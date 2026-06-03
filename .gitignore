@@ -7,3 +7,7 @@ venv/
 dist/
 build/
 .DS_Store
+.mcp-coder/logs/
+
+# Worker session specs: one .md per implementation session, local dev only (never commit)
+docs/tasks/
