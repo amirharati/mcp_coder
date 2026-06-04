@@ -1,0 +1,28 @@
+[build-system]
+requires = ["setuptools>=61", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "mcp-coder"
+version = "0.1.0"
+description = "MCP server that delegates coding work to CLI agents (Aider) with structured delegation logs"
+readme = "README.md"
+requires-python = ">=3.10,<3.13"
+dependencies = [
+    "mcp>=1.27,<2",
+    "aider-chat>=0.82,<0.87",
+    "pyyaml>=6,<7",
+]
+
+[project.optional-dependencies]
+dev = ["pytest>=8,<10"]
+
+[project.scripts]
+mcp-coder = "main:main"
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["core*", "server*"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]

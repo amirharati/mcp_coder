@@ -32,10 +32,12 @@
 
 | Document | Purpose |
 |----------|---------|
+| [INSTALL.md](./INSTALL.md) | **Install & reproducible env** — Python version, locked deps, bootstrap scripts |
 | [IDEA.md](./IDEA.md) | Vision, architecture, design principles (why we’re building this) |
 | [PHASES.md](./PHASES.md) | Multi-phase delivery plan (Phase 1–4, technical detail) |
 | [PHASE1_MVP.md](./PHASE1_MVP.md) | **Phase 1 product manager doc** — tasks, status, worker handoffs |
 | [BACKLOG.md](./BACKLOG.md) | Project backlog (deferred / later / nice-to-have) |
+| [PHASE1_ISSUES.md](./PHASE1_ISSUES.md) | **Phase 1 issue tracker** — gaps found during P1 (incl. server log) |
 | [TASK_SPEC_TEMPLATE.md](./TASK_SPEC_TEMPLATE.md) | Blank template — **do not edit**; copy into `docs/tasks/` |
 
 ## `docs/tasks/` — local worker specs (never in git)
@@ -58,10 +60,11 @@ cp docs/TASK_SPEC_TEMPLATE.md docs/tasks/P1-1.0-barebones-mcp-aider.md
 
 | Note | Topic |
 |------|--------|
-| [notes/spec-based-development.md](./notes/spec-based-development.md) | Use task specs like `docs/tasks/` in the product; maybe less full-history needed |
+| [notes/storage-and-linking.md](./notes/storage-and-linking.md) | `~/.mcp-coder` layout, IDs, session ↔ Cursor chat links |
+| [notes/spec-based-development.md](./notes/spec-based-development.md) | Spec-as-contract — **P1-199 review** (not blocking infra milestones) |
 
 ## Quick start (planning)
 
 1. Read [IDEA.md](./IDEA.md) for context.
 2. Use [PHASE1_MVP.md](./PHASE1_MVP.md) for what to build next.
-3. Deep dive: [PHASES.md](./PHASES.md) § Phase 1 (logging, sessions, SpecStory).
+3. Deep dive: [PHASES.md](./PHASES.md) § Phase 1 · [storage-and-linking.md](./notes/storage-and-linking.md).

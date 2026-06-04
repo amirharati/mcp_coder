@@ -1,0 +1,3 @@
+# Dev install: runtime lock + pytest (pinned).
+-r requirements-lock.txt
+pytest==9.0.3

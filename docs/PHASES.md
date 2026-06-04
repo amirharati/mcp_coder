@@ -14,7 +14,9 @@ This document is the **delivery plan**: what to build, in what order, and how we
 | **Cursor = orchestrator (cheap)** | Use a capable-but-cheap model in Cursor for planning, summarization, and tool calls. Heavy coding runs inside `mcp-coder` + CLI agent (expensive model only where it matters). |
 | **Execution = adapter** | Each CLI coder (Aider, OpenCode, …) gets an adapter using the *best* integration for that tool (Python API vs subprocess). |
 | **Proxy is separate** | [context_optimizer_proxy](https://github.com/amirharati/context_optimizer_proxy) optimizes per-turn LLM calls. `mcp-coder` optimizes per-task delegation. They compose but are independent projects. |
-| **Phase 1 = pass-through** | Reuse the same context Cursor already has (SpecStory file or Cursor summary). No owned context pipeline in Phase 1. |
+| **Phase 1 = pass-through** | Cursor summary in MCP args; later Cursor transcript on disk via **host adapter**. No owned context pipeline in Phase 1. |
+| **Phase 1 = infra first** | User-home store (`~/.mcp-coder`), adapters, linked logs — then session persistence, then full transcript context. |
+| **Host vs core** | Cursor-specific paths only in `core/host/cursor.py`. Other clients get their own host adapter later. |
 | **Phase 2+ = owned context** | RAG, multi-LLM roles (build context vs execute), repo docs, routers—see below. |
 | **Log every delegation** | From step **1.0** onward—one structured record per MCP tool call (see Observability below). |
 
@@ -22,10 +24,11 @@ This document is the **delivery plan**: what to build, in what order, and how we
 
 | | **Phase 1** | **Phase 2 and beyond** |
 |---|-------------|------------------------|
-| **Context source** | **SpecStory:** full chat transcript (same as Cursor). **Fallback:** Cursor’s *summary* only—not full chat parity | `mcp-coder` builds and manages its own context |
-| **LLMs inside mcp-coder** | None required (only Aider → provider). **Optional:** one cheap call for fallback session `new`/`reuse` (1.3, no SpecStory) | Yes—context-builder, RAG, file pick, etc. |
+| **Context source** | **Early:** Cursor `context_summary` in tool args. **Late P1:** Cursor `agent-transcripts` via host adapter. Not SpecStory. | `mcp-coder` builds and manages its own context |
+| **LLMs inside mcp-coder** | None required (only Aider → provider). Optional cheap classifier → backlog | Yes—context-builder, RAG, file pick, etc. |
 | **Memory / RAG** | No | Yes—session store, past tasks, repo docs, embeddings optional |
-| **Session logic** | Reuse Aider instance when useful; **new session** when context clearly changed | Explicit sessions, linking, “have we done this before?” |
+| **Session logic** | Disk-backed `mcp_session_id` under `~/.mcp-coder`; link to `host_session_id`; policies `always_new` \| `align_host` | Cross-day memory, explicit `continue_session`, RAG |
+| **Storage** | Canonical logs/sessions in `MCP_CODER_HOME`; workspace pointer only | Optional team sync / DB |
 | **Smart steps** | **None** beyond delegate + pass context + session heuristic | File picking, summarization, janitor, verification, sub-agents, etc. |
 
 ---
@@ -49,8 +52,9 @@ Prove end-to-end value in **Cursor only**:
 |----------|-------------------------|
 | One primary MCP tool: `delegate_to_agent` | Any LLM inside `mcp-coder` (context builder, router, janitor) |
 | Aider adapter (Python API) | RAG DB, `rag_search`, internal repo-doc library |
-| **Pass-through context** (SpecStory or Cursor summary) | Compacting, ranking, or rewriting context ourselves |
-| **Session reuse** when context unchanged (see below) | Cross-day memory, embeddings, multi-LLM orchestration |
+| **Pass-through context** (summary, then Cursor transcript via host adapter) | Compacting, ranking, or rewriting context ourselves |
+| **Home storage** + host adapter + session registry on disk | Cross-day RAG, spec gatekeeper |
+| **Session reuse** per `mcp_session_id` / `align_host` (see below) | Arbitrary resume across hosts without reconstruction |
 | Return: success, output tail, files touched, `session_reused` | Skills injection, critic/test sub-agents, ensemble |
 | **Structured delegation logs** (JSONL, per call) | Fancy UI (optional later); full prompt retention only in debug mode |
 
@@ -62,13 +66,17 @@ Inspired by trip-style logging in [context_optimizer_proxy](https://github.com/a
 
 #### One record per delegation
 
-Each tool invocation produces exactly one **`delegation`** record, written at end of call (or on failure). Append to:
+Each tool invocation produces exactly one **`delegation`** record, written at end of call (or on failure). **Canonical path** (P1-110+):
 
 ```
-<workspace>/.mcp-coder/logs/delegations.jsonl
+~/.mcp-coder/projects/<project_key>/sessions/<mcp_session_id>/delegations.jsonl
 ```
 
-(Configurable via env, e.g. `MCP_CODER_LOG_DIR`; default under project root. Gitignore `.mcp-coder/logs/` unless user opts in.)
+See [notes/storage-and-linking.md](./notes/storage-and-linking.md). Env: `MCP_CODER_HOME` (default `~/.mcp-coder`).
+
+**P1-100 legacy:** `<workspace>/.mcp-coder/logs/delegations.jsonl` — replaced by home store; optional mirror via `MCP_CODER_MIRROR_LOGS_TO_WORKSPACE=1`.
+
+Every record includes `project_key`, `mcp_session_id`, `session_dir`, `log_path`, and (when known) `host_kind`, `host_session_id`.
 
 Optional: mirror a human-readable **summary line** to stderr when `MCP_CODER_LOG_VERBOSE=1`.
 
@@ -83,7 +91,7 @@ Optional: mirror a human-readable **summary line** to stderr when `MCP_CODER_LOG
 | `tool_name` | e.g. `delegate_to_agent` |
 | `mcp_request` | Full tool arguments as received (JSON object) |
 | `backend` | e.g. `aider` |
-| `context_mode` | `specstory` \| `fallback` |
+| `context_mode` | `fallback` \| `host_transcript` (P1-140+) |
 | `session_action` | `new` \| `reuse` |
 | `session_reason` | Machine-readable why (see session enum below) |
 | `session_policy` | e.g. `fallback:always_new`, `fallback:heuristic`, `specstory:context` |
@@ -101,10 +109,11 @@ Log **provenance and size**, not only the user’s `task`:
 
 | Field | Purpose |
 |-------|---------|
-| `context.specstory_path` | Path to `.md` used, or null |
-| `context.specstory_mtime` | File mtime if Mode B |
-| `context.specstory_hash` | SHA-256 of transcript file (detect change → new session) |
-| `context.specstory_bytes` | Size of transcript injected |
+| `context.host_transcript_path` | Path to host transcript (e.g. Cursor `.jsonl`), or null |
+| `context.host_transcript_mtime` | File mtime if used |
+| `context.host_transcript_hash` | SHA-256 of transcript injected |
+| `context.host_transcript_bytes` | Size of transcript injected |
+| `context.specstory_*` | **Deprecated** — do not use for new work; SpecStory → backlog |
 | `context.fallback_summary_hash` | Hash of `context_summary` (+ constraints/snippets) for fallback |
 | `context.prompt_chars` / `context.prompt_tokens_est` | Final prompt length sent to Aider (chars + rough token estimate) |
 | `context.prompt_hash` | Hash of assembled prompt (compare across calls) |
@@ -120,7 +129,7 @@ This makes it obvious whether follow-ups reused the same context or silently shi
 
 | Field | Purpose |
 |-------|---------|
-| `timing.context_load_ms` | SpecStory read / hash / assemble |
+| `timing.context_load_ms` | Host transcript read / hash / assemble |
 | `timing.session_decision_ms` | Reuse vs new logic |
 | `timing.engine_run_ms` | Aider `Coder.run()` (or subprocess) |
 | `timing.post_process_ms` | git diff, file list, log write |
@@ -187,21 +196,35 @@ Same values as [Session persistence in Phase 1](#session-persistence-in-phase-1-
 - **`core/logging/delegation_log.py`** — build record, append JSONL, redact secrets (API keys in env dumps).
 - Wrap MCP tool handler: `timestamp_start` → work → `timestamp_end` → write log (even on exception).
 - Adapter hook: after `coder.run()`, try to parse token usage from return value / coder state (document what Aider exposes when implementing).
-- **1.0 deliverable:** logging works in fallback mode with `session_action: new` and `first_call` only; extend fields as SpecStory and session reuse land in 1.2 / 1.3.
+- **1.0 deliverable:** logging works in fallback mode with `session_action: new` and `first_call` only; extend fields as home storage (1.1), host hints (1.2), session reuse (1.3), transcript inject (1.4).
 - Later: small CLI `mcp-coder logs tail` or `inspect_delegations.py` (like proxy’s `inspect_logs.py`)—not required for 1.0.
+
+### Storage & linking (Phase 1 — from P1-110)
+
+**Canonical store:** `MCP_CODER_HOME` (default `~/.mcp-coder`). Sessions and logs are **not** the source of truth inside the git repo.
+
+| Artifact | Path |
+|----------|------|
+| Project registry | `~/.mcp-coder/projects/<project_key>/project.json` |
+| Session metadata | `.../sessions/<mcp_session_id>/session.json` |
+| Delegation log | `.../sessions/<mcp_session_id>/delegations.jsonl` |
+| Workspace pointer | `<workspace>/.mcp-coder/project.json` (optional) |
+| Cursor transcript (read-only) | `~/.cursor/projects/<slug>/agent-transcripts/<host_session_id>.jsonl` |
+
+Full schema: [notes/storage-and-linking.md](./notes/storage-and-linking.md).
 
 ### Context in Phase 1: pass-through only (no owned context pipeline)
 
-We do **not** build smarter context in Phase 1—no internal LLM, RAG, or repo-wide assembly. What Aider sees depends on the mode:
+We do **not** build smarter context in Phase 1—no internal LLM, RAG, or repo-wide assembly. What Aider sees evolves in **sub-steps**:
 
-| Source | Same as Cursor’s full chat? | What we pass to Aider |
-|--------|------------------------------|------------------------|
-| **Mode B — SpecStory** | **Yes** (for practical purposes) | Latest `.specstory/history/*.md`—the transcript SpecStory saves from Cursor/Composer |
-| **Mode A — Fallback** | **No** | Only what Cursor’s LLM puts in the tool call (`context_summary`, constraints, snippets). That is a **subset** of the chat—good enough for scoped tasks, easy to lose nuance |
+| Stage | When | What we pass to Aider |
+|-------|------|------------------------|
+| **Fallback (P1-100–1.3)** | Now | `context_summary` + `task` from MCP tool args (Cursor-compressed subset) |
+| **Host transcript (P1-140)** | After session infra | Normalized text from Cursor `agent-transcripts` via **host adapter**, plus summary + task |
 
-**Important:** Without SpecStory, `mcp-coder` does **not** see what Cursor sees. Cursor still has the full thread in its own context window; the MCP tool only receives the arguments Cursor chooses to send. Phase 2+ is where we stop depending on that and build our own context (RAG, context-builder LLM, etc.).
+**SpecStory is out of scope** for Phase 1 (see [BACKLOG.md](./BACKLOG.md) BL-203 / BL-505). **Spec-as-contract** is decided at **end of Phase 1** (P1-199), not a blocking milestone.
 
-No summarization *inside* `mcp-coder` in Phase 1. In fallback mode, summarization happens **in Cursor** before the tool call; in SpecStory mode, we read the full saved transcript from disk.
+No summarization *inside* `mcp-coder` in Phase 1. Summarization in Cursor before the tool call remains valid for fallback mode.
 
 ### Context size limits & expected failures (Phase 1)
 
@@ -209,7 +232,7 @@ No summarization *inside* `mcp-coder` in Phase 1. In fallback mode, summarizatio
 
 | Mode | Typical overflow scenario |
 |------|---------------------------|
-| **SpecStory** | Transcript grows over a long Composer session; we prepend the **entire** `.md` plus `task` and file contents → prompt too large |
+| **Host transcript** | Transcript grows over a long Composer session; we prepend the **entire** `.jsonl` (or tail) plus `task` and file contents → prompt too large |
 | **Fallback** | Less common for chat text (Cursor already compressed), but huge `code_snippets_from_chat` or many large `target_files` can still blow the budget |
 | **Session reuse** | Reused Aider instance **accumulates** its own turn history **in addition** to whatever we inject each call—increases risk on follow-ups |
 
@@ -224,7 +247,7 @@ No summarization *inside* `mcp-coder` in Phase 1. In fallback mode, summarizatio
 Before changing behavior, use delegation logs to **inspect what we sent**:
 
 - `context.prompt_chars`, `context.prompt_tokens_est`, `context.prompt_hash`
-- `context.specstory_bytes` / `specstory_hash` (did the transcript grow?)
+- `context.host_transcript_bytes` / `host_transcript_hash` (did the transcript grow?)
 - `context.prompt_preview` vs `MCP_CODER_LOG_FULL_PROMPT=1` for forensics
 - On failure: `error`, `success: false`, same context fields → correlate size with breakage
 
@@ -241,17 +264,17 @@ Before changing behavior, use delegation logs to **inspect what we sent**:
 
 If we hit overflows often during 1.2 testing, allow a config guardrail without building Phase 2:
 
-- `MCP_CODER_MAX_PROMPT_CHARS` or `MCP_CODER_MAX_SPECSTORY_BYTES`
+- `MCP_CODER_MAX_PROMPT_CHARS` or `MCP_CODER_MAX_TRANSCRIPT_BYTES`
 - When exceeded: truncate transcript (e.g. keep **tail** = most recent messages) and set in log:
   - `context.truncated: true`
-  - `context.truncation_reason: "max_specstory_bytes"`
+  - `context.truncation_reason: "max_transcript_bytes"`
   - `context.bytes_dropped: N`
 
 This is **not** summarization—it is an explicit, logged chop so we can still run experiments. Prefer learning from uncapped failures first, then add cap if needed.
 
-**Success criterion for experiments:** When a call fails, one JSONL line should be enough to answer: “Was it too much context? How big? SpecStory or fallback? New or reused session?”
+**Success criterion for experiments:** When a call fails, one JSONL line should be enough to answer: “Was it too much context? How big? Transcript or fallback? New or reused session?”
 
-#### Mode A — Summary fallback (build first)
+#### Mode A — Summary fallback (P1-100 through P1-130)
 
 **How it works:** Tool schema requires Cursor’s LLM to pack relevant chat into structured fields before calling the tool.
 
@@ -269,130 +292,86 @@ This is **not** summarization—it is an explicit, logged chop so we can still r
 
 **Cursor setup note:** Prefer Auto or a cheap/fast model for chat + tool routing; execution model is chosen inside Aider (or via env pointing at `context_optimizer_proxy`).
 
-#### Mode B — SpecStory transcript (add after Mode A works)
+#### Mode B — Host transcript (P1-140, Cursor first)
 
-**How it works:** If the project has `.specstory/history/` (from the [SpecStory](https://docs.specstory.com/integrations/cursor) extension), read the **most recently modified** `.md` file in that folder. That file is the live Cursor/Composer transcript for this workspace. Prepend it to the prompt sent to Aider (or use instead of `context_summary` when fresh enough).
+**How it works:** `CursorHostProvider` resolves `host_session_id` and reads `~/.cursor/projects/<slug>/agent-transcripts/<id>.jsonl`. Transform JSONL → text block; prepend to Aider prompt with `context_summary` + `task`.
 
-**Heuristic for “active chat”:** e.g. file `mtime` within last N minutes (configurable, start with 5–10).
+**Heuristic for “active chat”:** e.g. newest transcript by mtime, or match to current Composer session when detectable.
 
-**Pros:** Full fidelity without Cursor re-sending 50k tokens; shared repo filesystem.
+**Pros:** No SpecStory extension; aligns with Cursor’s on-disk layout; linkable via `host_session_id` in our session store.
 
-**Cons:** Requires SpecStory (or similar) installed; Cursor-specific path for now; schema of `.md` is stable enough for experimentation but not a formal API.
+**Cons:** Undocumented Cursor schema; may change; parsing lives only in `core/host/cursor.py`.
 
-**Fallback:** If no fresh SpecStory file → Mode A fields only.
+**Fallback:** If no transcript → Mode A fields only.
 
-### Session persistence in Phase 1 (only when useful)
+### Session persistence in Phase 1 (disk registry + in-process executor)
 
-Each MCP call is a new MCP message. Whether we **reuse** the in-process Aider `Coder` or **start a new** one depends on **context mode** and a **configurable policy**. Always log the decision (`session_action`, `session_reason`, `session_policy`).
+Each MCP call is a new MCP message. **mcp-coder owns `mcp_session_id`** under `~/.mcp-coder`. Cursor (or another host) supplies **`host_session_id`** as a hint—not the sole session key.
 
-**We do not persist sessions to disk in Phase 1**—only an in-memory singleton per workspace/process.
+| Layer | Persists? | Notes |
+|-------|-----------|-------|
+| **Disk** (`session.json`, `delegations.jsonl`) | Yes | Survives MCP restart |
+| **In-process Aider `Coder`** | Per `mcp_session_id` | Re-created after restart; prompt reconstructed from spec/summary/transcript later |
 
-#### SpecStory (Mode B) — context-driven only
+#### Policies (P1-130)
 
-Reuse is justified when the **transcript we inject** is the same as last time:
+| Policy | Behavior |
+|--------|----------|
+| **`always_new`** (default) | New `mcp_session_id` folder every delegation |
+| **`align_host`** | Reuse **latest** session with same `(project_key, host_session_id)`; if host unknown → `always_new` |
 
-| Decision | Condition |
-|----------|-----------|
-| **Reuse** | Same newest `.specstory/history/*.md` path **and** same `specstory_hash` as last delegation |
-| **New** | Different transcript file, or hash changed (new chat / SpecStory appended), or first call |
-
-No separate “always new” toggle for SpecStory—the file *is* the session boundary.
-
-#### Fallback (Mode A, no SpecStory) — try both; default **always new**
-
-Without a transcript on disk, we **cannot** know if Cursor’s chat continued or jumped topics. Two policies:
-
-| Policy | Behavior | When to use |
-|--------|----------|-------------|
-| **`always_new`** (default) | Every MCP call → `Coder.create(...)` fresh. No in-process reuse. | **Start here (1.0–1.1).** Predictable; avoids stale Aider history + wrong `context_summary` combo; easier to debug. |
-| **`heuristic`** | Reuse if time + files + summary hash match (see below). | **Experiment in 1.3** after logs from `always_new` baseline. |
-| **`cheap_llm`** (optional) | One small LLM call decides `new` vs `reuse` before starting Aider (see below). | **1.3+ if we have time**—fallback / no SpecStory only. |
-
-Env (proposed):
+Env:
 
 ```bash
-# fallback only; SpecStory ignores this
-MCP_CODER_FALLBACK_SESSION=always_new   # default
-# MCP_CODER_FALLBACK_SESSION=heuristic
-# MCP_CODER_FALLBACK_SESSION=cheap_llm   # optional experiment
+MCP_CODER_SESSION_POLICY=always_new   # default
+# MCP_CODER_SESSION_POLICY=align_host
 ```
 
-Log on every delegation:
-
-| Field | Example |
-|-------|---------|
-| `session_policy` | `fallback:always_new` \| `fallback:heuristic` \| `fallback:cheap_llm` \| `specstory:context` |
-| `session_action` | `new` \| `reuse` |
-| `session_reason` | see enum below |
-
-**Heuristic reuse (fallback only)** — when `MCP_CODER_FALLBACK_SESSION=heuristic`:
-
-| Reuse when (all configurable) | New session when |
-|------------------------------|------------------|
-| Last delegation &lt; `MCP_CODER_REUSE_MAX_AGE_SEC` (default 300) | Gap exceeded → `heuristic_new_time` |
-| `target_files` overlaps previous set | No overlap → `heuristic_new_files` |
-| `context_summary` (+ constraints/snippets) hash unchanged | Hash changed → `heuristic_new_summary` |
-
-**Why try `always_new` first in fallback**
-
-- Each call’s prompt is **only** what Cursor sent this time—no hidden turns in Aider from an earlier summary.
-- Follow-ups still work: Cursor sends a **new** `context_summary` that should reflect the thread (quality depends on Cursor, not Aider memory).
-- Reuse in fallback can **inflate** context (Aider history + new summary) and cause overflows sooner—compare in logs.
-
-**Why still try `heuristic` later**
-
-- If logs show Cursor’s summaries are stable and follow-ups benefit from Aider remembering file edits, heuristic reuse may save tokens/time.
-- A/B in experiments: same task sequence with `always_new` vs `heuristic`, compare `prompt_tokens_est`, success, `duration_ms`.
-
-#### Optional: cheap LLM session classifier (Phase 1 — fallback / no SpecStory only)
-
-**Not required for Phase 1 done.** If we have time during **1.3** (still no SpecStory path), try a **single cheap LLM call** (mini / Flash) to choose `new` vs `reuse` instead of hash/time heuristics.
-
-**Only applies when** `context_mode=fallback` (no SpecStory). SpecStory mode keeps **context-driven** rules (transcript path + hash)—no classifier.
-
-**Classifier prompt (example):** Given previous delegation summary + this call’s `task`, `context_summary`, `target_files`—is this a follow-up on the same work or a new topic? Return JSON: `{ "session_action": "new"|"reuse", "confidence": 0-1, "reason": "..." }`.
-
-**Inputs (keep small):** last log line’s `mcp_request`, `context.fallback_summary_hash`, `files_requested`, `task`—not full chat history.
-
-**Logging (required if enabled):** nested `session_classifier` on the delegation record: `model`, `tokens`, `latency_ms`, `request_preview`, `raw_response`, decision. `session_reason`: `classifier_reuse` \| `classifier_new`. Compare side-by-side with `always_new` and `heuristic` runs in experiment notes.
-
-**Config:** `MCP_CODER_FALLBACK_SESSION=cheap_llm` (or `always_new` + `MCP_CODER_SESSION_CLASSIFIER=cheap_llm`—pick one knob when implementing).
-
-This is **not** Phase 2 context-building—only a boundary test for “should we keep the same Aider instance?” in the no-SpecStory case.
+**Many mcp sessions per Cursor chat** is normal (record all; picking a “main” session is backlog). See [storage-and-linking.md](./notes/storage-and-linking.md).
 
 #### Session reason enum (log + MCP return)
 
 | Value | Meaning |
 |-------|---------|
-| `first_call` | No prior in-process session |
-| `policy_always_new` | Fallback; forced new by `MCP_CODER_FALLBACK_SESSION=always_new` |
-| `specstory_unchanged` | Reuse (Mode B) |
-| `specstory_changed` | New (Mode B) |
-| `heuristic_reuse` | Fallback heuristic matched |
-| `heuristic_new_time` | Fallback; gap exceeded |
-| `heuristic_new_files` | Fallback; no file overlap |
-| `heuristic_new_summary` | Fallback; summary hash changed |
-| `classifier_reuse` | Fallback; cheap LLM said reuse |
-| `classifier_new` | Fallback; cheap LLM said new |
+| `first_call` | No prior session for this policy |
+| `policy_always_new` | Forced new |
+| `align_host_reuse` | Reused session for same host id |
+| `align_host_new` | New session (no host id or first for this host) |
+| `heuristic_*` / `classifier_*` | Backlog optional experiments |
 
-**Not in Phase 1 (required):** DB-backed sessions, `continue_session` tool, full context-builder / RAG.
-
-Phase 2+ links explicit sessions to RAG. Phase 1 optional: cheap LLM classifier for **fallback session only**—see above.
+**Not in Phase 1:** `continue_session` with arbitrary id, DB sync, cross-machine session port.
 
 ### Adapter architecture (Phase 1)
 
+**Four layers — do not mix host paths into engine or logging.**
+
 ```
-core/engine/
-  base.py          # ExecutionResult, ExecutionEngine protocol
-  aider_engine.py  # AiderEngine — Coder.create + run, InputOutput(yes=True)
-  # opencode_engine.py  — Phase 1 optional / early Phase 2 (subprocess)
+core/host/
+  base.py              # HostContextProvider protocol, HostSessionHint
+  cursor.py            # Cursor-only: slug, agent-transcripts (ONLY Cursor imports here)
+  factory.py           # get_host_provider() — cursor default for P1
+
+core/storage/          # P1-110
+  paths.py             # MCP_CODER_HOME, project_key, session dirs
+  project_registry.py
+  session_store.py     # P1-130
+
+core/engine/           # P1-100 — unchanged contract
+  base.py              # ExecutionEngine
+  aider_engine.py
+  factory.py
+
+core/logging/
+  delegation_log.py    # writes under session_dir from storage layer
 ```
 
-Factory: `get_engine(backend: str) -> ExecutionEngine`. Phase 1 default: `aider`.
+| Adapter | Swaps | Phase 1 |
+|---------|--------|---------|
+| **Host** | Cursor vs Claude Desktop vs … | Cursor only |
+| **Execution** | Aider vs OpenCode | Aider only |
+| **Provider** | OpenRouter, Anthropic, … | Via Aider env |
 
-**Aider integration:** Prefer Python API (`aider.coders.Coder`, `aider.models.Model`, `aider.io.InputOutput(yes=True)`). Document that the scripting API is unofficial and may change.
-
-**OpenCode (later):** `opencode run --dangerously-skip-permissions ...` via subprocess when we add a second adapter.
+**OpenCode (later):** subprocess adapter in Phase 2 or spike ([BACKLOG.md](./BACKLOG.md) BL-004).
 
 ### MCP tool (target shape)
 
@@ -414,59 +393,59 @@ Factory: `get_engine(backend: str) -> ExecutionEngine`. Phase 1 default: `aider`
 
 **Returns:** `success`, `output` (truncated log), `files_changed` (best-effort from git status or Aider output), optional `session_reused: bool`.
 
-### Phase 1 sub-steps (implementation order)
+### Phase 1 sub-steps (implementation order — replanned)
 
-#### 1.0 — Barebones sub-agent (summary only) + logging
+Track tasks in [PHASE1_MVP.md](./PHASE1_MVP.md).
 
-- Python MCP server (stdio), official `mcp` SDK.
-- `AiderEngine` + `delegate_to_agent` with `task`, `target_files`, `context_summary`.
-- Prompt to Aider: combine `context_summary` + `task`; pass `fnames=target_files`.
-- **`delegation_log`:** JSONL per call (timing, model, mcp_request, context hashes/preview, response, success).
-- **Fallback sessions:** `MCP_CODER_FALLBACK_SESSION=always_new` → every call `session_action: new`, `session_reason: first_call` or `policy_always_new`.
-- No SpecStory, no heuristic reuse yet, no git diff parsing beyond basics.
-- **Experiment:** Register in Cursor `mcp.json`, simple task (“add a function to X”), inspect `.mcp-coder/logs/delegations.jsonl` after run.
+#### 1.0 — Barebones (done, P1-100)
 
-**Done when:** Cursor calls tool → Aider edits files → one complete log line answers what/when/how long/what context.
+- MCP + `AiderEngine` + `delegate_to_agent`; workspace-local JSONL; `always_new`.
 
-#### 1.1 — Smarter schema (still Mode A only)
+#### 1.1 — Home storage & linking (P1-110) **next**
 
-- Add `explicit_constraints`, `code_snippets_from_chat` to schema and prompt assembly.
-- Tune tool **description** so Cursor’s model fills them for nuanced requests.
-- **Experiment:** Task with exact hex code / API name; verify they appear in Aider prompt.
+- `MCP_CODER_HOME`, `project_key`, per-session folders, linked JSONL fields.
+- Optional workspace `project.json` pointer; migrate off workspace-only logs.
 
-**Done when:** Structured fields reliably improve output vs single `context_summary` blob.
+**Done when:** Every delegation is findable under `~/.mcp-coder/projects/.../sessions/...`.
 
-#### 1.2 — SpecStory mode (Mode B)
+#### 1.2 — Host adapter — Cursor (P1-120)
 
-- Resolve project root (cwd or `workspace_path`).
-- If `.specstory/history/` exists, pick newest `.md` by mtime; if fresh, prepend full transcript to Aider prompt (cap size if needed).
-- Else Mode A.
-- Document: recommend SpecStory extension for Cursor users.
-- **Experiment:** Long chat in Cursor + SpecStory autosave → delegate → confirm Aider sees full thread.
+- `HostContextProvider` + `cursor.py`; populate `host_session_id` on session + logs.
+- No transcript injection yet.
 
-**Done when:** With SpecStory on, follow-ups work without Cursor re-summarizing; without SpecStory, Mode A still works.
+**Done when:** Cursor-specific paths exist only under `core/host/`.
 
-#### 1.3 — Session policies (SpecStory + fallback experiments)
+#### 1.3 — Session persistence (P1-130) — `done`
 
-- **SpecStory:** context-driven reuse (transcript path + hash unchanged → reuse).
-- **Fallback:** implement `heuristic`; compare against 1.0–1.1 baseline (`always_new`).
-- **Fallback (optional if time):** `cheap_llm` session classifier—log `session_classifier` block; compare to `always_new` / `heuristic`.
-- In-process singleton + metadata: SpecStory path/hash, last files, summary hash, last run time, active `session_policy`.
-- Return `session_reused`, `session_reason`, `session_policy` (must match delegation log).
-- **Experiments:**
-  1. Fallback + `always_new`: two quick follow-ups—does quality depend only on Cursor’s new summary?
-  2. Fallback + `heuristic`: same sequence—compare logs (`prompt_tokens_est`, reuse vs new).
-  3. Fallback + `cheap_llm` (optional): same sequence—did classifier beat heuristics?
-  4. SpecStory: same chat → reuse; new `.md` or hash change → new.
+- `SessionStore`; policies `always_new` | `align_host`; executor cache per `mcp_session_id`.
+- Host scoring: `max(transcript mtime, delegation history)` + tie window.
+- E2E 2026-06-04: `align_host`, 5 delegations → one `mcp_session_id`. See `docs/tasks/P1-1.3-session-persistence.md` § Results.
 
-**Done when:** Policies are configurable, always logged, and we have notes on which policy to prefer per mode (classifier optional).
+**Done when:** `align_host` reuses same `mcp_session_id` for follow-ups in one Cursor chat. ✓
+
+#### 1.4 — Full context — Cursor transcript (P1-140)
+
+- Parse `agent-transcripts/*.jsonl`; inject into prompt; size caps + logging.
+
+**Done when:** Long-chat experiment beats summary-only; failure modes visible in JSONL.
+
+#### 1.9 — Phase 1 exit review (P1-199)
+
+- Spec-as-contract, gatekeeper, Phase 2 priorities — from real logs.
+
+#### Optional / backlog
+
+- P1-115: `explicit_constraints`, snippets — if transcript still loses nuance.
+- P1-131 / BL-102: cheap LLM session classifier.
+- SpecStory integration — **not planned** (BL-505).
 
 ### Phase 1 success criteria (overall)
 
 - [ ] Cursor discovers and uses the tool for non-trivial coding when prompted (rules/skills can nudge).
 - [ ] Token usage on Cursor side stays low (tool call + summary, not full-repo agent loop).
 - [ ] Aider completes tasks on scoped files; user can review diffs in Cursor.
-- [ ] Mode A and Mode B documented with known limitations.
+- [ ] Mode A (summary) and Mode B (host transcript) documented with known limitations.
+- [ ] Home storage and session linking documented ([storage-and-linking.md](./notes/storage-and-linking.md)).
 - [ ] Each delegation has a complete JSONL record (timing, context snapshot, model, tokens if available, response).
 - [ ] Notes captured from experiments (routing reliability, failure modes, follow-up behavior) for Phase 2/3—grounded in logs, not memory.
 
@@ -474,37 +453,39 @@ Factory: `get_engine(backend: str) -> ExecutionEngine`. Phase 1 default: `aider`
 
 1. Does Cursor reliably pass `target_files`, or do we need to infer from open tabs / `@` mentions in `task`?
 2. Optimal tool name/description for ~70–90% routing on “big” tasks without nagging every turn?
-3. SpecStory freshness window (5 vs 10 min); whether to enable dumb tail-truncation cap by default after measuring failures in logs.
-4. At what `prompt_tokens_est` do we consistently fail per model (document in experiment notes)?
-5. Should Aider point at `context_optimizer_proxy` base URL by default in our config template?
-6. Dry-run mode for MCP (`--dry-run` Aider) for safe first tests?
+3. Transcript tail cap default after measuring failures in logs (P1-140).
+4. Spec-as-contract: when and how (P1-199 only).
+5. At what `prompt_tokens_est` do we consistently fail per model (document in experiment notes)?
+6. Should Aider point at `context_optimizer_proxy` base URL by default in our config template?
+7. Dry-run mode for MCP (`--dry-run` Aider) for safe first tests?
 
-### Suggested project layout (when coding starts)
+### Suggested project layout
 
 ```
 mcp_coder/
   pyproject.toml
-  main.py                 # --mcp | CLI later
-  server/mcp_server.py    # wraps handler with delegation_log
+  main.py
+  server/mcp_server.py
   core/
-    logging/
-      delegation_log.py   # JSONL record builder + append (from 1.0)
-    engine/base.py
-    engine/aider_engine.py
-    context/
-      summary.py            # Mode A assembly
-      specstory.py          # Mode B reader
-    session.py              # 1.3 reuse vs new (SpecStory change vs fallback heuristics)
+    host/                   # P1-120 — cursor.py only place for Cursor paths
+    storage/                # P1-110, P1-130
+    engine/                 # P1-100
+    logging/delegation_log.py
+    context/summary.py      # Mode A; transcript assembly P1-140
 
-# Per workspace (gitignored by default):
-.mcp-coder/logs/delegations.jsonl
+# User home (canonical):
+~/.mcp-coder/projects/<project_key>/sessions/<mcp_session_id>/
+
+# Workspace (optional pointer, gitignored):
+<workspace>/.mcp-coder/session.json   # system pointer (project_key, sessions_root)
+<workspace>/.mcp-coder/config.yaml    # user-owned session_policy etc.
 ```
 
 ---
 
 ## Phase 2 and beyond: Owned context management
 
-Starting Phase 2, `mcp-coder` stops relying solely on Cursor/SpecStory and **builds and manages context itself**. This is where the vision in [IDEA.md](./IDEA.md) (router, janitor, RAG, token tiers) is implemented.
+Starting Phase 2, `mcp-coder` stops relying solely on pass-through host transcripts and **builds and manages context itself**. This is where the vision in [IDEA.md](./IDEA.md) (router, janitor, RAG, token tiers) is implemented.
 
 ### Multi-LLM roles (intent)
 
@@ -523,7 +504,7 @@ Phase 1 uses only the executor (via Aider). Phase 2+ adds the context-builder (a
 **Scope (indicative—not Phase 1):**
 
 - Cheap LLM (or rules + ripgrep) to propose `target_files` from `task` + repo map.
-- First version of **owned** context assembly: system prompt + selected files + compact task brief (may still *also* read SpecStory if present).
+- First version of **owned** context assembly: system prompt + selected files + compact task brief (may still read host transcript if present).
 - Optional second adapter (OpenCode).
 - Dual-mode CLI + MCP share same core.
 
@@ -557,10 +538,10 @@ Phase 1 uses only the executor (via Aider). Phase 2+ adds the context-builder (a
 
 ## Host support matrix (intent)
 
-| Host | Phase 1 | Context Mode A | Context Mode B (SpecStory) |
-|------|---------|----------------|----------------------------|
-| **Cursor** | Primary testbed | Yes | Yes (extension) |
-| Claude Desktop | Later | Yes | No (unless similar export exists) |
+| Host | Phase 1 | Summary (Mode A) | Host transcript (Mode B) |
+|------|---------|------------------|---------------------------|
+| **Cursor** | Primary | Yes | Yes (`agent-transcripts`) via `core/host/cursor.py` |
+| Claude Desktop | Later | Yes | Separate host adapter when needed |
 | Windsurf / others | Later | Yes | TBD |
 
 ---
@@ -585,6 +566,8 @@ Both projects can be developed in parallel. Phase 1 does not require the proxy o
 
 ## Next action (planning)
 
-- [x] Phase 1 tasks tracked in [PHASE1_MVP.md](./PHASE1_MVP.md); backlog in [BACKLOG.md](./BACKLOG.md).
-- [ ] Create local `docs/tasks/P1-1.0-barebones-mcp-aider.md`; worker implements from that file (gitignored).
-- [ ] After 1.0: P1-110 → P1-120 → P1-130 (optional P1-131); create task spec per milestone before each worker session.
+- [x] Phase 1 tasks tracked in [PHASE1_MVP.md](./PHASE1_MVP.md); gaps in [PHASE1_ISSUES.md](./PHASE1_ISSUES.md); backlog in [BACKLOG.md](./BACKLOG.md).
+- [x] Barebones MCP + Aider, home storage, Cursor host adapter, session persistence (incl. `config.yaml`, MCP singleton).
+- [ ] **Next:** Full Cursor transcript context in executor prompt.
+- [ ] Optional: persistent server log ([PHASE1_ISSUES.md](./PHASE1_ISSUES.md) P1-ISS-004).
+- [ ] Phase 1 exit review (spec strategy, Phase 2 goals).

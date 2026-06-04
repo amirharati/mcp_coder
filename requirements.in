@@ -1,0 +1,6 @@
+# Direct runtime dependencies (mirrors pyproject.toml [project.dependencies]).
+# For a fully pinned tree use requirements-lock.txt (see docs/INSTALL.md).
+
+mcp>=1.27,<2
+aider-chat>=0.82,<0.87
+pyyaml>=6,<7

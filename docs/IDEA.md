@@ -1,148 +1,327 @@
 # mcp-coder
 
-An MCP server (with optional CLI) that wraps CLI coding agents (like Aider, OpenCode, Claude Code, etc.) and exposes them as MCP tools — with cross-session persistent context memory.
+An MCP server (with optional CLI) that wraps CLI coding agents (Aider, OpenCode, Claude Code, etc.) and exposes them as MCP tools — with task-level orchestration, cross-session memory, and optional spec-driven workflows.
 
-## Core Idea & Vision
+**Delivery plan:** [PHASES.md](./PHASES.md) · **Phase 1 tasks:** [PHASE1_MVP.md](./PHASE1_MVP.md) · **Backlog:** [BACKLOG.md](./BACKLOG.md)
 
-Most AI coding agents (Cursor, Claude Code, Aider, Windsurf) are stateless per-invocation or per-session. Each conversation starts fresh. Users hack around this "Context Amnesia" using `MEMORY.md`, `CHANGELOG.md`, and manual context files. 
+---
 
-`mcp-coder` bridges this gap. It acts as a **Task-Level Orchestrator and Memory Bank**. 
+## Overall goal
 
-The calling agent (e.g., Cursor, Claude Desktop) stays lean, acting as a thin orchestration and UI layer. When a complex, multi-file task is needed, Cursor delegates the actual code editing to `mcp-coder` via MCP. `mcp-coder` then handles task scoping, memory retrieval, routing, and launches a dedicated CLI agent (like OpenCode or Aider) to execute the work.
+Build a **powerful, token-efficient coding agent system** that works well with **Cursor** while keeping **maximum control** and **auditability**.
 
-### The Two-Tiered Optimization Architecture
+- **Cursor** stays a thin conversation + planning layer.
+- **mcp-coder** owns task delegation, sessions, memory, spec structure, and optimization at the **task** boundary.
+- **Aider / OpenCode** own the gritty edit loop (mature execution engines — we do not rebuild them).
+- **[context_optimizer_proxy](https://github.com/amirharati/context_optimizer_proxy)** (separate repo) squeezes tokens at the **per-turn** boundary inside the execution engine’s LLM calls.
 
-This project is designed to work in tandem with a separate, lower-level proxy (like `context_optimizer_proxy`), creating a two-tiered optimization system:
+---
 
-1. **Tier 1: Task-Level Optimization (`mcp-coder`)**
-   - **Scope:** Coarse-grained, once per task.
-   - **Role:** The "Brain" and Session Manager.
-   - **Action:** Receives a high-level goal from Cursor. Checks past session memory ("Have we done this before?"). Decides which files are relevant. Launches the CLI agent (OpenCode/Aider) as a subprocess with a tightly scoped context.
-   - **Why:** Massive token savings and better execution quality by preventing the agent from wandering through the whole repo. Safe, because it doesn't interfere with the agent's internal loop.
+## Two complementary projects
 
-2. **Tier 2: Turn-Level Optimization (`context_optimizer_proxy` - *Separate Project*)**
-   - **Scope:** Fine-grained, intercepts every single LLM API call.
-   - **Role:** The "Pipes" and Token Squeezer.
-   - **Action:** Sits between the CLI agent and the LLM API. Strips boilerplate tool noise, compresses paths, and manages cache boundaries on every turn.
-   - **Why:** Squeezes maximum efficiency out of the execution loop.
+| Project | Layer | Role |
+|---------|--------|------|
+| **`context_optimizer_proxy`** (existing) | **Turn-level** | Compression, noise removal, token control, output cleaning, A/B experimentation on every LLM request |
+| **`mcp-coder`** (this repo) | **Task-level** | Session management, memory library, task optimization, “have we done this before?”, spec handling, delegation to CLI coders |
 
-*By separating these concerns, `mcp-coder` remains a clean orchestration layer, while the proxy handles the risky, low-level prompt hacking.*
+*Do not merge these into one codebase. They compose via configuration (execution engine → proxy → provider).*
 
-## Architecture
+### Layered flow (target architecture)
+
+```
+Cursor (thin layer — chat, planning, user Q&A)
+   ↓  MCP tool calls
+mcp-coder (task-level orchestrator + memory + spec tools)
+   ↓  subprocess / Python API
+OpenCode / Aider (execution engine)
+   ↓  LLM API (optional)
+context_optimizer_proxy (fine-grained per-turn optimization)
+   ↓
+Actual LLM provider
+```
+
+### Role division
+
+| Actor | Responsibility |
+|-------|------------------|
+| **Cursor’s LLM** | Main conversation, explains “why did we do this?”, routes work, fills summaries / spec fields when asked |
+| **mcp-coder** | High-level tools: delegate, memory, spec CRUD, session boundaries, logs — not line-by-line editing in the IDE |
+| **Aider / OpenCode** | Reliable multi-file edits, git integration, internal agent loop |
+| **context_optimizer_proxy** | Transparent prompt/response shaping on each turn |
+
+---
+
+## Phase 1 today vs long-term vision
+
+| | **Now (Phase 1)** | **Later (Phase 2+)** |
+|---|-------------------|----------------------|
+| **MCP tools** | `delegate_to_agent` (+ logging) | Spec tools, RAG query, session APIs |
+| **Context** | Summary in MCP args; **next:** Cursor transcript via host adapter | Owned context pipeline |
+| **Sessions** | Disk registry under `~/.mcp-coder`; `always_new` \| `align_host`; workspace `config.yaml` | Cross-day memory, explicit continue |
+| **Storage** | User-home canonical logs; `session.json` pointer + user `config.yaml` | Team sync / DB optional |
+| **Specs** | Dogfood local worker specs while building; **product spec at Phase 1 exit review** | `.mcp-coder/specs/` + gatekeeper (later) |
+
+**Checkpoint:** End of Phase 1 — spec strategy, gatekeeper, Phase 2 goals ([PHASE1_MVP.md](./PHASE1_MVP.md)).
+
+**Current status (2026-06-04):** Barebones MCP + Aider, home storage, Cursor host adapter, and session persistence shipped (including `align_host` E2E). **Next:** full host transcript in executor context.
+
+---
+
+## Core capabilities (target)
+
+- **Dual mode** — MCP server for Cursor + standalone CLI (same core).
+- **Session management** — Persistent sessions, smart new-vs-continue, library of past work (Phase 1.3+ / Phase 3).
+- **Memory system** — Semantic / keyword search over old tasks and decisions (RAG — Phase 3).
+- **Spec-driven development** — Markdown artifacts as the **contract** between planner and executor (Phase 2+; see below).
+- **Optional interactive mode** — Delegate to a full interactive Aider session in the terminal when `interactive: true` (backlog / post-P1).
+- **Adapter pattern** — Pluggable execution engines (Aider Python API, OpenCode subprocess, etc.).
+
+---
+
+## Spec-driven communication (direction from ideation)
+
+Structured Markdown as the **main API/contract** between components — not raw chat dumps and not unconstrained file writes by the executor.
+
+### Proposed workspace artifacts (under `.mcp-coder/specs/` or similar)
+
+| File | Purpose |
+|------|---------|
+| `task-spec.md` | Goal, scope, files, done-when — **primary handoff** |
+| `plan.md` | Steps the orchestrator or planner intends |
+| `decisions.md` | Append-only architectural decisions |
+| `context.md` | Constraints, links, environment notes |
+| `implementation.md` | What was actually done (post-run) |
+| `feedback.md` | Review notes, follow-ups |
+
+**Controlled access:** Do **not** let Aider/OpenCode write these files directly. Expose **dedicated MCP tools** that enforce structure, validation, section boundaries, and permissions.
+
+This mirrors how we build the product: planning chat → local `docs/tasks/P1-….md` → worker (see [notes/spec-based-development.md](./notes/spec-based-development.md)).
+
+### Proposed MCP tools (spec layer — future)
+
+| Tool | Purpose |
+|------|---------|
+| `create_task_spec` | Initialize a new task spec from template |
+| `read_spec_file` | Read section(s) with stable schema |
+| `update_spec_file` | Section-based update (not free-form overwrite) |
+| `append_decision` | Append-only decisions log |
+| `propose_plan` | Write/update plan section |
+| `get_task_status` | Status for active task |
+| `list_active_tasks` | Enumerate in-flight work |
+| `ask_user_about_spec` | Clarification hook for Cursor to present to user |
+
+**Execution tools (today / near-term):**
+
+| Tool | Purpose |
+|------|---------|
+| `delegate_to_agent` | Run Aider/OpenCode for implementation ( **Phase 1 — shipped** ) |
+
+One MCP server can expose **many tools**; use clear descriptions so Cursor does not call internal/spec tools for routine coding.
+
+---
+
+## Interaction modes (target)
+
+| Mode | Behavior |
+|------|----------|
+| **Default** | Hands-off — Cursor calls `delegate_to_agent`, gets result + log line |
+| **Clarification in IDE** | Tools like `ask_user_clarification` / `ask_user_about_spec` before delegating |
+| **Full interactive Aider** | Optional flag → spawn real terminal Aider with pre-optimized context (heavy; backlog) |
+
+---
+
+## The two-tiered optimization architecture
+
+1. **Tier 1: Task-level (`mcp-coder`)**  
+   Coarse-grained, once per delegation: scope files, pull memory, assemble spec/context, choose session, launch executor.
+
+2. **Tier 2: Turn-level (`context_optimizer_proxy`)**  
+   Fine-grained, every LLM call inside the executor: strip noise, compress paths, cache-aware boundaries.
+
+*Separation keeps orchestration safe and the proxy free to experiment without breaking delegation.*
+
+---
+
+## Architecture (internal components — mature state)
 
 ```
 You (human)
-  └── MCP Host (Cursor / Claude Desktop / etc.) -> "Thin UI Layer"
-       └── mcp-coder (orchestrator + memory) -> "Task-Level Optimizer"
-            ├── Router LLM (cheap model, decides what to do)
-            ├── Context Janitor (cheap model, checks/freshens context)
-            ├── RAG Memory (persistent, cross-session)
-            └── CLI Coder (OpenCode/Aider) -> "Execution Engine"
-                 └── context_optimizer_proxy -> "Turn-Level Optimizer" (Optional)
-                      └── Actual LLM (Claude, GPT-4o)
+  └── MCP Host (Cursor / Claude Desktop / etc.)
+       └── mcp-coder
+            ├── Spec tools (controlled MD contract)
+            ├── Router / janitor (cheap LLM — Phase 2+)
+            ├── RAG memory (Phase 3)
+            ├── Session scheduler
+            └── CLI Coder adapter (Aider / OpenCode)
+                 └── context_optimizer_proxy (optional)
+                      └── LLM provider
 ```
 
-Each sub-agent is an independent process — spawn, do one thing, return, die. No complex agent framework, just rules + model routing.
+Each sub-agent remains a **spawn → work → return** process where possible. No heavy agent framework unless a phase proves we need it.
 
-## Key Concepts
+---
 
-### 1. The "Cheap Orchestrator, Expensive Executor" Pattern
-A cheap LLM (GPT-4o-mini, Gemini Flash) handles routing, context audit, RAG search, and deciding which files to pass to the agent. The expensive LLM (Claude 3.5 Sonnet) only runs the actual coding task inside the CLI agent — focused, efficient, worth the cost.
+## Key concepts
 
-### 2. Session Management
-Each `delegate_task` call starts or continues a session. Sessions can be long-lived and span multiple turns. The wrapper owns session state, not the CLI agent. The wrapper acts as a **session scheduler** — deciding when to start a fresh session vs. continue an existing one to keep context size manageable.
+### Cheap orchestrator, expensive executor
 
-### 3. Cross-Session Memory (RAG)
-Past sessions are indexed by summary + keywords (optionally embeddings). On each new task, the router LLM searches for relevant past work and injects it into context. The coding agent can also query the RAG store mid-task via dedicated tools.
+Cheap model (mini / Flash) for routing, RAG, spec compaction, session classification. Expensive model (Sonnet / Opus) only inside the executor for code changes.
 
-### 4. Context Freshness (Context Janitor)
-Before passing context to the expensive model, the router LLM can audit: "Is this still accurate? Are we missing anything?" If stale, it spawns a cheap sub-agent to refresh before the main task runs.
+### Session management
 
-### 5. Context Extraction (Solving the Walled Garden)
-A major challenge with MCP tools is that they do not receive the full chat history from the host IDE (like Cursor). To ensure the CLI agent has the exact nuance of the user's request without burning tokens on summaries, `mcp-coder` uses a shared-filesystem approach:
-- **Primary Strategy (SpecStory):** `mcp-coder` looks for the `.specstory/history/` directory in the project root. If present, it reads the most recently modified Markdown file (which contains the real-time, perfect-fidelity transcript of the active Cursor chat) and injects it into the CLI agent's prompt.
-- **Fallback Strategy:** If no local transcript is available, it relies on a `context_from_chat` parameter in the MCP tool schema, forcing the host LLM to summarize the relevant decisions before delegation.
+The wrapper **owns** session state — not the CLI agent. Decides new vs continue from `mcp_session_id`, `host_session_id`, policy (`align_host`), and later spec version.
 
-### 6. Dual-Mode Operation (MCP + CLI)
-`mcp-coder` is built to be used both as an MCP server (called by Cursor) AND as a standalone CLI tool. This allows the same powerful, memory-backed agent to be used directly in the terminal when Cursor is closed.
+### Cross-session memory (RAG)
 
-## Data Models
+Index past delegations: summary, keywords, optional embeddings. Before launch: “have we done this before?” Inject only relevant slices.
 
-### Session Entry
+### Context freshness (janitor)
+
+Audit whether assembled context matches repo reality; refresh cheaply before expensive run.
+
+### Context extraction (MCP walled garden)
+
+MCP tools only receive JSON arguments — not full Cursor chat.
+
+- **Host transcript (Phase 1.4):** read Cursor `agent-transcripts/*.jsonl` via host adapter — not SpecStory.
+- **Fallback:** `context_summary` (+ optional `explicit_constraints`, snippets — P1-115).
+- **Long-term:** spec files as contract reduce need for full history ([notes/spec-based-development.md](./notes/spec-based-development.md)).
+
+### Dual-mode operation (MCP + CLI)
+
+Same backend for Cursor MCP and terminal `mcp-coder …` when CLI lands (Phase 2+).
+
+---
+
+## Advantages of this design
+
+- Leverages **mature** execution tools instead of rebuilding an editor agent.
+- **Two-layer** token/cost control (task + turn).
+- **Transparent** — `delegations.jsonl`, spec files, delegation viewer.
+- **Flexible** interaction: hands-off ↔ clarification ↔ optional interactive terminal.
+- **Future-proof** — sub-sessions, more MCP tools, multi-agent via same protocol.
+- Works **in Cursor** and **standalone**.
+
+---
+
+## Data models
+
+### Session entry
+
 ```python
 session_entry = {
-  id: str,                    # "sess_001"
-  created: timestamp,
-  turns: [
+  "id": "sess_001",
+  "created": "timestamp",
+  "turns": [
     {
-      turn: 1,
-      task: str,              # original task from host
-      model_used: str,        # e.g. "claude-sonnet-4"
-      files: [str],           # files involved
-      diff: str,              # raw git diff
-      summary: str,           # human-readable summary
-      tokens_used: int,
-      timestamp: timestamp
+      "turn": 1,
+      "task": "original task from host",
+      "model_used": "claude-sonnet-4",
+      "files": ["..."],
+      "diff": "raw git diff",
+      "summary": "human-readable summary",
+      "tokens_used": 0,
+      "timestamp": "timestamp",
     },
   ],
-  rolling_context: str,       # last N tokens of conversation (pruned)
-  total_tokens: int
+  "rolling_context": "last N tokens (pruned)",
+  "total_tokens": 0,
 }
 ```
 
-### RAG Entry
+### RAG entry
+
 ```python
 rag_entry = {
-  session_id: str,
-  turn: int,
-  summary: str,               # short description
-  keywords: [str],            # for keyword matching
-  embedding: [float],         # from cheap LLM (optional)
-  timestamp: timestamp
+  "session_id": "sess_001",
+  "turn": 1,
+  "summary": "short description",
+  "keywords": ["..."],
+  "embedding": [],  # optional
+  "timestamp": "timestamp",
 }
 ```
 
-## MCP Tools (Example Schema)
+For v1 RAG, keyword + recency may suffice before embeddings.
+
+---
+
+## MCP tools — delegation (Phase 1)
 
 ```json
 {
-  "delegate_task": {
+  "delegate_to_agent": {
     "params": {
       "task": "add pagination to /users endpoint",
-      "model": "claude-sonnet-4",
-      "files_hint": ["routes/users.ts"],
-      "session_id": "sess_001"
+      "target_files": ["routes/users.ts"],
+      "context_summary": "decisions from chat",
+      "backend": "aider"
     },
     "returns": {
-      "diff": "...",
-      "summary": "...",
-      "session_id": "sess_001",
-      "files_changed": ["routes/users.ts"]
+      "success": true,
+      "output": "...",
+      "files_changed": ["routes/users.ts"],
+      "session_reused": false,
+      "session_reason": "policy_always_new",
+      "session_policy": "fallback:always_new"
     }
   }
 }
 ```
 
-## CLI Equivalent (same backend)
+Future: `session_id`, spec paths, `interactive`, richer context fields — see spec tools table above.
+
+---
+
+## CLI equivalent (same backend — planned)
 
 ```bash
-mcp-coder --model claude "add pagination to /users" files/routes/users.ts
+mcp-coder --model claude "add pagination to /users" routes/users.ts
 mcp-coder --session sess_001 "now add sorting"
 mcp-coder status sess_001
 mcp-coder rag "pagination params"
 ```
 
-## Backends Supported
+---
 
-Any CLI coding agent with non-interactive mode:
-- **OpenCode** (Primary target - excellent multi-LLM support and modern architecture)
-- **Aider** (`--yes --no-auto-commits --message "task"`)
-- Claude Code (`--print` / `-p`)
+## Backends supported
 
-## Design Principles
+| Engine | Integration | Notes |
+|--------|-------------|--------|
+| **Aider** | Python API (`Coder.create`) | Phase 1 default |
+| **OpenCode** | Subprocess `opencode run …` | Adapter stub / Phase 2 |
+| Claude Code, Codex CLI, etc. | TBD | As needed |
 
-- **Keep it simple** — no complex agent frameworks, just rules + process spawning.
-- **Pay for value** — cheap model for routing/memory, expensive model for actual coding.
-- **Session-owned state** — the wrapper owns session memory, not the CLI agent.
-- **Layered Optimization** — Task-level optimization belongs here; turn-level prompt hacking belongs in a proxy.
-- **Transparent** — context is inspectable, sessions are resumable.
+---
+
+## Design principles
+
+- **Keep it simple** — rules + adapters + process spawn; avoid heavy frameworks early.
+- **Pay for value** — cheap intelligence for routing/memory; expensive model for code.
+- **Session-owned state** — wrapper owns memory and spec lifecycle, not the CLI agent.
+- **Layered optimization** — task logic here; turn logic in proxy.
+- **Controlled specs** — MCP tools write structured MD; executors do not own the contract files.
+- **Transparent** — logs and specs are inspectable; sessions resumable.
+- **Incremental delivery** — Phase 1 proves delegate + logs; spec system and RAG follow evidence.
+
+---
+
+## Suggested evolution (from ideation — not a fixed schedule)
+
+1. ~~Thin MCP wrapper calling Aider~~ → **Phase 1 (in progress)**.
+2. Home storage, host adapter, sessions, full context → **rest of Phase 1** ([PHASE1_MVP.md](./PHASE1_MVP.md)).
+3. Markdown spec system + controlled MCP spec tools → **Phase 2 candidate** (review at end of Phase 1).
+4. RAG + persistent session DB → **Phase 3**.
+5. Optional interactive Aider delegation; connect proxy by default in templates → **backlog / polish**.
+6. Sub-agents and multi-tool orchestration inside one server → **Phase 4+**.
+
+Manual familiarity with Aider/OpenCode in real repos remains valuable even while MCP automates delegation.
+
+---
+
+## Changelog
+
+| Date | Change |
+|------|--------|
+| 2026-06-03 | Initial vision, two-tier arch, data models |
+| 2026-06-04 | Grok ideation: spec system, role division, interaction modes, Phase 1 vs long-term; P1-100 status |

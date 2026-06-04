@@ -11,6 +11,27 @@
 
 ---
 
+## Files policy (workers must follow)
+
+### Workers **may** edit
+
+- `core/`, `server/`, `main.py`, `tests/`
+- Root **`README.md`**, **`.env.example`**, `pyproject.toml` (if required for the task)
+- **`docs/notes/`** files **explicitly listed** in this spec under Docs (e.g. `storage-and-linking.md`)
+- **`docs/examples/`** only if this spec says so
+
+### Workers **must not** edit (master / planning session only)
+
+- **`docs/IDEA.md`** — vision; not a working doc. No milestone updates, no status churn.
+- **`docs/PHASES.md`**, **`docs/PHASE1_MVP.md`**, **`docs/BACKLOG.md`**
+- **`docs/PHASE1_ISSUES.md`** — worker lists issue IDs in § Results; **master** updates the tracker
+- Other `docs/tasks/*.md` (sibling specs)
+- Do not expand scope into Makefile / singleton / config.yaml unless **listed in § Scope** below
+
+If something belongs in IDEA or the PM board, write it under **§ Results → Suggested for master session** (bullets only).
+
+---
+
 ## Goal
 
 {One paragraph.}

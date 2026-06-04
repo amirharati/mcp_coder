@@ -1,0 +1,8 @@
+# Example workspace config — copy to <workspace>/.mcp-coder/config.yaml
+# User-owned; mcp-coder reads only (never overwritten on delegate).
+
+# Session policy: always_new | align_host
+session_policy: always_new
+
+# Reuse mcp session per Cursor chat:
+# session_policy: align_host

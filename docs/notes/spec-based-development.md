@@ -1,7 +1,7 @@
 # Note: Spec-based development (meta → product)
 
-**Status:** Idea — revisit after Phase 1 MVP is working.  
-**Related:** [PHASE1_MVP.md](../PHASE1_MVP.md) workflow, [PHASES.md](../PHASES.md) Phase 2+, [BACKLOG.md](../BACKLOG.md)
+**Status:** Deferred to **P1-199** (end of Phase 1 review). Not blocking P1-110–P1-140.  
+**Related:** [PHASE1_MVP.md](../PHASE1_MVP.md), [PHASES.md](../PHASES.md), [BACKLOG.md](../BACKLOG.md) BL-150
 
 ---
 
@@ -30,24 +30,24 @@ The executor (Aider) does not need every chat turn if the **spec is the contract
 
 ---
 
-## Possible adaptations (Phase 2+ — not Phase 1)
+## Possible adaptations (decide at P1-199 — implement Phase 2+)
 
-Explore after P1 experiments; add to backlog when prioritizing.
+Explore after P1-110–P1-140 experiments; gatekeeper out of scope until post-P1.
 
 1. **MCP tool accepts a `task_spec` object** (or path to workspace spec under `.mcp-coder/specs/current.md`) instead of only `context_summary` blob.
 2. **Planner (Cursor) updates spec** each delegation; mcp-coder appends to spec § Results / log (mirror our `delegations.jsonl`).
 3. **Session boundary** = spec file version/hash changed materially (like SpecStory hash today).
 4. **Optional:** generate spec from chat via cheap LLM once, then refine per delegation — less resummarizing every call.
-5. **Coexist with SpecStory:** spec = contract; transcript = audit trail when installed.
+5. **Coexist with host transcript:** spec = contract; Cursor `agent-transcripts` = audit trail when available.
 
 **Open question:** Is a workspace-local `.mcp-coder/specs/` (gitignored or committed per team preference) better than only MCP JSON args?
 
 ---
 
-## Why not Phase 1
+## Why not during P1-110–P1-140
 
-Phase 1 validates: MCP → Aider → logs, fallback summary, optional SpecStory.  
-Spec-based product features need P1 data: when does summary fail? when is transcript overload? would a structured spec have helped?
+Phase 1 validates: MCP → Aider → **home storage** → host adapter → sessions → transcript context.  
+Spec-based product features need that data: when does summary fail? when is transcript overload? would a structured spec have helped? **Decide at P1-199.**
 
 ---
 
@@ -64,3 +64,4 @@ Spec-based product features need P1 data: when does summary fail? when is transc
 | Date | Note |
 |------|------|
 | 2026-06-03 | Initial note from planning chat |
+| 2026-06-04 | Deferred to P1-199; SpecStory removed from plan |

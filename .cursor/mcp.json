@@ -1,0 +1,9 @@
+{
+  "mcpServers": {
+    "mcp-coder": {
+      "command": "${workspaceFolder}/.venv/bin/python",
+      "args": ["${workspaceFolder}/main.py", "--mcp"],
+      "cwd": "${workspaceFolder}"
+    }
+  }
+}

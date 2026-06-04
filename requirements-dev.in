@@ -1,0 +1,4 @@
+# Dev / test dependencies (mirrors pyproject.toml [project.optional-dependencies.dev]).
+-r requirements.in
+
+pytest>=8,<10
