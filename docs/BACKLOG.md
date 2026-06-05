@@ -45,8 +45,8 @@ Status: `idea` | `deferred` | `blocked` | `done`
 | BL-107 | `MCP_CODER_MIRROR_LOGS_TO_WORKSPACE` default policy | Migration from P1-100 paths |
 | BL-108 | Pick “main” mcp session among N per `host_session_id` | Heuristic TBD |
 | BL-109 | `continue_session` by explicit `mcp_session_id` | After P1-130 infra |
-| BL-125 | **Persistent MCP server log** + verbosity tiers | **P1-125** — see [PHASE1_ISSUES.md](./PHASE1_ISSUES.md) **P1-ISS-004** (location + levels + defaults) |
-| BL-305 | Server log scope: global vs per-`project_key` | Sub-issue of P1-ISS-004 / BL-125 |
+| BL-125 | ~~**Persistent MCP server log** + verbosity tiers~~ | **done** — P1-125 (2026-06-05) |
+| BL-305 | ~~Server log scope: global vs per-`project_key`~~ | **done** — default `global`; `project` / `both` in yaml/env |
 
 ---
 
@@ -70,7 +70,8 @@ Status: `idea` | `deferred` | `blocked` | `done`
 | BL-302 | Redaction policy doc for logs (secrets) | Required before sharing logs |
 | BL-303 | Metrics export (Prometheus / statsd) | Enterprise-ish; low priority |
 | BL-304 | Global index `hosts/cursor/<id>/index.json` | Cross-project session lookup — **deferred P1-130**; one Cursor chat delegating to multiple repos (see P1-1.3 § Pre-implementation decisions) |
-| BL-305 | Persistent MCP **server** log (process audit) | Same as BL-125; stderr brief today is not persisted |
+| BL-305 | ~~Persistent MCP **server** log (process audit)~~ | **done** — P1-125 |
+| BL-308 | Global `server.jsonl` locking / per-pid subfiles | P1-ISS-011; only if garbled lines in practice |
 | BL-306 | Startup **code version / git hash** in MCP stderr | Detect stale process (P1-ISS-009) |
 | BL-307 | `MCP_CODER_SINGLETON=all` aggressive global kill | Escape hatch; default stays per-workspace |
 

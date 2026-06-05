@@ -9,6 +9,7 @@ from pathlib import Path
 from typing import Any
 
 from core.context.summary import redact_secrets
+from core.logging.server_log import server_log_emit
 from core.storage.paths import (
     legacy_workspace_log_path,
     mirror_log_targets,
@@ -200,10 +201,52 @@ def append_delegation_record(record: dict[str, Any], *, ws: str | None = None) -
             f"[mcp-coder] delegation {record.get('delegation_id')} "
             f"success={record.get('success')} duration_ms={record.get('duration_ms')}"
         )
+
+    success = bool(record.get("success"))
+    error = record.get("error")
+    if success:
+        err_field = None
+        if error:
+            err_text = str(error)
+            err_field = err_text[:200] + ("…" if len(err_text) > 200 else "")
+        server_log_emit(
+            "delegation_completed",
+            level="info",
+            delegation_id=record.get("delegation_id"),
+            success=True,
+            duration_ms=record.get("duration_ms"),
+            mcp_session_id=record.get("mcp_session_id"),
+            log_path=str(log_path.resolve()),
+            files_changed_count=len(record.get("files_changed") or []),
+            error=err_field,
+        )
+    else:
+        server_log_emit(
+            "delegation_failed",
+            level="error",
+            delegation_id=record.get("delegation_id"),
+            error=str(error) if error else "unknown",
+        )
     return log_path
 
 
-def log_host_resolved(*, hint_host_kind: str | None, host_session_id: str | None, transcript_path: str | None) -> None:
+def log_host_resolved(
+    *,
+    hint_host_kind: str | None,
+    host_session_id: str | None,
+    transcript_path: str | None,
+    resolve_error: str | None = None,
+    host_resolve_ms: int | None = None,
+) -> None:
+    server_log_emit(
+        "host_resolved",
+        level="info",
+        host_kind=hint_host_kind,
+        host_session_id=host_session_id,
+        host_transcript_path=transcript_path,
+        resolve_error=resolve_error,
+        host_resolve_ms=host_resolve_ms,
+    )
     if not log_brief() or not host_session_id:
         return
     sid = host_session_id[:8] + "…"
@@ -218,6 +261,15 @@ def log_delegation_received(
     backend: str,
     task_preview: str,
 ) -> None:
+    preview = task_preview[:120] + ("…" if len(task_preview) > 120 else "")
+    server_log_emit(
+        "delegation_received",
+        level="info",
+        delegation_id=delegation_id,
+        backend=backend,
+        target_files_count=len(target_files),
+        task_preview=preview,
+    )
     if not log_brief():
         return
     files = ",".join(target_files[:5]) or "(none)"
@@ -240,6 +292,7 @@ def log_delegation_sent(
     log_path: Path,
     error: str | None = None,
 ) -> None:
+    # delegation_completed / delegation_failed emitted from append_delegation_record
     if not log_brief():
         return
     changed = ",".join(files_changed[:5]) or "(none)"

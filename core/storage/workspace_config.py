@@ -7,18 +7,19 @@ from pathlib import Path
 from typing import Any
 
 from core.logging.delegation_log import log_stderr
+from core.logging.server_log import server_log_warn
 from core.storage.paths import legacy_workspace_config_path, workspace_config_path
 
 _legacy_json_warned = False
 
 
-def _warn_legacy_json_config() -> None:
+def _warn_legacy_json_config(workspace: str | Path | None = None) -> None:
     global _legacy_json_warned
     if _legacy_json_warned:
         return
-    log_stderr(
-        "[mcp-coder] .mcp-coder/config.json is deprecated; use config.yaml (comments supported)"
-    )
+    message = ".mcp-coder/config.json is deprecated; use config.yaml (comments supported)"
+    log_stderr(f"[mcp-coder] {message}")
+    server_log_warn(message, workspace_path=str(workspace) if workspace else None)
     _legacy_json_warned = True
 
 
@@ -45,7 +46,7 @@ def load_workspace_config(workspace: str | Path) -> dict[str, Any]:
 
     json_path = legacy_workspace_config_path(workspace)
     if json_path.is_file():
-        _warn_legacy_json_config()
+        _warn_legacy_json_config(workspace)
         try:
             return _load_json(json_path)
         except (json.JSONDecodeError, OSError):

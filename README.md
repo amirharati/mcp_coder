@@ -120,6 +120,9 @@ Other providers (Anthropic, OpenAI direct) still work if you set the matching AP
 | `MCP_CODER_LOG_BRIEF` | on | Brief receive/send lines on **stderr** (safe for MCP) |
 | `MCP_CODER_LOG_VERBOSE` | off | Extra summary when JSONL row is appended |
 | `MCP_CODER_LOG_FULL_PROMPT` | off | Include full prompt in JSONL record |
+| `MCP_CODER_SERVER_LOG` | on | Append structured server audit log to JSONL (`0`/`off` disables file only) |
+| `MCP_CODER_SERVER_LOG_LEVEL` | `info` | `error` \| `warn` \| `info` \| `debug` — minimum level for file append |
+| `MCP_CODER_SERVER_LOG_SCOPE` | `global` | `global` \| `project` \| `both` — where `server.jsonl` is written |
 
 ```bash
 MCP_CODER_HOME=~/.mcp-coder
@@ -128,7 +131,12 @@ MCP_CODER_SESSION_POLICY=always_new
 # MCP_CODER_MIRROR_LOGS_TO_WORKSPACE=1
 # MCP_CODER_LOG_VERBOSE=1
 # MCP_CODER_LOG_FULL_PROMPT=1
+# MCP_CODER_SERVER_LOG=1
+# MCP_CODER_SERVER_LOG_LEVEL=info
+# MCP_CODER_SERVER_LOG_SCOPE=global
 ```
+
+**Server audit log** (`server.jsonl`): durable JSONL for MCP startup, singleton, host resolve, session acquire, and delegation lifecycle. Stderr brief lines (`MCP_CODER_LOG_BRIEF`) are unchanged. Workspace `config.yaml` keys `server_log`, `server_log_level`, and `server_log_scope` override env. Inspect with `make server-logs-last` (global) or `make server-logs-last TEST_WS=/path/to/repo` (project file). Rotation (`MCP_CODER_SERVER_LOG_MAX_MB`) is not implemented.
 
 ---
 
@@ -137,7 +145,9 @@ MCP_CODER_SESSION_POLICY=always_new
 Canonical delegation logs live under **`MCP_CODER_HOME`** (default `~/.mcp-coder`), not in the git repo. Session folders:
 
 ```text
-~/.mcp-coder/projects/<project_key>/sessions/<mcp_session_id>/
+~/.mcp-coder/
+  server.jsonl                       # global MCP server audit log (default scope)
+  projects/<project_key>/sessions/<mcp_session_id>/
   session.json
   delegations.jsonl
 ```

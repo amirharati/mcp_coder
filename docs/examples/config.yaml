@@ -6,3 +6,8 @@ session_policy: always_new
 
 # Reuse mcp session per Cursor chat:
 # session_policy: align_host
+
+# Server audit log (optional; overrides MCP_CODER_SERVER_LOG_* env)
+# server_log: on
+# server_log_level: info
+# server_log_scope: global

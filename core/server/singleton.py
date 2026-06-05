@@ -9,6 +9,7 @@ import time
 from pathlib import Path
 
 from core.logging.delegation_log import log_brief, log_stderr
+from core.logging.server_log import server_log_emit
 from core.storage.paths import ensure_mcp_coder_home, mcp_coder_home, normalize_workspace, project_key
 
 _STARTUP_GRACE_SEC = 0.5
@@ -156,6 +157,20 @@ def enforce_single_stdio_server(
     for pid in stale_mcp_pids(ws, main_script=main_script):
         attempted.append(pid)
         gone = _terminate_pid(pid)
+        if gone:
+            server_log_emit(
+                "singleton_stale_terminated",
+                level="info",
+                stale_pid=pid,
+                workspace_path=ws,
+            )
+        else:
+            server_log_emit(
+                "singleton_stale_zombie",
+                level="warn",
+                stale_pid=pid,
+                workspace_path=ws,
+            )
         if log_brief():
             if gone:
                 log_stderr(f"[mcp-coder] terminated stale stdio server pid={pid} ws={ws}")

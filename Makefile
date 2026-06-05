@@ -1,4 +1,4 @@
-.PHONY: venv install install-locked install-dev lock test mcp mcp-ps mcp-kill mcp-smoke logs-last test-ws
+.PHONY: venv install install-locked install-dev lock test mcp mcp-ps mcp-kill mcp-smoke logs-last server-logs-last test-ws
 
 PYTHON ?= python3.12
 # Workspace to test against (override: make mcp-smoke TEST_WS=/path/to/repo)
@@ -54,6 +54,10 @@ print('config.yaml:', 'yes' if os.path.isfile(cfg) else 'missing'); \
 # Last delegation line for TEST_WS
 logs-last:
 	.venv/bin/python scripts/logs_last.py "$(TEST_WS)"
+
+# Last server audit log lines (global; pass TEST_WS=/path on CLI for project file)
+server-logs-last:
+	.venv/bin/python scripts/server_logs_last.py $(if $(filter command line,$(origin TEST_WS)),"$(TEST_WS)",)
 
 # Live delegate smoke (needs OPENROUTER_API_KEY in .env)
 test-ws:

@@ -9,7 +9,7 @@ Status: `open` | `scheduled` | `done` | `wontfix-p1` (defer with reason)
 
 | When to fix | Milestone |
 |-------------|-----------|
-| Before Phase 1 exit | P1-130, P1-140, **P1-125**, or P1-199 decision |
+| Before Phase 1 exit | P1-140, or P1-199 decision |
 | Phase 2+ | Mark `wontfix-p1` + link BL-* |
 
 ---
@@ -21,7 +21,8 @@ Status: `open` | `scheduled` | `done` | `wontfix-p1` (defer with reason)
 | [P1-ISS-001](#p1-iss-001-active-cursor-chat--newest-mtime) | `done` | high | Active Cursor chat ≠ newest transcript mtime | **P1-130** | score + tie-break |
 | [P1-ISS-002](#p1-iss-002-cursor-slug-heuristic-failures) | `open` | medium | Cursor project slug heuristic can fail | P1-120+ doc / env | Override exists |
 | [P1-ISS-003](#p1-iss-003-legacy-delegations-without-host-fields) | `open` | low | Legacy delegations lack `host_*` | doc only | Expected |
-| [P1-ISS-004](#p1-iss-004-persistent-mcp-server-log) | `scheduled` | high | Persistent MCP **server** log + verbosity | **P1-125** | See BL-125 |
+| [P1-ISS-004](#p1-iss-004-persistent-mcp-server-log) | `done` | high | Persistent MCP **server** log + verbosity | **P1-125** | Shipped 2026-06-05 |
+| [P1-ISS-011](#p1-iss-011-global-server-log-interleave) | `wontfix-p1` | low | Global `server.jsonl` interleave / rare garbled line | Phase 2+ / BL-308 | Use `server_log_scope: project` |
 | [P1-ISS-005](#p1-iss-005-repo-move-orphans-home-data) | `open` | low | Moving repo orphans `project_key` data | P1-199 / Phase 2 | By design for now |
 | [P1-ISS-006](#p1-iss-006-many-mcp-sessions-per-host-chat) | `done` | medium | Many mcp sessions per Cursor chat — no “main” picker | **P1-130** | `align_host` reuses latest; UI picker BL-108 |
 | [P1-ISS-007](#p1-iss-007-session_policy-field-naming) | `done` | low | `session_policy` naming inconsistent | **P1-130** | `always_new` \| `align_host` |
@@ -80,41 +81,29 @@ Status: `open` | `scheduled` | `done` | `wontfix-p1` (defer with reason)
 
 ### P1-ISS-004: Persistent MCP server log
 
+**Status:** `done` — closed 2026-06-05 at **P1-125**.
+
 **Found:** P1-120 worker § Results; planning gap vs delegation JSONL.
 
-**Problem:**
+**Shipped:** `core/logging/server_log.py`; default `~/.mcp-coder/server.jsonl` (`MCP_CODER_SERVER_LOG_SCOPE=global`); levels + workspace yaml overrides; events through delegation lifecycle; `make server-logs-last`. See `docs/tasks/P1-1.25-server-log.md` § Results.
 
-| What exists | Limitation |
-|-------------|------------|
-| Per-session `delegations.jsonl` under `~/.mcp-coder/.../sessions/.../` | One row per **delegation** only |
-| `MCP_CODER_LOG_BRIEF` on stderr | Ephemeral — Cursor MCP panel, not durable |
-| `MCP_CODER_LOG_VERBOSE` | Still not a structured server audit trail |
+**Not shipped (deferred):** rotation (`MCP_CODER_SERVER_LOG_MAX_MB`), global `~/.mcp-coder/config.yaml`, optional `debug` events, file locking — see **P1-ISS-011** / BL-308.
 
-Missing: **server lifecycle** events (startup, shutdown, host resolve errors, config, uncaught handler errors) with **configurable verbosity** and a **default on-disk location**.
+**Backlog (closed):** BL-125, BL-305.
 
-**Proposed milestone:** **P1-125** (optional before P1-199) or must-fix at P1-199 if debugging remains painful.
+---
 
-**Proposed design (defaults — adjust when implementing):**
+### P1-ISS-011: Global server log interleave
 
-| Knob | Default | Purpose |
-|------|---------|---------|
-| **Location** | `~/.mcp-coder/server.jsonl` | Global server log |
-| Alt | `~/.mcp-coder/projects/<project_key>/server.jsonl` | Per-project server log (optional `MCP_CODER_SERVER_LOG_SCOPE=global\|project`) |
-| **Level** | `info` | `MCP_CODER_SERVER_LOG_LEVEL=error\|warn\|info\|debug` |
-| **Enable** | `on` when file logging used | `MCP_CODER_SERVER_LOG=1` or `auto` (on if `MCP_CODER_HOME` set) |
-| **Dual-write** | brief stderr lines also append at `info+` when server log on | Keeps current UX |
+**Status:** `wontfix-p1` — accepted limitation at P1-125; revisit only if garbled lines show up in daily use.
 
-**Record shape (sketch):**
+**Found:** P1-125 worker § Results (multi-workspace / concurrency).
 
-```json
-{"type":"server","event":"startup","timestamp":"...","mcp_coder_home":"...","host_provider":"cursor","log_level":"info"}
-{"type":"server","event":"host_resolved","host_session_id":"...","resolve_error":null}
-{"type":"server","event":"delegation_handled","delegation_id":"...","log_path":"..."}
-```
+**Problem:** With default `server_log_scope: global`, every MCP stdio process appends to one file. Lines interleave but are tagged with `pid`, `workspace_path`, `project_key`. No file locking; under heavy parallel writes a rare **corrupted JSON line** is possible (POSIX `O_APPEND` is usually fine for small lines).
 
-**Out of scope for P1-ISS-004 fix:** Replacing delegation JSONL; full log rotation UI (can add `MCP_CODER_SERVER_LOG_MAX_MB` later).
+**Mitigation (no code):** Set `server_log_scope: project` (or `both`) in workspace `config.yaml` for repos you run in parallel.
 
-**Backlog:** [BACKLOG.md](./BACKLOG.md) BL-125, BL-305.
+**If we fix later:** file locking, per-pid subfiles, or default scope change — [BACKLOG.md](./BACKLOG.md) BL-308.
 
 ---
 
@@ -209,5 +198,6 @@ Missing: **server lifecycle** events (startup, shutdown, host resolve errors, co
 
 | Date | Change |
 |------|--------|
+| 2026-06-05 | P1-125 done; P1-ISS-004 closed; P1-ISS-011 opened (wontfix-p1) |
 | 2026-06-04 | P1-130 done; P1-ISS-009/010 opened; config.yaml + singleton extras |
 | 2026-06-04 | Initial tracker after P1-120 review; P1-ISS-004 server log design sketched |

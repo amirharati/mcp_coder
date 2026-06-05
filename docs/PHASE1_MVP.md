@@ -1,6 +1,6 @@
 # Phase 1 MVP — Product manager doc
 
-**Status:** Planning (replanned 2026-06-04)  
+**Status:** In progress (replanned 2026-06-04; P1-125 done 2026-06-05)  
 **Host:** Cursor first (other hosts via adapter layer later)  
 **Technical reference:** [PHASES.md](./PHASES.md) § Phase 1 · [Storage & linking](./notes/storage-and-linking.md)  
 **Vision:** [IDEA.md](./IDEA.md)  
@@ -56,7 +56,7 @@ Phase 1 still **no** owned context pipeline (no summarizer/RAG inside mcp-coder)
 | **1.4** Full context (Cursor) | P1-140 | `todo` | `P1-1.4-cursor-transcript-context.md` | **Next** — inject transcript; caps + logging |
 | **1.x opt** Richer MCP fields | P1-115 | `optional` | — | `explicit_constraints`, snippets — if still needed |
 | **1.x opt** Cheap LLM classifier | P1-131 | `optional` | — | Deferred; backlog |
-| **1.x opt** Server log + verbosity | P1-125 | `optional` | — | **BL-125/305** — persistent server jsonl; not session delegations |
+| **1.x opt** Server log + verbosity | P1-125 | `done` | `P1-1.25-server-log.md` | E2E 2026-06-05; `~/.mcp-coder/server.jsonl` |
 | **Exit** Phase 1 review | P1-199 | `blocked` | — | Spec strategy, gatekeeper, Phase 2 goals |
 
 **Removed from spine:** P1-120 SpecStory, schema-first P1-110.
@@ -122,7 +122,7 @@ See local `docs/tasks/P1-1.2-host-adapter-cursor.md` § Results.
 - [x] Delegate from Cursor → log shows `host_session_id` when transcript exists
 - [x] No imports of `cursor` paths outside `core/host/cursor.py`
 
-**Known gaps (tracked):** [PHASE1_ISSUES.md](./PHASE1_ISSUES.md) — e.g. **P1-ISS-001** (active chat heuristic), **P1-ISS-004** (server log → **P1-125**).
+**Known gaps (tracked):** [PHASE1_ISSUES.md](./PHASE1_ISSUES.md) — e.g. **P1-ISS-001** (active chat heuristic, partial).
 
 ---
 
@@ -152,7 +152,7 @@ See local `docs/tasks/P1-1.2-host-adapter-cursor.md` § Results.
 
 - [x] See worker spec § Done when + § Results E2E table
 
-**Known gaps:** [PHASE1_ISSUES.md](./PHASE1_ISSUES.md) — **P1-ISS-009** (MCP restart after code deploy), **P1-ISS-010** (UE zombies), **P1-ISS-004** (server log → P1-125).
+**Known gaps:** [PHASE1_ISSUES.md](./PHASE1_ISSUES.md) — **P1-ISS-009** (MCP restart after code deploy), **P1-ISS-010** (UE zombies), **P1-ISS-011** (global server log interleave — low).
 
 ---
 
@@ -181,6 +181,30 @@ See local `docs/tasks/P1-1.2-host-adapter-cursor.md` § Results.
 
 ---
 
+### P1-125 — Server log + verbosity (`done`)
+
+**Depends on:** P1-130 `done`  
+**E2E:** 2026-06-05 — live global `server.jsonl` after Cursor MCP restart + delegate; 78 pytest (incl. 8 server-log tests)
+
+**Goal:** Durable MCP process audit trail (`type: server` JSONL) separate from per-session `delegations.jsonl`.
+
+**Worker spec:** `docs/tasks/P1-1.25-server-log.md` § Results
+
+**Shipped**
+
+- [x] `core/logging/server_log.py` — enable/level/scope, env + workspace yaml
+- [x] Default **`global`** → `~/.mcp-coder/server.jsonl`; optional `project` / `both`
+- [x] Events: `stdio_server_ready`, singleton, host, session, delegation received/completed/failed, `config_deprecated`
+- [x] `make server-logs-last`, `scripts/server_logs_last.py`
+- [x] README, `.env.example`, `docs/examples/config.yaml`, storage note
+
+**Decisions (from worker)**
+
+- Failed delegations: **`delegation_failed` only** (not also `delegation_completed`)
+- No file locking on global log — acceptable for debug; see **P1-ISS-011** / BL-308 if garbled lines appear
+
+---
+
 ### P1-115 / P1-131 — Optional
 
 - **P1-115:** `explicit_constraints`, `code_snippets_from_chat` — only if P1-140 still loses nuance.
@@ -202,6 +226,7 @@ See local `docs/tasks/P1-1.2-host-adapter-cursor.md` § Results.
 - [x] Home storage: all delegations under `~/.mcp-coder` with clear links
 - [x] Host adapter: Cursor isolated; `host_session_id` on records
 - [x] Session policies: `always_new` and `align_host` logged and testable (E2E 2026-06-04)
+- [x] Server audit log: `server.jsonl` with lifecycle + delegation link fields (E2E 2026-06-05)
 - [ ] Full context: transcript pass-through works; limits documented
 - [ ] P1-199 review completed; Phase 2 goals adjusted from logs
 
@@ -217,7 +242,7 @@ See local `docs/tasks/P1-1.2-host-adapter-cursor.md` § Results.
 | Q4 | Transcript tail cap default on or off? | P1-140 experiments |
 | Q5 | Spec mandatory when? | P1-199 only |
 | Q6 | Cursor `target_files` reliability? | Ongoing |
-| Q7 | Server log: global vs per-`project_key`? Verbosity tiers? Default on? | **P1-125** (BL-125/305) |
+| Q7 | Server log: global vs per-`project_key`? Verbosity tiers? Default on? | **Resolved P1-125:** default `global`, level `info`, log on; yaml can set `server_log_scope: project` |
 
 ---
 
@@ -229,7 +254,17 @@ See local `docs/tasks/P1-1.2-host-adapter-cursor.md` § Results.
 |-------|-------|
 | Date | 2026-06-04 |
 | host_session_id | `90fcb3f8-…` (test_proj, live resolve) |
-| Notes | `core/host/` shipped; metadata on session + JSONL; **gap:** no persistent server log (BL-125/305) |
+| Notes | `core/host/` shipped; metadata on session + JSONL |
+
+---
+
+### 1.25 — Server log
+
+| Field | Value |
+|-------|-------|
+| Date | 2026-06-05 |
+| Path | `~/.mcp-coder/server.jsonl` (default scope `global`) |
+| Notes | Live E2E: `stdio_server_ready` → `delegation_received` → `delegation_failed` (Aider error path); disambiguate via `pid`, `project_key`; see P1-1.25 § Results |
 
 ---
 
@@ -269,8 +304,8 @@ See local `docs/tasks/P1-1.2-host-adapter-cursor.md` § Results.
 
 ## Next action
 
-1. Plan **milestone 1.4** — Cursor transcript inject into Aider prompt (local worker spec).
-2. Optional parallel: persistent MCP server log ([PHASE1_ISSUES.md](./PHASE1_ISSUES.md) P1-ISS-004).
+1. Plan **milestone 1.4** — Cursor transcript inject into Aider prompt (local worker spec `P1-1.4-cursor-transcript-context.md`).
+2. Operator: reload Cursor MCP after deploy (`make mcp-kill` or Reload Window) — [P1-ISS-009](./PHASE1_ISSUES.md#p1-iss-009-mcp-process-stale-after-code-deploy).
 
 ---
 
@@ -286,3 +321,4 @@ See local `docs/tasks/P1-1.2-host-adapter-cursor.md` § Results.
 | 2026-06-04 | P1-130 done — session policies, host scoring, executor cache; E2E align_host |
 | 2026-06-04 | **Gap logged:** persistent MCP server log → BL-125/305, optional P1-125 |
 | 2026-06-04 | **Replanned:** infra → host adapter → sessions → full context; `~/.mcp-coder`; SpecStory removed; spec deferred to P1-199 |
+| 2026-06-05 | **P1-125 done** — `server.jsonl`, P1-ISS-004 closed; P1-ISS-011 opened (global log interleave, wontfix-p1) |

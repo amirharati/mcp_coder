@@ -3,6 +3,7 @@ from pathlib import Path
 from unittest.mock import patch
 
 from core.engine.base import ExecutionResult
+from core.logging.server_log import server_log_path_global
 from server.mcp_server import delegate_to_agent
 
 
@@ -11,6 +12,7 @@ def test_delegate_to_agent_logs_and_returns(tmp_path, monkeypatch):
     workspace = tmp_path / "workspace"
     workspace.mkdir()
     monkeypatch.setenv("MCP_CODER_HOME", str(home))
+    monkeypatch.setenv("MCP_CODER_SERVER_LOG", "1")
     monkeypatch.chdir(workspace)
     monkeypatch.delenv("MCP_CODER_LOG_DIR", raising=False)
 
@@ -56,3 +58,9 @@ def test_delegate_to_agent_logs_and_returns(tmp_path, monkeypatch):
 
     pointer = workspace / ".mcp-coder" / "session.json"
     assert pointer.is_file()
+
+    server_log = server_log_path_global()
+    assert server_log.is_file()
+    events = [json.loads(line)["event"] for line in server_log.read_text(encoding="utf-8").splitlines()]
+    assert "delegation_received" in events
+    assert "delegation_completed" in events

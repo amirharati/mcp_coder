@@ -22,6 +22,7 @@ from core.logging.delegation_log import (
     utc_now_iso,
     workspace_path,
 )
+from core.logging.server_log import server_log_emit
 from core.session.policy import resolve_session_policy
 from core.session.store import SessionStore
 
@@ -112,20 +113,41 @@ def delegate_to_agent(
     t_host = time.perf_counter()
     try:
         host_hint = get_host_provider().resolve_active_session(ws)
-    except Exception:
-        host_hint = HostSessionHint(resolve_error="host_resolve_failed")
+    except Exception as exc:
+        host_hint = HostSessionHint(resolve_error=f"{type(exc).__name__}: {exc}")
     host_resolve_ms = int((time.perf_counter() - t_host) * 1000)
 
     t_sess = time.perf_counter()
     storage = SessionStore().acquire(ws, policy, host_hint)
     session_decision_ms = int((time.perf_counter() - t_sess) * 1000)
 
+    server_log_emit(
+        "session_acquired",
+        level="info",
+        workspace_path=ws,
+        session_policy=storage.session_policy,
+        session_action=storage.session_action,
+        session_reason=storage.session_reason,
+        mcp_session_id=storage.mcp_session_id,
+        session_dir=str(storage.session_dir.resolve()),
+        session_decision_ms=session_decision_ms,
+    )
+
     host_context = apply_host_hint(storage.session_dir, host_hint)
     log_host_resolved(
         hint_host_kind=host_hint.host_kind,
         host_session_id=host_hint.host_session_id,
         transcript_path=host_hint.host_transcript_path,
+        resolve_error=host_hint.resolve_error,
+        host_resolve_ms=host_resolve_ms,
     )
+    if host_hint.resolve_error:
+        server_log_emit(
+            "host_resolve_failed",
+            level="warn",
+            workspace_path=ws,
+            resolve_error=host_hint.resolve_error,
+        )
 
     log_delegation_received(
         delegation_id=delegation_id,

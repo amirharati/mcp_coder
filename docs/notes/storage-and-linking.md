@@ -17,10 +17,12 @@ Default root: `MCP_CODER_HOME` → `~/.mcp-coder` (or `$XDG_DATA_HOME/mcp-coder`
 
 ```text
 ~/.mcp-coder/
+  server.jsonl                        # global MCP server audit log (startup, host, delegations)
   config.yaml                         # optional global defaults (future; per-repo config lives in workspace)
   projects/
     <project_key>/
       project.json                    # workspace_path, timestamps
+      server.jsonl                    # optional per-project server log (scope=project|both)
       sessions/
         <mcp_session_id>/
           session.json                # policy, host link, backend
@@ -30,6 +32,8 @@ Default root: `MCP_CODER_HOME` → `~/.mcp-coder` (or `$XDG_DATA_HOME/mcp-coder`
       <host_session_id>/
         index.json                    # optional cross-project index (P1-130+)
 ```
+
+**Server audit log:** `server.jsonl` is separate from per-session `delegations.jsonl`. It records MCP process events (startup, singleton, host resolve, session acquire, delegation received/completed) as one JSON object per line (`type: server`). Default path is `~/.mcp-coder/server.jsonl`; with `MCP_CODER_SERVER_LOG_SCOPE=project` or `both`, also append under `projects/<project_key>/server.jsonl`. Controlled by `MCP_CODER_SERVER_LOG*` env or workspace `config.yaml` keys `server_log`, `server_log_level`, `server_log_scope`.
 
 **Workspace pointer (system-managed, overwritten on delegate):**
 
@@ -162,5 +166,5 @@ Canonical write is under `~/.mcp-coder/projects/.../sessions/.../delegations.jso
 
 | Date | Note |
 |------|------|
-| 2026-06-04 | Initial layout from planning chat |
+| 2026-06-04 | P1-125: `server.jsonl` global/per-project MCP audit log |
 | 2026-06-04 | `session.json` pointer, `config.yaml`, session policies, nested Cursor transcript paths |

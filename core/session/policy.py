@@ -4,6 +4,7 @@ import os
 from pathlib import Path
 
 from core.logging.delegation_log import log_stderr
+from core.logging.server_log import server_log_warn
 from core.storage.workspace_config import load_workspace_config
 
 POLICY_ALWAYS_NEW = "always_new"
@@ -18,10 +19,12 @@ def _warn_fallback_session_deprecated() -> None:
     if _deprecation_warned:
         return
     if os.environ.get("MCP_CODER_FALLBACK_SESSION", "").strip():
-        log_stderr(
-            "[mcp-coder] MCP_CODER_FALLBACK_SESSION is deprecated; "
+        message = (
+            "MCP_CODER_FALLBACK_SESSION is deprecated; "
             "use MCP_CODER_SESSION_POLICY (new var wins if both set)"
         )
+        log_stderr(f"[mcp-coder] {message}")
+        server_log_warn(message)
         _deprecation_warned = True
 
 
