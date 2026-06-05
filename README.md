@@ -2,7 +2,7 @@
 
 MCP server that delegates coding work to CLI agents (Aider, OpenCode, …) with pass-through context and structured delegation logs.
 
-**Phase 1 progress:** MCP → Aider delegation, home storage under `~/.mcp-coder`, Cursor host linking, session policies (`always_new` | `align_host`), workspace `config.yaml`. **Next:** inject Cursor chat transcript into the executor prompt — see [docs/PHASE1_MVP.md](docs/PHASE1_MVP.md).
+**Phase 1 progress:** MCP → Aider delegation, home storage under `~/.mcp-coder`, Cursor host linking, session policies (`always_new` | `align_host`), workspace `config.yaml`, opt-in Cursor transcript dump (`host_transcript: dump`). See [docs/PHASE1_MVP.md](docs/PHASE1_MVP.md).
 
 **Docs:** [docs/README.md](docs/README.md)
 
@@ -162,13 +162,28 @@ See [docs/notes/storage-and-linking.md](docs/notes/storage-and-linking.md) for I
 
 ## Host adapter (Cursor)
 
-mcp-coder resolves **which Cursor chat is active** via a host adapter layer (`core/host/`). On each delegation it records metadata only — **no transcript content** is read into the Aider prompt yet (P1-140).
+mcp-coder resolves **which Cursor chat is active** via a host adapter layer (`core/host/`). On each delegation it records metadata (path, ids, sizes). **Transcript injection is opt-in** — default `host_transcript: none` sends only `context_summary` + `task`; set `host_transcript: dump` to prepend the full parsed Cursor chat JSONL (dump-all, no smart trim).
 
 | Field | Meaning |
 |-------|---------|
 | `host_kind` | `"cursor"` when resolved |
 | `host_session_id` | Cursor transcript uuid (scored: max of transcript mtime and delegation history) |
 | `host_transcript_path` | Absolute path to nested `…/<id>/<id>.jsonl` |
+| `context_mode` | `fallback` (default) or `host_transcript` when dump injected text |
+| `context.host_transcript_injected_bytes` | UTF-8 size of transcript block in the Aider prompt |
+| `context.host_transcript_file_bytes` | Raw on-disk JSONL size (stat) |
+| `context.host_transcript_bytes` | Alias of `host_transcript_injected_bytes` (one release) |
+
+**Transcript policy** (default `none`):
+
+| `host_transcript` | Behavior |
+|-------------------|----------|
+| `none` | Mode A — summary + task only; no file read |
+| `dump` | Mode B — full parsed transcript prepended; may hit model context limits on long chats |
+
+Resolution: built-in default → `MCP_CODER_HOST_TRANSCRIPT` env → `<workspace>/.mcp-coder/config.yaml` (yaml wins). Optional tail cap when dump enabled: `MCP_CODER_MAX_TRANSCRIPT_BYTES` (0/unset = no limit).
+
+With `dump` + a very long chat, delegations **should** fail with provider context/token errors — that is expected in Phase 1. Check `host_transcript_injected_bytes` and `prompt_tokens_est` in `delegations.jsonl`. Live overflow test: `MCP_CODER_OVERFLOW_TEST=1 pytest tests/test_transcript_overflow.py -s` (needs `OPENROUTER_API_KEY`).
 
 **Slug heuristic:** resolved workspace path → replace `/` with `-` (e.g. `/Users/amir/Code/foo` → `Users-amir-Code-foo`). If that folder is missing under `~/.cursor/projects/`, tries `_` → `-` in the slug. Override with `MCP_CODER_CURSOR_PROJECT_SLUG` if the heuristic fails.
 
@@ -178,17 +193,24 @@ mcp-coder resolves **which Cursor chat is active** via a host adapter layer (`co
 | `MCP_CODER_CURSOR_ROOT` | `~/.cursor` | Cursor config root (tests override) |
 | `MCP_CODER_CURSOR_PROJECT_SLUG` | — | Skip slug heuristic; use this folder name |
 | `MCP_CODER_HOST_TIE_WINDOW_SEC` | `10` | Tie window for host scoring (seconds) |
+| `MCP_CODER_HOST_TRANSCRIPT` | `none` | `none` \| `dump` — full Cursor chat prepend |
+| `MCP_CODER_MAX_TRANSCRIPT_BYTES` | `0` | Tail cap on injected transcript when `dump` (0 = uncapped) |
 
 **Workspace override:** `<workspace>/.mcp-coder/config.yaml` (user-owned; mcp-coder reads only):
 
 ```yaml
 # Reuse mcp session per Cursor chat
 session_policy: align_host
+
+# Opt-in full transcript injection (default: none)
+# host_transcript: dump
 ```
 
 Wins over env. Legacy `config.json` still works if yaml is missing. Example: `docs/examples/config.yaml`. Delegation updates `session.json` (pointer) only — not config.
 
 When resolved, stderr may show: `[mcp-coder] host cursor session=59553f0e… transcript=…`
+
+**Aider + MCP (Playwright):** FastMCP runs on asyncio; Aider’s URL scraping uses sync Playwright. `core/engine/aider_engine.py` runs `coder.run()` in a single-worker `ThreadPoolExecutor` so `detect_urls` stays enabled without asyncio conflicts. Reload MCP after code changes.
 
 ---
 

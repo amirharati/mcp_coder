@@ -1,6 +1,6 @@
 # Phase 1 MVP — Product manager doc
 
-**Status:** In progress (replanned 2026-06-04; P1-125 done 2026-06-05)  
+**Status:** Spine complete (replanned 2026-06-04; P1-140 done 2026-06-05) — **next:** P1-199 exit review  
 **Host:** Cursor first (other hosts via adapter layer later)  
 **Technical reference:** [PHASES.md](./PHASES.md) § Phase 1 · [Storage & linking](./notes/storage-and-linking.md)  
 **Vision:** [IDEA.md](./IDEA.md)  
@@ -26,7 +26,7 @@
 3. **Full context (P1-140):** Read Cursor `agent-transcripts/*.jsonl` via host adapter; inject into Aider prompt (replace SpecStory plan).
 4. **Checkpoint:** Spec-as-contract, gatekeeper, N-session heuristics → **end of Phase 1 review** (not blocking 1.1–1.4).
 
-Phase 1 still **no** owned context pipeline (no summarizer/RAG inside mcp-coder). Pass-through: Cursor summary in tool args + optional transcript from disk.
+Phase 1 still **no** owned context pipeline (no summarizer/RAG inside mcp-coder). Pass-through: Cursor summary in tool args; **opt-in** full Cursor transcript (`host_transcript: dump`, default `none`).
 
 ---
 
@@ -53,11 +53,11 @@ Phase 1 still **no** owned context pipeline (no summarizer/RAG inside mcp-coder)
 | **1.1** Home storage + linking | P1-110 | `done` | `P1-1.1-home-storage.md` | E2E 2026-06-04; `~/.mcp-coder`, per-session jsonl |
 | **1.2** Host adapters (Cursor) | P1-120 | `done` | `P1-1.2-host-adapter-cursor.md` | E2E 2026-06-04; host metadata on logs |
 | **1.3** Session persistence | P1-130 | `done` | `P1-1.3-session-persistence.md` | Policies, host scoring, Coder cache |
-| **1.4** Full context (Cursor) | P1-140 | `todo` | `P1-1.4-cursor-transcript-context.md` | **Next** — inject transcript; caps + logging |
+| **1.4** Full context (Cursor) | P1-140 | `done` | `P1-1.4-cursor-transcript-context.md` | E2E 2026-06-05; opt-in `dump`; overflow test |
 | **1.x opt** Richer MCP fields | P1-115 | `optional` | — | `explicit_constraints`, snippets — if still needed |
 | **1.x opt** Cheap LLM classifier | P1-131 | `optional` | — | Deferred; backlog |
 | **1.x opt** Server log + verbosity | P1-125 | `done` | `P1-1.25-server-log.md` | E2E 2026-06-05; `~/.mcp-coder/server.jsonl` |
-| **Exit** Phase 1 review | P1-199 | `blocked` | — | Spec strategy, gatekeeper, Phase 2 goals |
+| **Exit** Phase 1 review | P1-199 | `todo` | — | **Next** — spec strategy, gatekeeper, Phase 2 goals |
 
 **Removed from spine:** P1-120 SpecStory, schema-first P1-110.
 
@@ -156,28 +156,33 @@ See local `docs/tasks/P1-1.2-host-adapter-cursor.md` § Results.
 
 ---
 
-### P1-140 — Milestone 1.4: Full context (Cursor transcript)
+### P1-140 — Milestone 1.4: Full context (Cursor transcript) (`done`)
 
-**Depends on:** P1-130 `done`
+**Depends on:** P1-130 `done`  
+**E2E:** 2026-06-05 — default `host_transcript: none`; `dump` on `mcp_coder_test_proj`; overflow ~1.86M bytes → 128k token limit error
 
-**Goal:** Aider sees host chat history without SpecStory or relying on Cursor to paste the thread.
+**Goal:** Opt-in dump-all of Cursor `agent-transcripts` into Aider prompt; log inject sizes; prove context-limit failures are visible.
 
-**In scope**
+**Worker spec:** `docs/tasks/P1-1.4-cursor-transcript-context.md` § Results
 
-- [ ] `core/host/cursor_transcript.py` (or under `cursor.py`) — JSONL → normalized text block
-- [ ] Prompt assembly: transcript + `context_summary` + `task` (+ files)
-- [ ] Log `context.host_transcript_hash`, bytes, truncation if cap exceeded
-- [ ] Optional dumb tail cap: `MCP_CODER_MAX_TRANSCRIPT_BYTES`
+**Shipped**
 
-**Out of scope**
+- [x] `core/host/cursor_transcript.py` — JSONL → plain text (`[user]` / `[assistant]` blocks)
+- [x] `core/context/transcript_policy.py` — `none` (default) \| `dump`; env + `config.yaml`
+- [x] `assemble_prompt` — transcript + summary + task; `context_mode` `fallback` \| `host_transcript`
+- [x] Logging: `host_transcript_injected_bytes`, `host_transcript_file_bytes`, hash, policy, truncation fields
+- [x] `MCP_CODER_MAX_TRANSCRIPT_BYTES` optional tail cap when `dump`
+- [x] Overflow test (`MCP_CODER_OVERFLOW_TEST=1`); 95 pytest (+1 skipped)
 
-- SpecStory
-- Summarization inside mcp-coder
+**Also shipped (post-spec)**
 
-**Done when**
+- [x] `aider_engine.py` — `ThreadPoolExecutor` around Aider run so sync Playwright (`detect_urls`) works under FastMCP asyncio
 
-- [ ] Long Cursor chat → delegate → log shows transcript injected; Aider behavior improves vs summary-only
-- [ ] Failures correlatable to size fields in JSONL
+**Decisions**
+
+- Default inject **`none`** (backward compatible)
+- **`host_transcript_bytes`** aliases injected bytes; **`host_transcript_file_bytes`** = stat
+- Empty parse under `dump` → `context_mode: fallback`
 
 ---
 
@@ -227,7 +232,7 @@ See local `docs/tasks/P1-1.2-host-adapter-cursor.md` § Results.
 - [x] Host adapter: Cursor isolated; `host_session_id` on records
 - [x] Session policies: `always_new` and `align_host` logged and testable (E2E 2026-06-04)
 - [x] Server audit log: `server.jsonl` with lifecycle + delegation link fields (E2E 2026-06-05)
-- [ ] Full context: transcript pass-through works; limits documented
+- [x] Full context: opt-in transcript dump; overflow + size fields documented (E2E 2026-06-05)
 - [ ] P1-199 review completed; Phase 2 goals adjusted from logs
 
 ---
@@ -239,7 +244,7 @@ See local `docs/tasks/P1-1.2-host-adapter-cursor.md` § Results.
 | Q1 | `project_key` = hash of resolved path — include realpath? | P1-110 |
 | Q2 | Mirror workspace JSONL by default or opt-in? | P1-110 |
 | Q3 | `align_host` reuse latest vs first session? | **Latest** (agreed in planning) |
-| Q4 | Transcript tail cap default on or off? | P1-140 experiments |
+| Q4 | Transcript tail cap default on or off? | **Resolved P1-140:** inject default **`none`**; byte cap **off** (`0`); enable `dump` + optional `MCP_CODER_MAX_TRANSCRIPT_BYTES` per repo |
 | Q5 | Spec mandatory when? | P1-199 only |
 | Q6 | Cursor `target_files` reliability? | Ongoing |
 | Q7 | Server log: global vs per-`project_key`? Verbosity tiers? Default on? | **Resolved P1-125:** default `global`, level `info`, log on; yaml can set `server_log_scope: project` |
@@ -293,18 +298,21 @@ See local `docs/tasks/P1-1.2-host-adapter-cursor.md` § Results.
 | `always_new` | Default; one new `mcp_session_id` per call |
 | `align_host` | E2E 2026-06-04 — 5 delegations → one session (`e9787d0d…`); see P1-1.3 § Results |
 
-### 1.4 — Context size
+### 1.4 — Transcript context
 
 | Field | Value |
 |-------|-------|
-| Transcript bytes | |
-| Failures | |
+| Date | 2026-06-05 |
+| Default policy | `host_transcript: none` |
+| Overflow test | ~1,860,512 injected bytes → `128,000 token limit` (gpt-4o-mini via OpenRouter) |
+| Live dump E2E | `03ee1bd0` — 824 B injected, URL scrape OK after Playwright thread fix |
+| Notes | See P1-1.4 § Results; reload MCP after deploy |
 
 ---
 
 ## Next action
 
-1. Plan **milestone 1.4** — Cursor transcript inject into Aider prompt (local worker spec `P1-1.4-cursor-transcript-context.md`).
+1. **P1-199** — Phase 1 exit review (spec-as-contract, gatekeeper, Phase 2 goals).
 2. Operator: reload Cursor MCP after deploy (`make mcp-kill` or Reload Window) — [P1-ISS-009](./PHASE1_ISSUES.md#p1-iss-009-mcp-process-stale-after-code-deploy).
 
 ---
@@ -322,3 +330,4 @@ See local `docs/tasks/P1-1.2-host-adapter-cursor.md` § Results.
 | 2026-06-04 | **Gap logged:** persistent MCP server log → BL-125/305, optional P1-125 |
 | 2026-06-04 | **Replanned:** infra → host adapter → sessions → full context; `~/.mcp-coder`; SpecStory removed; spec deferred to P1-199 |
 | 2026-06-05 | **P1-125 done** — `server.jsonl`, P1-ISS-004 closed; P1-ISS-011 opened (global log interleave, wontfix-p1) |
+| 2026-06-05 | **P1-140 done** — opt-in transcript dump; overflow E2E; Aider Playwright thread isolation |

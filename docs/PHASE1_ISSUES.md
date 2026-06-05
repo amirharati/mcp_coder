@@ -9,7 +9,7 @@ Status: `open` | `scheduled` | `done` | `wontfix-p1` (defer with reason)
 
 | When to fix | Milestone |
 |-------------|-----------|
-| Before Phase 1 exit | P1-140, or P1-199 decision |
+| Before Phase 1 exit | P1-199 decision only |
 | Phase 2+ | Mark `wontfix-p1` + link BL-* |
 
 ---
@@ -198,6 +198,7 @@ Status: `open` | `scheduled` | `done` | `wontfix-p1` (defer with reason)
 
 | Date | Change |
 |------|--------|
+| 2026-06-05 | P1-140 done; Phase 1 spine complete; next P1-199 |
 | 2026-06-05 | P1-125 done; P1-ISS-004 closed; P1-ISS-011 opened (wontfix-p1) |
 | 2026-06-04 | P1-130 done; P1-ISS-009/010 opened; config.yaml + singleton extras |
 | 2026-06-04 | Initial tracker after P1-120 review; P1-ISS-004 server log design sketched |

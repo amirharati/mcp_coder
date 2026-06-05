@@ -12,7 +12,7 @@ def host_context_from_hint(hint: HostSessionHint) -> dict[str, Any]:
     ctx: dict[str, Any] = {
         "host_transcript_path": hint.host_transcript_path,
         "host_transcript_mtime": None,
-        "host_transcript_bytes": None,
+        "host_transcript_file_bytes": None,
         "host_project_slug": hint.host_project_slug,
         "host_resolve_method": hint.host_resolve_method,
     }
@@ -24,7 +24,7 @@ def host_context_from_hint(hint: HostSessionHint) -> dict[str, Any]:
                 .isoformat()
                 .replace("+00:00", "Z")
             )
-            ctx["host_transcript_bytes"] = st.st_size
+            ctx["host_transcript_file_bytes"] = st.st_size
         except OSError:
             pass
     return ctx

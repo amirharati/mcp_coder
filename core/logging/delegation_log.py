@@ -19,7 +19,8 @@ from core.storage.workspace_session import load_workspace_pointer
 from core.storage.session_paths import touch_session_last_delegation
 
 TOOL_NAME = "delegate_to_agent"
-CONTEXT_MODE = "fallback"
+CONTEXT_MODE_FALLBACK = "fallback"
+CONTEXT_MODE_HOST_TRANSCRIPT = "host_transcript"
 PROMPT_PREVIEW_CHARS = 500
 
 
@@ -114,6 +115,7 @@ def build_delegation_record(
     files_requested: list[str],
     files_changed: list[str],
     context_block: dict[str, Any],
+    context_mode: str = CONTEXT_MODE_FALLBACK,
     timing: dict[str, int | float],
     tokens: dict[str, Any],
     project_key: str,
@@ -143,7 +145,7 @@ def build_delegation_record(
         "tool_name": TOOL_NAME,
         "mcp_request": mcp_request,
         "backend": backend,
-        "context_mode": CONTEXT_MODE,
+        "context_mode": context_mode,
         "session_action": session_action,
         "session_reason": session_reason,
         "session_policy": session_policy,

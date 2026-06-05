@@ -29,7 +29,7 @@ Status: `idea` | `deferred` | `blocked` | `done`
 |----|------|-------|
 | BL-505 | SpecStory `.specstory/history/*.md` | Replaced by Cursor host transcript (P1-140) |
 | BL-402 | SpecStory freshness window | N/A |
-| BL-101 | SpecStory tail truncation cap | Use `MCP_CODER_MAX_TRANSCRIPT_BYTES` in P1-140 |
+| BL-101 | ~~SpecStory tail truncation cap~~ | **done** — `MCP_CODER_MAX_TRANSCRIPT_BYTES` when `host_transcript: dump` |
 
 ---
 
@@ -56,7 +56,7 @@ Status: `idea` | `deferred` | `blocked` | `done`
 |----|------|-------|
 | BL-201 | Claude Desktop host adapter | Own `core/host/claude_desktop.py` |
 | BL-202 | Windsurf / other IDEs | Host matrix TBD |
-| BL-203 | ~~Read Cursor agent-transcripts~~ | **In Phase 1** as P1-120 + P1-140 |
+| BL-203 | ~~Read Cursor agent-transcripts~~ | **done** — P1-120 metadata + P1-140 opt-in dump |
 | BL-204 | Proxy intercept: save latest Cursor prompt from `context_optimizer_proxy` | Personal workflow |
 | BL-205 | Cursor rule / skill snippet for routing to `delegate_to_agent` | Improve auto-routing |
 

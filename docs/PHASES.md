@@ -568,6 +568,6 @@ Both projects can be developed in parallel. Phase 1 does not require the proxy o
 
 - [x] Phase 1 tasks tracked in [PHASE1_MVP.md](./PHASE1_MVP.md); gaps in [PHASE1_ISSUES.md](./PHASE1_ISSUES.md); backlog in [BACKLOG.md](./BACKLOG.md).
 - [x] Barebones MCP + Aider, home storage, Cursor host adapter, session persistence (incl. `config.yaml`, MCP singleton).
-- [ ] **Next:** Full Cursor transcript context in executor prompt.
+- [x] Full Cursor transcript context — opt-in `host_transcript: dump` ([PHASE1_MVP.md](./PHASE1_MVP.md) P1-140).
 - [x] Persistent server log ([PHASE1_ISSUES.md](./PHASE1_ISSUES.md) P1-ISS-004 / P1-125).
-- [ ] Phase 1 exit review (spec strategy, Phase 2 goals).
+- [ ] **Next:** Phase 1 exit review (spec strategy, Phase 2 goals).

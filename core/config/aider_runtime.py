@@ -82,6 +82,8 @@ def delegation_coder_kwargs() -> dict[str, Any]:
         "stream": delegation_stream(),
         "auto_lint": delegation_auto_lint(),
         "show_diffs": False,
+        # URL scrape via Playwright when prompt contains https:// (see aider_engine thread isolation).
+        "detect_urls": True,
     }
 
 
@@ -102,6 +104,7 @@ def infer_run_success(
         "RateLimitError",
         "OpenrouterException",
         "OpenAIError",
+        "playwright sync api",
     )
     lower = text.lower()
     if any(m.lower() in lower for m in error_markers):

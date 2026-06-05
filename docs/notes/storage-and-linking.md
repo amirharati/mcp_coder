@@ -58,6 +58,9 @@ Default root: `MCP_CODER_HOME` → `~/.mcp-coder` (or `$XDG_DATA_HOME/mcp-coder`
 ```yaml
 # always_new | align_host
 session_policy: align_host
+
+# none (default) | dump — full Cursor chat prepend when dump
+# host_transcript: dump
 ```
 
 Legacy: `config.json` still read if yaml is missing. Example template: `docs/examples/config.yaml`.
@@ -166,5 +169,6 @@ Canonical write is under `~/.mcp-coder/projects/.../sessions/.../delegations.jso
 
 | Date | Note |
 |------|------|
+| 2026-06-05 | P1-140: `host_transcript` policy; inject metrics on delegation `context` |
 | 2026-06-04 | P1-125: `server.jsonl` global/per-project MCP audit log |
 | 2026-06-04 | `session.json` pointer, `config.yaml`, session policies, nested Cursor transcript paths |

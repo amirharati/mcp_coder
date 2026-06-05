@@ -51,6 +51,9 @@ def test_delegate_to_agent_logs_and_returns(tmp_path, monkeypatch):
     record = json.loads(log_path.read_text(encoding="utf-8").strip())
     assert record["success"] is True
     assert record["tool_name"] == "delegate_to_agent"
+    assert record["context_mode"] == "fallback"
+    assert record["context"]["host_transcript_policy"] == "none"
+    assert record["context"]["host_transcript_injected_bytes"] == 0
     assert record["project_key"]
     assert record["mcp_session_id"] == payload["mcp_session_id"]
     assert record["session_dir"]
@@ -64,3 +67,39 @@ def test_delegate_to_agent_logs_and_returns(tmp_path, monkeypatch):
     events = [json.loads(line)["event"] for line in server_log.read_text(encoding="utf-8").splitlines()]
     assert "delegation_received" in events
     assert "delegation_completed" in events
+
+
+def test_dump_policy_with_host_none_stays_fallback(tmp_path, monkeypatch):
+    home = tmp_path / "home"
+    workspace = tmp_path / "workspace"
+    workspace.mkdir()
+    monkeypatch.setenv("MCP_CODER_HOME", str(home))
+    monkeypatch.setenv("MCP_CODER_HOST", "none")
+    monkeypatch.setenv("MCP_CODER_HOST_TRANSCRIPT", "dump")
+    monkeypatch.chdir(workspace)
+
+    fake_result = ExecutionResult(
+        success=True,
+        output="ok",
+        files_changed=[],
+        model="gpt-4o",
+        tokens={"source": "unavailable"},
+    )
+    mock_engine = type(
+        "MockEngine",
+        (),
+        {"model_name": "gpt-4o", "backend_id": "aider", "run": lambda *a, **k: fake_result},
+    )()
+
+    with patch("server.mcp_server.get_engine", return_value=mock_engine):
+        raw = delegate_to_agent(
+            task="t",
+            target_files=["a.py"],
+            context_summary="c",
+            backend="aider",
+        )
+
+    record = json.loads(Path(json.loads(raw)["log_path"]).read_text(encoding="utf-8").strip())
+    assert record["context_mode"] == "fallback"
+    assert record["context"]["host_transcript_policy"] == "dump"
+    assert record["context"]["host_transcript_injected_bytes"] == 0

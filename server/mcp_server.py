@@ -7,11 +7,19 @@ from typing import Any
 from mcp.server.fastmcp import FastMCP
 
 from core.context.summary import assemble_prompt, prompt_metadata
+from core.context.transcript_policy import POLICY_DUMP, resolve_host_transcript_policy
 from core.engine import get_engine, list_backends
 from core.engine.factory import UnknownBackendError
 from core.host import apply_host_hint, get_host_provider
 from core.host.base import HostSessionHint
+from core.host.cursor_transcript import (
+    empty_transcript_result,
+    load_cursor_transcript,
+    transcript_log_context,
+)
 from core.logging.delegation_log import (
+    CONTEXT_MODE_FALLBACK,
+    CONTEXT_MODE_HOST_TRANSCRIPT,
     append_delegation_record,
     build_delegation_record,
     log_delegation_received,
@@ -109,6 +117,7 @@ def delegate_to_agent(
     }
     ws = workspace_path()
     policy = resolve_session_policy(ws)
+    host_transcript_policy = resolve_host_transcript_policy(ws)
 
     t_host = time.perf_counter()
     try:
@@ -134,6 +143,27 @@ def delegate_to_agent(
     )
 
     host_context = apply_host_hint(storage.session_dir, host_hint)
+    file_bytes = host_context.get("host_transcript_file_bytes")
+
+    transcript_result = empty_transcript_result(
+        file_bytes=file_bytes if isinstance(file_bytes, int) else None,
+    )
+    context_mode = CONTEXT_MODE_FALLBACK
+    host_transcript_text: str | None = None
+    context_load_ms = 0
+
+    if (
+        host_transcript_policy == POLICY_DUMP
+        and host_hint.host_transcript_path
+        and not host_hint.resolve_error
+    ):
+        t_ctx = time.perf_counter()
+        transcript_result = load_cursor_transcript(host_hint.host_transcript_path)
+        context_load_ms = int((time.perf_counter() - t_ctx) * 1000)
+        if transcript_result.text:
+            context_mode = CONTEXT_MODE_HOST_TRANSCRIPT
+            host_transcript_text = transcript_result.text
+
     log_host_resolved(
         hint_host_kind=host_hint.host_kind,
         host_session_id=host_hint.host_session_id,
@@ -164,19 +194,30 @@ def delegate_to_agent(
     executor_reused = False
     executor_recreated = False
     timing: dict[str, int] = {
-        "context_load_ms": 0,
+        "context_load_ms": context_load_ms,
         "session_decision_ms": session_decision_ms + host_resolve_ms,
         "engine_run_ms": 0,
         "post_process_ms": 0,
     }
 
-    prompt = assemble_prompt(context_summary, task)
-    context_block = prompt_metadata(prompt, context_summary=context_summary)
+    prompt = assemble_prompt(
+        context_summary,
+        task,
+        host_transcript=host_transcript_text,
+    )
+    transcript_meta = transcript_log_context(
+        policy=host_transcript_policy,
+        load_result=transcript_result,
+        file_bytes=file_bytes if isinstance(file_bytes, int) else None,
+        context_mode=context_mode,
+    )
+    context_block = prompt_metadata(
+        prompt,
+        context_summary=context_summary,
+        transcript_meta=transcript_meta,
+    )
 
     try:
-        t_ctx = time.perf_counter()
-        timing["context_load_ms"] = int((time.perf_counter() - t_ctx) * 1000)
-
         engine = get_engine(backend)
         model = engine.model_name
 
@@ -242,6 +283,7 @@ def delegate_to_agent(
         files_requested=list(target_files),
         files_changed=files_changed,
         context_block=context_block,
+        context_mode=context_mode,
         timing=timing,
         tokens=tokens,
         project_key=storage.project_key,

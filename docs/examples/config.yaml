@@ -7,6 +7,10 @@ session_policy: always_new
 # Reuse mcp session per Cursor chat:
 # session_policy: align_host
 
+# Host transcript injection (default: none — summary+task only)
+# host_transcript: none
+# host_transcript: dump   # prepend full Cursor chat JSONL (dump-all)
+
 # Server audit log (optional; overrides MCP_CODER_SERVER_LOG_* env)
 # server_log: on
 # server_log_level: info

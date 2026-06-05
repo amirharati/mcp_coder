@@ -56,14 +56,14 @@ Actual LLM provider
 | | **Now (Phase 1)** | **Later (Phase 2+)** |
 |---|-------------------|----------------------|
 | **MCP tools** | `delegate_to_agent` (+ logging) | Spec tools, RAG query, session APIs |
-| **Context** | Summary in MCP args; **next:** Cursor transcript via host adapter | Owned context pipeline |
+| **Context** | Summary in MCP args; opt-in Cursor transcript dump (`host_transcript: dump`) | Owned context pipeline |
 | **Sessions** | Disk registry under `~/.mcp-coder`; `always_new` \| `align_host`; workspace `config.yaml` | Cross-day memory, explicit continue |
 | **Storage** | User-home canonical logs; `session.json` pointer + user `config.yaml` | Team sync / DB optional |
 | **Specs** | Dogfood local worker specs while building; **product spec at Phase 1 exit review** | `.mcp-coder/specs/` + gatekeeper (later) |
 
 **Checkpoint:** End of Phase 1 — spec strategy, gatekeeper, Phase 2 goals ([PHASE1_MVP.md](./PHASE1_MVP.md)).
 
-**Current status (2026-06-04):** Barebones MCP + Aider, home storage, Cursor host adapter, and session persistence shipped (including `align_host` E2E). **Next:** full host transcript in executor context.
+**Current status (2026-06-05):** Phase 1 spine shipped (MCP → Aider, home storage, host adapter, sessions, server log, opt-in transcript dump). **Next:** P1-199 exit review (spec strategy, gatekeeper, Phase 2).
 
 ---
 

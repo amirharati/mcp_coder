@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import concurrent.futures
 import os
 from pathlib import Path
 from typing import Any
@@ -110,25 +111,36 @@ class AiderEngine(ExecutionEngine):
                 )
                 return coder, io, out_buffer
 
-            with isolated_stdio() as (stdout_cap, stderr_cap):
-                if mcp_session_id:
-                    (coder, io, out_buffer), executor_reused, executor_recreated = (
-                        get_or_create_coder(
-                            mcp_session_id,
-                            target_files,
-                            _make_coder,
+            def _run_coder() -> Any:
+                with isolated_stdio() as (stdout_cap, stderr_cap):
+                    if mcp_session_id:
+                        (coder, io, out_buffer), executor_reused_local, executor_recreated_local = (
+                            get_or_create_coder(
+                                mcp_session_id,
+                                target_files,
+                                _make_coder,
+                            )
                         )
-                    )
-                else:
-                    io, out_buffer = create_delegation_io()
-                    coder = Coder.create(
-                        main_model=model,
-                        io=io,
-                        fnames=resolved_files,
-                        **delegation_coder_kwargs(),
-                    )
-                partial = coder.run(prompt)
-                captured = merged_capture(out_buffer, stdout_cap, stderr_cap)
+                    else:
+                        io, out_buffer = create_delegation_io()
+                        coder = Coder.create(
+                            main_model=model,
+                            io=io,
+                            fnames=resolved_files,
+                            **delegation_coder_kwargs(),
+                        )
+                        executor_reused_local = False
+                        executor_recreated_local = False
+                    
+                    partial = coder.run(prompt)
+                    captured = merged_capture(out_buffer, stdout_cap, stderr_cap)
+                    return coder, io, partial, captured, executor_reused_local, executor_recreated_local
+
+            # Run Aider in a dedicated thread to isolate its synchronous Playwright 
+            # calls from FastMCP's asyncio event loop.
+            with concurrent.futures.ThreadPoolExecutor(max_workers=1) as executor:
+                future = executor.submit(_run_coder)
+                coder, io, partial, captured, executor_reused, executor_recreated = future.result()
 
             partial_str = str(partial) if partial is not None else ""
             output = "\n".join(s for s in (captured.strip(), partial_str.strip()) if s)

@@ -14,7 +14,7 @@ from core.host.null import NullHostProvider
 from server.mcp_server import delegate_to_agent
 
 
-def _fake_cursor_layout(cursor_root: Path, slug: str, session_id: str) -> Path:
+def _fake_cursor_layout(cursor_root: Path, slug: str, session_id: str, *, text: str = "hello") -> Path:
     transcript = (
         cursor_root
         / "projects"
@@ -24,7 +24,13 @@ def _fake_cursor_layout(cursor_root: Path, slug: str, session_id: str) -> Path:
         / f"{session_id}.jsonl"
     )
     transcript.parent.mkdir(parents=True, exist_ok=True)
-    transcript.write_text('{"role":"user"}\n', encoding="utf-8")
+    line = json.dumps(
+        {
+            "role": "user",
+            "message": {"content": [{"type": "text", "text": text}]},
+        }
+    )
+    transcript.write_text(line + "\n", encoding="utf-8")
     return transcript
 
 
@@ -128,10 +134,67 @@ def test_delegate_to_agent_writes_host_fields(tmp_path, monkeypatch):
     assert record["host_kind"] == "cursor"
     assert record["host_session_id"] == "host-abc"
     assert record["host_transcript_path"]
-    assert record["context"]["host_transcript_bytes"] is not None
+    assert record["context"]["host_transcript_file_bytes"] is not None
+    assert record["context"]["host_transcript_injected_bytes"] == 0
+    assert record["context"]["host_transcript_bytes"] == 0
+    assert record["context"]["host_transcript_policy"] == "none"
+    assert record["context_mode"] == "fallback"
 
     session = json.loads((log_path.parent / "session.json").read_text(encoding="utf-8"))
     assert session["host_session_id"] == "host-abc"
+
+
+def test_delegate_injects_transcript_when_dump_policy(tmp_path, monkeypatch):
+    home = tmp_path / "home"
+    workspace = tmp_path / "workspace"
+    workspace.mkdir()
+    cursor_root = tmp_path / "cursor"
+    monkeypatch.setenv("MCP_CODER_HOME", str(home))
+    monkeypatch.setenv("MCP_CODER_HOST", "cursor")
+    monkeypatch.setenv("MCP_CODER_HOST_TRANSCRIPT", "dump")
+    monkeypatch.setenv("MCP_CODER_CURSOR_ROOT", str(cursor_root))
+    monkeypatch.setenv("MCP_CODER_CURSOR_PROJECT_SLUG", "Users-test-repo")
+    monkeypatch.setenv("MCP_CODER_LOG_FULL_PROMPT", "1")
+    monkeypatch.chdir(workspace)
+
+    _fake_cursor_layout(
+        cursor_root,
+        "Users-test-repo",
+        "host-dump",
+        text="prior chat context from cursor",
+    )
+
+    fake_result = ExecutionResult(
+        success=True,
+        output="done",
+        files_changed=["hello.py"],
+        model="gpt-4o",
+        tokens={"source": "unavailable"},
+    )
+
+    mock_engine = type(
+        "MockEngine",
+        (),
+        {"model_name": "gpt-4o", "backend_id": "aider", "run": lambda *a, **k: fake_result},
+    )()
+
+    with patch("server.mcp_server.get_engine", return_value=mock_engine):
+        raw = delegate_to_agent(
+            task="Add hello world",
+            target_files=["hello.py"],
+            context_summary="Python 3.10+",
+            backend="aider",
+        )
+
+    payload = json.loads(raw)
+    record = json.loads(Path(payload["log_path"]).read_text(encoding="utf-8").strip())
+    prompt_full = record["context"]["prompt_full"]
+    assert "prior chat context from cursor" in prompt_full
+    assert record["context_mode"] == "host_transcript"
+    assert record["context"]["host_transcript_injected_bytes"] > 0
+    assert record["context"]["host_transcript_bytes"] == record["context"]["host_transcript_injected_bytes"]
+    assert record["context"]["host_transcript_hash"]
+    assert record["timing"]["context_load_ms"] >= 0
 
 
 def test_real_slug_for_mcp_coder_repo(monkeypatch):
