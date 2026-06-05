@@ -1,0 +1,10 @@
+{
+  "mcpServers": {
+    "mcp-coder": {
+      "command": "/PATH/TO/mcp_coder/.venv/bin/python",
+      "args": ["/PATH/TO/mcp_coder/main.py", "--mcp"],
+      "cwd": "${workspaceFolder}",
+      "envFile": "/PATH/TO/mcp_coder/.env"
+    }
+  }
+}

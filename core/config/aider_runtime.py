@@ -87,13 +87,25 @@ def delegation_coder_kwargs() -> dict[str, Any]:
     }
 
 
+_IMPLEMENT_QUESTION_MARKERS = (
+    "add these files to the chat",
+    "add the following files to the chat",
+    "could you please add",
+    "please add these files",
+    "please add the following files",
+    "i need access to the existing files",
+    "i need access to",
+    "add them to the chat",
+)
+
+
 def infer_run_success(
     *,
     io: Any,
     output: str,
     partial_response: str | None,
 ) -> tuple[bool, str | None]:
-    """Treat Aider/LiteLLM tool errors as delegation failure."""
+    """Treat Aider/LiteLLM tool errors and interactive questions as implement failure."""
     if getattr(io, "num_error_outputs", 0) > 0:
         return False, "Aider reported one or more errors (see output)"
     text = "\n".join(filter(None, [output, partial_response or ""]))
@@ -111,4 +123,10 @@ def infer_run_success(
         return False, text.strip()[:2000] or "LLM provider error"
     if not text.strip():
         return False, "Empty response from Aider (no edits applied?)"
+    if any(marker in lower for marker in _IMPLEMENT_QUESTION_MARKERS):
+        return (
+            False,
+            "Worker requested clarification instead of implementing "
+            "(use mode=review, or expand target_files / context_summary)",
+        )
     return True, None

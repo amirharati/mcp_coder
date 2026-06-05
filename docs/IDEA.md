@@ -1,8 +1,31 @@
+<!--
+  STEWARDSHIP — Tier 0 canonical vision. See docs/VISION_DOCS.md.
+
+  - Do NOT change this file unless the user explicitly asks to update IDEA.md
+    or top-level vision.
+  - Workers: docs/tasks/*.md only; planning session merges vision here when needed.
+  - Preserves 074753b (README.md) + early docs/IDEA.md; add/adapt, do not drop original intent.
+-->
+
 # mcp-coder
 
 An MCP server (with optional CLI) that wraps CLI coding agents (Aider, OpenCode, Claude Code, etc.) and exposes them as MCP tools — with task-level orchestration, cross-session memory, and optional spec-driven workflows.
 
-**Delivery plan:** [PHASES.md](./PHASES.md) · **Phase 1 tasks:** [PHASE1_MVP.md](./PHASE1_MVP.md) · **Backlog:** [BACKLOG.md](./BACKLOG.md)
+**Delivery plan:** [PHASES.md](./PHASES.md) · **Phase 1 tasks:** [PHASE1_MVP.md](./PHASE1_MVP.md) · **Backlog:** [BACKLOG.md](./BACKLOG.md) · **Vision map:** [VISION_DOCS.md](./VISION_DOCS.md)
+
+---
+
+## Core problem & why this exists
+
+*(From initial vision — commit `074753b`.)*
+
+Most AI coding agents are **stateless per-invocation** (or lose project memory when a host session ends). Each conversation starts fresh. Users work around **context amnesia** with `AGENTS.md`, `MEMORY.md`, `CHANGELOG.md`, and hand-maintained context files.
+
+**`mcp-coder` bridges that gap:** it manages context and memory **across delegations and sessions** so work can build on prior decisions, not only on whatever fits in the host chat.
+
+The calling agent (Cursor, Claude Desktop, any MCP host) stays **lean** — conversation and planning in the IDE; **actual multi-file editing** goes to a mature CLI coder via MCP, with **mcp-coder** owning routing, sessions, memory, specs, and audit logs in between.
+
+No existing tool offers clean **cross-session / cross-project memory** for coding agents as a first-class, MCP-accessible layer. This project makes that memory **automatic, inspectable, and host-agnostic** (not another ad-hoc markdown pile in the repo).
 
 ---
 
@@ -73,7 +96,9 @@ Actual LLM provider
 - **Session management** — Persistent sessions, smart new-vs-continue, library of past work (Phase 1.3+ / Phase 3).
 - **Memory system** — Semantic / keyword search over old tasks and decisions (RAG — Phase 3).
 - **Spec-driven development** — Markdown artifacts as the **contract** between planner and executor (Phase 2+; see below).
-- **Optional interactive mode** — Delegate to a full interactive Aider session in the terminal when `interactive: true` (backlog / post-P1).
+- **Interactive / supervised modes** — supervised multi-step delegate, live terminal tail, optional terminal handoff ([BACKLOG.md](./BACKLOG.md) **BL-160a–d** — timing TBD; not full Cursor-in-terminal chat by default).
+- **Internal multi-agent pipeline** — Planner/architect then executor inside one MCP call ([BACKLOG.md](./BACKLOG.md) **BL-161**).
+- **Multi-model per role** — Cheap context/cleanup vs expensive code ([BACKLOG.md](./BACKLOG.md) **BL-162**; overlaps Phase 2 context-builder).
 - **Adapter pattern** — Pluggable execution engines (Aider Python API, OpenCode subprocess, etc.).
 
 ---
@@ -169,11 +194,21 @@ Cheap model (mini / Flash) for routing, RAG, spec compaction, session classifica
 
 ### Session management
 
-The wrapper **owns** session state — not the CLI agent. Decides new vs continue from `mcp_session_id`, `host_session_id`, policy (`align_host`), and later spec version.
+The wrapper **owns** session state — not the CLI agent. It acts as a **session scheduler**: decide new vs continue from `mcp_session_id`, `host_session_id`, policy (`align_host`), rolling window size, and later spec version. Sessions can be long-lived across multiple turns (Phase 3+ APIs; Phase 1 persists registry + policy only).
+
+### Three context sources (every delegation)
+
+Each task fed to the executor should eventually be compiled from:
+
+1. **System prompt** — fixed project conventions, style, rules (workspace / skills).
+2. **RAG context** — relevant slices from past sessions (Phase 3).
+3. **Rolling window** — last *N* tokens of the **current** session history (pruned), not the full host chat.
+
+Phase 1 uses `context_summary`, optional constraints, and opt-in host transcript dump; Phase 2+ moves assembly here under owned context ([PHASES.md](./PHASES.md)).
 
 ### Cross-session memory (RAG)
 
-Index past delegations: summary, keywords, optional embeddings. Before launch: “have we done this before?” Inject only relevant slices.
+Index past delegations: summary, keywords, optional embeddings. Before launch: “have we done this before?” Inject only relevant slices. **Mid-task:** the executor or host may query memory via dedicated tools (e.g. `rag_search` — future).
 
 ### Context freshness (janitor)
 
@@ -183,9 +218,26 @@ Audit whether assembled context matches repo reality; refresh cheaply before exp
 
 MCP tools only receive JSON arguments — not full Cursor chat.
 
-- **Host transcript (Phase 1.4):** read Cursor `agent-transcripts/*.jsonl` via host adapter — not SpecStory.
+- **Host transcript (Phase 1.4 — shipped):** read Cursor `agent-transcripts/*.jsonl` via host adapter (`host_transcript: dump`). Early ideation mentioned **SpecStory** (`.specstory/history/`); product path is **host adapter + optional dump**, not a hard SpecStory dependency.
 - **Fallback:** `context_summary` (+ optional `explicit_constraints`, snippets — P1-115).
 - **Long-term:** spec files as contract reduce need for full history ([notes/spec-based-development.md](./notes/spec-based-development.md)).
+
+### Skills injection (future)
+
+Detect topic from task; inject relevant skill files (React, Docker, testing patterns, etc.) from a library. Phase 2 candidate ([BACKLOG.md](./BACKLOG.md) BL-008).
+
+### Sub-agent toolkit (future)
+
+Specialized **one-shot** agents composed by the orchestrator — each spawn → work → return → die (no heavy framework):
+
+- Critic / code reviewer / security scanner  
+- Test writer / documenter / pattern extractor  
+
+Same process model as the main executor; cheap model + focused system prompt. Phase 4+ ([PHASES.md](./PHASES.md)).
+
+### Multi-model ensemble (future)
+
+For some tasks, spawn *N* cheap instances with varied prompts, then consolidate — may beat one strong model at lower cost. Experimental; not Phase 1–2 scope.
 
 ### Dual-mode operation (MCP + CLI)
 
@@ -271,6 +323,18 @@ For v1 RAG, keyword + recency may suffice before embeddings.
 
 Future: `session_id`, spec paths, `interactive`, richer context fields — see spec tools table above.
 
+### Future MCP tools (target API — from initial README)
+
+Early schema used `delegate_task`; **Phase 1 ships `delegate_to_agent`** (same role). Planned companions:
+
+| Tool | Purpose |
+|------|---------|
+| `continue_session` | Follow-up message on an existing `session_id` (wrapper-owned continuity) |
+| `get_session_status` | Turns, tokens, files changed, per-turn summaries |
+| `rag_search` | Query indexed past work (`query` → ranked hits) |
+
+These sit alongside spec tools and `delegate_to_agent`; timing in [BACKLOG.md](./BACKLOG.md) / [PHASES.md](./PHASES.md).
+
 ---
 
 ## CLI equivalent (same backend — planned)
@@ -288,9 +352,11 @@ mcp-coder rag "pagination params"
 
 | Engine | Integration | Notes |
 |--------|-------------|--------|
-| **Aider** | Python API (`Coder.create`) | Phase 1 default |
-| **OpenCode** | Subprocess `opencode run …` | Adapter stub / Phase 2 |
-| Claude Code, Codex CLI, etc. | TBD | As needed |
+| **Aider** | Python API (`Coder.create`) | Phase 1 default; CLI also supports non-interactive flags (`--yes`, `--no-auto-commits`, `--message`) |
+| **OpenCode** | Subprocess (if ever) | **Backlog / very low** — Aider-first ([BACKLOG.md](./BACKLOG.md) BL-004); headless / `opencode run` when explored |
+| Claude Code, Codex CLI, Gemini CLI, Goose, etc. | TBD | Non-interactive modes (`--print` / `-p`, `exec`, etc.) when a backend is justified |
+
+*Principle (unchanged):* any CLI coder with a **non-interactive** invocation path can be adapted; we add engines only when Cursor+Aider path is insufficient.
 
 ---
 
@@ -298,6 +364,7 @@ mcp-coder rag "pagination params"
 
 - **Keep it simple** — rules + adapters + process spawn; avoid heavy frameworks early.
 - **Pay for value** — cheap intelligence for routing/memory; expensive model for code.
+- **Composable sub-agents** — each does one thing, returns, dies; orchestrator composes them.
 - **Session-owned state** — wrapper owns memory and spec lifecycle, not the CLI agent.
 - **Layered optimization** — task logic here; turn logic in proxy.
 - **Controlled specs** — MCP tools write structured MD; executors do not own the contract files.
@@ -308,14 +375,15 @@ mcp-coder rag "pagination params"
 
 ## Suggested evolution (from ideation — not a fixed schedule)
 
-1. ~~Thin MCP wrapper calling Aider~~ → **Phase 1 (in progress)**.
-2. Home storage, host adapter, sessions, full context → **rest of Phase 1** ([PHASE1_MVP.md](./PHASE1_MVP.md)).
-3. Markdown spec system + controlled MCP spec tools → **Phase 2 candidate** (review at end of Phase 1).
-4. RAG + persistent session DB → **Phase 3**.
-5. Optional interactive Aider delegation; connect proxy by default in templates → **backlog / polish**.
-6. Sub-agents and multi-tool orchestration inside one server → **Phase 4+**.
+1. ~~Thin MCP wrapper calling Aider~~ → **Phase 1 spine (done)** ([PHASE1_MVP.md](./PHASE1_MVP.md)).
+2. P1-199 + **spec experiment** → close Phase 1; light spec-as-contract (no gatekeeper).
+3. **Phase 2 — owned context:** creation (what to add) + window management (rolling, summarize, skills, topic detection) + **executor cache** evolution — **not** new adapters ([PHASES.md](./PHASES.md), [BACKLOG.md](./BACKLOG.md) § Post–Phase 1 focus).
+4. RAG + cross-session memory → **Phase 3**.
+5. Connect `context_optimizer_proxy` by default in templates → backlog / polish.
+6. Sub-agents, critic, ensemble → **Phase 4+**.
+7. OpenCode / other hosts → **very low priority** (BL-004, BL-201/202).
 
-Manual familiarity with Aider/OpenCode in real repos remains valuable even while MCP automates delegation.
+Manual familiarity with Aider in real repos remains valuable while MCP automates delegation.
 
 ---
 
@@ -323,5 +391,6 @@ Manual familiarity with Aider/OpenCode in real repos remains valuable even while
 
 | Date | Change |
 |------|--------|
-| 2026-06-03 | Initial vision, two-tier arch, data models |
+| 2026-06-03 | Initial vision (`074753b` README): core problem, three context sources, future MCP/CLI, backends |
 | 2026-06-04 | Grok ideation: spec system, role division, interaction modes, Phase 1 vs long-term; P1-100 status |
+| 2026-06-05 | Stewardship banner; restored original README anchors; [VISION_DOCS.md](./VISION_DOCS.md) map; P1 spine + transcript dump status |

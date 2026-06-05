@@ -132,6 +132,12 @@ def build_delegation_record(
     executor_reused: bool = False,
     executor_recreated: bool = False,
     prompt_full: str | None = None,
+    spec_path: str | None = None,
+    spec_report_path: str | None = None,
+    spec_sha256: str | None = None,
+    spec_mtime: str | None = None,
+    outcome: str | None = None,
+    delegate_mode: str | None = None,
 ) -> dict[str, Any]:
     session_dir_str = str(Path(session_dir).resolve())
     log_path_str = str(Path(log_path).resolve())
@@ -178,6 +184,15 @@ def build_delegation_record(
     }
     if prompt_full is not None and should_log_full_prompt():
         record["context"]["prompt_full"] = prompt_full
+    if spec_path is not None:
+        record["spec_path"] = spec_path
+        if spec_report_path is not None:
+            record["spec_report_path"] = spec_report_path
+        if delegate_mode is not None:
+            record["delegate_mode"] = delegate_mode
+        record["spec_sha256"] = spec_sha256
+        record["spec_mtime"] = spec_mtime
+        record["outcome"] = outcome
     return record
 
 

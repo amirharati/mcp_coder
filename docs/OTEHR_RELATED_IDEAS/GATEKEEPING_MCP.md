@@ -1,4 +1,11 @@
-**✅ Gatekeeper Idea — Summary** (Copy this into your separate MD file)
+<!--
+  STEWARDSHIP — Tier 3 related idea (not canonical). See docs/VISION_DOCS.md.
+
+  - May inform BL-* / P1-199; does not override docs/IDEA.md.
+  - Do not treat as shipped product design without user + backlog entry.
+-->
+
+**✅ Gatekeeper Idea — Summary** (related idea — see [IDEA.md](../IDEA.md) spec tools · [VISION_DOCS.md](../VISION_DOCS.md))
 
 ### Gatekeeper Concept Overview
 

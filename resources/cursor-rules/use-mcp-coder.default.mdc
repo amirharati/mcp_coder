@@ -1,0 +1,27 @@
+---
+description: mcp-coder delegate_to_agent (default policy; synced by MCP)
+mcp_coder_managed: true
+mcp_coder_rule_id: use-mcp-coder
+mcp_coder_rules_policy: default
+mcp_coder_rule_version: "6"
+globs:
+alwaysApply: true
+---
+
+# mcp-coder
+
+Use **mcp-coder** for disk edits. Pass decisions in `context_summary` or a step task spec.
+
+## Planner vs executor
+
+| Phase | You | MCP |
+|-------|-----|-----|
+| Epic + step spec | `specs/epics/…`, `specs/tasks/…` | — |
+| Optional **review** | `mode=review`, `target_files=[]` | Worker feedback in report |
+| **Implement** | `mode=implement`, `target_files` includes read deps | Code edits |
+
+Same step spec across review + implement. Bump `revision` when you change the spec after review.
+
+Do not brainstorm in implement mode. You mark task `done` after verification; MCP owns reports.
+
+Synced from mcp-coder (`cursor_rules_policy: default`). Do not edit by hand.

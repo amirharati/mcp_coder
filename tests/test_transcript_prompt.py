@@ -14,15 +14,15 @@ def test_assemble_prompt_prepends_transcript():
     parts = prompt.split(PROMPT_SEPARATOR)
     assert len(parts) == 3
     assert parts[0].startswith(TRANSCRIPT_HEADER)
-    assert parts[1] == "summary bit"
-    assert parts[2] == "do task"
+    assert parts[1] == "do task"
+    assert parts[2] == "summary bit"
 
 
 def test_assemble_prompt_without_transcript_unchanged():
     prompt = assemble_prompt("Use pytest.", "Add tests for foo.")
     assert "Use pytest." in prompt
     assert "Add tests for foo." in prompt
-    assert prompt.index("Use pytest.") < prompt.index("Add tests")
+    assert prompt.index("Add tests") < prompt.index("Use pytest.")
 
 
 def test_prompt_metadata_includes_transcript_fields(tmp_path):

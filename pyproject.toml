@@ -20,6 +20,10 @@ dev = ["pytest>=8,<10"]
 [project.scripts]
 mcp-coder = "main:main"
 
+[tool.setuptools]
+include-package-data = true
+py-modules = ["main"]
+
 [tool.setuptools.packages.find]
 where = ["."]
 include = ["core*", "server*"]

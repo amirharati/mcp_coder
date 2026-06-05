@@ -63,7 +63,7 @@ session_policy: align_host
 # host_transcript: dump
 ```
 
-Legacy: `config.json` still read if yaml is missing. Example template: `docs/examples/config.yaml`.
+Legacy: `config.json` still read if yaml is missing. Example template: `resources/examples/config.yaml`.
 
 Legacy: `<workspace>/.mcp-coder/project.json` is still read as pointer fallback if `session.json` is missing.
 
@@ -99,6 +99,35 @@ Join: `session.json.host_session_id` equals transcript basename (uuid stem).
 
 ---
 
+## Workspace task specs (P1-150 / P1-151)
+
+Planner-owned task specs + MCP-owned reports under the workspace:
+
+```text
+<workspace>/.mcp-coder/
+  spec-template.md
+  spec-epic-template.md
+  spec-report-template.md
+  specs/
+    epics/<epic_id>.md
+    tasks/<epic>-<step>.md       # same file across review + implement delegates
+    reports/<same-filename>.md   # MCP-only audit (Run log, Worker feedback)
+```
+
+| Role | Owns |
+|------|------|
+| Cursor (planner) | Epic, task spec (Goal → Revision log), `status: done`, pytest verify |
+| mcp-coder | `specs/reports/*` only — Run log, Worker feedback, report `status:` |
+| Aider | Repo file edits (`mode=implement`) or review text (`mode=review`) |
+
+`delegate_to_agent(..., spec_path="tasks/foo.md", mode="review"|"implement")` — `spec_path` must resolve under `specs/tasks/`.
+
+Delegation JSONL when spec used: `spec_path`, `spec_report_path`, `delegate_mode`, `spec_sha256`, `spec_mtime`, `outcome`.
+
+Templates: `resources/spec-template.md`, `spec-epic-template.md`, `spec-report-template.md`. See [spec-review-loop.md](./spec-review-loop.md).
+
+---
+
 ## `session.json` (minimal)
 
 ```json
@@ -131,6 +160,12 @@ Every JSONL line includes (in addition to existing P1-100 fields):
 | `log_path` | Absolute path to this session’s `delegations.jsonl` |
 | `host_kind` | null if host adapter unavailable |
 | `host_session_id` | null if unknown |
+| `spec_path` | Repo-relative spec when `spec_path` arg used (optional) |
+| `spec_sha256` | Hash of spec file after MCP updates (optional) |
+| `spec_mtime` | Spec mtime ISO-8601 when read (optional) |
+| `outcome` | `success` \| `partial` \| `failed` \| `needs_input` \| `invalid_spec` \| `review` (optional) |
+| `delegate_mode` | `implement` \| `review` when `mode` arg used (optional) |
+| `spec_report_path` | Repo-relative report under `specs/reports/` (optional) |
 
 ---
 
@@ -169,6 +204,8 @@ Canonical write is under `~/.mcp-coder/projects/.../sessions/.../delegations.jso
 
 | Date | Note |
 |------|------|
+| 2026-06-05 | P1-151: epics/tasks/reports split; `delegate_mode`; review loop |
+| 2026-06-05 | P1-150: workspace `specs/tasks/` + optional `spec_path` on delegate |
 | 2026-06-05 | P1-140: `host_transcript` policy; inject metrics on delegation `context` |
 | 2026-06-04 | P1-125: `server.jsonl` global/per-project MCP audit log |
 | 2026-06-04 | `session.json` pointer, `config.yaml`, session policies, nested Cursor transcript paths |

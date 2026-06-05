@@ -1,0 +1,13 @@
+# One managed rule in the workspace per policy (dest filename always use-mcp-coder.mdc).
+version: 1
+default_policy: default
+
+policies:
+  default:
+    rules:
+      - dest: use-mcp-coder.mdc
+        src: use-mcp-coder.default.mdc
+  strict:
+    rules:
+      - dest: use-mcp-coder.mdc
+        src: use-mcp-coder.strict.mdc

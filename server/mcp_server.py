@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import time
+from pathlib import Path
 from typing import Any
 
 from mcp.server.fastmcp import FastMCP
@@ -33,6 +34,13 @@ from core.logging.delegation_log import (
 from core.logging.server_log import server_log_emit
 from core.session.policy import resolve_session_policy
 from core.session.store import SessionStore
+from core.specs.bootstrap import ensure_task_report, ensure_workspace_spec_layout
+from core.engine.spec_review import run_spec_review
+from core.specs.modes import DELEGATE_MODE_REVIEW, normalize_delegate_mode
+from core.specs.outcome import OUTCOME_INVALID_SPEC, compute_spec_outcome
+from core.specs.paths import normalize_spec_path_arg, resolve_spec_path
+from core.specs.read import read_task_spec
+from core.specs.write import apply_post_delegation_report_updates
 
 OUTPUT_MAX_CHARS = 16_000
 
@@ -66,6 +74,12 @@ def _response_payload(
     host_session_id: str | None = None,
     executor_reused: bool = False,
     executor_recreated: bool = False,
+    outcome: str | None = None,
+    spec_path: str | None = None,
+    spec_report_path: str | None = None,
+    spec_sha256: str | None = None,
+    spec_bytes: int | None = None,
+    delegate_mode: str | None = None,
 ) -> dict[str, Any]:
     payload: dict[str, Any] = {
         "success": success,
@@ -85,6 +99,18 @@ def _response_payload(
         payload["host_kind"] = host_kind
     if host_session_id is not None:
         payload["host_session_id"] = host_session_id
+    if outcome is not None:
+        payload["outcome"] = outcome
+    if spec_path is not None:
+        payload["spec_path"] = spec_path
+    if spec_report_path is not None:
+        payload["spec_report_path"] = spec_report_path
+    if spec_sha256 is not None:
+        payload["spec_sha256"] = spec_sha256
+    if spec_bytes is not None:
+        payload["spec_bytes"] = spec_bytes
+    if delegate_mode is not None:
+        payload["delegate_mode"] = delegate_mode
     return payload
 
 
@@ -95,7 +121,10 @@ def _response_payload(
         "writing code yourself when the user asks to build, create, or change project files "
         "(web pages, scripts, multi-file features). Required: task, target_files (repo-relative), "
         "context_summary (decisions from chat—the delegate cannot see history). "
-        "Returns success, output, files_changed. Default backend: aider."
+        "Optional spec_path: step task under .mcp-coder/specs/tasks/ (e.g. tasks/my-epic-02-cli.md). "
+        "mode: implement (default) edits target_files; review asks questions only (target_files must be []). "
+        "MCP appends audit to specs/reports/<same-name>.md. Returns success, output, files_changed, outcome. "
+        "Default backend: aider."
     ),
 )
 def delegate_to_agent(
@@ -103,6 +132,8 @@ def delegate_to_agent(
     target_files: list[str],
     context_summary: str,
     backend: str = "aider",
+    spec_path: str | None = None,
+    mode: str = "implement",
 ) -> str:
     """Run one delegated implementation via the selected backend; append JSONL log."""
     delegation_id = new_delegation_id()
@@ -115,7 +146,49 @@ def delegate_to_agent(
         "context_summary": context_summary,
         "backend": backend,
     }
+    if spec_path is not None:
+        mcp_request["spec_path"] = spec_path
+    try:
+        delegate_mode = normalize_delegate_mode(mode)
+    except ValueError as exc:
+        delegate_mode = "implement"
+        return json.dumps(
+            _response_payload(
+                success=False,
+                output=str(exc),
+                files_changed=[],
+                session_reused=False,
+                session_reason="invalid_mode",
+                session_policy="n/a",
+                delegate_mode=mode,
+            ),
+            ensure_ascii=False,
+        )
+    mcp_request["mode"] = delegate_mode
     ws = workspace_path()
+    ensure_workspace_spec_layout(ws)
+
+    spec_rel_path: str | None = None
+    spec_abs_path = None
+    spec_read = None
+    spec_invalid_reason: str | None = None
+    if spec_path:
+        try:
+            spec_rel_path = normalize_spec_path_arg(spec_path)
+            spec_abs_path = resolve_spec_path(ws, spec_rel_path)
+        except ValueError as exc:
+            spec_invalid_reason = str(exc)
+        else:
+            if not spec_abs_path.is_file():
+                spec_invalid_reason = (
+                    f"Step task spec not found: {spec_rel_path}. "
+                    f"Copy .mcp-coder/spec-template.md to {spec_rel_path} "
+                    "(one file per step; link epic: in front matter). "
+                    "For multi-step work, also create .mcp-coder/specs/epics/<slug>.md "
+                    "from spec-epic-template.md."
+                )
+            else:
+                spec_read = read_task_spec(spec_abs_path, workspace=ws)
     policy = resolve_session_policy(ws)
     host_transcript_policy = resolve_host_transcript_policy(ws)
 
@@ -200,10 +273,12 @@ def delegate_to_agent(
         "post_process_ms": 0,
     }
 
+    spec_block = spec_read.prompt_block if spec_read else None
     prompt = assemble_prompt(
         context_summary,
         task,
         host_transcript=host_transcript_text,
+        spec_block=spec_block,
     )
     transcript_meta = transcript_log_context(
         policy=host_transcript_policy,
@@ -217,38 +292,91 @@ def delegate_to_agent(
         transcript_meta=transcript_meta,
     )
 
-    try:
-        engine = get_engine(backend)
-        model = engine.model_name
-
-        t_engine = time.perf_counter()
-        result = engine.run(
-            prompt,
-            target_files,
-            workspace_path=ws,
-            mcp_session_id=storage.mcp_session_id,
+    review_target_files_error: str | None = None
+    if delegate_mode == DELEGATE_MODE_REVIEW and target_files:
+        review_target_files_error = (
+            "mode=review requires target_files=[] (no file edits). "
+            "Use mode=implement to change files, or mode=review with an empty target_files list."
         )
-        timing["engine_run_ms"] = int((time.perf_counter() - t_engine) * 1000)
 
-        success = result.success
-        output = result.output or ""
-        files_changed = result.files_changed
-        tokens = result.tokens or tokens
-        model = result.model or model
-        error = result.error
-        executor_reused = result.executor_reused
-        executor_recreated = result.executor_recreated
-        if not success and error:
-            output = error if not output else f"{output}\n{error}"
+    if spec_invalid_reason:
+        success = False
+        error = spec_invalid_reason
+        output = spec_invalid_reason
+    elif review_target_files_error:
+        success = False
+        error = review_target_files_error
+        output = review_target_files_error
+    else:
+        try:
+            t_engine = time.perf_counter()
+            if delegate_mode == DELEGATE_MODE_REVIEW:
+                result = run_spec_review(prompt)
+            else:
+                engine = get_engine(backend)
+                model = engine.model_name
+                result = engine.run(
+                    prompt,
+                    target_files,
+                    workspace_path=ws,
+                    mcp_session_id=storage.mcp_session_id,
+                )
+            timing["engine_run_ms"] = int((time.perf_counter() - t_engine) * 1000)
 
-    except UnknownBackendError as exc:
-        success = False
-        error = str(exc)
-        output = error
-    except Exception as exc:
-        success = False
-        error = f"{type(exc).__name__}: {exc}"
-        output = error
+            success = result.success
+            output = result.output or ""
+            files_changed = result.files_changed
+            tokens = result.tokens or tokens
+            model = result.model or model
+            error = result.error
+            executor_reused = result.executor_reused
+            executor_recreated = result.executor_recreated
+            if not success and error:
+                output = error if not output else f"{output}\n{error}"
+
+        except UnknownBackendError as exc:
+            success = False
+            error = str(exc)
+            output = error
+        except Exception as exc:
+            success = False
+            error = f"{type(exc).__name__}: {exc}"
+            output = error
+
+    timestamp_end = utc_now_iso()
+    spec_sha256: str | None = spec_read.sha256 if spec_read else None
+    spec_bytes: int | None = spec_read.file_bytes if spec_read else None
+    spec_mtime: str | None = spec_read.mtime_iso if spec_read else None
+    outcome: str | None = None
+    spec_report_rel_path: str | None = None
+    if spec_path:
+        if spec_invalid_reason:
+            outcome = OUTCOME_INVALID_SPEC
+        elif spec_abs_path is not None and spec_abs_path.is_file():
+            report_abs_path = ensure_task_report(spec_abs_path, workspace=ws)
+            spec_report_rel_path = str(report_abs_path.resolve().relative_to(Path(ws).resolve()))
+            apply_post_delegation_report_updates(
+                report_abs_path,
+                timestamp=timestamp_end,
+                delegation_id=delegation_id,
+                mcp_session_id=storage.mcp_session_id,
+                delegate_mode=delegate_mode,
+                success=success,
+                files_changed=files_changed,
+                output=output,
+                error=error,
+                task_spec=spec_rel_path,
+            )
+            spec_read = read_task_spec(spec_abs_path, workspace=ws)
+            spec_sha256 = spec_read.sha256
+            spec_bytes = spec_read.file_bytes
+            spec_mtime = spec_read.mtime_iso
+            outcome = compute_spec_outcome(
+                success=success,
+                files_changed=files_changed,
+                blockers_written=not success,
+                delegate_mode=delegate_mode,
+            )
 
     t_post = time.perf_counter()
     response = _response_payload(
@@ -264,9 +392,14 @@ def delegate_to_agent(
         host_session_id=host_hint.host_session_id,
         executor_reused=executor_reused,
         executor_recreated=executor_recreated,
+        outcome=outcome,
+        spec_path=spec_rel_path,
+        spec_report_path=spec_report_rel_path,
+        spec_sha256=spec_sha256,
+        spec_bytes=spec_bytes,
+        delegate_mode=delegate_mode,
     )
     duration_ms = int((time.perf_counter() - t0) * 1000)
-    timestamp_end = utc_now_iso()
     timing["post_process_ms"] = int((time.perf_counter() - t_post) * 1000)
 
     record = build_delegation_record(
@@ -300,6 +433,12 @@ def delegate_to_agent(
         executor_reused=executor_reused,
         executor_recreated=executor_recreated,
         prompt_full=prompt if should_log_full_prompt() else None,
+        spec_path=spec_rel_path,
+        spec_report_path=spec_report_rel_path,
+        spec_sha256=spec_sha256,
+        spec_mtime=spec_mtime,
+        outcome=outcome,
+        delegate_mode=delegate_mode,
     )
     log_path = append_delegation_record(record, ws=ws)
     log_delegation_sent(

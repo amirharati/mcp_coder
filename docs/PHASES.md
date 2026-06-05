@@ -1,6 +1,14 @@
+<!--
+  STEWARDSHIP — Tier 1 delivery plan. See docs/VISION_DOCS.md.
+
+  - Do NOT rewrite phase boundaries or principles without explicit user request.
+  - Must stay consistent with docs/IDEA.md (canonical WHY).
+  - Workers: docs/tasks/*.md only; planning session updates this doc.
+-->
+
 # mcp-coder: Phases & Delivery (BD)
 
-This document is the **delivery plan**: what to build, in what order, and how we validate each step. Vision and rationale live in [IDEA.md](./IDEA.md). Implementation happens in focused coding sessions once a phase (or sub-step) is agreed.
+This document is the **delivery plan**: what to build, in what order, and how we validate each step. Vision and rationale live in [IDEA.md](./IDEA.md) · doc map: [VISION_DOCS.md](./VISION_DOCS.md). Implementation happens in focused coding sessions once a phase (or sub-step) is agreed.
 
 **Status:** Planning. Phase 1 is broken into sub-steps so we can experiment with Cursor before adding complexity.
 
@@ -485,34 +493,44 @@ mcp_coder/
 
 ## Phase 2 and beyond: Owned context management
 
-Starting Phase 2, `mcp-coder` stops relying solely on pass-through host transcripts and **builds and manages context itself**. This is where the vision in [IDEA.md](./IDEA.md) (router, janitor, RAG, token tiers) is implemented.
+Starting Phase 2, `mcp-coder` stops relying solely on pass-through (`context_summary`, opt-in transcript dump) and **builds and manages context itself**. This is where the vision in [IDEA.md](./IDEA.md) (router, janitor, RAG, token tiers) is implemented.
+
+**Explicitly not Phase 2 focus:** OpenCode or other execution adapters ([BACKLOG.md](./BACKLOG.md) BL-004 — very low / if ever). **Aider + Cursor** until the product is useful. Other hosts (Claude Desktop, Windsurf) are also low priority (BL-201/202).
 
 ### Multi-LLM roles (intent)
 
 | Role | Typical model tier | Job |
 |------|-------------------|-----|
-| **Context builder** | Cheap (mini / Flash) | Summarize chats, pick files, query RAG, compress history, refresh stale facts |
-| **Executor** | Expensive (Sonnet / Opus) | Run inside Aider/OpenCode for actual edits |
+| **Context builder** | Cheap (mini / Flash) | Summarize chats, pick files, topic boundaries, query RAG (Phase 3), compress history, refresh stale facts |
+| **Executor** | Expensive (Sonnet / Opus) | Run inside **Aider** for actual edits |
 | **Optional helpers** | Cheap | RAG query, lint/test check, critic before returning to Cursor |
 
-Phase 1 uses only the executor (via Aider). Phase 2+ adds the context-builder (and later helpers) **inside** `mcp-coder`.
+Phase 1 uses only the executor (via Aider). Phase 2+ adds the context-builder **inside** `mcp-coder`.
 
-### Phase 2: Task-level context pipeline
+### Phase 2: MCP-owned context (two halves)
 
-**Goal:** Reduce bad delegations and token waste without requiring Cursor to pass perfect `target_files` or summaries.
+**Goal:** Useful delegations without huge prompts or wrong-topic context — without new engines or hosts.
 
-**Scope (indicative—not Phase 1):**
+| Half | What |
+|------|------|
+| **Context creation** | What to put in the prompt: spec-as-contract (experiment), file pickers, skills, constraints — not a raw chat dump by default |
+| **Context window management** | Stay inside model limits: rolling transcript, summarize chunks, caps, logged truncation — same program as creation |
 
-- Cheap LLM (or rules + ripgrep) to propose `target_files` from `task` + repo map.
-- First version of **owned** context assembly: system prompt + selected files + compact task brief (may still read host transcript if present).
-- Optional second adapter (OpenCode).
-- Dual-mode CLI + MCP share same core.
+**Indicative scope** ([BACKLOG.md](./BACKLOG.md) § Post–Phase 1 focus):
 
-**Still light on memory:** may log turns locally but not full RAG yet.
+1. **Spec workflow** (BL-150 **done** P1-151) — epic/step specs, reports, review loop; extend with owned assembly (BL-001); gatekeeper still BL-151.
+2. **Owned assembly** (BL-001) — compact task brief + selected files; cheap LLM and/or rules + ripgrep.
+3. **Topic / task detection** (BL-153) — bound work to the right “topic” for sessions and context slices.
+4. **Window budget** (BL-154) — rolling history, summarizers, prompt templates.
+5. **Skills** (BL-008) — inject by topic/task type.
+6. **Executor cache** (BL-155) — build on P1-130 in-process `Coder` cache: today prompt is **rebuilt fully each call**; explore multi-turn carry-over, TTL, survive more than `target_files` equality — not “discard executor state by default.”
+7. **Janitor / router** (BL-003) — after basics work.
 
-**Success:** Fewer wrong-file edits; smaller, focused prompts to Aider than raw pass-through.
+**Still light on long-term memory:** local turn logs OK; full RAG → Phase 3 (BL-002).
 
-*(Fallback session classifier via cheap LLM is a **Phase 1 optional** experiment—see [Optional: cheap LLM session classifier](#optional-cheap-llm-session-classifier-phase-1--fallback--no-specstory-only). Phase 2 may reuse that pattern for file picking and RAG pre-filter.)*
+**Success:** Fewer wrong-file edits; smaller focused prompts; topic-aware sessions; measurable `prompt_tokens_est` down vs `host_transcript: dump`.
+
+*(Cheap LLM session classifier remains optional — BL-102; may feed topic detection.)*
 
 ### Phase 3: RAG and cross-session memory
 
@@ -533,6 +551,16 @@ Phase 1 uses only the executor (via Aider). Phase 2+ adds the context-builder (a
 **Goal:** Janitor, verification, composable sub-agents.
 
 **Scope:** Context freshness audit, cheap model grades executor output, critic / test-writer one-shots, optional multi-model ensemble (see IDEA.md).
+
+### Kept on the list — decide when (not Phase 2 required)
+
+Tracked in [BACKLOG.md](./BACKLOG.md) § On the list — timing TBD:
+
+| ID | Theme |
+|----|--------|
+| BL-160 | **Interactive sessions** — supervised complex task, live terminal visibility, optional handoff/CLI (see BACKLOG § BL-160a–d) |
+| BL-161 | **Multi-agent inside MCP** — internal planner/architect steps before executor (Aider) |
+| BL-162 | **Multi-model routing** — cheap vs expensive models per role (partially overlaps Phase 2 context-builder) |
 
 ---
 
@@ -570,4 +598,5 @@ Both projects can be developed in parallel. Phase 1 does not require the proxy o
 - [x] Barebones MCP + Aider, home storage, Cursor host adapter, session persistence (incl. `config.yaml`, MCP singleton).
 - [x] Full Cursor transcript context — opt-in `host_transcript: dump` ([PHASE1_MVP.md](./PHASE1_MVP.md) P1-140).
 - [x] Persistent server log ([PHASE1_ISSUES.md](./PHASE1_ISSUES.md) P1-ISS-004 / P1-125).
-- [ ] **Next:** Phase 1 exit review (spec strategy, Phase 2 goals).
+- [x] Spec-based delegate + review loop ([PHASE1_MVP.md](./PHASE1_MVP.md) P1-150/151; BL-150 done).
+- [ ] **Next:** Phase 1 exit review P1-199 (lock spec decisions, Phase 2 goals).

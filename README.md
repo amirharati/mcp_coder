@@ -2,9 +2,9 @@
 
 MCP server that delegates coding work to CLI agents (Aider, OpenCode, …) with pass-through context and structured delegation logs.
 
-**Phase 1 progress:** MCP → Aider delegation, home storage under `~/.mcp-coder`, Cursor host linking, session policies (`always_new` | `align_host`), workspace `config.yaml`, opt-in Cursor transcript dump (`host_transcript: dump`). See [docs/PHASE1_MVP.md](docs/PHASE1_MVP.md).
+**Phase 1 progress:** MCP → Aider delegation, home storage, Cursor host linking, session policies, opt-in transcript dump, **spec workflow** (epic/step specs, `mode=review|implement`, reports). Exit review: [docs/PHASE1_MVP.md](docs/PHASE1_MVP.md) P1-199.
 
-**Docs:** [docs/README.md](docs/README.md)
+**Docs:** [docs/README.md](docs/README.md) · **Vision:** [docs/IDEA.md](docs/IDEA.md) · **Doc map:** [docs/VISION_DOCS.md](docs/VISION_DOCS.md)
 
 ---
 
@@ -97,6 +97,18 @@ AIDER_MODEL=openrouter/anthropic/claude-sonnet-4
 ```
 
 Other providers (Anthropic, OpenAI direct) still work if you set the matching API key and an appropriate `AIDER_MODEL` id. See [Aider OpenRouter docs](https://aider.chat/docs/llms/openrouter.html).
+
+**Test model** (same `.env` / LiteLLM path as delegations, no Aider edit loop):
+
+```bash
+source .venv/bin/activate
+mcp-coder test-model
+mcp-coder test-model --model openrouter/anthropic/claude-sonnet-4
+mcp-coder test-model --via litellm   # raw LiteLLM only (compare when debugging)
+mcp-coder test-model --via both      # Aider Model + LiteLLM
+```
+
+Prints config resolution (env files, model source, API base, key masked) on stderr, then pings via **Aider `Model`** by default — same stack as `delegate_to_agent`. Exit `0` = `OK` + reply; exit `1` = provider error (run before a long E2E).
 
 ---
 
@@ -206,7 +218,7 @@ session_policy: align_host
 # host_transcript: dump
 ```
 
-Wins over env. Legacy `config.json` still works if yaml is missing. Example: `docs/examples/config.yaml`. Delegation updates `session.json` (pointer) only — not config.
+Wins over env. Legacy `config.json` still works if yaml is missing. Example: `resources/examples/config.yaml` (copy manually). Delegation updates `session.json` (pointer) only — not config.
 
 When resolved, stderr may show: `[mcp-coder] host cursor session=59553f0e… transcript=…`
 
@@ -214,29 +226,65 @@ When resolved, stderr may show: `[mcp-coder] host cursor session=59553f0e… tra
 
 ---
 
-## Cursor `mcp.json`
+## Task specs (experimental)
 
-Use the venv Python and repo `main.py` (stdio). Set `cwd` to the project you want Aider to edit:
+Optional **bidirectional task specs** under the workspace (not in git unless you commit them):
 
-```json
-{
-  "mcpServers": {
-    "mcp-coder": {
-      "command": "/path/to/mcp_coder/.venv/bin/python",
-      "args": ["/path/to/mcp_coder/main.py", "--mcp"],
-      "cwd": "${workspaceFolder}",
-      "env": {
-        "MCP_CODER_SESSION_POLICY": "always_new",
-        "OPENROUTER_API_KEY": "<your-key-or-use-dotenv-in-cwd>",
-        "OPENROUTER_API_BASE": "https://openrouter.ai/api/v1",
-        "AIDER_MODEL": "openrouter/openai/gpt-4o-mini"
-      }
-    }
-  }
-}
+```text
+<workspace>/.mcp-coder/
+  spec-template.md              # step task template (planner-owned sections)
+  spec-epic-template.md         # epic template (multi-step features)
+  spec-report-template.md       # MCP report template (auto-used; do not copy by hand)
+  specs/epics/<slug>.md         # epic — planner; links step tasks
+  specs/tasks/<epic>-<step>.md  # one step task per delegate (keep for audit)
+  specs/reports/<same-name>.md  # MCP append-only Run log per step task
 ```
 
-Restart Cursor after editing MCP config.
+**Bootstrap on MCP start** (`main.py --mcp`):
+
+| Path | Behavior |
+|------|----------|
+| Templates + `specs/{tasks,epics,reports}/` | Created if missing (never overwrites templates) |
+| `.cursor/rules/use-mcp-coder.mdc` | **One** managed rule; content from **policy** (`default` \| `strict`); updated on MCP restart |
+
+Consumer workspaces get **exactly one** mcp-coder rule — no duplicate or conflicting delegation files. **default** vs **strict** swaps content in place. Old managed files (`mcp-coder-delegate.mdc`, etc.) are removed on restart. Set `cursor_rules_policy` in config, **restart MCP**.
+
+Consumer bundles live in **`resources/`** (`spec-template.md`, `cursor-rules/`, `examples/config.yaml`). Not loaded in this repo’s Cursor sessions. Dev rules: **`.cursor/rules/`**.
+
+No manual copy for specs or Cursor rules. Disable with `MCP_CODER_SYNC_CURSOR_RULE=0` or `cursor_rules.sync: false` in workspace config. Hand-edited files without `mcp_coder_managed: true` are never overwritten.
+
+**`config.yaml` is different** — user-owned settings; mcp-coder does not create or overwrite it (copy from `resources/examples/config.yaml` if you want session policy / `host_transcript` defaults).
+
+**Cursor (planner)** owns epic + step task specs (Goal → Plan, Done when checkboxes). **mcp-coder** writes **reports** only (`specs/reports/` — Run log, Status `delegated_ok` \| `blocked`). Mark step task `status: done` in the task file after you verify tests. **Aider** edits repo files only.
+
+Pass optional `spec_path` (step task under `tasks/`) to `delegate_to_agent`:
+
+- `.mcp-coder/specs/tasks/my-epic-02-cli.md`
+- `tasks/my-epic-02-cli.md` (shorthand)
+
+**Review loop (same step spec, multiple calls):**
+
+- `mode=review` — worker questions/suggestions only (`target_files=[]`); MCP appends **Worker feedback** on the report
+- Planner updates task spec (`revision++`, `status: ready`)
+- `mode=implement` (default) — edits `target_files` (include files to **read** for imports)
+
+See [docs/notes/spec-review-loop.md](docs/notes/spec-review-loop.md).
+
+If the file is missing, the tool returns `outcome: invalid_spec` (points at `spec-template.md`) and logs the attempt without calling Aider.
+
+**Prompt order when spec is set:** host transcript (if `host_transcript: dump`) → compiled spec sections → `task` → `context_summary`.
+
+Response adds `outcome`, `spec_path`, `spec_report_path`, `spec_sha256`, `spec_bytes`. See `docs/notes/storage-and-linking.md` and `resources/spec-template.md`.
+
+---
+
+## Cursor `mcp.json`
+
+**Consumer repo:** copy [`resources/examples/mcp.json`](resources/examples/mcp.json) → `<project>/.cursor/mcp.json`, replace `/PATH/TO/mcp_coder`, restart Cursor. Full steps: [`resources/examples/MCP_SETUP.md`](resources/examples/MCP_SETUP.md).
+
+Template uses `envFile` → mcp-coder `.env` so API keys stay in the mcp-coder checkout. `cwd` is `${workspaceFolder}` (the consumer repo Aider edits).
+
+**Cannot auto-sync:** Cursor must read `mcp.json` before MCP starts — unlike `use-mcp-coder.mdc` and `spec-template.md`.
 
 ### Tool: `delegate_to_agent`
 

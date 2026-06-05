@@ -1,0 +1,31 @@
+---
+description: mcp-coder delegate_to_agent only (strict policy; synced by MCP)
+mcp_coder_managed: true
+mcp_coder_rule_id: use-mcp-coder
+mcp_coder_rules_policy: strict
+mcp_coder_rule_version: "6"
+globs:
+alwaysApply: true
+---
+
+# mcp-coder (strict)
+
+## Planner vs executor
+
+| Phase | You (Cursor) | MCP / Aider |
+|-------|----------------|-------------|
+| **Epic** | `specs/epics/<slug>.md` | — |
+| **Step task** | `specs/tasks/<epic>-<step>.md` (one file per step; keep for audit) | — |
+| **Review** (optional) | `delegate_to_agent(mode=review, spec_path=…, target_files=[], task=…)` | Questions → report **Worker feedback** |
+| **Refine** | Update **same** task spec (`revision++`, `status: ready`); human input if needed | — |
+| **Implement** | `delegate_to_agent(mode=implement, spec_path=…, target_files=[edit + read deps], …)` | Edits code; report Run log |
+
+- **Never** implement on disk yourself.
+- **Never** delegate planning (writing epic/step specs).
+- **Do not** use implement mode to brainstorm — use **review** or Cursor chat.
+- **Do not** edit `specs/reports/` (MCP-owned).
+- After implement: verify tests; set task `status: done` + checkboxes; update epic Steps table.
+
+After each tool call: summarize `success`, `outcome`, `delegate_mode`, `spec_report_path`.
+
+Synced from mcp-coder (`cursor_rules_policy: strict`). Do not edit by hand.

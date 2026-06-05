@@ -1,0 +1,5 @@
+include resources/spec-template.md
+recursive-include resources/cursor-rules *
+recursive-include resources/examples *
+include resources/examples/mcp.json
+include resources/examples/MCP_SETUP.md

@@ -12,11 +12,12 @@ def assemble_prompt(
     task: str,
     *,
     host_transcript: str | None = None,
+    spec_block: str | None = None,
 ) -> str:
-    """Build the prompt sent to Aider: optional host transcript, summary, task."""
+    """Build the prompt: transcript → spec → task → context_summary."""
     parts = [
         p.strip()
-        for p in (host_transcript, context_summary, task)
+        for p in (host_transcript, spec_block, task, context_summary)
         if p and p.strip()
     ]
     if not parts:

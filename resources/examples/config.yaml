@@ -1,5 +1,5 @@
 # Example workspace config — copy to <workspace>/.mcp-coder/config.yaml
-# User-owned; mcp-coder reads only (never overwritten on delegate).
+# User-owned; mcp-coder reads only (never auto-copied or overwritten).
 
 # Session policy: always_new | align_host
 session_policy: always_new
@@ -10,6 +10,11 @@ session_policy: always_new
 # Host transcript injection (default: none — summary+task only)
 # host_transcript: none
 # host_transcript: dump   # prepend full Cursor chat JSONL (dump-all)
+
+# Cursor rules — one managed file synced on MCP restart: .cursor/rules/use-mcp-coder.mdc
+# cursor_rules_policy: default   # default | strict (content swap) — then restart MCP
+# cursor_rules:
+#   sync: false
 
 # Server audit log (optional; overrides MCP_CODER_SERVER_LOG_* env)
 # server_log: on
