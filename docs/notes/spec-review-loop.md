@@ -14,6 +14,14 @@
 4. `mode=implement` — worker edits `target_files` (**include files to read** for imports / prior steps).
 5. Planner runs `pytest`; sets task `status: done` and epic Steps table — **not** MCP.
 
+## Read-deps checklist (before implement)
+
+- [ ] Task spec **Files** has **Edit** and **Read** subsections.
+- [ ] Every **Read** path is in `target_files` (Aider loads full file text).
+- [ ] Step N+1 lists step N outputs under **Read** when the worker needs that API.
+- [ ] `mode=review` was used for spec questions only — it does **not** load code for implement.
+- [ ] Check delegate response `files_unexpected` — paths touched outside `target_files` (expand spec/deps if needed).
+
 ## When to use review
 
 | Trigger | Example |
@@ -49,15 +57,16 @@ Implement mode treats “please add files to chat” as **failure** (`needs_inpu
 
 ---
 
-## Decisions (revisit at P1-199)
+## Decisions (locked at P1-199)
 
 | ID | Decision | Backlog if we change |
 |----|----------|----------------------|
-| D-SPEC-1 | Review optional | BL-312 auto-review policy |
+| D-SPEC-1 | Review optional | BL-312 |
 | D-SPEC-3 | Planner verifies tests; MCP `delegated_ok` ≠ done | BL-310 |
-| D-SPEC-4 | Read deps in `target_files` or `context_summary` | BL-311 |
+| D-SPEC-4 | Read-deps convention (P1-152); MCP enforce → Phase 2 | BL-311 |
+| D-SPEC-8 | Log scope expansion; `edit_scope` → Phase 2 | BL-315; `files_unexpected` shipped P1-152 |
 
-Full table: [PHASE1_MVP.md](../PHASE1_MVP.md) § P1-199.
+Full table: [PHASE1_MVP.md](../PHASE1_MVP.md) § P1-199. Phase 2 direction: [phase2-owned-context.md](./phase2-owned-context.md).
 
 ---
 
@@ -65,5 +74,6 @@ Full table: [PHASE1_MVP.md](../PHASE1_MVP.md) § P1-199.
 
 | Date | Note |
 |------|------|
+| 2026-06-06 | D-SPEC locked at P1-199; D-SPEC-8 + phase2-owned-context link |
 | 2026-06-05 | Shipped P1-151; E2E notes; issues P1-ISS-013–016 |
 | 2026-06-05 | Initial design doc |

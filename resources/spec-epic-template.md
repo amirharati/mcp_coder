@@ -29,6 +29,8 @@ Track step task specs (create a new file before each implement step; do not recy
 
 After each delegate: read `reports/<same-name>.md` for Run log; update this table and step spec `Done when` when verified.
 
+**Read-deps:** step N+1 **implement** must list step N deliverables under **Read** in the task spec and include them in `target_files`.
+
 ---
 
 ## Out of scope

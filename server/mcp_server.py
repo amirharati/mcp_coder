@@ -65,6 +65,7 @@ def _response_payload(
     success: bool,
     output: str,
     files_changed: list[str],
+    files_unexpected: list[str] | None = None,
     session_reused: bool,
     session_reason: str,
     session_policy: str,
@@ -85,6 +86,7 @@ def _response_payload(
         "success": success,
         "output": _truncate_output(output),
         "files_changed": files_changed,
+        "files_unexpected": files_unexpected if files_unexpected is not None else [],
         "session_reused": session_reused,
         "session_reason": session_reason,
         "session_policy": session_policy,
@@ -262,6 +264,7 @@ def delegate_to_agent(
     success = False
     error: str | None = None
     files_changed: list[str] = []
+    files_unexpected: list[str] = []
     output = ""
     tokens: dict[str, Any] = {"source": "unavailable"}
     executor_reused = False
@@ -326,6 +329,7 @@ def delegate_to_agent(
             success = result.success
             output = result.output or ""
             files_changed = result.files_changed
+            files_unexpected = result.files_unexpected
             tokens = result.tokens or tokens
             model = result.model or model
             error = result.error
@@ -383,6 +387,7 @@ def delegate_to_agent(
         success=success,
         output=output,
         files_changed=files_changed,
+        files_unexpected=files_unexpected,
         session_reused=storage.session_action == "reuse",
         session_reason=storage.session_reason,
         session_policy=storage.session_policy,
@@ -415,6 +420,7 @@ def delegate_to_agent(
         response_to_cursor=response,
         files_requested=list(target_files),
         files_changed=files_changed,
+        files_unexpected=files_unexpected,
         context_block=context_block,
         context_mode=context_mode,
         timing=timing,

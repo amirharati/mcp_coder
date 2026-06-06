@@ -8,7 +8,7 @@
 
 # Phase 1 MVP — Product manager doc
 
-**Status:** Spine complete + **spec workflow shipped** (P1-150/151, 2026-06-05) — **next:** P1-199 exit review (lock decisions, Phase 2 goals)  
+**Status:** Phase 1 **closed** (P1-199, 2026-06-06) — **next:** Phase 2 owned context ([BACKLOG.md](./BACKLOG.md) § Post–Phase 1 focus)  
 **Host:** Cursor first (other hosts via adapter layer later)  
 **Technical reference:** [PHASES.md](./PHASES.md) § Phase 1 · [Storage & linking](./notes/storage-and-linking.md)  
 **Vision:** [IDEA.md](./IDEA.md) · [VISION_DOCS.md](./VISION_DOCS.md)  
@@ -67,7 +67,8 @@ Phase 1 still **no** owned context pipeline (no summarizer/RAG inside mcp-coder)
 | **1.x opt** Server log + verbosity | P1-125 | `done` | `P1-1.25-server-log.md` | E2E 2026-06-05; `~/.mcp-coder/server.jsonl` |
 | **1.5** Spec delegate v0 | P1-150 | `done` | `P1-1.50-spec-delegate-v0.md` | `spec_path`, run log, outcomes |
 | **1.51** Spec v2 + review loop | P1-151 | `done` | `P1-1.51-spec-delegate-v2-review.md` | epics/tasks/reports; `mode=review\|implement`; E2E expense-splitter |
-| **Exit** Phase 1 review | P1-199 | `todo` | — | **Next** — lock spec decisions, gatekeeper timing, Phase 2 goals |
+| **1.52** Phase 1 tail polish | P1-152 | `done` | `P1-1.52-phase1-tail-polish.md` | read-deps docs; honest `files_changed` / `files_unexpected`; ops troubleshooting |
+| **Exit** Phase 1 review | P1-199 | `done` | `P1-1.99-phase1-exit-review.md` | Lock D-SPEC-1–8; freeze issues; Phase 2 direction |
 
 **Removed from spine:** P1-120 SpecStory, schema-first P1-110.
 
@@ -273,26 +274,41 @@ See [notes/spec-review-loop.md](./notes/spec-review-loop.md), [notes/spec-based-
 
 ---
 
-### P1-199 — End of Phase 1 review
+### P1-152 — Phase 1 tail polish (`done`)
 
-- [ ] Re-read [IDEA.md](./IDEA.md) and Phase 2 in [PHASES.md](./PHASES.md)
+**Depends on:** P1-151 `done`  
+**Shipped:** 2026-06-06
+
+**Goal:** Read-deps convention in cursor rules + spec templates; honest `files_changed` / `files_unexpected`; MCP reload ops docs.
+
+**Worker spec:** `docs/tasks/P1-1.52-phase1-tail-polish.md` § Results
+
+---
+
+### P1-199 — End of Phase 1 review (`done`)
+
+**Depends on:** P1-152 `done`  
+**Closed:** 2026-06-06
+
+- [x] Re-read [IDEA.md](./IDEA.md) and Phase 2 in [PHASES.md](./PHASES.md)
 - [x] **Spec experiment (BL-150):** shipped at P1-151 — see **Decisions (spec workflow)** below; gatekeeper still deferred (BL-151)
-- [ ] Confirm or revise spec decisions (review optional? read-deps convention? `delegated_ok` vs planner verify)
-- [ ] **Phase 2 direction locked:** owned context (create + window budget), topic detection, executor cache — **not** OpenCode/other hosts ([BACKLOG.md](./BACKLOG.md) § Post–Phase 1 focus)
-- [ ] **Later (on list):** interactive sessions, internal planner→executor, multi-model routing ([BACKLOG.md](./BACKLOG.md) BL-160–162) — decide phase when, not required to close P1
-- [ ] Capture any remaining decisions in experiment notes below
+- [x] Spec decisions locked (D-SPEC-1–8); open issues migrated to [BACKLOG.md](./BACKLOG.md); [PHASE1_ISSUES.md](./PHASE1_ISSUES.md) frozen
+- [x] **Phase 2 direction locked:** context compiler owns prompt materialization ([notes/phase2-owned-context.md](./notes/phase2-owned-context.md)) — **not** OpenCode/other hosts
+- [x] **Later (on list):** interactive sessions, internal planner→executor, multi-model routing ([BACKLOG.md](./BACKLOG.md) BL-160–162) — timing TBD
+- [x] BL-403 A/B prompt-size experiment **deferred** (not blocking exit)
 
-**Decisions (spec workflow — revisit at P1-199 if needed)**
+**Decisions (spec workflow — locked at P1-199)**
 
-| ID | Decision | Rationale | Revisit? |
-|----|----------|-----------|----------|
-| D-SPEC-1 | **Review is optional** — planner or user triggers; not auto on every step | Step 1 greenfield skipped review; step 2 benefited | Auto-review on cross-step deps? → BL-312 |
-| D-SPEC-2 | **Reports vs tasks** — MCP owns `specs/reports/`; planner owns `specs/tasks/` | Clean audit vs contract | — |
-| D-SPEC-3 | **`delegated_ok` ≠ tests green** — planner verifies with `pytest` before `status: done` | E2E step 2: 3 implement calls before green | MCP pytest hook? → BL-310 |
-| D-SPEC-4 | **Read deps in `target_files`** for step N+1 (or API in `context_summary`) | Step 2 implement #1 guessed wrong API without `splitter.py` in chat | Enforce/warn in MCP? → BL-311 |
-| D-SPEC-5 | **Same task file** across review + implement; `revision++` after review | One contract per step | — |
-| D-SPEC-6 | **Brainstorm in review**, not implement | `infer_run_success` fails “add files to chat” on implement | — |
-| D-SPEC-7 | **Lean context both sides** — spec/summary for worker; thin planner chat; no default transcript dump | E2E ~4.2k executor tok vs ~44k dump counterfactual | Smart injection / session RAG → BL-001, BL-002, BL-154 |
+| ID | Decision | Status | If we change |
+|----|----------|--------|--------------|
+| D-SPEC-1 | **Review is optional** — planner or user triggers | **Locked** | BL-312 |
+| D-SPEC-2 | **Reports vs tasks** — MCP `specs/reports/`; planner `specs/tasks/` | **Locked** | — |
+| D-SPEC-3 | **`delegated_ok` ≠ tests green** — planner `pytest` before `status: done` | **Locked** | BL-310 |
+| D-SPEC-4 | **Read-deps convention** (P1-152 docs); MCP enforce → Phase 2 | **Locked** | BL-311; interim: rules + `files_unexpected` |
+| D-SPEC-5 | **Same task file**; `revision++` after review | **Locked** | — |
+| D-SPEC-6 | **Brainstorm in review**, not implement | **Locked** | — |
+| D-SPEC-7 | **Lean context** — `host_transcript: none` default | **Locked** | BL-001, BL-154 |
+| D-SPEC-8 | **Log scope expansion**; `edit_scope` discover\|strict → Phase 2 | **Locked** | BL-315; honest `files_unexpected` shipped P1-152 |
 
 ---
 
@@ -305,7 +321,7 @@ See [notes/spec-review-loop.md](./notes/spec-review-loop.md), [notes/spec-based-
 - [x] Server audit log: `server.jsonl` with lifecycle + delegation link fields (E2E 2026-06-05)
 - [x] Full context: opt-in transcript dump; overflow + size fields documented (E2E 2026-06-05)
 - [x] Spec workflow: epic/step specs, reports, review + implement modes (E2E expense-splitter 2026-06-05)
-- [ ] P1-199 review completed; Phase 2 goals adjusted from logs
+- [x] P1-199 review completed; Phase 2 goals locked ([notes/phase2-owned-context.md](./notes/phase2-owned-context.md))
 
 ---
 
@@ -317,7 +333,7 @@ See [notes/spec-review-loop.md](./notes/spec-review-loop.md), [notes/spec-based-
 | Q2 | Mirror workspace JSONL by default or opt-in? | P1-110 |
 | Q3 | `align_host` reuse latest vs first session? | **Latest** (agreed in planning) |
 | Q4 | Transcript tail cap default on or off? | **Resolved P1-140:** inject default **`none`**; byte cap **off** (`0`); enable `dump` + optional `MCP_CODER_MAX_TRANSCRIPT_BYTES` per repo |
-| Q5 | Spec mandatory when? | **Partial P1-151:** optional `spec_path`; strict consumer rules encourage always for multi-step epics; mandatory product-wide → P1-199 |
+| Q5 | Spec mandatory when? | **Resolved P1-199:** **mandatory for multi-step epics** (strict consumer rules); optional for single-shot delegates |
 | Q6 | Cursor `target_files` reliability? | Ongoing |
 | Q7 | Server log: global vs per-`project_key`? Verbosity tiers? Default on? | **Resolved P1-125:** default `global`, level `info`, log on; yaml can set `server_log_scope: project` |
 
@@ -398,8 +414,9 @@ See [notes/spec-review-loop.md](./notes/spec-review-loop.md), [notes/spec-based-
 
 ## Next action
 
-1. **P1-199** — Lock spec decisions (§ P1-199 table); Phase 2 = owned context (see [BACKLOG.md](./BACKLOG.md) § Post–Phase 1 focus).
-2. Operator: reload Cursor MCP after deploy (`make mcp-kill` or Reload Window) — [P1-ISS-009](./PHASE1_ISSUES.md#p1-iss-009-mcp-process-stale-after-code-deploy).
+1. **Phase 2 Wave 1** — [BACKLOG.md](./BACKLOG.md) § Post–Phase 1 focus: **BL-316 / BL-001** (context compiler + tiers), **BL-154** (window budget), **BL-311a** (read-deps warn), **BL-315** (`edit_scope`). Design note: [notes/phase2-owned-context.md](./notes/phase2-owned-context.md).
+2. Operator: reload Cursor MCP after any code deploy (`make mcp-kill` or Reload Window) — mitigated in README/INSTALL (P1-152).
+3. New gaps → [BACKLOG.md](./BACKLOG.md) BL-* only; [PHASE1_ISSUES.md](./PHASE1_ISSUES.md) frozen at exit.
 
 ---
 
@@ -420,3 +437,5 @@ See [notes/spec-review-loop.md](./notes/spec-review-loop.md), [notes/spec-based-
 | 2026-06-05 | **P1-140 done** — opt-in transcript dump; overflow E2E; Aider Playwright thread isolation |
 | 2026-06-05 | **P1-150 done** — spec_path, outcomes, run log on task spec |
 | 2026-06-05 | **P1-151 done** — spec v2 (epics/tasks/reports), review loop, cursor rules v6; expense-splitter E2E; P1-ISS-013–016 |
+| 2026-06-06 | **P1-152 done** — read-deps docs, honest file reporting, ops troubleshooting |
+| 2026-06-06 | **P1-199 done** — Phase 1 closed; D-SPEC-1–8 locked; issues frozen; Phase 2 direction in BACKLOG + phase2-owned-context note |

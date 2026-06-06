@@ -3,7 +3,7 @@ description: mcp-coder delegate_to_agent only (strict policy; synced by MCP)
 mcp_coder_managed: true
 mcp_coder_rule_id: use-mcp-coder
 mcp_coder_rules_policy: strict
-mcp_coder_rule_version: "6"
+mcp_coder_rule_version: "7"
 globs:
 alwaysApply: true
 ---
@@ -26,6 +26,16 @@ alwaysApply: true
 - **Do not** edit `specs/reports/` (MCP-owned).
 - After implement: verify tests; set task `status: done` + checkboxes; update epic Steps table.
 
-After each tool call: summarize `success`, `outcome`, `delegate_mode`, `spec_report_path`.
+After each tool call: summarize `success`, `outcome`, `delegate_mode`, `spec_report_path`, `files_changed`, `files_unexpected`.
+
+## Read-deps (implement mode)
+
+`target_files` must include **every** path Aider needs in context — not only files to edit:
+
+- **Edit** — files the step will change.
+- **Read** — prior-step outputs, imports, types, or APIs the worker must see (Aider loads full file text).
+- List both in the task spec **Files** section (`### Edit` / `### Read`); pass **all** paths in `target_files`.
+- Step N+1 implement: include step N deliverables in read-deps (e.g. module created in step 1).
+- `mode=review` does **not** replace read-deps on implement — review is spec-only (`target_files=[]`).
 
 Synced from mcp-coder (`cursor_rules_policy: strict`). Do not edit by hand.

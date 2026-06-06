@@ -159,6 +159,8 @@ After install, point Cursor at the venv Python (see [README.md](../README.md) §
 | `ModuleNotFoundError: aider` | `pip install aider-chat` or re-run bootstrap |
 | MCP tool missing in Cursor | Restart Cursor; check `mcp.json` path to `.venv/bin/python` |
 | Delegation fails immediately | Set `OPENROUTER_API_KEY` in `.env` or MCP `env`; check `AIDER_MODEL` uses `openrouter/` prefix |
+| Stale MCP after code deploy | **Reload Window** in Cursor, or `make mcp-kill` from mcp-coder repo then reload ([README](../README.md) § Troubleshooting) |
+| Zombie `main.py --mcp` processes | Quit Cursor; `make mcp-kill`; reopen workspace |
 
 ---
 

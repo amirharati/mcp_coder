@@ -12,6 +12,7 @@ class ExecutionResult:
     success: bool
     output: str
     files_changed: list[str] = field(default_factory=list)
+    files_unexpected: list[str] = field(default_factory=list)
     model: str | None = None
     error: str | None = None
     tokens: dict[str, Any] = field(default_factory=dict)

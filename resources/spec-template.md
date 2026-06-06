@@ -30,9 +30,21 @@ What is in / out for **this step** only.
 
 ## Files
 
-Repo-relative paths the executor may touch on **implement** (include files to **read** for imports, not only edits):
+Repo-relative paths for **implement** — list in the spec, then pass **all** of them in `target_files`.
 
-- `path/to/file.py`
+### Edit
+
+Files this step creates or modifies:
+
+- `path/to/new_module.py`
+
+### Read (include in target_files)
+
+Prior-step or dependency files Aider must see (full text loaded; not edited this step):
+
+- `path/to/step1_api.py` — public API from step 1
+
+**Cross-step example:** step 2 implements CLI that imports `step1_api.py` → `target_files` = `[cli.py, step1_api.py]` even though only `cli.py` is edited.
 
 ---
 

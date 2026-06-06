@@ -19,7 +19,8 @@ def test_delegate_to_agent_logs_and_returns(tmp_path, monkeypatch):
     fake_result = ExecutionResult(
         success=True,
         output="done",
-        files_changed=["hello.py"],
+        files_changed=["hello.py", "extra.py"],
+        files_unexpected=["extra.py"],
         model="gpt-4o",
         tokens={"source": "unavailable"},
     )
@@ -42,7 +43,8 @@ def test_delegate_to_agent_logs_and_returns(tmp_path, monkeypatch):
     assert payload["success"] is True
     assert payload["session_reused"] is False
     assert payload["session_policy"] == "always_new"
-    assert payload["files_changed"] == ["hello.py"]
+    assert payload["files_changed"] == ["hello.py", "extra.py"]
+    assert payload["files_unexpected"] == ["extra.py"]
     assert "mcp_session_id" in payload
     assert "log_path" in payload
 
@@ -50,6 +52,7 @@ def test_delegate_to_agent_logs_and_returns(tmp_path, monkeypatch):
     assert log_path.is_file()
     record = json.loads(log_path.read_text(encoding="utf-8").strip())
     assert record["success"] is True
+    assert record["files_unexpected"] == ["extra.py"]
     assert record["tool_name"] == "delegate_to_agent"
     assert record["context_mode"] == "fallback"
     assert record["context"]["host_transcript_policy"] == "none"

@@ -295,7 +295,7 @@ Template uses `envFile` → mcp-coder `.env` so API keys stay in the mcp-coder c
 | `context_summary` | yes | Decisions/constraints from Cursor chat |
 | `backend` | no | Default `aider` |
 
-Returns JSON: `success`, `output`, `files_changed`, `session_reused`, `session_reason`, `session_policy`, `mcp_session_id`, `log_path`, `executor_reused`, `executor_recreated`.
+Returns JSON: `success`, `output`, `files_changed`, `files_unexpected`, `session_reused`, `session_reason`, `session_policy`, `mcp_session_id`, `log_path`, `executor_reused`, `executor_recreated`.
 
 Each call appends one line to the session log under home:
 
@@ -385,6 +385,16 @@ CLI / AI inspection tools can be added later (same JSONL format).
 pytest
 # or: make install-dev && make test
 ```
+
+---
+
+## Troubleshooting
+
+| Problem | Fix |
+|---------|-----|
+| MCP behaves like old code after `git pull` / local edits | Cursor loads the stdio server once — **Developer: Reload Window** (`Cmd+Shift+P`) or from the mcp-coder repo run `make mcp-kill` then reload |
+| Zombie `main.py --mcp` / stuck `UE` processes (macOS) | Quit Cursor fully; `make mcp-kill` from mcp-coder repo; reopen workspace |
+| `files_unexpected` in delegate response | Aider touched paths outside `target_files` — add them to spec **Read** and retry |
 
 ---
 

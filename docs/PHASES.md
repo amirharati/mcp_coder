@@ -10,7 +10,7 @@
 
 This document is the **delivery plan**: what to build, in what order, and how we validate each step. Vision and rationale live in [IDEA.md](./IDEA.md) · doc map: [VISION_DOCS.md](./VISION_DOCS.md). Implementation happens in focused coding sessions once a phase (or sub-step) is agreed.
 
-**Status:** Planning. Phase 1 is broken into sub-steps so we can experiment with Cursor before adding complexity.
+**Status:** Phase 1 **complete** (P1-199, 2026-06-06). Phase 2 = owned context compiler — see [BACKLOG.md](./BACKLOG.md) § Post–Phase 1 focus.
 
 ---
 
@@ -493,7 +493,7 @@ mcp_coder/
 
 ## Phase 2 and beyond: Owned context management
 
-Starting Phase 2, `mcp-coder` stops relying solely on pass-through (`context_summary`, opt-in transcript dump) and **builds and manages context itself**. This is where the vision in [IDEA.md](./IDEA.md) (router, janitor, RAG, token tiers) is implemented.
+Starting Phase 2, `mcp-coder` stops relying solely on pass-through (`context_summary`, opt-in transcript dump) and **builds and manages context itself** — a **context compiler** with per-path materialization tiers ([notes/phase2-owned-context.md](./notes/phase2-owned-context.md)). This is where the vision in [IDEA.md](./IDEA.md) (router, janitor, RAG, token tiers) is implemented.
 
 **Explicitly not Phase 2 focus:** OpenCode or other execution adapters ([BACKLOG.md](./BACKLOG.md) BL-004 — very low / if ever). **Aider + Cursor** until the product is useful. Other hosts (Claude Desktop, Windsurf) are also low priority (BL-201/202).
 
@@ -599,4 +599,5 @@ Both projects can be developed in parallel. Phase 1 does not require the proxy o
 - [x] Full Cursor transcript context — opt-in `host_transcript: dump` ([PHASE1_MVP.md](./PHASE1_MVP.md) P1-140).
 - [x] Persistent server log ([PHASE1_ISSUES.md](./PHASE1_ISSUES.md) P1-ISS-004 / P1-125).
 - [x] Spec-based delegate + review loop ([PHASE1_MVP.md](./PHASE1_MVP.md) P1-150/151; BL-150 done).
-- [ ] **Next:** Phase 1 exit review P1-199 (lock spec decisions, Phase 2 goals).
+- [x] Phase 1 exit review P1-199 — closed 2026-06-06; [PHASE1_ISSUES.md](./PHASE1_ISSUES.md) frozen.
+- [ ] **Next:** Phase 2 Wave 1 — context compiler (BL-316/BL-001), window budget (BL-154), read-deps warn (BL-311).

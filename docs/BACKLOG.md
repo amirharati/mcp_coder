@@ -59,22 +59,24 @@ Status: `idea` | `deferred` | `blocked` | `done`
 
 ## Post–Phase 1 focus (priority after P1-199)
 
-**Direction (2026-06 planning):** Make **Aider + Cursor** genuinely useful before new execution engines or hosts. Core bet = **MCP-owned context management** (what goes into the prompt + how we stay inside the window), not more adapters.
+**Direction (locked P1-199, 2026-06-06):** **Context compiler** owns what enters the executor prompt: per-path tiers (edit-full, read-full, read-excerpt, pointer, map-only, hide). `target_files` is a **planner hint / edit scope**, not “always full file in chat” (today that is **Aider-specific** via `fnames`). When `spec_path` is set, **spec Files is the contract**; MCP builder materializes context and engine adapters map to Aider. RAG/gatekeeper/OpenCode remain deferred. Design note: [notes/phase2-owned-context.md](./notes/phase2-owned-context.md).
 
 | Priority | ID | Item | Notes |
 |----------|-----|------|--------|
-| 1 | ~~BL-150~~ | ~~Spec-based delegation~~ | **done** P1-150/151 (2026-06-05) — see § Done |
+| 1 | **BL-316** | Context builder **file materialization tiers** | Core Phase 2; decouple spec/API from Aider `fnames`; extends BL-001 |
 | 2 | BL-001 | Owned context **creation** | Assemble brief: files, constraints, task; cheap LLM or rules + ripgrep |
-| 3 | BL-153 | **Topic / task boundary detection** | Know “what topic is this?” for smarter session + context slices (not just host mtime) |
-| 4 | BL-154 | **Context window management** | Rolling history, summarize chunks, prompt templates, caps — mcp-coder owns the budget |
-| 5 | BL-008 | Skills + prompt packs | Inject by topic / task type into owned assembly |
-| 6 | BL-155 | **Executor cache & multi-turn** | Extend P1-130: today in-process `Coder` cache per `mcp_session_id` but **full prompt rebuilt every call**; explore retaining executor state, rolling delegate context, TTL — not “new Coder every time” by default |
-| 7 | **BL-309** | **Delegation hardening** (job vs workflow failure) | P1-ISS-012 — cheap-model 500s must not open browsers / leave empty stubs; see § below |
-| 8 | BL-310 | Planner verify / report status split | P1-ISS-013 — `delegated_ok` vs tests green |
-| 9 | BL-311 | Read-deps validation for implement | P1-ISS-014 — spec Files vs `target_files` |
-| 10 | BL-312 | Auto-review policy (optional) | Revisit D-SPEC-1 — cross-step deps |
-| 11 | BL-003 | Router / janitor LLM | Freshness, stale context — after assembly basics |
-| — | BL-002 | RAG / cross-session memory | Phase 3 — after topic + window mgmt prove useful |
+| 3 | BL-154 | **Context window management** | Rolling history, summarize chunks, prompt templates, caps |
+| 4 | BL-311 | Read-deps validation for implement | P1-ISS-014 — warn/merge spec Files vs `target_files`; convention shipped P1-152 |
+| 5 | BL-315 | `edit_scope` + spec `files_edit` / `files_read` YAML | D-SPEC-8; discover \| strict |
+| 6 | **BL-309** | **Delegation hardening** (job vs workflow failure) | P1-ISS-012 — cheap-model 500s; see § below |
+| 7 | BL-153 | **Topic / task boundary detection** | Smarter session + context slices |
+| 8 | BL-008 | Skills + prompt packs | Inject by topic / task type |
+| 9 | BL-155 | **Executor cache & multi-turn** | Extend P1-130 rolling delegate context |
+| 10 | BL-310 | Planner verify / report status split | P1-ISS-013 |
+| 11 | BL-312 | Auto-review policy (optional) | D-SPEC-1 |
+| 12 | BL-003 / **BL-162** | Router / janitor + **cheap model for context build** | BL-162 partial overlap Phase 2 |
+| — | BL-002 | RAG / cross-session memory | Phase 3 |
+| — | ~~BL-150~~ | ~~Spec-based delegation~~ | **done** P1-150/151 |
 
 **Two halves of “owned context” (same program):**
 
@@ -257,11 +259,89 @@ Re-run steps 3–4 with Qwen; expect `success: false` with short classified erro
 
 ### BL-312: Auto-review policy (optional)
 
-**Status:** `idea` — revisit at P1-199 ([PHASE1_MVP.md](./PHASE1_MVP.md) D-SPEC-1).
+**Status:** `deferred` — D-SPEC-1 locked at P1-199 ([PHASE1_MVP.md](./PHASE1_MVP.md)).
 
 **Goal:** Decide whether MCP or rules should **suggest** `mode=review` when task spec references prior-step files or epic step > 1.
 
 Not shipped — review remains planner/user triggered.
+
+---
+
+### BL-314: Honest delegation file reporting
+
+**Status:** `deferred` — **partial done** P1-152 (2026-06-06).
+
+**Goal:** Full visibility when executor scope expands beyond planner intent.
+
+| Sub | Item | Status |
+|-----|------|--------|
+| BL-314a | `files_changed` = all git-touched paths during delegation | **done** P1-152 |
+| BL-314b | `files_unexpected` in tool response + JSONL | **done** P1-152 |
+| BL-314c | Spec report **Scope expansion** section when `files_unexpected` non-empty | deferred |
+| BL-314d | Tie to `edit_scope: strict` enforcement | deferred → BL-315 |
+
+**Source:** P1-ISS-017 (closed at P1-152).
+
+---
+
+### BL-315: `edit_scope` + spec Files YAML
+
+**Status:** `deferred` — D-SPEC-8 locked at P1-199.
+
+**Goal:** Structured spec contract for edit vs read paths; MCP enforcement policy.
+
+| Sub | Item |
+|-----|------|
+| BL-315a | YAML front matter: `files_edit`, `files_read` (replaces markdown-only subsections) |
+| BL-315b | `edit_scope: discover` \| `strict` — whether paths outside edit set are allowed |
+| BL-315c | Builder reads spec as primary contract when `spec_path` set |
+
+Phase 1 uses markdown `### Edit` / `### Read` only (P1-152).
+
+---
+
+### BL-316: Context builder file materialization tiers
+
+**Status:** `deferred` — **Phase 2 Wave 1** (P1-199).
+
+**Goal:** mcp-coder **context builder** decides per path how content enters the executor prompt — decoupled from Aider `fnames` full-file default.
+
+| Tier | Use |
+|------|-----|
+| `edit-full` | May edit; full body |
+| `read-full` | Context only; full body |
+| `read-excerpt` | Snippet / symbol slice |
+| `pointer` | Path + summary line |
+| `map-only` | Tree / index |
+| `hide` | Omit |
+
+**Flow:** `assemble_context()` → `ContextPackage` → engine adapter (`AiderContext`, etc.). Extends BL-001. See [notes/phase2-owned-context.md](./notes/phase2-owned-context.md).
+
+**Source:** Phase 2 thesis at P1-199; bridges P1-152 read-deps + `files_unexpected`.
+
+---
+
+### BL-317: Cursor project slug robustness
+
+**Status:** `deferred` — **P1-ISS-002** (`carried` at P1-199).
+
+**Goal:** Reduce slug heuristic failures mapping workspace → `.cursor/projects/<slug>/`.
+
+| Sub | Item |
+|-----|------|
+| BL-317a | README troubleshooting (env `MCP_CODER_CURSOR_PROJECT_SLUG`) — partial in README |
+| BL-317b | Cache resolved slug in workspace `.mcp-coder/project.json` after first success |
+| BL-317c | Optional scan fallback across slug variants |
+
+---
+
+### BL-318: `project_key` alias on repo move
+
+**Status:** `deferred` — **P1-ISS-005** (`carried` at P1-199).
+
+**Goal:** When repo is cloned/moved, link old `~/.mcp-coder/projects/<old_key>/` to new `project_key` or provide import tool.
+
+By design today: `project_key` = SHA-256(resolved path).
 
 ---
 
@@ -272,7 +352,9 @@ Not shipped — review remains planner/user triggered.
 | BL-301 | Delegation log web UI | Extend viewer for `~/.mcp-coder` |
 | BL-302 | Redaction policy doc for logs (secrets) | Required before sharing logs |
 | BL-303 | Metrics export (Prometheus / statsd) | Enterprise-ish; low priority |
-| BL-304 | Global index `hosts/cursor/<id>/index.json` | Cross-project session lookup — **deferred P1-130**; one Cursor chat delegating to multiple repos (see P1-1.3 § Pre-implementation decisions) |
+| BL-304 | Global index `hosts/cursor/<id>/index.json` | Cross-project session lookup — **P1-ISS-008** (`carried` at P1-199); one Cursor chat delegating to multiple repos |
+| BL-317 | Cursor project slug robustness | **P1-ISS-002** — see § BL-317 |
+| BL-318 | `project_key` alias on repo move | **P1-ISS-005** — see § BL-318 |
 | BL-305 | ~~Persistent MCP **server** log (process audit)~~ | **done** — P1-125 |
 | BL-308 | Global `server.jsonl` locking / per-pid subfiles | P1-ISS-011; only if garbled lines in practice |
 | BL-306 | Startup **code version / git hash** in MCP stderr | Detect stale process (P1-ISS-009) |
@@ -285,7 +367,7 @@ Not shipped — review remains planner/user triggered.
 | ID | Experiment | Outcome drives |
 |----|------------|----------------|
 | BL-401 | `always_new` vs `align_host` | Default `MCP_CODER_SESSION_POLICY` — **partial:** E2E favors `align_host` for test sandbox; keep default `always_new` globally |
-| BL-403 | Prompt size vs failure rate per model | Transcript cap, Phase 2 summarization |
+| BL-403 | Prompt size vs failure rate per model | **Deferred** at P1-199; transcript cap partial P1-140 |
 | BL-404 | Cursor `target_files` reliability | Schema / inference rules |
 | BL-405 | Tool name/description for routing | MCP tool description |
 
@@ -326,8 +408,18 @@ Not shipped — review remains planner/user triggered.
 
 | ID | Item | Completed |
 |----|------|-----------|
+| BL-314 (partial) | Honest `files_changed` + `files_unexpected` | 2026-06-06 — P1-152; report Scope expansion → remaining |
 | BL-150 | Spec-based delegation (v0 + v2 + review loop) | 2026-06-05 — P1-150 `spec_path`/outcomes; P1-151 epics/tasks/reports, `mode=review\|implement`, cursor rules v6; E2E `mcp_coder_phase1_e2e` |
 | BL-125 | Persistent MCP server log | 2026-06-05 — P1-125 |
 | BL-305 | Server log scope | 2026-06-05 — P1-125 |
 | BL-101 | Transcript tail cap | 2026-06-05 — P1-140 |
 | BL-203 | Cursor agent-transcripts | 2026-06-05 — P1-120 + P1-140 |
+
+---
+
+## Changelog
+
+| Date | Change |
+|------|--------|
+| 2026-06-06 | P1-199 exit — Post–Phase 1 focus reordered; BL-314 partial, BL-315–318 added; P1 issues migrated |
+| 2026-06-05 | BL-309–312 from expense-splitter E2E; BL-150 done |

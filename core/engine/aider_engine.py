@@ -15,8 +15,9 @@ from core.config.providers import apply_provider_env
 from core.engine.base import ExecutionEngine, ExecutionResult
 from core.engine.factory import register_engine
 from core.engine.git_diff import (
-    files_changed_for_delegation,
-    files_changed_via_git,
+    compute_files_unexpected,
+    files_touched_since_snapshot,
+    snapshot_git_dirty,
     snapshot_mtimes,
 )
 from core.engine.stdio_isolation import isolated_stdio, merged_capture
@@ -92,6 +93,8 @@ class AiderEngine(ExecutionEngine):
         prev_cwd = os.getcwd()
         executor_reused = False
         executor_recreated = False
+        before_git: set[str] | None = None
+        before_mtimes: dict[str, float | None] | None = None
         try:
             os.chdir(workspace_path)
             resolved_files = [
@@ -99,6 +102,7 @@ class AiderEngine(ExecutionEngine):
                 for f in target_files
             ]
             model = Model(self._model_name)
+            before_git = snapshot_git_dirty(workspace_path)
             before_mtimes = snapshot_mtimes(workspace_path, target_files)
 
             def _make_coder() -> tuple[Any, Any, Any]:
@@ -145,8 +149,14 @@ class AiderEngine(ExecutionEngine):
             partial_str = str(partial) if partial is not None else ""
             output = "\n".join(s for s in (captured.strip(), partial_str.strip()) if s)
 
-            files_changed = files_changed_for_delegation(
-                workspace_path, target_files, before_mtimes
+            files_changed, used_git = files_touched_since_snapshot(
+                workspace_path,
+                before_git,
+                target_files=target_files,
+                before_mtimes=before_mtimes,
+            )
+            files_unexpected = compute_files_unexpected(
+                files_changed, target_files, used_git=used_git
             )
             tokens = _extract_tokens(coder, partial)
             success, error = infer_run_success(
@@ -158,6 +168,7 @@ class AiderEngine(ExecutionEngine):
                 success=success,
                 output=output,
                 files_changed=files_changed,
+                files_unexpected=files_unexpected,
                 model=self._model_name,
                 error=error,
                 tokens=tokens,
@@ -165,10 +176,19 @@ class AiderEngine(ExecutionEngine):
                 executor_recreated=executor_recreated,
             )
         except Exception as exc:
+            files_changed, used_git = files_touched_since_snapshot(
+                workspace_path,
+                before_git,
+                target_files=target_files,
+                before_mtimes=before_mtimes,
+            )
             return ExecutionResult(
                 success=False,
                 output="",
-                files_changed=files_changed_via_git(workspace_path),
+                files_changed=files_changed,
+                files_unexpected=compute_files_unexpected(
+                    files_changed, target_files, used_git=used_git
+                ),
                 model=self._model_name,
                 error=f"{type(exc).__name__}: {exc}",
                 tokens={"source": "unavailable"},

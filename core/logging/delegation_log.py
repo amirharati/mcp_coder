@@ -114,6 +114,7 @@ def build_delegation_record(
     response_to_cursor: dict[str, Any],
     files_requested: list[str],
     files_changed: list[str],
+    files_unexpected: list[str] | None = None,
     context_block: dict[str, Any],
     context_mode: str = CONTEXT_MODE_FALLBACK,
     timing: dict[str, int | float],
@@ -169,6 +170,7 @@ def build_delegation_record(
         "response_to_cursor": response_to_cursor,
         "files_requested": files_requested,
         "files_changed": files_changed,
+        "files_unexpected": files_unexpected if files_unexpected is not None else [],
         "context": {
             "specstory_path": None,
             "specstory_mtime": None,

@@ -84,9 +84,9 @@ Actual LLM provider
 | **Storage** | User-home canonical logs; `session.json` pointer + user `config.yaml` | Team sync / DB optional |
 | **Specs** | Dogfood local worker specs while building; **product spec at Phase 1 exit review** | `.mcp-coder/specs/` + gatekeeper (later) |
 
-**Checkpoint:** End of Phase 1 — spec strategy, gatekeeper, Phase 2 goals ([PHASE1_MVP.md](./PHASE1_MVP.md)).
+**Checkpoint:** End of Phase 1 — spec strategy, gatekeeper, Phase 2 goals ([PHASE1_MVP.md](./PHASE1_MVP.md)) — **completed P1-199 (2026-06-06)**.
 
-**Current status (2026-06-05):** Phase 1 spine shipped (MCP → Aider, home storage, host adapter, sessions, server log, opt-in transcript dump). **Next:** P1-199 exit review (spec strategy, gatekeeper, Phase 2).
+**Current status (2026-06-06):** Phase 1 **closed** — delegate + pass-through context, home storage, sessions, spec workflow (review/implement), honest file reporting (P1-152). **Next:** Phase 2 **owned context compiler** ([BACKLOG.md](./BACKLOG.md) § Post–Phase 1 focus; [notes/phase2-owned-context.md](./notes/phase2-owned-context.md)).
 
 ---
 

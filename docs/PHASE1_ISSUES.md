@@ -7,17 +7,11 @@
 
 # Phase 1 issue tracker
 
-**Purpose:** Known gaps, limitations, and follow-ups discovered during Phase 1 — so we do not lose them in chat or worker § Results.  
-**Not** the full product backlog ([BACKLOG.md](./BACKLOG.md)); items here are **Phase 1–relevant** (fix before/ at P1-199 or explicitly carry to Phase 2). **Vision:** [IDEA.md](./IDEA.md).
+**Frozen at Phase 1 exit (P1-199, 2026-06-06).** Historical record only — **do not add new rows here.** New gaps → [BACKLOG.md](./BACKLOG.md) BL-* only.
 
-**Milestone board:** [PHASE1_MVP.md](./PHASE1_MVP.md)
+**Purpose:** Gaps discovered during Phase 1 (preserved for audit). **Vision:** [IDEA.md](./IDEA.md). **Milestone board:** [PHASE1_MVP.md](./PHASE1_MVP.md).
 
-Status: `open` | `scheduled` | `done` | `wontfix-p1` (defer with reason)
-
-| When to fix | Milestone |
-|-------------|-----------|
-| Before Phase 1 exit | P1-199 decision only |
-| Phase 2+ | Mark `wontfix-p1` + link BL-* |
+Terminal status: `done` | `wontfix-p1` | `carried` (→ BL-* in Notes)
 
 ---
 
@@ -26,19 +20,20 @@ Status: `open` | `scheduled` | `done` | `wontfix-p1` (defer with reason)
 | ID | Status | Priority | Title | Target | Notes |
 |----|--------|----------|-------|--------|-------|
 | [P1-ISS-001](#p1-iss-001-active-cursor-chat--newest-mtime) | `done` | high | Active Cursor chat ≠ newest transcript mtime | **P1-130** | score + tie-break |
-| [P1-ISS-002](#p1-iss-002-cursor-slug-heuristic-failures) | `open` | medium | Cursor project slug heuristic can fail | P1-120+ doc / env | Override exists |
-| [P1-ISS-003](#p1-iss-003-legacy-delegations-without-host-fields) | `open` | low | Legacy delegations lack `host_*` | doc only | Expected |
+| [P1-ISS-002](#p1-iss-002-cursor-slug-heuristic-failures) | `carried` | medium | Cursor project slug heuristic can fail | Phase 2+ | → [BL-317](./BACKLOG.md#bl-317-cursor-project-slug-robustness) |
+| [P1-ISS-003](#p1-iss-003-legacy-delegations-without-host-fields) | `wontfix-p1` | low | Legacy delegations lack `host_*` | doc only | Expected; README |
 | [P1-ISS-004](#p1-iss-004-persistent-mcp-server-log) | `done` | high | Persistent MCP **server** log + verbosity | **P1-125** | Shipped 2026-06-05 |
 | [P1-ISS-011](#p1-iss-011-global-server-log-interleave) | `wontfix-p1` | low | Global `server.jsonl` interleave / rare garbled line | Phase 2+ / BL-308 | Use `server_log_scope: project` |
-| [P1-ISS-005](#p1-iss-005-repo-move-orphans-home-data) | `open` | low | Moving repo orphans `project_key` data | P1-199 / Phase 2 | By design for now |
+| [P1-ISS-005](#p1-iss-005-repo-move-orphans-home-data) | `carried` | low | Moving repo orphans `project_key` data | Phase 2+ | → [BL-318](./BACKLOG.md#bl-318-project_key-alias-on-repo-move) |
 | [P1-ISS-006](#p1-iss-006-many-mcp-sessions-per-host-chat) | `done` | medium | Many mcp sessions per Cursor chat — no “main” picker | **P1-130** | `align_host` reuses latest; UI picker BL-108 |
 | [P1-ISS-007](#p1-iss-007-session_policy-field-naming) | `done` | low | `session_policy` naming inconsistent | **P1-130** | `always_new` \| `align_host` |
-| [P1-ISS-008](#p1-iss-008-cross-project-host-index) | `open` | low | No cross-project index by `host_session_id` | BL-304 | Optional |
-| [P1-ISS-009](#p1-iss-009-mcp-process-stale-after-code-deploy) | `open` | high | MCP child keeps old Python code until process exits | doc + ops | Reload Window after deploy |
-| [P1-ISS-010](#p1-iss-010-ue-zombie-mcp-processes) | `open` | low | Stuck `UE` `main.py --mcp` on macOS | doc | Quit Cursor; `make mcp-kill` |
+| [P1-ISS-008](#p1-iss-008-cross-project-host-index) | `carried` | low | No cross-project index by `host_session_id` | Phase 2+ | → [BL-304](./BACKLOG.md#observability--ops) |
+| [P1-ISS-009](#p1-iss-009-mcp-process-stale-after-code-deploy) | `done` | high | MCP child keeps old Python code until process exits | **P1-152** | README/INSTALL; code follow-up [BL-306](./BACKLOG.md#observability--ops) |
+| [P1-ISS-010](#p1-iss-010-ue-zombie-mcp-processes) | `done` | low | Stuck `UE` `main.py --mcp` on macOS | **P1-152** | README/INSTALL ops docs |
 | [P1-ISS-012](#p1-iss-012-weak-model-upstream-errors-break-workflow) | `wontfix-p1` | high | Weak-model / upstream API errors break **workflow**, not just job | Phase 2+ / **BL-309** | E2E 2026-06-05; Sonnet OK |
 | [P1-ISS-013](#p1-iss-013-delegated_ok--planner-test-verify) | `wontfix-p1` | medium | MCP `delegated_ok` / `success: true` ≠ tests green | By design / **BL-310** | E2E step 2 — planner pytest loop |
-| [P1-ISS-014](#p1-iss-014-cross-step-read-deps-not-in-target_files) | `open` | high | Step N+1 implement without read-deps → wrong API guess | Convention / **BL-311** | E2E step 2 implement #1 |
+| [P1-ISS-014](#p1-iss-014-cross-step-read-deps-not-in-target_files) | `carried` | high | Step N+1 implement without read-deps → wrong API guess | Phase 2 | Convention P1-152; MCP → [BL-311](./BACKLOG.md#bl-311-read-deps-from-spec-files-section) |
+| [P1-ISS-017](#p1-iss-017-files_changed-under-reported) | `done` | medium | `files_changed` only listed `target_files` | **P1-152** | Git snapshot + `files_unexpected`; [BL-314](./BACKLOG.md#bl-314-honest-delegation-file-reporting) partial |
 | [P1-ISS-015](#p1-iss-015-review-mode-does-not-validate-prior-step-api) | `wontfix-p1` | low | Review answers spec Qs only; does not read step N code | Documented | D-SPEC-1; use read-deps on implement |
 | [P1-ISS-016](#p1-iss-016-implement-add-files-to-chat-marked-failure) | `done` | medium | “Add files to chat” counted as implement success | **P1-151** | `infer_run_success` → `needs_input` |
 
@@ -71,6 +66,8 @@ Status: `open` | `scheduled` | `done` | `wontfix-p1` (defer with reason)
 
 ### P1-ISS-002: Cursor slug heuristic failures
 
+**Status:** `carried` — 2026-06-06 at P1-199 → [BL-317](./BACKLOG.md#bl-317-cursor-project-slug-robustness).
+
 **Found:** P1-120 (live `mcp_coder_test_proj`).
 
 **Problem:** Slug is derived from resolved path (`/` → `-`, optional `_` → `-`). Cursor’s folder name may not match (e.g. `personal_tools` vs `personal-tools`).
@@ -82,6 +79,8 @@ Status: `open` | `scheduled` | `done` | `wontfix-p1` (defer with reason)
 ---
 
 ### P1-ISS-003: Legacy delegations without host fields
+
+**Status:** `wontfix-p1` — 2026-06-06 at P1-199 (doc only).
 
 **Found:** P1-120.
 
@@ -121,6 +120,8 @@ Status: `open` | `scheduled` | `done` | `wontfix-p1` (defer with reason)
 
 ### P1-ISS-005: Repo move orphans home data
 
+**Status:** `carried` — 2026-06-06 at P1-199 → [BL-318](./BACKLOG.md#bl-318-project_key-alias-on-repo-move).
+
 **Found:** P1-110.
 
 **Problem:** `project_key` = SHA-256(resolved workspace path). Clone/move repo → new key; old `~/.mcp-coder/projects/<old_key>/` orphaned.
@@ -157,6 +158,8 @@ Status: `open` | `scheduled` | `done` | `wontfix-p1` (defer with reason)
 
 ### P1-ISS-008: Cross-project host index
 
+**Status:** `carried` — 2026-06-06 at P1-199 → [BL-304](./BACKLOG.md#observability--ops).
+
 **Found:** [storage-and-linking.md](./notes/storage-and-linking.md).
 
 **Problem:** Finding all mcp sessions for a Cursor chat across repos requires scanning all `projects/*/sessions/*/session.json`.
@@ -166,6 +169,8 @@ Status: `open` | `scheduled` | `done` | `wontfix-p1` (defer with reason)
 ---
 
 ### P1-ISS-009: MCP process stale after code deploy
+
+**Status:** `done` — mitigated 2026-06-06 at P1-152 (README/INSTALL ops). Optional code: [BL-306](./BACKLOG.md#observability--ops).
 
 **Found:** P1-130 E2E review (2026-06-04).
 
@@ -180,6 +185,8 @@ Status: `open` | `scheduled` | `done` | `wontfix-p1` (defer with reason)
 ---
 
 ### P1-ISS-010: UE zombie MCP processes (macOS)
+
+**Status:** `done` — mitigated 2026-06-06 at P1-152 (README/INSTALL ops).
 
 **Found:** P1-130 E2E review (2026-06-04).
 
@@ -242,7 +249,7 @@ Status: `open` | `scheduled` | `done` | `wontfix-p1` (defer with reason)
 
 ### P1-ISS-014: Cross-step read-deps not in `target_files`
 
-**Status:** `open` — convention + cursor rules; not enforced in MCP ([BL-311](./BACKLOG.md#bl-311-read-deps-from-spec-files-section)).
+**Status:** `carried` — convention shipped P1-152; MCP enforce → [BL-311](./BACKLOG.md#bl-311-read-deps-from-spec-files-section).
 
 **Found:** Expense-splitter E2E step 2 implement #1 (`3facf598…`, 2026-06-05).
 
@@ -284,6 +291,18 @@ Status: `open` | `scheduled` | `done` | `wontfix-p1` (defer with reason)
 
 ---
 
+### P1-ISS-017: `files_changed` under-reported
+
+**Status:** `done` — closed 2026-06-06 at **P1-152**.
+
+**Found:** Planning gap before tail polish — delegation JSONL and tool response listed only `target_files` intersection, not all paths Aider touched.
+
+**Shipped:** Git dirty-set snapshot delta at delegation start/end; `files_changed` = all touched paths; `files_unexpected` = touched minus `target_files`. Non-git fallback: mtime on `target_files` only, `files_unexpected` empty.
+
+**Remaining:** Spec report **Scope expansion** section → [BL-314](./BACKLOG.md#bl-314-honest-delegation-file-reporting) partial.
+
+---
+
 ## Scheduled / done
 
 | ID | Status | Resolution |
@@ -294,10 +313,7 @@ Status: `open` | `scheduled` | `done` | `wontfix-p1` (defer with reason)
 
 ## How to add an issue
 
-1. Append row to **Open issues** table with next `P1-ISS-NNN`.
-2. Add ### section with problem, impact, target milestone, acceptance.
-3. If long-term only → also add row to [BACKLOG.md](./BACKLOG.md).
-4. Reference ID in worker spec § Results (“see P1-ISS-00x”).
+**Frozen at P1-199.** Add new gaps to [BACKLOG.md](./BACKLOG.md) BL-* only.
 
 ---
 
@@ -305,6 +321,7 @@ Status: `open` | `scheduled` | `done` | `wontfix-p1` (defer with reason)
 
 | Date | Change |
 |------|--------|
+| 2026-06-06 | **P1-199 exit** — tracker frozen; all rows terminal; P1-ISS-017 done; open → carried/done |
 | 2026-06-05 | P1-ISS-013–016 from expense-splitter E2E (spec v2 + review loop); P1-ISS-016 done |
 | 2026-06-05 | P1-ISS-012 opened (wontfix-p1): weak-model upstream errors break workflow; BL-309 |
 | 2026-06-05 | P1-140 done; Phase 1 spine complete; next P1-199 |

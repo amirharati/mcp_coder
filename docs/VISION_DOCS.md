@@ -17,7 +17,7 @@ Use this page so **main vision** ([IDEA.md](./IDEA.md)) is not lost when editing
 | **1 — How we ship** | [PHASES.md](./PHASES.md) | Multi-phase delivery, boundaries, validation. Must stay **consistent with IDEA**. | Planning / master session; not workers |
 | **2 — Phase 1 PM** | [PHASE1_MVP.md](./PHASE1_MVP.md) | Tasks, status, acceptance, worker handoffs | Planning session updates status; scope changes need user agreement |
 | **2 — Deferred** | [BACKLOG.md](./BACKLOG.md) | BL-* items, priorities, post–P1 focus | Add/defer with user or P1-199; do not delete rows silently |
-| **2 — P1 gaps** | [PHASE1_ISSUES.md](./PHASE1_ISSUES.md) | Issues found during P1 | Planning session; link to BL-* when deferring |
+| **2 — P1 gaps** | [PHASE1_ISSUES.md](./PHASE1_ISSUES.md) | Issues found during P1 — **frozen / historical at P1 exit (2026-06-06)** | Read-only; new gaps → BACKLOG BL-* |
 | **3 — Direction notes** | [notes/spec-based-development.md](./notes/spec-based-development.md) | Spec-as-contract — **shipped experiment** (P1-151) | Update when workflow changes; P1-199 locks decisions |
 | **3 — Direction notes** | [notes/spec-review-loop.md](./notes/spec-review-loop.md) | Review vs implement modes | Same |
 | **3 — Related ideas** | [OTEHR_RELATED_IDEAS/](./OTEHR_RELATED_IDEAS/) | Gatekeeper, experiments — **not** canonical vision | Optional; may inform backlog only |
@@ -52,4 +52,5 @@ Use this page so **main vision** ([IDEA.md](./IDEA.md)) is not lost when editing
 
 | Date | Change |
 |------|--------|
+| 2026-06-06 | PHASE1_ISSUES frozen at P1-199 exit; Phase 2 direction note added |
 | 2026-06-05 | Initial vision-doc map + stewardship tiers (with IDEA audit) |
