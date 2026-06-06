@@ -15,11 +15,14 @@ Use this page so **main vision** ([IDEA.md](./IDEA.md)) is not lost when editing
 |------|----------|------|----------------|
 | **0 — Why** | [IDEA.md](./IDEA.md) | Product vision, architecture, principles, data models. Roots: commit `074753b` (`README.md`) + Grok ideation. | **User only** (explicit ask to change vision) |
 | **1 — How we ship** | [PHASES.md](./PHASES.md) | Multi-phase delivery, boundaries, validation. Must stay **consistent with IDEA**. | Planning / master session; not workers |
-| **2 — Phase 1 PM** | [PHASE1_MVP.md](./PHASE1_MVP.md) | Tasks, status, acceptance, worker handoffs | Planning session updates status; scope changes need user agreement |
-| **2 — Deferred** | [BACKLOG.md](./BACKLOG.md) | BL-* items, priorities, post–P1 focus | Add/defer with user or P1-199; do not delete rows silently |
-| **2 — P1 gaps** | [PHASE1_ISSUES.md](./PHASE1_ISSUES.md) | Issues found during P1 — **frozen / historical at P1 exit (2026-06-06)** | Read-only; new gaps → BACKLOG BL-* |
-| **3 — Direction notes** | [notes/spec-based-development.md](./notes/spec-based-development.md) | Spec-as-contract — **shipped experiment** (P1-151) | Update when workflow changes; P1-199 locks decisions |
+| **2 — Phase 1 PM** | [PHASE1_MVP.md](./PHASE1_MVP.md) | Tasks, status, acceptance — **closed/frozen P1-199** | Historical only; do not add new rows |
+| **2 — Phase 2 PM** | [PHASE2_MVP.md](./PHASE2_MVP.md) | Phase 2 milestones, waves, decisions | Planning / master session updates status |
+| **2 — Deferred** | [BACKLOG.md](./BACKLOG.md) | BL-* items, priorities, post–P1/P2 focus | Add/defer with user; do not delete rows silently |
+| **2 — P1 gaps** | [PHASE1_ISSUES.md](./PHASE1_ISSUES.md) | Issues from P1 — **frozen / historical at P1-199** | Read-only; new gaps → BACKLOG or PHASE2_ISSUES |
+| **2 — P2 gaps** | [PHASE2_ISSUES.md](./PHASE2_ISSUES.md) | Issues found during Phase 2 | Planning session; link to BL-* when deferring |
+| **3 — Direction notes** | [notes/spec-based-development.md](./notes/spec-based-development.md) | Spec-as-contract — **shipped experiment** (P1-151) | Update when workflow changes |
 | **3 — Direction notes** | [notes/spec-review-loop.md](./notes/spec-review-loop.md) | Review vs implement modes | Same |
+| **3 — Direction notes** | [notes/phase2-owned-context.md](./notes/phase2-owned-context.md) | Context compiler design — locked P1-199 | Update as Phase 2 decisions land |
 | **3 — Related ideas** | [OTEHR_RELATED_IDEAS/](./OTEHR_RELATED_IDEAS/) | Gatekeeper, experiments — **not** canonical vision | Optional; may inform backlog only |
 
 ## Operational (not vision — safe to update when implementing)
@@ -29,14 +32,15 @@ Use this page so **main vision** ([IDEA.md](./IDEA.md)) is not lost when editing
 | [INSTALL.md](./INSTALL.md) | Install, Python, locks |
 | [notes/storage-and-linking.md](./notes/storage-and-linking.md) | `~/.mcp-coder` layout |
 | [TASK_SPEC_TEMPLATE.md](./TASK_SPEC_TEMPLATE.md) | Copy-only template |
-| `docs/tasks/P1-*.md` | **Gitignored** worker specs |
+| `docs/tasks/P1-*.md` | **Gitignored** Phase 1 worker specs |
+| `docs/tasks/P2-*.md` | **Gitignored** Phase 2 worker specs |
 | [README.md](./README.md) (this folder) | Workflow index |
 
 ## Rules for agents
 
 1. **Never** rewrite Tier 0–1 to “match implementation” without the user asking — adapt with **additions** and phase tables, not deletions of original intent.
-2. **Workers** implement from `docs/tasks/*.md` only; they do **not** edit IDEA, PHASES, PHASE1_MVP, or BACKLOG.
-3. **Status-only** updates in PHASE1_MVP (mark P1-* done) belong to the **planning / master** session after reviewing worker § Results.
+2. **Workers** implement from `docs/tasks/*.md` only; they do **not** edit IDEA, PHASES, PHASE1_MVP, PHASE2_MVP, or BACKLOG.
+3. **Status-only** updates in PHASE2_MVP (mark P2-* done) belong to the **planning / master** session after reviewing worker § Results. PHASE1_MVP is frozen.
 4. When unsure whether a change is vision vs execution: **stop** and ask — default to [IDEA.md](./IDEA.md) § Core problem & why this exists.
 5. **Root** [README.md](../README.md) is install/quick start; vision lives under `docs/`.
 
@@ -45,12 +49,12 @@ Use this page so **main vision** ([IDEA.md](./IDEA.md)) is not lost when editing
 - **Problem:** Stateless coding agents → cross-session memory + task-level orchestration ([IDEA.md](./IDEA.md)).
 - **Two tiers:** Task-level (`mcp-coder`) + turn-level (`context_optimizer_proxy`) — separate repos.
 - **Phase 1:** Delegate + pass-through context + home storage + sessions + opt-in transcript — **no** owned RAG/router yet.
-- **Phase 2:** Owned context (creation, window, skills, topic detection) — see [PHASES.md](./PHASES.md) and BACKLOG § Post–Phase 1 focus.
+- **Phase 2:** Owned context compiler (tiers, materialization, budget, read-deps) — see [PHASE2_MVP.md](./PHASE2_MVP.md), [PHASES.md](./PHASES.md), and [notes/phase2-owned-context.md](./notes/phase2-owned-context.md).
 - **Executor:** Aider-first; OpenCode/other hosts very low priority.
 
 ## Changelog
 
 | Date | Change |
 |------|--------|
-| 2026-06-06 | PHASE1_ISSUES frozen at P1-199 exit; Phase 2 direction note added |
+| 2026-06-06 | PHASE2_MVP + PHASE2_ISSUES created; PHASE1_ISSUES frozen; phase2-owned-context note added; doc map updated |
 | 2026-06-05 | Initial vision-doc map + stewardship tiers (with IDEA audit) |
