@@ -32,17 +32,57 @@
 
 Phase 1 learned: lean prompts work (~4.2k executor tokens vs ~44k dump); read-deps discipline is critical; honest `files_unexpected` reporting matters. Phase 2 codifies those lessons into owned tooling.
 
+**Design reference:** [notes/phase2-owned-context.md](./notes/phase2-owned-context.md) — three layers, behavioral contract, audit loop, capabilities, examples.
+
+---
+
+## Architecture (summary)
+
+Phase 2 is not only “smarter context” — it is **owning delegation behavior** so the process is predictable, auditable, and improvable without reading Aider internals.
+
+```text
+L1 CONTRACT     spec + MCP API + policies (files_edit/read, edit_scope, …)
+       ↓
+L2 COMPILER     assemble_context() → ContextPackage (tiers, budget, excerpts)
+       ↓
+L3 ADAPTER      translate(package) → Aider (or other) → ExecutionResult
+```
+
+> mcp-coder describes **intent**; adapters **fulfill** it. JSONL records contract → package → adapter input → result.
+
+**Phase 2 hinge:** `ExecutionEngine.run(context: ContextPackage)` replaces `run(prompt, target_files)` at **P2-210**. Wave 1 tasks must validate **spec contract**, not entrench Aider `fnames` semantics.
+
+### Phase 2 architecture decisions (D-P2)
+
+| ID | Decision | Primary tasks |
+|----|----------|---------------|
+| D-P2-1 | `ContextPackage` is the only adapter input | P2-210 |
+| D-P2-2 | Policies are mcp-coder owned, not backend env flags | P2-115, P2-200 |
+| D-P2-3 | Mid-run file add: audit first (`discover` default); post-check for `strict` | P2-115, P2-305 |
+| D-P2-4 | Untracked/gitignored paths: compiler materializes; never assume repo map | P2-200, P2-205 |
+| D-P2-5 | `BackendCapabilities` per adapter; logged on every delegation | P2-212 |
+| D-P2-6 | `target_files` = hint; when `spec_path` set, spec Files wins | P2-110, P2-115, P2-200 |
+| D-P2-7 | Compiler testable without live backend | P2-200, P2-215 |
+
+Details + examples: [phase2-owned-context.md](./notes/phase2-owned-context.md).
+
+---
+
 **What Phase 2 is (and is not):**
 
 | In scope | Out of scope |
 |----------|-------------|
-| Context compiler (tiers, materialization, budget) | RAG / cross-session memory → Phase 3 |
-| Spec alignment (`files_edit` / `files_read`, `edit_scope`) | Gatekeeper MCP → BL-151 |
-| Read-deps warn/auto-merge (BL-311) | OpenCode / other execution engines → BL-004 |
-| Window budget + pre-flight token estimate (BL-154) | Multi-host (Claude Desktop, Windsurf) |
-| Delegation hardening (BL-309 — workflow not just job) | Full interactive terminal → BL-160c/d |
-| Cheap model for `mode=review` (BL-162 partial) | Multi-agent internal pipeline → BL-161 |
-| Executor cache evolution (BL-155) | Embeddings / semantic search |
+| Three-layer abstraction (contract / compiler / adapter) | RAG / cross-session memory → Phase 3 |
+| Context compiler (tiers, materialization, budget) | Gatekeeper MCP → BL-151 |
+| Four-layer audit loop in JSONL | OpenCode / other execution engines → BL-004 |
+| Spec alignment (`files_edit` / `files_read`, `edit_scope`) | Multi-host (Claude Desktop, Windsurf) |
+| `BackendCapabilities` + capability-aware compilation | Full interactive terminal → BL-160c/d |
+| Read-deps warn/auto-merge (BL-311) | Multi-agent internal pipeline → BL-161 |
+| `inspect_context` dry-run (no backend) | Embeddings / semantic search |
+| Window budget + pre-flight token estimate (BL-154) | |
+| Delegation hardening (BL-309) | |
+| Cheap model for `mode=review` (BL-162 partial) | |
+| Executor cache on package hash (BL-155) | |
 | Skills + prompt packs (BL-008) | |
 
 ---
@@ -53,46 +93,55 @@ Work proceeds in four waves. Milestones within a wave can run in sequence or be 
 
 ### Wave 1 — Honesty + safety foundations
 
-**Goal:** Fix what Phase 1 left untrustworthy so Phase 2 builds on solid ground.
+**Goal:** L1 **behavioral contract** in spec + MCP; safer executor failures — **without** entrenching Aider `fnames` semantics.  
+**Design:** [phase2-owned-context.md § L1](./notes/phase2-owned-context.md#l1--behavioral-contract-not-api-contract)
 
-| Milestone | Task ID | Status | Summary |
-|-----------|---------|--------|---------|
-| Read-deps warn | P2-110 | `todo` | Warn when spec `Files` ⊄ `target_files` on implement (BL-311a) |
-| Spec `files_edit` / `files_read` YAML | P2-115 | `todo` | Front matter + MCP reads these; `edit_scope: discover\|strict` (BL-315) |
-| Pre-flight token estimate | P2-120 | `todo` | Count prompt bytes before calling Aider; log + cap with reason (BL-154 lite) |
-| Delegation hardening | P2-125 | `todo` | Headless URL policy; classified errors; no browser open on 500s (BL-309a/b) |
+| Milestone | Task ID | Status | Implements (D-P2 / BL) | Summary |
+|-----------|---------|--------|------------------------|---------|
+| Read-deps warn | P2-110 | `todo` | D-P2-6, BL-311a | On `mode=implement` + `spec_path`: compare spec **Files** (Edit+Read) to MCP `target_files` **hint**; warn in response (not Aider validation). Do not auto-merge yet. |
+| Delegation policies in spec | P2-115 | `todo` | D-P2-2, D-P2-3, D-SPEC-8, BL-315 | YAML: `files_edit`, `files_read`, `edit_scope`, `allow_create`, `untracked_policy`; MCP parses into `DelegationPolicies`; post-run `scope_violation` when `strict`. |
+| Pre-flight token estimate | P2-120 | `todo` | BL-154 lite | Estimate assembled prompt bytes before engine run; log `context.token_estimate_preflight`; optional cap + `truncation_reason`. |
+| Delegation hardening | P2-125 | `todo` | BL-309a/b | Headless URL policy; classified errors; no browser on upstream 500; bounded run time. |
 
 ### Wave 2 — Context compiler core
 
-**Goal:** mcp-coder assembles the brief; Aider no longer gets "dump everything from `target_files`."
+**Goal:** L2 compiler + L3 adapter hinge — **architectural center of Phase 2**.  
+**Design:** [phase2-owned-context.md § L2–L3](./notes/phase2-owned-context.md#three-layers-backend-agnostic-middle)
 
-| Milestone | Task ID | Status | Summary |
-|-----------|---------|--------|---------|
-| Materialization tiers | P2-200 | `todo` | `assemble_context()` → edit-full / read-full / read-excerpt / pointer (BL-316 + BL-001) |
-| Excerpt engine | P2-205 | `todo` | Ripgrep-based excerpt; `.mcp-coder/context/excerpts/` materialization |
-| Engine adapter boundary | P2-210 | `todo` | `AiderEngine` maps `ContextPackage` → Aider `fnames` + `read_only_fnames` + prompt prefix |
-| Window budget | P2-220 | `todo` | Rolling budget; per-model cap; logged truncation reason (BL-154) |
+| Milestone | Task ID | Status | Implements (D-P2 / BL) | Summary |
+|-----------|---------|--------|------------------------|---------|
+| `ContextPackage` + assembler | P2-200 | `todo` | D-P2-1, D-P2-4, D-P2-6, D-P2-7, BL-316, BL-001 | `core/context/assemble_context()` → tiers, `brief`, `metadata`; spec Files primary when `spec_path` set; unit tests without Aider. |
+| Excerpt engine | P2-205 | `todo` | D-P2-4 | Ripgrep/symbol excerpts → `.mcp-coder/context/excerpts/`; materialize untracked/gitignored read-deps. |
+| Engine adapter boundary | P2-210 | `todo` | D-P2-1 | **Hinge:** `ExecutionEngine.run(context: ContextPackage)`; `AiderEngine.translate()` → `fnames` + prompt blocks; keep `target_files` MCP arg as hint only. |
+| Backend capabilities + audit | P2-212 | `todo` | D-P2-5 | `BackendCapabilities` dataclass; log on delegation; capability-aware tier degradation warnings in package/result. |
+| Inspect context (dry-run) | P2-215 | `todo` | D-P2-7 | `mcp-coder inspect-context` or MCP tool: return `ContextPackage` JSON without running backend. |
+| Window budget | P2-220 | `todo` | BL-154 | Enforce per-model byte/token budget in compiler; rolling truncation with logged reason. |
+
+**Suggested order:** P2-200 → P2-205 → P2-210 → P2-212 → P2-215 → P2-220.
 
 ### Wave 3 — Executor + host contracts
 
-**Goal:** Tighter back-and-forth between MCP and Aider; richer signals back to Cursor.
+**Goal:** Close audit loop layers 3–4; richer outcomes back to Cursor and spec reports.  
+**Design:** [phase2-owned-context.md § Audit loop](./notes/phase2-owned-context.md#audit-loop-four-layers)
 
-| Milestone | Task ID | Status | Summary |
-|-----------|---------|--------|---------|
-| Executor cache evolution | P2-300 | `todo` | Rolling delegate context; TTL; less full rebuild per call (BL-155) |
-| Scope expansion report | P2-305 | `todo` | `files_unexpected` → "Scope expansion" section in spec reports (BL-314 remainder) |
-| Cheap model for review | P2-310 | `todo` | Route `mode=review` to mini/Flash model (BL-162 partial); planner keeps executor |
-| MCP progress notifications | P2-315 | `todo` | Cursor notification on long Aider runs (BL-106) |
+| Milestone | Task ID | Status | Implements (D-P2 / BL) | Summary |
+|-----------|---------|--------|------------------------|---------|
+| Executor cache evolution | P2-300 | `todo` | BL-155 | Cache key on `ContextPackage` hash (not raw `target_files`); rolling brief; TTL. |
+| Scope expansion report | P2-305 | `todo` | D-P2-3, D-SPEC-8, BL-314 | `files_unexpected` → **Scope expansion** section in `specs/reports/`; `outcome: scope_violation` when `edit_scope: strict`. |
+| Rich `ExecutionResult` | P2-308 | `todo` | D-P2-3 | `scope_violations`, `capability_warnings`, `preflight_token_estimate` on result + JSONL. |
+| Cheap model for review | P2-310 | `todo` | BL-162 partial | Route `mode=review` to cheap model; separate from executor config. |
+| MCP progress notifications | P2-315 | `todo` | BL-106 | Long-run progress to Cursor (if transport supports). |
 
 ### Wave 4 — Intelligence layer
 
-**Goal:** mcp-coder makes context decisions with lightweight intelligence, not just rules.
+**Goal:** Cheap intelligence on top of compiler (not before it).  
+**Design:** [phase2-owned-context.md § Non-goals](./notes/phase2-owned-context.md#non-goals-still-deferred)
 
-| Milestone | Task ID | Status | Summary |
-|-----------|---------|--------|---------|
-| Topic / task detection | P2-400 | `todo` | Bound context to the right "topic" per session (BL-153) |
-| Skills + prompt packs | P2-405 | `todo` | Inject skill files by topic/task type (BL-008) |
-| Router / janitor (lite) | P2-410 | `todo` | Freshness audit + cheap model orchestrator (BL-003 / BL-162) |
+| Milestone | Task ID | Status | Implements (D-P2 / BL) | Summary |
+|-----------|---------|--------|------------------------|---------|
+| Topic / task detection | P2-400 | `todo` | BL-153 | Topic boundaries for sessions and context slices. |
+| Skills + prompt packs | P2-405 | `todo` | BL-008 | Inject skills by topic/task type into assembler. |
+| Router / janitor (lite) | P2-410 | `todo` | BL-003, BL-162 | Freshness audit + cheap orchestrator LLM after assembly basics. |
 
 Status: `todo` | `in_progress` | `done` | `blocked` | `optional`
 
@@ -132,30 +181,36 @@ Same pattern as Phase 1:
 |---|----------|------|
 | Q1 | `assemble_context()` — rules-only v0 or cheap LLM from the start? | P2-200 |
 | Q2 | Excerpt engine: symbol-level (AST) or text-window (ripgrep)? | P2-205 |
-| Q3 | `edit_scope: strict` — hard block or post-check warning? | P2-115 |
-| Q4 | Cheap model for review — same OpenRouter key or separate config? | P2-310 |
-| Q5 | MCP progress notifications — Cursor supports `notifications/progress`? | P2-315 |
-| Q6 | Token budget — per-model config in workspace `config.yaml` or global? | P2-120 / P2-220 |
+| Q3 | `edit_scope: strict` — post-check only (locked D-P2-3) or mid-run block later? | P2-115 |
+| Q4 | `read_only_fnames` in Aider — use when available or always excerpt-in-prompt? | P2-210 |
+| Q5 | Cheap model for review — same OpenRouter key or separate config? | P2-310 |
+| Q6 | MCP progress notifications — Cursor supports `notifications/progress`? | P2-315 |
+| Q7 | Token budget — per-model in workspace `config.yaml` or global? | P2-120 / P2-220 |
+| Q8 | `inspect_context` — CLI only, MCP tool, or both? | P2-215 |
 
 ---
 
 ## Phase 2 success checklist
 
-- [ ] Context compiler owns materialization tiers; `target_files` is edit hint, not "dump all"
-- [ ] Spec `files_edit` / `files_read` parsed by MCP; `edit_scope` respected
-- [ ] Read-deps missing → visible warning in tool response
-- [ ] Token pre-flight estimate + cap logged on every delegation
-- [ ] Delegation hardening: no browser open, no empty stubs, bounded run time on upstream failure
-- [ ] Engine adapter boundary clean: `ContextPackage` → Aider mapping; other backends possible
-- [ ] Wave 1 + Wave 2 complete; Wave 3/4 at least Wave 3 started
+- [ ] **L1 contract:** `files_edit` / `files_read` / policies parsed from spec; `target_files` is hint only (D-P2-6)
+- [ ] **L2 compiler:** `assemble_context()` owns tiers; untracked paths materialized (D-P2-4)
+- [ ] **L3 adapter:** `run(ContextPackage)` — no `target_files` in engine signature (D-P2-1, P2-210)
+- [ ] **Capabilities:** `BackendCapabilities` logged; degradation warnings visible (D-P2-5)
+- [ ] **Audit loop:** JSONL has contract → package summary → adapter snapshot → result (four layers)
+- [ ] **Inspect:** dry-run `ContextPackage` without backend (P2-215)
+- [ ] Read-deps missing → warning (P2-110); scope expansion in reports (P2-305)
+- [ ] Token pre-flight + budget logged on every delegation (P2-120, P2-220)
+- [ ] Delegation hardening: no browser storm on upstream failure (P2-125)
+- [ ] Wave 1 + Wave 2 complete; Wave 3 at least P2-305 + P2-308 done
 - [ ] Phase 2 exit review (P2-499) completed; Phase 3 goals locked
 
 ---
 
 ## Next action
 
-1. Start **Wave 1** — create spec for **P2-110** (BL-311a read-deps warn) as the smallest high-leverage opener.
-2. Review Q1–Q6 above before P2-200; make context compiler architecture decision.
+1. Review [phase2-owned-context.md](./notes/phase2-owned-context.md) + D-P2 table — confirm before first worker.
+2. Start **Wave 1** — spec for **P2-110** (contract warn, not Aider validation).
+3. Before **P2-210**: P2-200 + P2-115 must ship (package + policies exist).
 
 ---
 
@@ -164,3 +219,4 @@ Same pattern as Phase 1:
 | Date | Change |
 |------|--------|
 | 2026-06-06 | Initial Phase 2 PM doc; waves 1–4; decisions inherited from P1-199 |
+| 2026-06-06 | Architecture section, D-P2-1–7, expanded task pointers; P2-212, P2-215, P2-308; design note expanded |

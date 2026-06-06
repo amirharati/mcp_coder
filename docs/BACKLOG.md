@@ -59,7 +59,7 @@ Status: `idea` | `deferred` | `blocked` | `done`
 
 ## Post–Phase 1 focus (priority after P1-199)
 
-**Direction (locked P1-199, 2026-06-06):** **Context compiler** owns what enters the executor prompt: per-path tiers (edit-full, read-full, read-excerpt, pointer, map-only, hide). `target_files` is a **planner hint / edit scope**, not “always full file in chat” (today that is **Aider-specific** via `fnames`). When `spec_path` is set, **spec Files is the contract**; MCP builder materializes context and engine adapters map to Aider. RAG/gatekeeper/OpenCode remain deferred. Design note: [notes/phase2-owned-context.md](./notes/phase2-owned-context.md).
+**Direction (locked P1-199, 2026-06-06):** Three layers — **contract** (spec + policies) → **context compiler** (tiers, budget) → **execution adapter** (Aider today). `target_files` is a planner hint; spec Files is the contract when `spec_path` is set. Audit loop: contract → package → adapter input → result. PM board: [PHASE2_MVP.md](./PHASE2_MVP.md). Design: [notes/phase2-owned-context.md](./notes/phase2-owned-context.md).
 
 | Priority | ID | Item | Notes |
 |----------|-----|------|--------|
@@ -302,9 +302,9 @@ Phase 1 uses markdown `### Edit` / `### Read` only (P1-152).
 
 ### BL-316: Context builder file materialization tiers
 
-**Status:** `deferred` — **Phase 2 Wave 1** (P1-199).
+**Status:** `deferred` — **Phase 2 Wave 2** ([PHASE2_MVP.md](./PHASE2_MVP.md) P2-200, P2-210).
 
-**Goal:** mcp-coder **context builder** decides per path how content enters the executor prompt — decoupled from Aider `fnames` full-file default.
+**Goal:** mcp-coder **context compiler** (L2) decides per path how content enters the executor prompt — **behavioral contract**, not Aider `fnames` passthrough. Adapters (L3) map `ContextPackage` to backend-specific calls.
 
 | Tier | Use |
 |------|-----|
@@ -315,9 +315,11 @@ Phase 1 uses markdown `### Edit` / `### Read` only (P1-152).
 | `map-only` | Tree / index |
 | `hide` | Omit |
 
-**Flow:** `assemble_context()` → `ContextPackage` → engine adapter (`AiderContext`, etc.). Extends BL-001. See [notes/phase2-owned-context.md](./notes/phase2-owned-context.md).
+**Flow:** L1 contract (spec policies) → `assemble_context()` → `ContextPackage` → `BackendCapabilities` + adapter translate → `ExecutionResult` with audit fields. Extends BL-001.
 
-**Source:** Phase 2 thesis at P1-199; bridges P1-152 read-deps + `files_unexpected`.
+**Tasks:** P2-200 (assembler), P2-205 (excerpts), P2-210 (adapter hinge), P2-212 (capabilities), P2-215 (inspect dry-run). **Design:** [notes/phase2-owned-context.md](./notes/phase2-owned-context.md) (D-P2-1–7).
+
+**Source:** P1-199 thesis; bridges P1-152 read-deps + `files_unexpected`.
 
 ---
 
