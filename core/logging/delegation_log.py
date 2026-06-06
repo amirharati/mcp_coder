@@ -139,6 +139,8 @@ def build_delegation_record(
     spec_mtime: str | None = None,
     outcome: str | None = None,
     delegate_mode: str | None = None,
+    spec_files_missing_from_target: list[str] | None = None,
+    contract_warnings: list[str] | None = None,
 ) -> dict[str, Any]:
     session_dir_str = str(Path(session_dir).resolve())
     log_path_str = str(Path(log_path).resolve())
@@ -195,6 +197,10 @@ def build_delegation_record(
         record["spec_sha256"] = spec_sha256
         record["spec_mtime"] = spec_mtime
         record["outcome"] = outcome
+    if spec_files_missing_from_target:
+        record["spec_files_missing_from_target"] = spec_files_missing_from_target
+    if contract_warnings:
+        record["contract_warnings"] = contract_warnings
     return record
 
 

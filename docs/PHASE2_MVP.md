@@ -8,7 +8,7 @@
 
 # Phase 2 MVP — Product manager doc
 
-**Status:** Planning — Wave 1 not yet started (2026-06-06)
+**Status:** Wave 1 in progress — P2-110 done (2026-06-06)
 **Host:** Cursor (Aider backend; other hosts deferred)
 **Technical reference:** [PHASES.md](./PHASES.md) § Phase 2 · [phase2-owned-context.md](./notes/phase2-owned-context.md)
 **Vision:** [IDEA.md](./IDEA.md) · [VISION_DOCS.md](./VISION_DOCS.md)
@@ -98,7 +98,7 @@ Work proceeds in four waves. Milestones within a wave can run in sequence or be 
 
 | Milestone | Task ID | Status | Implements (D-P2 / BL) | Summary |
 |-----------|---------|--------|------------------------|---------|
-| Read-deps warn | P2-110 | `todo` | D-P2-6, BL-311a | On `mode=implement` + `spec_path`: compare spec **Files** (Edit+Read) to MCP `target_files` **hint**; warn in response (not Aider validation). Do not auto-merge yet. |
+| Read-deps warn | P2-110 | `done` | `P2-1.10-read-deps-warn.md` | D-P2-6, BL-311a — `spec_files_missing_from_target` + `contract_warnings`; warn-only; 143 pytest |
 | Delegation policies in spec | P2-115 | `todo` | D-P2-2, D-P2-3, D-SPEC-8, BL-315 | YAML: `files_edit`, `files_read`, `edit_scope`, `allow_create`, `untracked_policy`; MCP parses into `DelegationPolicies`; post-run `scope_violation` when `strict`. |
 | Pre-flight token estimate | P2-120 | `todo` | BL-154 lite | Estimate assembled prompt bytes before engine run; log `context.token_estimate_preflight`; optional cap + `truncation_reason`. |
 | Delegation hardening | P2-125 | `todo` | BL-309a/b | Headless URL policy; classified errors; no browser on upstream 500; bounded run time. |
@@ -198,7 +198,7 @@ Same pattern as Phase 1:
 - [ ] **Capabilities:** `BackendCapabilities` logged; degradation warnings visible (D-P2-5)
 - [ ] **Audit loop:** JSONL has contract → package summary → adapter snapshot → result (four layers)
 - [ ] **Inspect:** dry-run `ContextPackage` without backend (P2-215)
-- [ ] Read-deps missing → warning (P2-110); scope expansion in reports (P2-305)
+- [x] Read-deps missing → warning (P2-110); scope expansion in reports (P2-305)
 - [ ] Token pre-flight + budget logged on every delegation (P2-120, P2-220)
 - [ ] Delegation hardening: no browser storm on upstream failure (P2-125)
 - [ ] Wave 1 + Wave 2 complete; Wave 3 at least P2-305 + P2-308 done
@@ -208,9 +208,9 @@ Same pattern as Phase 1:
 
 ## Next action
 
-1. Review [phase2-owned-context.md](./notes/phase2-owned-context.md) + D-P2 table — confirm before first worker.
-2. Start **Wave 1** — spec for **P2-110** (contract warn, not Aider validation).
-3. Before **P2-210**: P2-200 + P2-115 must ship (package + policies exist).
+1. **Next worker:** **P2-115** — spec policies (`files_edit` / `files_read` YAML, `edit_scope`).
+2. Before **P2-210**: P2-200 + P2-115 must ship (package + policies exist).
+3. Reload MCP after deploy when testing live delegates.
 
 ---
 
@@ -220,3 +220,4 @@ Same pattern as Phase 1:
 |------|--------|
 | 2026-06-06 | Initial Phase 2 PM doc; waves 1–4; decisions inherited from P1-199 |
 | 2026-06-06 | Architecture section, D-P2-1–7, expanded task pointers; P2-212, P2-215, P2-308; design note expanded |
+| 2026-06-06 | **P2-110 done** — spec Files contract warn (`spec_files_missing_from_target`, `contract_warnings`) |

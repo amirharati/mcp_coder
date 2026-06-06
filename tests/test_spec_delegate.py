@@ -191,3 +191,112 @@ def test_delegate_spec_partial_when_no_files_changed(tmp_path, monkeypatch):
         )
 
     assert json.loads(raw)["outcome"] == OUTCOME_PARTIAL
+
+
+EDIT_READ_SPEC_BODY = """---
+spec_id: cli-step
+epic: expense
+status: open
+---
+
+# Step 2 CLI
+
+## Goal
+
+Add CLI.
+
+## Scope
+
+CLI only.
+
+## Files
+
+### Edit
+
+- `expense_splitter/cli.py`
+
+### Read (include in target_files)
+
+- `expense_splitter/splitter.py` — public API from step 1
+
+## Constraints
+
+- none
+
+## Done when
+
+- [ ] CLI works
+"""
+
+
+def test_delegate_warns_when_read_path_missing_from_target_files(tmp_path, monkeypatch):
+    home = tmp_path / "home"
+    ws = tmp_path / "workspace"
+    ws.mkdir()
+    task = ws / ".mcp-coder" / "specs" / "tasks" / "step-02-cli.md"
+    task.parent.mkdir(parents=True)
+    task.write_text(EDIT_READ_SPEC_BODY, encoding="utf-8")
+
+    monkeypatch.setenv("MCP_CODER_HOME", str(home))
+    monkeypatch.chdir(ws)
+
+    fake = ExecutionResult(
+        success=True,
+        output="done",
+        files_changed=["expense_splitter/cli.py"],
+        model="m",
+    )
+    mock_engine = type("E", (), {"model_name": "m", "run": lambda *a, **k: fake})()
+
+    with patch("server.mcp_server.get_engine", return_value=mock_engine):
+        raw = delegate_to_agent(
+            task="Implement CLI",
+            target_files=["expense_splitter/cli.py"],
+            context_summary="step 1 done",
+            spec_path="tasks/step-02-cli.md",
+            mode="implement",
+        )
+
+    payload = json.loads(raw)
+    assert payload["success"] is True
+    assert payload["spec_files_missing_from_target"] == ["expense_splitter/splitter.py"]
+    assert payload["contract_warnings"] == [
+        "Spec Files lists paths not in target_files: expense_splitter/splitter.py"
+    ]
+
+    record = json.loads(Path(payload["log_path"]).read_text(encoding="utf-8").strip())
+    assert record["spec_files_missing_from_target"] == ["expense_splitter/splitter.py"]
+    assert record["contract_warnings"] == payload["contract_warnings"]
+    assert record["mcp_request"]["spec_files_missing_from_target"] == [
+        "expense_splitter/splitter.py"
+    ]
+
+
+def test_delegate_no_contract_warn_when_all_paths_in_target(tmp_path, monkeypatch):
+    home = tmp_path / "home"
+    ws = tmp_path / "workspace"
+    ws.mkdir()
+    task = ws / ".mcp-coder" / "specs" / "tasks" / "step-02-cli.md"
+    task.parent.mkdir(parents=True)
+    task.write_text(EDIT_READ_SPEC_BODY, encoding="utf-8")
+
+    monkeypatch.setenv("MCP_CODER_HOME", str(home))
+    monkeypatch.chdir(ws)
+
+    fake = ExecutionResult(success=True, output="ok", files_changed=[], model="m")
+    mock_engine = type("E", (), {"model_name": "m", "run": lambda *a, **k: fake})()
+
+    with patch("server.mcp_server.get_engine", return_value=mock_engine):
+        raw = delegate_to_agent(
+            task="Implement CLI",
+            target_files=[
+                "expense_splitter/cli.py",
+                "expense_splitter/splitter.py",
+            ],
+            context_summary="",
+            spec_path="tasks/step-02-cli.md",
+        )
+
+    payload = json.loads(raw)
+    assert "spec_files_missing_from_target" not in payload
+    assert "contract_warnings" not in payload

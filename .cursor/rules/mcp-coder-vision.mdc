@@ -9,24 +9,46 @@ alwaysApply: true
 
 ## Do not edit without explicit user instruction
 
-- `docs/IDEA.md`, `docs/PHASES.md`, `docs/PHASE1_MVP.md`, `docs/BACKLOG.md`, `docs/PHASE1_ISSUES.md`
-- `docs/VISION_DOCS.md`, `docs/notes/spec-based-development.md`
+- `docs/IDEA.md`, `docs/PHASES.md`, `docs/PHASE1_MVP.md`, `docs/PHASE2_MVP.md`, `docs/BACKLOG.md`
+- `docs/PHASE1_ISSUES.md`, `docs/PHASE2_ISSUES.md`
+- `docs/VISION_DOCS.md`, `docs/notes/spec-based-development.md`, `docs/notes/phase2-owned-context.md`
 - `docs/OTEHR_RELATED_IDEAS/*` (related ideas, not product truth)
 
 Each file has an HTML stewardship comment at the top — read it before any edit.
 
 ## Workers (implementation sessions)
 
-- Implement only from **`docs/tasks/P1-*.md`** (gitignored).
-- Put outcomes in local spec **§ Results** — do **not** update IDEA, PHASES, PHASE1_MVP, or BACKLOG.
-- Propose backlog/vision changes in § Results for the **planning** session.
+**Single source of truth:** the attached `docs/tasks/P2-*.md` or `P1-*.md` spec only (gitignored).
+
+### Workers **must**
+
+- Implement **only** what the attached task spec defines.
+- Fill **§ Results** in that same spec file when done.
+- Write **self-contained** code/tests; spec should already embed needed context + links.
+- Propose PM/vision/backlog changes under **§ Results → Suggested for master session** (bullets only).
+
+### Workers **must not**
+
+- Edit tier 0–2 docs (`IDEA`, `PHASES`, `PHASE*_MVP`, `BACKLOG`, `PHASE*_ISSUES`, `VISION_DOCS`, `phase2-owned-context.md`) unless the task spec **explicitly** lists them (rare; e.g. P1-199 exit).
+- Edit sibling `docs/tasks/*.md` specs.
+- Expand scope into Makefile, vision replanning, or unrelated refactors.
+
+### Backend-neutral rule (Phase 2+)
+
+**No new logic in `server/` or `core/context/` (and `core/specs/` contract code) that mentions Aider APIs** (`fnames`, repo map, `yes=True`, etc.). Validate **spec behavioral contract** only. Backend-specific code stays in `core/engine/aider_engine.py` and `core/config/aider_runtime.py`.
 
 ## Planning / master session
 
-- **OK:** status rows in PHASE1_MVP, new BL-* / issues, small alignment with shipped reality.
+- **OK:** status rows in `PHASE2_MVP` / `PHASE2_ISSUES`, new BL-* / P2-ISS, small alignment with shipped reality.
 - **NOT OK:** delete original vision, replan phases, or contradict IDEA without user agreement.
 - When adapting vision docs: **add** context and phase reality; preserve intent from initial commit `074753b`.
 
+## Task spec quality (master writes specs)
+
+- Specs are **self-contained**: goal, scope, files policy, acceptance, and pointers to design notes — worker should not need to hunt PM docs.
+- Link design context once: e.g. [phase2-owned-context.md](docs/notes/phase2-owned-context.md) § L1 — not copy the whole doc.
+- One milestone per worker session.
+
 ## Quick anchors
 
-Cross-session memory + task orchestration; Cursor thin; Aider executes; `context_optimizer_proxy` separate; Phase 1 = delegate + pass-through (no owned RAG yet).
+Cross-session memory + task orchestration; Cursor thin; executor via adapter; Phase 2 = context compiler + behavioral contract (not Aider-shaped APIs in core).
