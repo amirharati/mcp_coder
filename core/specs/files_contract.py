@@ -78,14 +78,22 @@ def parse_files_contract(files_section: str) -> FilesContract:
     return FilesContract(edit=edit_unique, read=read_unique, all_paths=all_paths)
 
 
+def paths_missing_from_target(
+    contract_paths: list[str],
+    target_files: list[str],
+) -> list[str]:
+    """Sorted contract paths not in normalized target_files."""
+    targets = {normalize_repo_path(f) for f in target_files}
+    missing = [p for p in contract_paths if p not in targets]
+    return sorted(missing)
+
+
 def contract_paths_missing_from_target(
     contract: FilesContract,
     target_files: list[str],
 ) -> list[str]:
     """Sorted paths in contract.all_paths but not in normalized target_files."""
-    targets = {normalize_repo_path(f) for f in target_files}
-    missing = [p for p in contract.all_paths if p not in targets]
-    return sorted(missing)
+    return paths_missing_from_target(contract.all_paths, target_files)
 
 
 def build_contract_warnings(missing_paths: list[str]) -> list[str]:

@@ -99,7 +99,7 @@ Work proceeds in four waves. Milestones within a wave can run in sequence or be 
 | Milestone | Task ID | Status | Implements (D-P2 / BL) | Summary |
 |-----------|---------|--------|------------------------|---------|
 | Read-deps warn | P2-110 | `done` | `P2-1.10-read-deps-warn.md` | D-P2-6, BL-311a — `spec_files_missing_from_target` + `contract_warnings`; warn-only; 143 pytest |
-| Delegation policies in spec | P2-115 | `todo` | D-P2-2, D-P2-3, D-SPEC-8, BL-315 | YAML: `files_edit`, `files_read`, `edit_scope`, `allow_create`, `untracked_policy`; MCP parses into `DelegationPolicies`; post-run `scope_violation` when `strict`. |
+| Delegation policies in spec | P2-115 | `done` | `P2-1.15-spec-policies.md` | D-P2-2, D-P2-3, D-SPEC-8, BL-315a/b — YAML policies + markdown fallback; `scope_violation` on strict post-check; 157 pytest |
 | Pre-flight token estimate | P2-120 | `todo` | BL-154 lite | Estimate assembled prompt bytes before engine run; log `context.token_estimate_preflight`; optional cap + `truncation_reason`. |
 | Delegation hardening | P2-125 | `todo` | BL-309a/b | Headless URL policy; classified errors; no browser on upstream 500; bounded run time. |
 
@@ -158,7 +158,7 @@ Status: `todo` | `in_progress` | `done` | `blocked` | `optional`
 | D-SPEC-5 | Same task file; `revision++` after review | — |
 | D-SPEC-6 | Brainstorm in review, not implement | — |
 | D-SPEC-7 | Lean context; `host_transcript: none` default | BL-001, BL-154 |
-| D-SPEC-8 | Log scope expansion; `edit_scope` → **P2-115** | BL-315 |
+| D-SPEC-8 | `edit_scope` + policies parsed **P2-115**; scope expansion report → **P2-305** | BL-315 |
 
 ---
 
@@ -181,7 +181,7 @@ Same pattern as Phase 1:
 |---|----------|------|
 | Q1 | `assemble_context()` — rules-only v0 or cheap LLM from the start? | P2-200 |
 | Q2 | Excerpt engine: symbol-level (AST) or text-window (ripgrep)? | P2-205 |
-| Q3 | `edit_scope: strict` — post-check only (locked D-P2-3) or mid-run block later? | P2-115 |
+| Q3 | `edit_scope: strict` — post-check only (locked D-P2-3; shipped P2-115) | — |
 | Q4 | `read_only_fnames` in Aider — use when available or always excerpt-in-prompt? | P2-210 |
 | Q5 | Cheap model for review — same OpenRouter key or separate config? | P2-310 |
 | Q6 | MCP progress notifications — Cursor supports `notifications/progress`? | P2-315 |
@@ -192,7 +192,7 @@ Same pattern as Phase 1:
 
 ## Phase 2 success checklist
 
-- [ ] **L1 contract:** `files_edit` / `files_read` / policies parsed from spec; `target_files` is hint only (D-P2-6)
+- [x] **L1 contract:** `files_edit` / `files_read` / policies parsed from spec; `target_files` is hint only (D-P2-6; P2-115)
 - [ ] **L2 compiler:** `assemble_context()` owns tiers; untracked paths materialized (D-P2-4)
 - [ ] **L3 adapter:** `run(ContextPackage)` — no `target_files` in engine signature (D-P2-1, P2-210)
 - [ ] **Capabilities:** `BackendCapabilities` logged; degradation warnings visible (D-P2-5)
@@ -208,8 +208,8 @@ Same pattern as Phase 1:
 
 ## Next action
 
-1. **Next worker:** **P2-115** — spec policies (`files_edit` / `files_read` YAML, `edit_scope`).
-2. Before **P2-210**: P2-200 + P2-115 must ship (package + policies exist).
+1. **Next worker:** **P2-120** — pre-flight token estimate (`context.token_estimate_preflight`).
+2. Before **P2-210**: P2-200 must ship (policies exist from P2-115).
 3. Reload MCP after deploy when testing live delegates.
 
 ---
@@ -221,3 +221,4 @@ Same pattern as Phase 1:
 | 2026-06-06 | Initial Phase 2 PM doc; waves 1–4; decisions inherited from P1-199 |
 | 2026-06-06 | Architecture section, D-P2-1–7, expanded task pointers; P2-212, P2-215, P2-308; design note expanded |
 | 2026-06-06 | **P2-110 done** — spec Files contract warn (`spec_files_missing_from_target`, `contract_warnings`) |
+| 2026-06-06 | **P2-115 done** — `DelegationPolicies` YAML + `edit_scope: strict` → `scope_violation` post-check |

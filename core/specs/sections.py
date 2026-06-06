@@ -5,6 +5,8 @@ from __future__ import annotations
 import re
 from typing import Any
 
+import yaml
+
 PLANNER_SECTION_TITLES = (
     "Goal",
     "Scope",
@@ -39,21 +41,22 @@ SECTION_HEADER_RE = re.compile(r"^## (.+)$", re.MULTILINE)
 
 
 def split_front_matter(text: str) -> tuple[dict[str, Any], str]:
-    """Loose YAML front matter between --- markers; returns ({}, body) if absent."""
+    """YAML front matter between --- markers; returns ({}, body) if absent or invalid."""
     match = FRONT_MATTER_RE.match(text)
     if not match:
         return {}, text
     raw_yaml = match.group(1)
     body = text[match.end() :]
-    data: dict[str, Any] = {}
-    for line in raw_yaml.splitlines():
-        stripped = line.strip()
-        if not stripped or stripped.startswith("#"):
-            continue
-        if ":" not in stripped:
-            continue
-        key, _, value = stripped.partition(":")
-        data[key.strip()] = value.strip().strip('"').strip("'")
+    if not raw_yaml.strip():
+        return {}, body
+    try:
+        data = yaml.safe_load(raw_yaml)
+    except yaml.YAMLError:
+        return {}, body
+    if data is None:
+        return {}, body
+    if not isinstance(data, dict):
+        return {}, body
     return data, body
 
 

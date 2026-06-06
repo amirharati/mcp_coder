@@ -10,6 +10,7 @@ OUTCOME_PARTIAL = "partial"
 OUTCOME_FAILED = "failed"
 OUTCOME_NEEDS_INPUT = "needs_input"
 OUTCOME_REVIEW = "review"
+OUTCOME_SCOPE_VIOLATION = "scope_violation"
 
 
 def compute_spec_outcome(
@@ -31,3 +32,15 @@ def compute_spec_outcome(
     if not success and blockers_written:
         return OUTCOME_NEEDS_INPUT
     return OUTCOME_FAILED
+
+
+def apply_scope_outcome(
+    outcome: str,
+    *,
+    edit_scope: str,
+    scope_violations: list[str],
+) -> str:
+    """If strict and violations non-empty, return scope_violation; else passthrough."""
+    if edit_scope == "strict" and scope_violations:
+        return OUTCOME_SCOPE_VIOLATION
+    return outcome

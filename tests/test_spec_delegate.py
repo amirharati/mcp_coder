@@ -3,7 +3,12 @@ from pathlib import Path
 from unittest.mock import patch
 
 from core.engine.base import ExecutionResult
-from core.specs.outcome import OUTCOME_INVALID_SPEC, OUTCOME_PARTIAL, OUTCOME_SUCCESS
+from core.specs.outcome import (
+    OUTCOME_INVALID_SPEC,
+    OUTCOME_PARTIAL,
+    OUTCOME_SCOPE_VIOLATION,
+    OUTCOME_SUCCESS,
+)
 from core.specs.sections import REPORT_STATUS_DELEGATED_OK, parse_sections, split_front_matter
 from server.mcp_server import delegate_to_agent
 
@@ -300,3 +305,145 @@ def test_delegate_no_contract_warn_when_all_paths_in_target(tmp_path, monkeypatc
     payload = json.loads(raw)
     assert "spec_files_missing_from_target" not in payload
     assert "contract_warnings" not in payload
+
+
+STRICT_YAML_SPEC = """---
+spec_id: cli-step
+files_edit:
+  - expense_splitter/cli.py
+files_read:
+  - expense_splitter/splitter.py
+edit_scope: strict
+---
+
+# Step 2 CLI
+
+## Goal
+
+Add CLI.
+
+## Files
+
+### Edit
+
+- `ignored/when/yaml/set.py`
+
+### Read
+
+- `also/ignored.py`
+
+## Constraints
+
+- none
+
+## Done when
+
+- [ ] CLI works
+"""
+
+
+def test_delegate_strict_scope_violation(tmp_path, monkeypatch):
+    home = tmp_path / "home"
+    ws = tmp_path / "workspace"
+    ws.mkdir()
+    task = ws / ".mcp-coder" / "specs" / "tasks" / "strict-cli.md"
+    task.parent.mkdir(parents=True)
+    task.write_text(STRICT_YAML_SPEC, encoding="utf-8")
+
+    monkeypatch.setenv("MCP_CODER_HOME", str(home))
+    monkeypatch.chdir(ws)
+
+    fake = ExecutionResult(
+        success=True,
+        output="done",
+        files_changed=["expense_splitter/cli.py", "expense_splitter/splitter.py"],
+        model="m",
+    )
+    mock_engine = type("E", (), {"model_name": "m", "run": lambda *a, **k: fake})()
+
+    with patch("server.mcp_server.get_engine", return_value=mock_engine):
+        raw = delegate_to_agent(
+            task="Implement CLI",
+            target_files=[
+                "expense_splitter/cli.py",
+                "expense_splitter/splitter.py",
+            ],
+            context_summary="",
+            spec_path="tasks/strict-cli.md",
+        )
+
+    payload = json.loads(raw)
+    assert payload["success"] is True
+    assert payload["outcome"] == OUTCOME_SCOPE_VIOLATION
+    assert payload["scope_violations"] == ["expense_splitter/splitter.py"]
+    assert payload["delegation_policies"]["edit_scope"] == "strict"
+    assert payload["delegation_policies"]["files_edit"] == ["expense_splitter/cli.py"]
+
+    record = json.loads(Path(payload["log_path"]).read_text(encoding="utf-8").strip())
+    assert record["outcome"] == OUTCOME_SCOPE_VIOLATION
+    assert record["scope_violations"] == ["expense_splitter/splitter.py"]
+    assert record["delegation_policies"]["edit_scope"] == "strict"
+
+
+def test_delegate_invalid_edit_scope_invalid_spec(tmp_path, monkeypatch):
+    home = tmp_path / "home"
+    ws = tmp_path / "workspace"
+    ws.mkdir()
+    task = ws / ".mcp-coder" / "specs" / "tasks" / "bad-policy.md"
+    task.parent.mkdir(parents=True)
+    task.write_text(
+        "---\nspec_id: bad\nedit_scope: tight\n---\n\n## Goal\n\nt\n",
+        encoding="utf-8",
+    )
+
+    monkeypatch.setenv("MCP_CODER_HOME", str(home))
+    monkeypatch.chdir(ws)
+
+    with patch("server.mcp_server.get_engine") as get_engine:
+        raw = delegate_to_agent(
+            task="t",
+            target_files=["a.py"],
+            context_summary="",
+            spec_path="tasks/bad-policy.md",
+        )
+        get_engine.assert_not_called()
+
+    payload = json.loads(raw)
+    assert payload["success"] is False
+    assert payload["outcome"] == OUTCOME_INVALID_SPEC
+    assert "edit_scope" in payload["output"]
+
+
+def test_delegate_discover_no_scope_violation_outcome(tmp_path, monkeypatch):
+    home = tmp_path / "home"
+    ws = tmp_path / "workspace"
+    ws.mkdir()
+    task = ws / ".mcp-coder" / "specs" / "tasks" / "discover.md"
+    task.parent.mkdir(parents=True)
+    task.write_text(EDIT_READ_SPEC_BODY, encoding="utf-8")
+
+    monkeypatch.setenv("MCP_CODER_HOME", str(home))
+    monkeypatch.chdir(ws)
+
+    fake = ExecutionResult(
+        success=True,
+        output="done",
+        files_changed=["expense_splitter/cli.py", "expense_splitter/splitter.py"],
+        model="m",
+    )
+    mock_engine = type("E", (), {"model_name": "m", "run": lambda *a, **k: fake})()
+
+    with patch("server.mcp_server.get_engine", return_value=mock_engine):
+        raw = delegate_to_agent(
+            task="Implement CLI",
+            target_files=[
+                "expense_splitter/cli.py",
+                "expense_splitter/splitter.py",
+            ],
+            context_summary="",
+            spec_path="tasks/discover.md",
+        )
+
+    payload = json.loads(raw)
+    assert payload["outcome"] == OUTCOME_SUCCESS
+    assert "scope_violations" not in payload

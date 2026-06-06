@@ -6,6 +6,14 @@ revision: 1          # planner bumps when Scope/Constraints change after worker 
 created: ""          # ISO date, e.g. 2026-06-05
 status: draft        # planner: draft | ready | done
 supersedes: ""       # optional prior step spec_id this replaces
+# Optional delegation policies (YAML overrides ## Files when non-empty):
+# files_edit:
+#   - path/to/edit.py
+# files_read:
+#   - path/to/read_dep.py
+# edit_scope: discover   # discover | strict (strict → outcome scope_violation if edits outside files_edit)
+# allow_create: true
+# untracked_policy: materialize   # materialize | require_declared | block (enforced in Phase 2)
 ---
 
 # Step task spec

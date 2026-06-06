@@ -18,6 +18,12 @@ from core.specs.paths import (
     workspace_specs_reports_dir,
     workspace_specs_tasks_dir,
 )
+from core.specs.delegation_policies import (
+    DelegationPolicies,
+    PolicyValidationError,
+    compute_scope_violations,
+    load_delegation_policies,
+)
 from core.specs.files_contract import (
     FilesContract,
     build_contract_warnings,
@@ -31,10 +37,14 @@ from core.specs.write import (
 )
 
 __all__ = [
+    "DelegationPolicies",
     "FilesContract",
+    "PolicyValidationError",
     "apply_post_delegation_report_updates",
     "build_contract_warnings",
+    "compute_scope_violations",
     "contract_paths_missing_from_target",
+    "load_delegation_policies",
     "apply_post_delegation_spec_updates",
     "bundled_spec_epic_template_path",
     "bundled_spec_report_template_path",

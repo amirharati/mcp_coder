@@ -36,13 +36,19 @@ from core.session.policy import resolve_session_policy
 from core.session.store import SessionStore
 from core.specs.bootstrap import ensure_task_report, ensure_workspace_spec_layout
 from core.engine.spec_review import run_spec_review
-from core.specs.files_contract import (
-    build_contract_warnings,
-    contract_paths_missing_from_target,
-    parse_files_contract,
+from core.specs.delegation_policies import (
+    DelegationPolicies,
+    PolicyValidationError,
+    compute_scope_violations,
+    load_delegation_policies,
 )
+from core.specs.files_contract import build_contract_warnings, paths_missing_from_target
 from core.specs.modes import DELEGATE_MODE_IMPLEMENT, DELEGATE_MODE_REVIEW, normalize_delegate_mode
-from core.specs.outcome import OUTCOME_INVALID_SPEC, compute_spec_outcome
+from core.specs.outcome import (
+    OUTCOME_INVALID_SPEC,
+    apply_scope_outcome,
+    compute_spec_outcome,
+)
 from core.specs.paths import normalize_spec_path_arg, resolve_spec_path
 from core.specs.read import read_task_spec
 from core.specs.write import apply_post_delegation_report_updates
@@ -88,6 +94,8 @@ def _response_payload(
     delegate_mode: str | None = None,
     spec_files_missing_from_target: list[str] | None = None,
     contract_warnings: list[str] | None = None,
+    delegation_policies: dict[str, Any] | None = None,
+    scope_violations: list[str] | None = None,
 ) -> dict[str, Any]:
     payload: dict[str, Any] = {
         "success": success,
@@ -124,6 +132,10 @@ def _response_payload(
         payload["spec_files_missing_from_target"] = spec_files_missing_from_target
     if contract_warnings:
         payload["contract_warnings"] = contract_warnings
+    if delegation_policies is not None:
+        payload["delegation_policies"] = delegation_policies
+    if scope_violations:
+        payload["scope_violations"] = scope_violations
     return payload
 
 
@@ -202,6 +214,15 @@ def delegate_to_agent(
                 )
             else:
                 spec_read = read_task_spec(spec_abs_path, workspace=ws)
+    delegation_policies: DelegationPolicies | None = None
+    if spec_read is not None and not spec_invalid_reason:
+        try:
+            delegation_policies = load_delegation_policies(
+                spec_read.front_matter,
+                spec_read.sections.get("Files", ""),
+            )
+        except PolicyValidationError as exc:
+            spec_invalid_reason = str(exc)
     policy = resolve_session_policy(ws)
     host_transcript_policy = resolve_host_transcript_policy(ws)
 
@@ -310,14 +331,12 @@ def delegate_to_agent(
     contract_warnings: list[str] = []
     if (
         delegate_mode == DELEGATE_MODE_IMPLEMENT
-        and spec_read is not None
+        and delegation_policies is not None
         and not spec_invalid_reason
     ):
-        files_section = spec_read.sections.get("Files", "")
-        contract = parse_files_contract(files_section)
-        if contract.all_paths:
-            spec_files_missing = contract_paths_missing_from_target(
-                contract, target_files
+        if delegation_policies.all_paths:
+            spec_files_missing = paths_missing_from_target(
+                delegation_policies.all_paths, target_files
             )
             contract_warnings = build_contract_warnings(spec_files_missing)
             if contract_warnings:
@@ -387,6 +406,7 @@ def delegate_to_agent(
     spec_bytes: int | None = spec_read.file_bytes if spec_read else None
     spec_mtime: str | None = spec_read.mtime_iso if spec_read else None
     outcome: str | None = None
+    scope_violations: list[str] = []
     spec_report_rel_path: str | None = None
     if spec_path:
         if spec_invalid_reason:
@@ -416,6 +436,36 @@ def delegate_to_agent(
                 blockers_written=not success,
                 delegate_mode=delegate_mode,
             )
+            if (
+                delegate_mode == DELEGATE_MODE_IMPLEMENT
+                and delegation_policies is not None
+                and delegation_policies.edit_scope == "strict"
+            ):
+                scope_violations = compute_scope_violations(
+                    files_changed, delegation_policies.files_edit
+                )
+                outcome = apply_scope_outcome(
+                    outcome,
+                    edit_scope=delegation_policies.edit_scope,
+                    scope_violations=scope_violations,
+                )
+                if scope_violations:
+                    server_log_emit(
+                        "spec_scope_violation",
+                        level="warn",
+                        delegation_id=delegation_id,
+                        spec_path=spec_rel_path,
+                        scope_violations=scope_violations,
+                        edit_scope=delegation_policies.edit_scope,
+                    )
+
+    policies_response: dict[str, Any] | None = None
+    if (
+        delegate_mode == DELEGATE_MODE_IMPLEMENT
+        and delegation_policies is not None
+        and not spec_invalid_reason
+    ):
+        policies_response = delegation_policies.to_response_dict()
 
     t_post = time.perf_counter()
     response = _response_payload(
@@ -440,11 +490,17 @@ def delegate_to_agent(
         delegate_mode=delegate_mode,
         spec_files_missing_from_target=spec_files_missing or None,
         contract_warnings=contract_warnings or None,
+        delegation_policies=policies_response,
+        scope_violations=scope_violations or None,
     )
     if spec_files_missing:
         mcp_request["spec_files_missing_from_target"] = spec_files_missing
     if contract_warnings:
         mcp_request["contract_warnings"] = contract_warnings
+    if policies_response is not None:
+        mcp_request["delegation_policies"] = policies_response
+    if scope_violations:
+        mcp_request["scope_violations"] = scope_violations
     duration_ms = int((time.perf_counter() - t0) * 1000)
     timing["post_process_ms"] = int((time.perf_counter() - t_post) * 1000)
 
@@ -488,6 +544,8 @@ def delegate_to_agent(
         delegate_mode=delegate_mode,
         spec_files_missing_from_target=spec_files_missing or None,
         contract_warnings=contract_warnings or None,
+        delegation_policies=policies_response,
+        scope_violations=scope_violations or None,
     )
     log_path = append_delegation_record(record, ws=ws)
     log_delegation_sent(

@@ -286,15 +286,15 @@ Not shipped — review remains planner/user triggered.
 
 ### BL-315: `edit_scope` + spec Files YAML
 
-**Status:** `deferred` — D-SPEC-8 locked at P1-199.
+**Status:** `partial` — BL-315a/b **done** P2-115; BL-315c → P2-200 context compiler.
 
 **Goal:** Structured spec contract for edit vs read paths; MCP enforcement policy.
 
 | Sub | Item |
 |-----|------|
-| BL-315a | YAML front matter: `files_edit`, `files_read` (replaces markdown-only subsections) |
-| BL-315b | `edit_scope: discover` \| `strict` — whether paths outside edit set are allowed |
-| BL-315c | Builder reads spec as primary contract when `spec_path` set |
+| BL-315a | YAML front matter: `files_edit`, `files_read` — **done** P2-115 |
+| BL-315b | `edit_scope: discover` \| `strict` — post-check `scope_violation` — **done** P2-115 |
+| BL-315c | Builder reads spec as primary contract when `spec_path` set — **P2-200** |
 
 Phase 1 uses markdown `### Edit` / `### Read` only (P1-152).
 

@@ -141,6 +141,8 @@ def build_delegation_record(
     delegate_mode: str | None = None,
     spec_files_missing_from_target: list[str] | None = None,
     contract_warnings: list[str] | None = None,
+    delegation_policies: dict[str, Any] | None = None,
+    scope_violations: list[str] | None = None,
 ) -> dict[str, Any]:
     session_dir_str = str(Path(session_dir).resolve())
     log_path_str = str(Path(log_path).resolve())
@@ -201,6 +203,10 @@ def build_delegation_record(
         record["spec_files_missing_from_target"] = spec_files_missing_from_target
     if contract_warnings:
         record["contract_warnings"] = contract_warnings
+    if delegation_policies is not None:
+        record["delegation_policies"] = delegation_policies
+    if scope_violations:
+        record["scope_violations"] = scope_violations
     return record
 
 
