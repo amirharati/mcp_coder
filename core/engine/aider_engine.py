@@ -31,7 +31,6 @@ from core.engine.git_diff import (
     snapshot_mtimes,
 )
 from core.engine.stdio_isolation import isolated_stdio, merged_capture
-from core.session.executor_cache import get_or_create_coder
 
 BACKEND_ID = "aider"
 
@@ -173,6 +172,10 @@ class AiderEngine(ExecutionEngine):
                 return coder, io, out_buffer
 
             def _run_coder() -> Any:
+                # Lazy import: top-level import loads core.session.__init__ → policy →
+                # delegation_log before mcp_server finishes importing logging (P2-210 cycle).
+                from core.session.executor_cache import get_or_create_coder
+
                 with block_webbrowser_open(), isolated_stdio() as (stdout_cap, stderr_cap):
                     if mcp_session_id:
                         (coder, io, out_buffer), executor_reused_local, executor_recreated_local = (

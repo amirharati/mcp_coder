@@ -20,8 +20,6 @@ from core.context.package import (
 from core.context.summary import assemble_prompt, estimate_tokens, prompt_metadata, sha256_hex
 from core.context.transcript_policy import POLICY_DUMP, resolve_host_transcript_policy
 from core.delegation.errors import classify_delegation_error
-from core.engine import get_engine, list_backends
-from core.engine.factory import UnknownBackendError
 from core.host import apply_host_hint, get_host_provider
 from core.host.base import HostSessionHint
 from core.host.cursor_transcript import (
@@ -43,6 +41,8 @@ from core.logging.delegation_log import (
     workspace_path,
 )
 from core.logging.server_log import server_log_emit
+from core.engine import get_engine, list_backends
+from core.engine.factory import UnknownBackendError
 from core.session.policy import resolve_session_policy
 from core.session.store import SessionStore
 from core.specs.bootstrap import ensure_task_report, ensure_workspace_spec_layout
