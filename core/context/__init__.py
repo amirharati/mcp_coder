@@ -1,4 +1,10 @@
 from core.context.assemble import assemble_context
+from core.context.excerpts import (
+    ExcerptResult,
+    build_file_excerpt,
+    read_full_max_bytes,
+    write_excerpt_file,
+)
 from core.context.package import (
     COMPILER_VERSION,
     TIER_EDIT_FULL,
@@ -14,6 +20,10 @@ from core.context.summary import assemble_prompt, prompt_metadata
 
 __all__ = [
     "COMPILER_VERSION",
+    "ExcerptResult",
+    "build_file_excerpt",
+    "read_full_max_bytes",
+    "write_excerpt_file",
     "TIER_EDIT_FULL",
     "TIER_HIDE",
     "TIER_MAP_ONLY",

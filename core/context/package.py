@@ -14,7 +14,7 @@ TIER_POINTER = "pointer"
 TIER_MAP_ONLY = "map-only"
 TIER_HIDE = "hide"
 
-COMPILER_VERSION = "0.1.0"
+COMPILER_VERSION = "0.2.0"
 
 
 @dataclass
@@ -23,6 +23,7 @@ class PathEntry:
     tier: str
     bytes: int | None = None
     payload: str | None = None
+    excerpt_path: str | None = None
 
 
 @dataclass

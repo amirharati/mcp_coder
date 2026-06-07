@@ -6,9 +6,15 @@ import subprocess
 from pathlib import Path
 from typing import Any
 
+from core.context.excerpts import (
+    build_file_excerpt,
+    read_full_max_bytes,
+    write_excerpt_file,
+)
 from core.context.package import (
     COMPILER_VERSION,
     TIER_EDIT_FULL,
+    TIER_READ_EXCERPT,
     TIER_READ_FULL,
     ContextPackage,
     PathEntry,
@@ -121,6 +127,7 @@ def assemble_context(
     """Build a ContextPackage from workspace, optional spec, and MCP hints."""
     ws = workspace.resolve()
     hint_paths = _normalize_path_list(target_files)
+    max_full_bytes = read_full_max_bytes()
 
     loaded_policies: DelegationPolicies | None = None
     goal: str | None = None
@@ -160,11 +167,14 @@ def assemble_context(
     entries: list[PathEntry] = []
     missing_paths: list[str] = []
     untracked_paths: list[str] = []
+    excerpt_paths: list[str] = []
+    truncations: list[dict[str, Any]] = []
     git_available = _is_git_repo(ws)
 
     for path in sorted(contract_paths):
         tier = tier_map.get(path, TIER_READ_FULL)
         abs_path = ws / path
+
         if not abs_path.is_file():
             missing_paths.append(path)
             entries.append(PathEntry(path=path, tier=tier, bytes=None, payload=None))
@@ -172,11 +182,45 @@ def assemble_context(
 
         payload: str | None = None
         byte_count: int | None = None
-        if tier in (TIER_EDIT_FULL, TIER_READ_FULL):
+        entry_excerpt_path: str | None = None
+
+        if tier == TIER_EDIT_FULL:
             payload, byte_count = _read_utf8_payload(abs_path)
+        elif tier == TIER_READ_FULL:
+            file_size = abs_path.stat().st_size
+            if file_size > max_full_bytes:
+                result = build_file_excerpt(
+                    abs_path,
+                    rel_path=path,
+                    max_full_bytes=max_full_bytes,
+                )
+                if result is not None and result.strategy != "full_small":
+                    exc_rel = write_excerpt_file(ws, path, result.text)
+                    tier = TIER_READ_EXCERPT
+                    payload = result.text
+                    byte_count = result.excerpt_bytes
+                    entry_excerpt_path = exc_rel
+                    excerpt_paths.append(exc_rel)
+                    truncations.append(
+                        {
+                            "reason": "read_full_max_bytes",
+                            "path": path,
+                            "bytes_dropped": result.full_bytes - result.excerpt_bytes,
+                        }
+                    )
+                else:
+                    payload, byte_count = _read_utf8_payload(abs_path)
+            else:
+                payload, byte_count = _read_utf8_payload(abs_path)
 
         entries.append(
-            PathEntry(path=path, tier=tier, bytes=byte_count, payload=payload)
+            PathEntry(
+                path=path,
+                tier=tier,
+                bytes=byte_count,
+                payload=payload,
+                excerpt_path=entry_excerpt_path,
+            )
         )
 
         if not git_available:
@@ -202,7 +246,8 @@ def assemble_context(
         "hint_paths": metadata_hint_paths,
         "missing_paths": sorted(missing_paths),
         "untracked_paths": sorted(untracked_paths),
-        "truncations": [],
+        "excerpt_paths": excerpt_paths,
+        "truncations": truncations,
         "token_estimate_preflight": token_estimate,
         "compiler_version": COMPILER_VERSION,
     }
