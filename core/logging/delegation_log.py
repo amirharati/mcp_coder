@@ -144,6 +144,8 @@ def build_delegation_record(
     delegation_policies: dict[str, Any] | None = None,
     scope_violations: list[str] | None = None,
     usage: dict[str, Any] | None = None,
+    error_class: str | None = None,
+    error_message: str | None = None,
 ) -> dict[str, Any]:
     session_dir_str = str(Path(session_dir).resolve())
     log_path_str = str(Path(log_path).resolve())
@@ -211,6 +213,11 @@ def build_delegation_record(
     if usage is not None:
         record["usage"] = usage
         record["context"]["token_estimate_preflight"] = usage.get("preflight_tokens_est")
+    if error_class is not None:
+        record["error_detail"] = {
+            "error_class": error_class,
+            "error_message": error_message,
+        }
     return record
 
 
@@ -256,11 +263,14 @@ def append_delegation_record(record: dict[str, Any], *, ws: str | None = None) -
             error=err_field,
         )
     else:
+        error_detail = record.get("error_detail") or {}
         server_log_emit(
             "delegation_failed",
             level="error",
             delegation_id=record.get("delegation_id"),
             error=str(error) if error else "unknown",
+            error_class=error_detail.get("error_class"),
+            error_message=error_detail.get("error_message"),
         )
     return log_path
 

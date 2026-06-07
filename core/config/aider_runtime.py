@@ -48,6 +48,30 @@ def delegation_auto_lint() -> bool:
     return _env_bool("MCP_CODER_AIDER_AUTO_LINT", False)
 
 
+def delegation_detect_urls() -> bool:
+    """Whether Aider should scrape URLs found in prompts (default: False for MCP delegations).
+
+    Set MCP_CODER_AIDER_DETECT_URLS=1 to opt in.  Was implicitly True before P2-125.
+    """
+    return _env_bool("MCP_CODER_AIDER_DETECT_URLS", False)
+
+
+def delegation_timeout_seconds() -> float:
+    """Max seconds for a single delegate_to_agent engine run (default 120).
+
+    Override via MCP_CODER_DELEGATION_TIMEOUT_S.
+    """
+    raw = os.environ.get("MCP_CODER_DELEGATION_TIMEOUT_S", "").strip()
+    if raw:
+        try:
+            v = float(raw)
+            if v > 0:
+                return v
+        except ValueError:
+            pass
+    return 120.0
+
+
 def create_delegation_io() -> tuple[Any, io.StringIO]:
     """
   InputOutput for headless delegation (~ aider --yes-always --no-auto-commits).
@@ -82,8 +106,9 @@ def delegation_coder_kwargs() -> dict[str, Any]:
         "stream": delegation_stream(),
         "auto_lint": delegation_auto_lint(),
         "show_diffs": False,
-        # URL scrape via Playwright when prompt contains https:// (see aider_engine thread isolation).
-        "detect_urls": True,
+        # URL scrape via Playwright when prompt contains https://.
+        # Default False for MCP delegations (P2-125 BL-309a); opt in via env.
+        "detect_urls": delegation_detect_urls(),
     }
 
 

@@ -101,7 +101,7 @@ Work proceeds in four waves. Milestones within a wave can run in sequence or be 
 | Read-deps warn | P2-110 | `done` | `P2-1.10-read-deps-warn.md` | D-P2-6, BL-311a — `spec_files_missing_from_target` + `contract_warnings`; warn-only; 143 pytest |
 | Delegation policies in spec | P2-115 | `done` | `P2-1.15-spec-policies.md` | D-P2-2, D-P2-3, D-SPEC-8, BL-315a/b — YAML policies + markdown fallback; `scope_violation` on strict post-check; 157 pytest |
 | Usage telemetry | P2-120 | `done` | `P2-1.20-usage-telemetry.md` | BL-154 partial — preflight + actual + static `model_rates.yaml`; JSONL + report always; MCP `usage` when `usage_report` (default on); BL-319 dynamic rates deferred; 172 pytest |
-| Delegation hardening | P2-125 | `todo` | BL-309a/b | Headless URL policy; classified errors; no browser on upstream 500; bounded run time. |
+| Delegation hardening + Wave 1 exit | P2-125 | `todo` | `P2-1.25-delegation-hardening.md` | BL-309a/b/e — URL policy, `error_class`, timeout, browser guard; matrix tests + `wave1-exit-validation.md`. Optional split: P2-129 = Part B only. |
 
 ### Wave 2 — Context compiler core
 
@@ -208,8 +208,8 @@ Same pattern as Phase 1:
 
 ## Next action
 
-1. **Next worker:** **P2-125** — delegation hardening (BL-309a/b).
-2. **Or** start Wave 2: **P2-200** — `assemble_context()` (architectural hinge before P2-210).
+1. **Next worker:** **P2-125** — delegation hardening + Wave 1 exit validation (`docs/tasks/P2-1.25-delegation-hardening.md`). Model: sonnet-thinking or composer-2.5.
+2. After Wave 1 sign-off → **P2-200** (`assemble_context()`).
 3. Reload MCP after deploy when testing live delegates.
 
 ---

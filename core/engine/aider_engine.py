@@ -8,7 +8,13 @@ from typing import Any
 from core.config.aider_runtime import (
     create_delegation_io,
     delegation_coder_kwargs,
+    delegation_timeout_seconds,
     infer_run_success,
+)
+from core.delegation.errors import (
+    block_webbrowser_open,
+    classify_delegation_error,
+    sanitize_delegation_output,
 )
 from core.config.models import provider_hint_for_model, resolve_model_name
 from core.config.providers import apply_provider_env
@@ -121,7 +127,7 @@ class AiderEngine(ExecutionEngine):
                 return coder, io, out_buffer
 
             def _run_coder() -> Any:
-                with isolated_stdio() as (stdout_cap, stderr_cap):
+                with block_webbrowser_open(), isolated_stdio() as (stdout_cap, stderr_cap):
                     if mcp_session_id:
                         (coder, io, out_buffer), executor_reused_local, executor_recreated_local = (
                             get_or_create_coder(
@@ -140,16 +146,49 @@ class AiderEngine(ExecutionEngine):
                         )
                         executor_reused_local = False
                         executor_recreated_local = False
-                    
+
                     partial = coder.run(prompt)
                     captured = merged_capture(out_buffer, stdout_cap, stderr_cap)
                     return coder, io, partial, captured, executor_reused_local, executor_recreated_local
 
-            # Run Aider in a dedicated thread to isolate its synchronous Playwright 
-            # calls from FastMCP's asyncio event loop.
+            # Run Aider in a dedicated thread to isolate its synchronous Playwright
+            # calls from FastMCP's asyncio event loop.  Bounded by delegation_timeout_seconds
+            # (default 120s, env MCP_CODER_DELEGATION_TIMEOUT_S) per BL-309e.
+            timeout_s = delegation_timeout_seconds()
             with concurrent.futures.ThreadPoolExecutor(max_workers=1) as executor:
                 future = executor.submit(_run_coder)
-                coder, io, partial, captured, executor_reused, executor_recreated = future.result()
+                try:
+                    coder, io, partial, captured, executor_reused, executor_recreated = (
+                        future.result(timeout=timeout_s)
+                    )
+                except concurrent.futures.TimeoutError:
+                    future.cancel()
+                    from core.logging.server_log import server_log_emit
+
+                    server_log_emit(
+                        "delegation_timeout",
+                        level="error",
+                        model=self._model_name,
+                        timeout_s=timeout_s,
+                    )
+                    files_changed_t, used_git_t = files_touched_since_snapshot(
+                        workspace_path,
+                        before_git,
+                        target_files=target_files,
+                        before_mtimes=before_mtimes,
+                    )
+                    return ExecutionResult(
+                        success=False,
+                        output="Delegation timed out; engine did not complete within the allowed time.",
+                        files_changed=files_changed_t,
+                        files_unexpected=compute_files_unexpected(
+                            files_changed_t, target_files, used_git=used_git_t
+                        ),
+                        model=self._model_name,
+                        error="Delegation timed out.",
+                        error_class="timeout",
+                        tokens={"source": "unavailable"},
+                    )
 
             partial_str = str(partial) if partial is not None else ""
             output = "\n".join(s for s in (captured.strip(), partial_str.strip()) if s)
@@ -169,6 +208,10 @@ class AiderEngine(ExecutionEngine):
                 output=output,
                 partial_response=partial_str,
             )
+            error_class: str | None = None
+            if not success and error:
+                error_class, _short = classify_delegation_error(error)
+                output = sanitize_delegation_output(output, error_class=error_class)
             return ExecutionResult(
                 success=success,
                 output=output,
@@ -176,6 +219,7 @@ class AiderEngine(ExecutionEngine):
                 files_unexpected=files_unexpected,
                 model=self._model_name,
                 error=error,
+                error_class=error_class,
                 tokens=tokens,
                 executor_reused=executor_reused,
                 executor_recreated=executor_recreated,
@@ -187,15 +231,18 @@ class AiderEngine(ExecutionEngine):
                 target_files=target_files,
                 before_mtimes=before_mtimes,
             )
+            err_text = f"{type(exc).__name__}: {exc}"
+            error_class, _short = classify_delegation_error(err_text, exc=exc)
             return ExecutionResult(
                 success=False,
-                output="",
+                output=sanitize_delegation_output(err_text, error_class=error_class),
                 files_changed=files_changed,
                 files_unexpected=compute_files_unexpected(
                     files_changed, target_files, used_git=used_git
                 ),
                 model=self._model_name,
-                error=f"{type(exc).__name__}: {exc}",
+                error=err_text,
+                error_class=error_class,
                 tokens={"source": "unavailable"},
             )
         finally:

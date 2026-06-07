@@ -10,6 +10,7 @@ from mcp.server.fastmcp import FastMCP
 from core.config.models import resolve_model_name
 from core.context.summary import assemble_prompt, prompt_metadata
 from core.context.transcript_policy import POLICY_DUMP, resolve_host_transcript_policy
+from core.delegation.errors import classify_delegation_error
 from core.engine import get_engine, list_backends
 from core.engine.factory import UnknownBackendError
 from core.host import apply_host_hint, get_host_provider
@@ -105,6 +106,8 @@ def _response_payload(
     scope_violations: list[str] | None = None,
     usage: dict[str, Any] | None = None,
     usage_warnings: list[str] | None = None,
+    error_class: str | None = None,
+    error_message: str | None = None,
 ) -> dict[str, Any]:
     payload: dict[str, Any] = {
         "success": success,
@@ -149,6 +152,10 @@ def _response_payload(
         payload["usage"] = usage
     if usage_warnings:
         payload["usage_warnings"] = usage_warnings
+    if error_class is not None:
+        payload["error_class"] = error_class
+    if error_message is not None:
+        payload["error_message"] = error_message
     return payload
 
 
@@ -309,6 +316,8 @@ def delegate_to_agent(
     model: str | None = None
     success = False
     error: str | None = None
+    error_class: str | None = None
+    error_message: str | None = None
     files_changed: list[str] = []
     files_unexpected: list[str] = []
     output = ""
@@ -401,18 +410,25 @@ def delegate_to_agent(
             tokens = result.tokens or tokens
             model = result.model or model
             error = result.error
+            error_class = result.error_class
+            if not success and error:
+                _ec, error_message = classify_delegation_error(error)
+                if not error_class:
+                    error_class = _ec
             executor_reused = result.executor_reused
             executor_recreated = result.executor_recreated
-            if not success and error:
-                output = error if not output else f"{output}\n{error}"
+            if not success and error and not output:
+                output = error
 
         except UnknownBackendError as exc:
             success = False
             error = str(exc)
+            error_class, error_message = classify_delegation_error(error, exc=exc)
             output = error
         except Exception as exc:
             success = False
             error = f"{type(exc).__name__}: {exc}"
+            error_class, error_message = classify_delegation_error(error, exc=exc)
             output = error
 
     resolved_model = model or resolve_model_name()
@@ -521,6 +537,8 @@ def delegate_to_agent(
         scope_violations=scope_violations or None,
         usage=usage_dict if usage_report_enabled else None,
         usage_warnings=usage_warnings if usage_report_enabled else None,
+        error_class=error_class if not success else None,
+        error_message=error_message if not success else None,
     )
     if spec_files_missing:
         mcp_request["spec_files_missing_from_target"] = spec_files_missing
@@ -576,6 +594,8 @@ def delegate_to_agent(
         delegation_policies=policies_response,
         scope_violations=scope_violations or None,
         usage=usage_dict,
+        error_class=error_class if not success else None,
+        error_message=error_message if not success else None,
     )
     log_path = append_delegation_record(record, ws=ws)
     log_delegation_sent(

@@ -15,6 +15,7 @@ class ExecutionResult:
     files_unexpected: list[str] = field(default_factory=list)
     model: str | None = None
     error: str | None = None
+    error_class: str | None = None
     tokens: dict[str, Any] = field(default_factory=dict)
     executor_reused: bool = False
     executor_recreated: bool = False
