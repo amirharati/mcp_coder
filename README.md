@@ -110,6 +110,19 @@ mcp-coder test-model --via both      # Aider Model + LiteLLM
 
 Prints config resolution (env files, model source, API base, key masked) on stderr, then pings via **Aider `Model`** by default — same stack as `delegate_to_agent`. Exit `0` = `OK` + reply; exit `1` = provider error (run before a long E2E).
 
+**Inspect context** (dry-run compiler — no LLM, no file edits, no JSONL):
+
+```bash
+mcp-coder inspect-context \
+  --task "Add comment above Expense" \
+  --target-files expense_splitter/models.py \
+  --context-summary "Step 5b read-context test" \
+  --spec tasks/step-5b.md \
+  --pretty
+```
+
+Returns JSON with `context_package`, optional `adapter_preview` (`fnames`, `read_paths_in_prompt`), and P2-110 `contract_warnings` when a spec is present. Same shape via MCP tool `inspect_context`.
+
 ---
 
 ## Environment
@@ -296,6 +309,21 @@ Template uses `envFile` → mcp-coder `.env` so API keys stay in the mcp-coder c
 | `backend` | no | Default `aider` |
 
 Returns JSON: `success`, `output`, `files_changed`, `files_unexpected`, `session_reused`, `session_reason`, `session_policy`, `mcp_session_id`, `log_path`, `executor_reused`, `executor_recreated`.
+
+### Tool: `inspect_context`
+
+Dry-run only: compile `ContextPackage` and adapter preview without calling the backend. No file edits, no LLM, no JSONL log.
+
+| Argument | Required | Notes |
+|----------|----------|-------|
+| `task` | yes | Same as `delegate_to_agent` |
+| `target_files` | yes | Planner hint paths |
+| `context_summary` | yes | Planner context |
+| `spec_path` | no | Step task under `.mcp-coder/specs/` |
+| `include_payloads` | no | Default `false` |
+| `include_adapter_preview` | no | Default `true` |
+
+Returns JSON: `ok`, `context_package`, optional `adapter_preview`, optional `contract_warnings`.
 
 Each call appends one line to the session log under home:
 

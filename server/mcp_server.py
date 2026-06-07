@@ -10,6 +10,7 @@ from mcp.server.fastmcp import FastMCP
 
 from core.config.models import resolve_model_name
 from core.context.assemble import assemble_context
+from core.context.inspect import inspect_context_package
 from core.context.package import (
     TIER_EDIT_FULL,
     TIER_READ_EXCERPT,
@@ -689,6 +690,40 @@ def delegate_to_agent(
     )
 
     return json.dumps(response, ensure_ascii=False)
+
+
+@mcp.tool(
+    name="inspect_context",
+    description=(
+        "DRY-RUN CONTEXT INSPECTOR: Compile ContextPackage and adapter preview "
+        "(fnames, read paths in prompt) without calling the execution backend. "
+        "No file edits, no LLM call, no JSONL delegation log. "
+        "Use before delegate_to_agent to verify read-deps and edit scope. "
+        "Required: task, target_files, context_summary. "
+        "Optional spec_path under .mcp-coder/specs/tasks/."
+    ),
+)
+def inspect_context(
+    task: str,
+    target_files: list[str],
+    context_summary: str,
+    spec_path: str | None = None,
+    include_payloads: bool = False,
+    include_adapter_preview: bool = True,
+) -> str:
+    """Return assembled context package + adapter preview as JSON (dry-run only)."""
+    ws = workspace_path()
+    result = inspect_context_package(
+        workspace=Path(ws),
+        task=task,
+        target_files=target_files,
+        context_summary=context_summary,
+        spec_path=spec_path,
+        include_payloads=include_payloads,
+        include_adapter_preview=include_adapter_preview,
+        host_transcript=None,
+    )
+    return json.dumps(result, ensure_ascii=False)
 
 
 def run_stdio() -> None:
