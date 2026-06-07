@@ -49,7 +49,12 @@ def _extract_tokens(coder: Any, run_result: Any) -> dict[str, Any]:
                     "total": usage.get("total_tokens"),
                     "source": "aider_usage",
                 }
-    return {"source": "unavailable"}
+    return {
+        "input": None,
+        "output": None,
+        "total": None,
+        "source": "unavailable",
+    }
 
 
 @register_engine(BACKEND_ID)

@@ -38,6 +38,7 @@ def _format_run_log_entry(
     output_preview: str,
     error: str | None,
     task_spec: str | None = None,
+    usage_summary: str | None = None,
 ) -> str:
     files = ", ".join(files_changed) if files_changed else "(none)"
     lines = [
@@ -51,6 +52,8 @@ def _format_run_log_entry(
         lines.insert(2, f"- **task_spec:** `{task_spec}`")
     if error:
         lines.append(f"- **error:** {error[:RUN_LOG_OUTPUT_PREVIEW_CHARS]}")
+    if usage_summary:
+        lines.append(usage_summary)
     return "\n".join(lines)
 
 
@@ -105,6 +108,7 @@ def apply_post_delegation_report_updates(
     output: str,
     error: str | None,
     task_spec: str | None = None,
+    usage_summary: str | None = None,
 ) -> tuple[str, str]:
     """Append Run log on report file; update Status, Blockers, Worker feedback; sync YAML status."""
     raw = path.read_text(encoding="utf-8")
@@ -121,6 +125,7 @@ def apply_post_delegation_report_updates(
         output_preview=redact_secrets(output[:RUN_LOG_OUTPUT_PREVIEW_CHARS]),
         error=redact_secrets(error[:RUN_LOG_OUTPUT_PREVIEW_CHARS]) if error else None,
         task_spec=task_spec,
+        usage_summary=usage_summary,
     )
 
     existing_run = parse_sections(body).get("Run log", "").strip()

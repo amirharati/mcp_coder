@@ -61,6 +61,27 @@ def test_apply_post_delegation_implement_success(tmp_path: Path):
     assert sections["Blockers / questions"].strip() == ""
 
 
+def test_run_log_includes_usage_summary(tmp_path: Path):
+    report = tmp_path / "report.md"
+    report.write_text(REPORT_SAMPLE, encoding="utf-8")
+
+    apply_post_delegation_report_updates(
+        report,
+        timestamp="2026-06-05T12:00:00Z",
+        delegation_id="abc-123",
+        mcp_session_id="sess-456",
+        delegate_mode="implement",
+        success=True,
+        files_changed=["x.py"],
+        output="Applied edit",
+        error=None,
+        usage_summary="- **usage:** model `gpt-4o-mini`; preflight ~100 tok; actual n/a; cost n/a",
+    )
+
+    sections = parse_sections(split_front_matter(report.read_text(encoding="utf-8"))[1])
+    assert "**usage:**" in sections["Run log"]
+
+
 def test_apply_post_delegation_review_appends_worker_feedback(tmp_path: Path):
     report = tmp_path / "report.md"
     report.write_text(REPORT_SAMPLE, encoding="utf-8")

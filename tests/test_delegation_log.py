@@ -71,6 +71,46 @@ def test_append_delegation_record(tmp_path, monkeypatch):
     assert pointer.is_file()
 
 
+def test_delegation_record_includes_usage(tmp_path, monkeypatch):
+    storage = _storage_for(tmp_path, monkeypatch)
+    usage = {
+        "model": "openrouter/openai/gpt-4o-mini",
+        "preflight_tokens_est": 42,
+        "preflight_chars": 168,
+        "actual": {"input": None, "output": None, "total": None, "source": "unavailable"},
+    }
+    record = build_delegation_record(
+        delegation_id="usage-id",
+        timestamp_start="2026-06-06T00:00:00.000Z",
+        timestamp_end="2026-06-06T00:00:01.000Z",
+        duration_ms=1000,
+        mcp_request={"task": "t"},
+        backend="aider",
+        model="openrouter/openai/gpt-4o-mini",
+        success=True,
+        error=None,
+        response_to_cursor={"success": True},
+        files_requested=["a.py"],
+        files_changed=["a.py"],
+        context_block={"prompt_chars": 168, "prompt_tokens_est": 42},
+        timing={"engine_run_ms": 900},
+        tokens={"source": "unavailable"},
+        project_key=storage.project_key,
+        mcp_session_id=storage.mcp_session_id,
+        session_dir=storage.session_dir,
+        log_path=storage.log_path,
+        session_action="new",
+        session_reason="policy_always_new",
+        session_policy="always_new",
+        usage=usage,
+    )
+    path = append_delegation_record(record)
+    parsed = json.loads(path.read_text(encoding="utf-8").strip())
+    assert parsed["usage"]["preflight_tokens_est"] == 42
+    assert parsed["context"]["token_estimate_preflight"] == 42
+    assert parsed["context"]["prompt_tokens_est"] == 42
+
+
 def test_log_dir_mirror(tmp_path, monkeypatch):
     storage = _storage_for(tmp_path, monkeypatch)
     mirror_dir = tmp_path / "custom_logs"

@@ -143,6 +143,7 @@ def build_delegation_record(
     contract_warnings: list[str] | None = None,
     delegation_policies: dict[str, Any] | None = None,
     scope_violations: list[str] | None = None,
+    usage: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     session_dir_str = str(Path(session_dir).resolve())
     log_path_str = str(Path(log_path).resolve())
@@ -207,6 +208,9 @@ def build_delegation_record(
         record["delegation_policies"] = delegation_policies
     if scope_violations:
         record["scope_violations"] = scope_violations
+    if usage is not None:
+        record["usage"] = usage
+        record["context"]["token_estimate_preflight"] = usage.get("preflight_tokens_est")
     return record
 
 

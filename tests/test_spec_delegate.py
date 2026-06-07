@@ -447,3 +447,75 @@ def test_delegate_discover_no_scope_violation_outcome(tmp_path, monkeypatch):
     payload = json.loads(raw)
     assert payload["outcome"] == OUTCOME_SUCCESS
     assert "scope_violations" not in payload
+
+
+def test_delegate_usage_in_response_and_report(tmp_path, monkeypatch):
+    home = tmp_path / "home"
+    ws = _setup_workspace(tmp_path)
+    report = ws / ".mcp-coder" / "specs" / "reports" / "scrape.md"
+
+    monkeypatch.setenv("MCP_CODER_HOME", str(home))
+    monkeypatch.chdir(ws)
+
+    fake = ExecutionResult(
+        success=True,
+        output="done",
+        files_changed=["scraped_content.txt"],
+        model="openrouter/openai/gpt-4o-mini",
+        tokens={
+            "input": 12000,
+            "output": 3400,
+            "total": 15400,
+            "source": "aider_usage",
+        },
+    )
+    mock_engine = type("E", (), {"model_name": "openrouter/openai/gpt-4o-mini", "run": lambda *a, **k: fake})()
+
+    with patch("server.mcp_server.get_engine", return_value=mock_engine):
+        raw = delegate_to_agent(
+            task="Create the file now.",
+            target_files=["scraped_content.txt"],
+            context_summary="ctx",
+            spec_path="tasks/scrape.md",
+        )
+
+    payload = json.loads(raw)
+    assert "usage" in payload
+    assert payload["usage"]["model"] == "openrouter/openai/gpt-4o-mini"
+    assert payload["usage"]["actual"]["total"] == 15400
+    assert payload["usage"]["cost_est_usd"]["source"] == "static_rates"
+
+    record = json.loads(Path(payload["log_path"]).read_text(encoding="utf-8").strip())
+    assert record["usage"]["preflight_tokens_est"] == record["context"]["prompt_tokens_est"]
+    assert record["context"]["token_estimate_preflight"] == record["usage"]["preflight_tokens_est"]
+
+    report_text = report.read_text(encoding="utf-8")
+    assert "**usage:**" in report_text
+    assert "gpt-4o-mini" in report_text
+
+
+def test_delegate_usage_omitted_when_report_disabled(tmp_path, monkeypatch):
+    home = tmp_path / "home"
+    ws = _setup_workspace(tmp_path)
+    cfg = ws / ".mcp-coder"
+    cfg.mkdir(exist_ok=True)
+    (cfg / "config.yaml").write_text("usage_report: false\n", encoding="utf-8")
+
+    monkeypatch.setenv("MCP_CODER_HOME", str(home))
+    monkeypatch.chdir(ws)
+
+    fake = ExecutionResult(success=True, output="ok", files_changed=[], model="m")
+    mock_engine = type("E", (), {"model_name": "m", "run": lambda *a, **k: fake})()
+
+    with patch("server.mcp_server.get_engine", return_value=mock_engine):
+        raw = delegate_to_agent(
+            task="t",
+            target_files=["scraped_content.txt"],
+            context_summary="",
+            spec_path="tasks/scrape.md",
+        )
+
+    payload = json.loads(raw)
+    assert "usage" not in payload
+    record = json.loads(Path(payload["log_path"]).read_text(encoding="utf-8").strip())
+    assert "usage" in record

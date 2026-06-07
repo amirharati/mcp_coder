@@ -20,3 +20,6 @@ session_policy: always_new
 # server_log: on
 # server_log_level: info
 # server_log_scope: global
+
+# Echo usage block in delegate_to_agent response (JSONL always logs usage)
+# usage_report: true

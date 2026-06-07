@@ -7,6 +7,7 @@ from typing import Any
 
 from mcp.server.fastmcp import FastMCP
 
+from core.config.models import resolve_model_name
 from core.context.summary import assemble_prompt, prompt_metadata
 from core.context.transcript_policy import POLICY_DUMP, resolve_host_transcript_policy
 from core.engine import get_engine, list_backends
@@ -52,6 +53,12 @@ from core.specs.outcome import (
 from core.specs.paths import normalize_spec_path_arg, resolve_spec_path
 from core.specs.read import read_task_spec
 from core.specs.write import apply_post_delegation_report_updates
+from core.usage import (
+    build_usage_report,
+    build_usage_warnings,
+    format_usage_run_log_line,
+    resolve_usage_report_enabled,
+)
 
 OUTPUT_MAX_CHARS = 16_000
 
@@ -96,6 +103,8 @@ def _response_payload(
     contract_warnings: list[str] | None = None,
     delegation_policies: dict[str, Any] | None = None,
     scope_violations: list[str] | None = None,
+    usage: dict[str, Any] | None = None,
+    usage_warnings: list[str] | None = None,
 ) -> dict[str, Any]:
     payload: dict[str, Any] = {
         "success": success,
@@ -136,6 +145,10 @@ def _response_payload(
         payload["delegation_policies"] = delegation_policies
     if scope_violations:
         payload["scope_violations"] = scope_violations
+    if usage is not None:
+        payload["usage"] = usage
+    if usage_warnings:
+        payload["usage_warnings"] = usage_warnings
     return payload
 
 
@@ -191,6 +204,7 @@ def delegate_to_agent(
         )
     mcp_request["mode"] = delegate_mode
     ws = workspace_path()
+    usage_report_enabled = resolve_usage_report_enabled(ws)
     ensure_workspace_spec_layout(ws)
 
     spec_rel_path: str | None = None
@@ -401,6 +415,18 @@ def delegate_to_agent(
             error = f"{type(exc).__name__}: {exc}"
             output = error
 
+    resolved_model = model or resolve_model_name()
+    usage_dict = build_usage_report(
+        model=resolved_model,
+        prompt=prompt,
+        actual_tokens=tokens,
+        preflight_tokens_est=int(context_block.get("prompt_tokens_est") or 0),
+        preflight_chars=int(context_block.get("prompt_chars") or len(prompt)),
+    )
+    usage_summary_line = format_usage_run_log_line(usage_dict)
+    context_block["token_estimate_preflight"] = usage_dict["preflight_tokens_est"]
+    usage_warnings = build_usage_warnings(usage_dict["preflight_tokens_est"])
+
     timestamp_end = utc_now_iso()
     spec_sha256: str | None = spec_read.sha256 if spec_read else None
     spec_bytes: int | None = spec_read.file_bytes if spec_read else None
@@ -425,6 +451,7 @@ def delegate_to_agent(
                 output=output,
                 error=error,
                 task_spec=spec_rel_path,
+                usage_summary=usage_summary_line,
             )
             spec_read = read_task_spec(spec_abs_path, workspace=ws)
             spec_sha256 = spec_read.sha256
@@ -492,6 +519,8 @@ def delegate_to_agent(
         contract_warnings=contract_warnings or None,
         delegation_policies=policies_response,
         scope_violations=scope_violations or None,
+        usage=usage_dict if usage_report_enabled else None,
+        usage_warnings=usage_warnings if usage_report_enabled else None,
     )
     if spec_files_missing:
         mcp_request["spec_files_missing_from_target"] = spec_files_missing
@@ -546,6 +575,7 @@ def delegate_to_agent(
         contract_warnings=contract_warnings or None,
         delegation_policies=policies_response,
         scope_violations=scope_violations or None,
+        usage=usage_dict,
     )
     log_path = append_delegation_record(record, ws=ws)
     log_delegation_sent(

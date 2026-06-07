@@ -65,9 +65,9 @@ Status: `idea` | `deferred` | `blocked` | `done`
 |----------|-----|------|--------|
 | 1 | **BL-316** | Context builder **file materialization tiers** | Core Phase 2; decouple spec/API from Aider `fnames`; extends BL-001 |
 | 2 | BL-001 | Owned context **creation** | Assemble brief: files, constraints, task; cheap LLM or rules + ripgrep |
-| 3 | BL-154 | **Context window management** | Rolling history, summarize chunks, prompt templates, caps |
+| 3 | BL-154 | **Context window management** | Telemetry **P2-120**; compiler caps **P2-220** — see § BL-154 |
 | 4 | BL-311 | Read-deps validation for implement | P1-ISS-014 — warn/merge spec Files vs `target_files`; convention shipped P1-152 |
-| 5 | BL-315 | `edit_scope` + spec `files_edit` / `files_read` YAML | D-SPEC-8; discover \| strict |
+| 5 | BL-315 | `edit_scope` + spec `files_edit` / `files_read` YAML | **partial** P2-115; 315c → P2-200 |
 | 6 | **BL-309** | **Delegation hardening** (job vs workflow failure) | P1-ISS-012 — cheap-model 500s; see § below |
 | 7 | BL-153 | **Topic / task boundary detection** | Smarter session + context slices |
 | 8 | BL-008 | Skills + prompt packs | Inject by topic / task type |
@@ -134,7 +134,7 @@ Phase 1 deferred executor conversation carry-over to here (BL-155); see P1-130 `
 
 ### BL-309: Delegation hardening (job failure vs workflow failure)
 
-**Status:** `deferred` — **P1-ISS-012** (`wontfix-p1` at Phase 1 exit).
+**Status:** `deferred` — **P1-ISS-012** (`wontfix-p1` at Phase 1 exit). **Wave 1:** P2-125 (309a/b).
 
 **Goal:** A delegation may fail because the model or upstream provider failed the **task**. It must not break the **workflow** (browser storms, empty files, 3+ minute opaque hangs, confusing partial repo state).
 
@@ -347,6 +347,25 @@ By design today: `project_key` = SHA-256(resolved path).
 
 ---
 
+### BL-319: Dynamic model rates (usage cost)
+
+**Status:** `deferred` — static table shipped **P2-120** (`resources/model_rates.yaml`).
+
+**Goal:** Keep `cost_est_usd` accurate as models and OpenRouter pricing change — without manual yaml edits for every new `AIDER_MODEL`.
+
+| Sub | Item |
+|-----|------|
+| BL-319a | Refresh from **OpenRouter pricing API** (or documented endpoint) on MCP startup or periodic cache |
+| BL-319b | Fallback: lightweight **scraper** / provider docs for non-OpenRouter models |
+| BL-319c | Optional **workspace override** `.mcp-coder/model_rates.yaml` merged over bundled rates |
+| BL-319d | CLI `mcp-coder rates refresh` or master-session doc for manual sync |
+
+Until then: add rows to bundled `model_rates.yaml` when switching models; unknown model → `cost_est_usd.source: unknown_model`.
+
+**Implements:** Post–P2-120 enhancement; pairs with usage telemetry (JSONL + MCP `usage` block).
+
+---
+
 ## Observability & ops
 
 | ID | Item | Notes |
@@ -357,6 +376,7 @@ By design today: `project_key` = SHA-256(resolved path).
 | BL-304 | Global index `hosts/cursor/<id>/index.json` | Cross-project session lookup — **P1-ISS-008** (`carried` at P1-199); one Cursor chat delegating to multiple repos |
 | BL-317 | Cursor project slug robustness | **P1-ISS-002** — see § BL-317 |
 | BL-318 | `project_key` alias on repo move | **P1-ISS-005** — see § BL-318 |
+| BL-319 | Dynamic model rates for usage cost | **P2-120** static table; API/scraper later — see § BL-319 |
 | BL-305 | ~~Persistent MCP **server** log (process audit)~~ | **done** — P1-125 |
 | BL-308 | Global `server.jsonl` locking / per-pid subfiles | P1-ISS-011; only if garbled lines in practice |
 | BL-306 | Startup **code version / git hash** in MCP stderr | Detect stale process (P1-ISS-009) |
@@ -410,6 +430,7 @@ By design today: `project_key` = SHA-256(resolved path).
 
 | ID | Item | Completed |
 |----|------|-----------|
+| BL-154 (partial) | Usage telemetry (preflight + actual + static cost) | 2026-06-06 — P2-120; window budget enforcement → P2-220 |
 | BL-314 (partial) | Honest `files_changed` + `files_unexpected` | 2026-06-06 — P1-152; report Scope expansion → remaining |
 | BL-150 | Spec-based delegation (v0 + v2 + review loop) | 2026-06-05 — P1-150 `spec_path`/outcomes; P1-151 epics/tasks/reports, `mode=review\|implement`, cursor rules v6; E2E `mcp_coder_phase1_e2e` |
 | BL-125 | Persistent MCP server log | 2026-06-05 — P1-125 |
@@ -423,5 +444,6 @@ By design today: `project_key` = SHA-256(resolved path).
 
 | Date | Change |
 |------|--------|
+| 2026-06-06 | P2-120 done — usage telemetry; BL-319 dynamic rates deferred; BL-154 partial |
 | 2026-06-06 | P1-199 exit — Post–Phase 1 focus reordered; BL-314 partial, BL-315–318 added; P1 issues migrated |
 | 2026-06-05 | BL-309–312 from expense-splitter E2E; BL-150 done |
