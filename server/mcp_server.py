@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import os
 import time
 from pathlib import Path
 from typing import Any
@@ -8,7 +9,15 @@ from typing import Any
 from mcp.server.fastmcp import FastMCP
 
 from core.config.models import resolve_model_name
-from core.context.summary import assemble_prompt, prompt_metadata
+from core.context.assemble import assemble_context
+from core.context.package import (
+    TIER_EDIT_FULL,
+    TIER_READ_EXCERPT,
+    TIER_READ_FULL,
+    ContextPackage,
+    summarize_context_package,
+)
+from core.context.summary import assemble_prompt, estimate_tokens, prompt_metadata, sha256_hex
 from core.context.transcript_policy import POLICY_DUMP, resolve_host_transcript_policy
 from core.delegation.errors import classify_delegation_error
 from core.engine import get_engine, list_backends
@@ -63,6 +72,13 @@ from core.usage import (
 
 OUTPUT_MAX_CHARS = 16_000
 
+
+def use_context_package() -> bool:
+    """Return True unless MCP_CODER_USE_CONTEXT_PACKAGE is explicitly 0/false/no."""
+    raw = os.environ.get("MCP_CODER_USE_CONTEXT_PACKAGE", "1").strip().lower()
+    return raw not in ("0", "false", "no")
+
+
 mcp = FastMCP(
     "mcp-coder",
     instructions=(
@@ -108,6 +124,7 @@ def _response_payload(
     usage_warnings: list[str] | None = None,
     error_class: str | None = None,
     error_message: str | None = None,
+    context_package_summary: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     payload: dict[str, Any] = {
         "success": success,
@@ -156,6 +173,8 @@ def _response_payload(
         payload["error_class"] = error_class
     if error_message is not None:
         payload["error_message"] = error_message
+    if context_package_summary is not None:
+        payload["context_package_summary"] = context_package_summary
     return payload
 
 
@@ -344,11 +363,16 @@ def delegate_to_agent(
         file_bytes=file_bytes if isinstance(file_bytes, int) else None,
         context_mode=context_mode,
     )
-    context_block = prompt_metadata(
-        prompt,
-        context_summary=context_summary,
-        transcript_meta=transcript_meta,
+
+    # Context package flag — active for implement + valid spec + env default on
+    _use_pkg = (
+        delegate_mode == DELEGATE_MODE_IMPLEMENT
+        and spec_read is not None
+        and not spec_invalid_reason
+        and use_context_package()
     )
+    context_package: ContextPackage | None = None
+    executor_prompt = prompt  # overridden if context package path is taken
 
     spec_files_missing: list[str] = []
     contract_warnings: list[str] = []
@@ -392,6 +416,24 @@ def delegate_to_agent(
             t_engine = time.perf_counter()
             if delegate_mode == DELEGATE_MODE_REVIEW:
                 result = run_spec_review(prompt)
+            elif _use_pkg:
+                context_package = assemble_context(
+                    workspace=Path(ws),
+                    spec_path=spec_rel_path,
+                    target_files=target_files,
+                    task=task,
+                    context_summary=context_summary,
+                    policies=delegation_policies,
+                )
+                engine = get_engine(backend)
+                model = engine.model_name
+                result = engine.run_context(
+                    context_package,
+                    workspace_path=ws,
+                    mcp_session_id=storage.mcp_session_id,
+                    host_transcript=host_transcript_text,
+                )
+                executor_prompt = result.prompt_used or context_package.brief
             else:
                 engine = get_engine(backend)
                 model = engine.model_name
@@ -432,12 +474,36 @@ def delegate_to_agent(
             output = error
 
     resolved_model = model or resolve_model_name()
+
+    # Build context_block from executor_prompt (legacy: same as prompt; package: translated prompt)
+    context_block = prompt_metadata(
+        executor_prompt,
+        context_summary=context_summary,
+        transcript_meta=transcript_meta,
+    )
+    if context_package is not None:
+        read_entries_in_prompt = [
+            e
+            for e in context_package.entries
+            if e.tier in (TIER_READ_FULL, TIER_READ_EXCERPT) and e.payload is not None
+        ]
+        context_block["context_package"] = summarize_context_package(context_package)
+        context_block["adapter_in"] = {
+            "fnames": sorted(
+                e.path for e in context_package.entries if e.tier == TIER_EDIT_FULL
+            ),
+            "read_paths_in_prompt": [e.path for e in read_entries_in_prompt],
+            "prompt_chars": len(executor_prompt),
+            "prompt_tokens_est": estimate_tokens(executor_prompt),
+            "prompt_hash": sha256_hex(executor_prompt),
+        }
+
     usage_dict = build_usage_report(
         model=resolved_model,
-        prompt=prompt,
+        prompt=executor_prompt,
         actual_tokens=tokens,
         preflight_tokens_est=int(context_block.get("prompt_tokens_est") or 0),
-        preflight_chars=int(context_block.get("prompt_chars") or len(prompt)),
+        preflight_chars=int(context_block.get("prompt_chars") or len(executor_prompt)),
     )
     usage_summary_line = format_usage_run_log_line(usage_dict)
     context_block["token_estimate_preflight"] = usage_dict["preflight_tokens_est"]
@@ -539,6 +605,21 @@ def delegate_to_agent(
         usage_warnings=usage_warnings if usage_report_enabled else None,
         error_class=error_class if not success else None,
         error_message=error_message if not success else None,
+        context_package_summary=(
+            {
+                "compiler_version": context_package.metadata.get("compiler_version"),
+                "edit_paths": sorted(
+                    e.path for e in context_package.entries if e.tier == TIER_EDIT_FULL
+                ),
+                "read_paths": [
+                    e.path
+                    for e in context_package.entries
+                    if e.tier in (TIER_READ_FULL, TIER_READ_EXCERPT)
+                ],
+            }
+            if context_package is not None
+            else None
+        ),
     )
     if spec_files_missing:
         mcp_request["spec_files_missing_from_target"] = spec_files_missing
@@ -582,7 +663,7 @@ def delegate_to_agent(
         host_context=host_context,
         executor_reused=executor_reused,
         executor_recreated=executor_recreated,
-        prompt_full=prompt if should_log_full_prompt() else None,
+        prompt_full=executor_prompt if should_log_full_prompt() else None,
         spec_path=spec_rel_path,
         spec_report_path=spec_report_rel_path,
         spec_sha256=spec_sha256,

@@ -2,7 +2,19 @@ from __future__ import annotations
 
 from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
-from typing import Any
+from typing import TYPE_CHECKING, Any
+
+if TYPE_CHECKING:
+    from core.context.package import ContextPackage
+
+
+@dataclass
+class BackendRunRequest:
+    """Aider-specific translated run request produced by translate_context_package."""
+
+    prompt: str
+    fnames: list[str]       # repo-relative edit-full paths ONLY
+    edit_paths: list[str]   # same as fnames (contract edit scope for audit)
 
 
 @dataclass
@@ -19,6 +31,7 @@ class ExecutionResult:
     tokens: dict[str, Any] = field(default_factory=dict)
     executor_reused: bool = False
     executor_recreated: bool = False
+    prompt_used: str | None = None  # set by run_context for usage/JSONL logging
 
 
 class ExecutionEngine(ABC):
@@ -49,3 +62,20 @@ class ExecutionEngine(ABC):
         mcp_session_id: str | None = None,
     ) -> ExecutionResult:
         """Execute one delegation in workspace_path."""
+
+    def run_context(
+        self,
+        package: ContextPackage,
+        *,
+        workspace_path: str,
+        mcp_session_id: str | None = None,
+        host_transcript: str | None = None,
+    ) -> ExecutionResult:
+        """Execute from a ContextPackage (L2 → L3 adapter hinge).
+
+        Default raises NotImplementedError. AiderEngine overrides this.
+        Future backends may not support it.
+        """
+        raise NotImplementedError(
+            f"{self.backend_id} does not support run_context"
+        )

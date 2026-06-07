@@ -138,6 +138,7 @@ def test_delegate_with_spec_writes_report_not_task(tmp_path, monkeypatch):
 
     monkeypatch.setenv("MCP_CODER_HOME", str(home))
     monkeypatch.setenv("MCP_CODER_LOG_FULL_PROMPT", "1")
+    monkeypatch.setenv("MCP_CODER_USE_CONTEXT_PACKAGE", "0")
     monkeypatch.chdir(ws)
 
     fake = ExecutionResult(
@@ -182,6 +183,7 @@ def test_delegate_spec_partial_when_no_files_changed(tmp_path, monkeypatch):
     home = tmp_path / "home"
     ws = _setup_workspace(tmp_path)
     monkeypatch.setenv("MCP_CODER_HOME", str(home))
+    monkeypatch.setenv("MCP_CODER_USE_CONTEXT_PACKAGE", "0")
     monkeypatch.chdir(ws)
 
     fake = ExecutionResult(success=True, output="noop", files_changed=[], model="m")
@@ -243,6 +245,7 @@ def test_delegate_warns_when_read_path_missing_from_target_files(tmp_path, monke
     task.write_text(EDIT_READ_SPEC_BODY, encoding="utf-8")
 
     monkeypatch.setenv("MCP_CODER_HOME", str(home))
+    monkeypatch.setenv("MCP_CODER_USE_CONTEXT_PACKAGE", "0")
     monkeypatch.chdir(ws)
 
     fake = ExecutionResult(
@@ -286,6 +289,7 @@ def test_delegate_no_contract_warn_when_all_paths_in_target(tmp_path, monkeypatc
     task.write_text(EDIT_READ_SPEC_BODY, encoding="utf-8")
 
     monkeypatch.setenv("MCP_CODER_HOME", str(home))
+    monkeypatch.setenv("MCP_CODER_USE_CONTEXT_PACKAGE", "0")
     monkeypatch.chdir(ws)
 
     fake = ExecutionResult(success=True, output="ok", files_changed=[], model="m")
@@ -351,6 +355,7 @@ def test_delegate_strict_scope_violation(tmp_path, monkeypatch):
     task.write_text(STRICT_YAML_SPEC, encoding="utf-8")
 
     monkeypatch.setenv("MCP_CODER_HOME", str(home))
+    monkeypatch.setenv("MCP_CODER_USE_CONTEXT_PACKAGE", "0")
     monkeypatch.chdir(ws)
 
     fake = ExecutionResult(
@@ -423,6 +428,7 @@ def test_delegate_discover_no_scope_violation_outcome(tmp_path, monkeypatch):
     task.write_text(EDIT_READ_SPEC_BODY, encoding="utf-8")
 
     monkeypatch.setenv("MCP_CODER_HOME", str(home))
+    monkeypatch.setenv("MCP_CODER_USE_CONTEXT_PACKAGE", "0")
     monkeypatch.chdir(ws)
 
     fake = ExecutionResult(
@@ -455,6 +461,7 @@ def test_delegate_usage_in_response_and_report(tmp_path, monkeypatch):
     report = ws / ".mcp-coder" / "specs" / "reports" / "scrape.md"
 
     monkeypatch.setenv("MCP_CODER_HOME", str(home))
+    monkeypatch.setenv("MCP_CODER_USE_CONTEXT_PACKAGE", "0")
     monkeypatch.chdir(ws)
 
     fake = ExecutionResult(
@@ -502,6 +509,7 @@ def test_delegate_usage_omitted_when_report_disabled(tmp_path, monkeypatch):
     (cfg / "config.yaml").write_text("usage_report: false\n", encoding="utf-8")
 
     monkeypatch.setenv("MCP_CODER_HOME", str(home))
+    monkeypatch.setenv("MCP_CODER_USE_CONTEXT_PACKAGE", "0")
     monkeypatch.chdir(ws)
 
     fake = ExecutionResult(success=True, output="ok", files_changed=[], model="m")

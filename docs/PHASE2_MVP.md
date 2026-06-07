@@ -8,7 +8,7 @@
 
 # Phase 2 MVP — Product manager doc
 
-**Status:** Wave 2 in progress — **P2-200/205 done** (2026-06-07); next **P2-210** (hinge)
+**Status:** Wave 2 in progress — **P2-200/205/210 done** (2026-06-07); next **P2-212** or **P2-215**
 **Host:** Cursor (Aider backend; other hosts deferred)
 **Technical reference:** [PHASES.md](./PHASES.md) § Phase 2 · [phase2-owned-context.md](./notes/phase2-owned-context.md)
 **Vision:** [IDEA.md](./IDEA.md) · [VISION_DOCS.md](./VISION_DOCS.md)
@@ -108,13 +108,13 @@ Work proceeds in four waves. Milestones within a wave can run in sequence or be 
 
 **Goal:** L2 compiler + L3 adapter hinge — **architectural center of Phase 2**.  
 **Design:** [phase2-owned-context.md § L2–L3](./notes/phase2-owned-context.md#three-layers-backend-agnostic-middle)  
-**Next worker spec:** `docs/tasks/P2-2.10-engine-adapter.md` (create before P2-210 session)
+**Next worker spec:** `docs/tasks/P2-2.12-backend-capabilities.md` or `P2-2.15-inspect-context.md` (TBD)
 
 | Milestone | Task ID | Status | Implements (D-P2 / BL) | Summary |
 |-----------|---------|--------|------------------------|---------|
 | `ContextPackage` + assembler | P2-200 | `done` | `P2-2.00-assemble-context.md` | D-P2-4/6/7 — `assemble_context()` + `ContextPackage`; rules-only v0; 218 pytest (+6) |
 | Excerpt engine | P2-205 | `done` | `P2-2.05-excerpt-engine.md` | `read-excerpt` tier + `.mcp-coder/context/excerpts/`; `MCP_CODER_READ_FULL_MAX_BYTES`; 233 pytest (+15) |
-| Engine adapter boundary | P2-210 | `todo` | D-P2-1 | **Hinge:** `ExecutionEngine.run(context: ContextPackage)`; `AiderEngine.translate()` → `fnames` + prompt blocks; keep `target_files` MCP arg as hint only. |
+| Engine adapter boundary | P2-210 | `done` | `P2-2.10-engine-adapter.md` | D-P2-1 — `run_context` + `translate_context_package`; edit-only `fnames`; JSONL `context_package` + `adapter_in`; 253 pytest (+20) |
 | Backend capabilities + audit | P2-212 | `todo` | D-P2-5 | `BackendCapabilities` dataclass; log on delegation; capability-aware tier degradation warnings in package/result. |
 | Inspect context (dry-run) | P2-215 | `todo` | D-P2-7 | `mcp-coder inspect-context` or MCP tool: return `ContextPackage` JSON without running backend. |
 | Window budget | P2-220 | `todo` | BL-154 | Enforce per-model byte/token budget in compiler; rolling truncation with logged reason. |
@@ -195,8 +195,8 @@ Same pattern as Phase 1:
 ## Phase 2 success checklist
 
 - [x] **L1 contract:** `files_edit` / `files_read` / policies parsed from spec; `target_files` is hint only (D-P2-6; P2-115)
-- [x] **L2 compiler (v0):** `assemble_context()` + tiers + excerpts + untracked metadata (P2-200/205); wire → **P2-210**
-- [ ] **L3 adapter:** `run(ContextPackage)` — no `target_files` in engine signature (D-P2-1, P2-210)
+- [x] **L2 compiler (v0):** `assemble_context()` + tiers + excerpts + untracked metadata (P2-200/205)
+- [x] **L3 adapter (Aider hinge):** `run_context(ContextPackage)` on spec implement (P2-210); legacy path when no spec / env off
 - [ ] **Capabilities:** `BackendCapabilities` logged; degradation warnings visible (D-P2-5)
 - [ ] **Audit loop:** JSONL has contract → package summary → adapter snapshot → result (four layers)
 - [ ] **Inspect:** dry-run `ContextPackage` without backend (P2-215)
@@ -211,9 +211,10 @@ Same pattern as Phase 1:
 
 ## Next action
 
-1. **Commit P2-205** — `core/context/excerpts.py`, tests, `.env.example`.
-2. **P2-210** — hinge: `ExecutionEngine.run(ContextPackage)` + `AiderEngine.translate()`; draft worker spec first.
-3. **P2-215** — `inspect_context` dry-run (can follow P2-210).
+1. **Live dogfood:** spec delegate with read dep omitted from `target_files` — confirm read block in prompt (package path default on).
+2. **P2-215** — `inspect_context` dry-run (good next; small, high leverage).
+3. **P2-212** — `BackendCapabilities` + audit layer 3 completeness.
+4. **P2-220** — window budget enforcement.
 
 ---
 
@@ -230,3 +231,4 @@ Same pattern as Phase 1:
 | 2026-06-07 | **Wave 2 active** — P2-200 worker spec ready |
 | 2026-06-07 | **P2-200 done** — `assemble_context()` + `ContextPackage`; 218 pytest |
 | 2026-06-07 | **P2-205 done** — excerpt engine, `COMPILER_VERSION` 0.2.0; 233 pytest |
+| 2026-06-07 | **P2-210 done** — adapter hinge; `MCP_CODER_USE_CONTEXT_PACKAGE`; 253 pytest |

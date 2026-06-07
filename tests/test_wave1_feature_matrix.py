@@ -120,6 +120,7 @@ def test_w1_1_read_dep_warn_delegation_still_runs(tmp_path, monkeypatch):
     ws = _make_ws(tmp_path, "cli.md", _READ_DEP_SPEC)
     home = tmp_path / "home"
     monkeypatch.setenv("MCP_CODER_HOME", str(home))
+    monkeypatch.setenv("MCP_CODER_USE_CONTEXT_PACKAGE", "0")
     monkeypatch.chdir(ws)
 
     fake = ExecutionResult(
@@ -165,6 +166,7 @@ def test_w1_2_strict_scope_violation(tmp_path, monkeypatch):
     ws = _make_ws(tmp_path, "strict.md", _STRICT_SCOPE_SPEC)
     home = tmp_path / "home"
     monkeypatch.setenv("MCP_CODER_HOME", str(home))
+    monkeypatch.setenv("MCP_CODER_USE_CONTEXT_PACKAGE", "0")
     monkeypatch.chdir(ws)
 
     fake = ExecutionResult(

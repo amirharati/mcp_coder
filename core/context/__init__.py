@@ -15,6 +15,7 @@ from core.context.package import (
     TIER_READ_FULL,
     ContextPackage,
     PathEntry,
+    summarize_context_package,
 )
 from core.context.summary import assemble_prompt, prompt_metadata
 
@@ -32,6 +33,7 @@ __all__ = [
     "TIER_READ_FULL",
     "ContextPackage",
     "PathEntry",
+    "summarize_context_package",
     "assemble_context",
     "assemble_prompt",
     "prompt_metadata",
