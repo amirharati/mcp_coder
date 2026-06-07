@@ -8,7 +8,7 @@
 
 # Phase 2 MVP — Product manager doc
 
-**Status:** Wave 1 in progress — P2-110 done (2026-06-06)
+**Status:** Wave 1 **done** (2026-06-07) — Wave 2 next (**P2-200**)
 **Host:** Cursor (Aider backend; other hosts deferred)
 **Technical reference:** [PHASES.md](./PHASES.md) § Phase 2 · [phase2-owned-context.md](./notes/phase2-owned-context.md)
 **Vision:** [IDEA.md](./IDEA.md) · [VISION_DOCS.md](./VISION_DOCS.md)
@@ -91,22 +91,24 @@ Details + examples: [phase2-owned-context.md](./notes/phase2-owned-context.md).
 
 Work proceeds in four waves. Milestones within a wave can run in sequence or be split across worker sessions. Task specs live in `docs/tasks/P2-*.md` (created per session).
 
-### Wave 1 — Honesty + safety foundations
+### Wave 1 — Honesty + safety foundations ✓
 
 **Goal:** L1 **behavioral contract** in spec + MCP; safer executor failures — **without** entrenching Aider `fnames` semantics.  
-**Design:** [phase2-owned-context.md § L1](./notes/phase2-owned-context.md#l1--behavioral-contract-not-api-contract)
+**Design:** [phase2-owned-context.md § L1](./notes/phase2-owned-context.md#l1--behavioral-contract-not-api-contract)  
+**Exit:** [wave1-exit-validation.md](./notes/wave1-exit-validation.md) · wild test [runbook](./notes/wave1-wild-test-runbook.md)
 
 | Milestone | Task ID | Status | Implements (D-P2 / BL) | Summary |
 |-----------|---------|--------|------------------------|---------|
 | Read-deps warn | P2-110 | `done` | `P2-1.10-read-deps-warn.md` | D-P2-6, BL-311a — `spec_files_missing_from_target` + `contract_warnings`; warn-only; 143 pytest |
 | Delegation policies in spec | P2-115 | `done` | `P2-1.15-spec-policies.md` | D-P2-2, D-P2-3, D-SPEC-8, BL-315a/b — YAML policies + markdown fallback; `scope_violation` on strict post-check; 157 pytest |
 | Usage telemetry | P2-120 | `done` | `P2-1.20-usage-telemetry.md` | BL-154 partial — preflight + actual + static `model_rates.yaml`; JSONL + report always; MCP `usage` when `usage_report` (default on); BL-319 dynamic rates deferred; 172 pytest |
-| Delegation hardening + Wave 1 exit | P2-125 | `todo` | `P2-1.25-delegation-hardening.md` | BL-309a/b/e — URL policy, `error_class`, timeout, browser guard; matrix tests + `wave1-exit-validation.md`. Optional split: P2-129 = Part B only. |
+| Delegation hardening + Wave 1 exit | P2-125 | `done` | `P2-1.25-delegation-hardening.md` | BL-309a/b/e — 212 pytest; dogfood Phases 1–4 pass; wild test → [wave1-wild-test-runbook.md](./notes/wave1-wild-test-runbook.md) |
 
-### Wave 2 — Context compiler core
+### Wave 2 — Context compiler core ← **active**
 
 **Goal:** L2 compiler + L3 adapter hinge — **architectural center of Phase 2**.  
-**Design:** [phase2-owned-context.md § L2–L3](./notes/phase2-owned-context.md#three-layers-backend-agnostic-middle)
+**Design:** [phase2-owned-context.md § L2–L3](./notes/phase2-owned-context.md#three-layers-backend-agnostic-middle)  
+**First worker spec:** `docs/tasks/P2-2.00-assemble-context.md` (create before implement session)
 
 | Milestone | Task ID | Status | Implements (D-P2 / BL) | Summary |
 |-----------|---------|--------|------------------------|---------|
@@ -200,17 +202,18 @@ Same pattern as Phase 1:
 - [ ] **Inspect:** dry-run `ContextPackage` without backend (P2-215)
 - [x] Read-deps missing → warning (P2-110); scope expansion in reports (P2-305)
 - [x] Usage telemetry on every delegation — preflight + actual + cost (P2-120); window budget enforcement (P2-220)
-- [ ] Delegation hardening: no browser storm on upstream failure (P2-125)
-- [ ] Wave 1 + Wave 2 complete; Wave 3 at least P2-305 + P2-308 done
+- [x] Delegation hardening: classified failures, no browser storm (P2-125; P2-ISS-006 timeout UX follow-up)
+- [x] **Wave 1 complete** (P2-110/115/120/125 + wild test)
+- [ ] Wave 2 complete; Wave 3 at least P2-305 + P2-308 done
 - [ ] Phase 2 exit review (P2-499) completed; Phase 3 goals locked
 
 ---
 
 ## Next action
 
-1. **Next worker:** **P2-125** — delegation hardening + Wave 1 exit validation (`docs/tasks/P2-1.25-delegation-hardening.md`). Model: sonnet-thinking or composer-2.5.
-2. After Wave 1 sign-off → **P2-200** (`assemble_context()`).
-3. Reload MCP after deploy when testing live delegates.
+1. **Wave 2 kickoff:** attach `docs/tasks/P2-2.00-assemble-context.md` in a **new worker session** (composer-2.5 or sonnet-thinking).
+2. **P2-200** — `core/context/assemble_context()` + `ContextPackage` datatypes; unit tests only (no Aider wire yet).
+3. After P2-200 → P2-205 → **P2-210** (engine hinge).
 
 ---
 
@@ -223,3 +226,5 @@ Same pattern as Phase 1:
 | 2026-06-06 | **P2-110 done** — spec Files contract warn (`spec_files_missing_from_target`, `contract_warnings`) |
 | 2026-06-06 | **P2-115 done** — `DelegationPolicies` YAML + `edit_scope: strict` → `scope_violation` post-check |
 | 2026-06-06 | **P2-120 done** — usage telemetry; static `model_rates.yaml`; BL-319 dynamic rates deferred |
+| 2026-06-07 | **Wave 1 complete** — P2-125 + structured dogfood + wild test; P2-ISS-007/008 → BL-320/321 |
+| 2026-06-07 | **Wave 2 active** — P2-200 worker spec ready |

@@ -1,7 +1,8 @@
 # Wave 1 Exit Validation
 
 **Milestone:** Wave 1 — honesty + safety foundations (P2-110, P2-115, P2-120, P2-125)  
-**Status:** Pending planner sign-off  
+**Status:** Wave 1 **complete** — structured dogfood + wild test (expense-splitter epic, 9 pytest)  
+**Issues:** [PHASE2_ISSUES.md](../PHASE2_ISSUES.md) P2-ISS-001–008  
 **Automated gate:** `pytest -q` — all tests must pass
 
 ---
@@ -133,9 +134,11 @@ confirm the machinery.
 
 | Field | Value |
 |-------|-------|
-| Date | _(planner fills)_ |
-| pytest count | `___ passed, ___ skipped` |
+| Date | 2026-06-07 |
+| pytest count | mcp_coder `212 passed, 1 skipped`; wild E2E `9 passed` |
 | Wave 1 tasks | P2-110 ✓ / P2-115 ✓ / P2-120 ✓ / P2-125 ✓ |
-| P1-ISS-012 status | mitigated (mock) / confirmed live _(circle one)_ |
-| Sample `delegation_id` (live) | _(optional)_ |
-| Notes | _(optional)_ |
+| Structured dogfood | Phases 1–4 ✓ |
+| P1-ISS-012 status | **partial** — timeout + provider flake live; clean `upstream_5xx` not hit |
+| Wild test | **done** — Qwen fail ×3 → 4o-mini; epic 3 steps + step-3 fix-forward |
+| Sample `delegation_id` (live) | step1 ok `42f1363d`; step2 `1aae8d8e`; step3 `cab09fc9` |
+| Follow-ups filed | P2-ISS-007 BL-320 attempt archive; P2-ISS-008 BL-321 tiered models |

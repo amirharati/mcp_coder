@@ -347,6 +347,55 @@ By design today: `project_key` = SHA-256(resolved path).
 
 ---
 
+### BL-320: Failed-delegate attempt archive (spec-adjacent)
+
+**Status:** `idea` — from wild test P2-ISS-007.
+
+**Problem:** Planner-facing `specs/reports/*.md` tracks **current** step status; failed retries are either buried in Run log (truncated) or only in JSONL. No first-class “attempt history” per step.
+
+**Proposal:**
+
+| Piece | Notes |
+|-------|--------|
+| BL-320a | Workspace config `retain_failed_attempts: true` (default off or `on_failure_only`) |
+| BL-320b | Write `.mcp-coder/specs/attempts/<spec_id>/<delegation_id>.md` (or JSONL) on **failed** implement/review — model, duration, `error_class`, sanitized output, link to JSONL |
+| BL-320c | Main report stays lean: Status + latest success; **Attempts** section lists links to failed archives (last N) |
+| BL-320d | Optional MCP tool `list_delegation_attempts(spec_path)` for Cursor — wraps JSONL + attempt files |
+
+**Not in scope:** Replacing `delegations.jsonl` (still canonical); duplicating full Aider transcripts unless `MCP_CODER_LOG_VERBOSE`.
+
+**Target:** Phase 2 polish or early Wave 3 UX — after P2-200 if tied to context package metadata.
+
+---
+
+### BL-321: Progressive / tiered executor model selection
+
+**Status:** `idea` — from wild test P2-ISS-008; extends BL-003 (router) and BL-319 (rates).
+
+**Problem:** Single global `AIDER_MODEL`; operator manually swaps `.env` and restarts MCP. Cursor can *suggest* upgrades but cannot *invoke* tiered retry without human.
+
+**Two-layer model (user proposal):**
+
+1. **Planner (Cursor)** — vague intent: `model_tier: mid` or natural language (“use a stronger model”); not enforced.
+2. **MCP** — fine-grained pick from **annotated catalog** + heuristics (task file count, prior `error_class`, step revision).
+
+**Proposal:**
+
+| Piece | Notes |
+|-------|--------|
+| BL-321a | `resources/model_tiers.yaml` — tiers (`cheap`, `mid`, `strong`, `control`) → ordered OpenRouter ids + notes (speed, coding, cost); merge workspace override |
+| BL-321b | Catalog maintenance: offline script (`mcp-coder models refresh`) and/or OpenRouter list + `test-model` smoke; optional auto-annotations (latency from JSONL percentiles) |
+| BL-321c | Delegate param `model_tier` (optional) → MCP resolves id; JSONL logs `model_tier` + `model_resolved` |
+| BL-321d | **Auto step-up** (config): on `timeout` / `upstream_5xx` / `unknown`, retry once with next tier in same tool call or return `suggested_tier` + `retry_hint` |
+| BL-321e | **Auto step-down** (optional): after success on trivial step, suggest cheaper tier for next delegate (hint only) |
+| BL-321f | Failure signals for step-up: classified `error_class`, pytest hook (BL-310b), or planner `mode=review` blocked |
+
+**Relation to BL-007:** Ensemble is multi-model parallel; this is **sequential escalation** on one task.
+
+**Target:** Phase 2 late (post-P2-200) or Phase 3 — needs stable usage telemetry (P2-120) and error taxonomy (P2-125).
+
+---
+
 ### BL-319: Dynamic model rates (usage cost)
 
 **Status:** `deferred` — static table shipped **P2-120** (`resources/model_rates.yaml`).
@@ -377,6 +426,8 @@ Until then: add rows to bundled `model_rates.yaml` when switching models; unknow
 | BL-317 | Cursor project slug robustness | **P1-ISS-002** — see § BL-317 |
 | BL-318 | `project_key` alias on repo move | **P1-ISS-005** — see § BL-318 |
 | BL-319 | Dynamic model rates for usage cost | **P2-120** static table; API/scraper later — see § BL-319 |
+| BL-320 | Failed-delegate attempt archive | Wild test P2-ISS-007 — see § BL-320 |
+| BL-321 | Tiered / progressive model selection | Wild test P2-ISS-008 — see § BL-321 |
 | BL-305 | ~~Persistent MCP **server** log (process audit)~~ | **done** — P1-125 |
 | BL-308 | Global `server.jsonl` locking / per-pid subfiles | P1-ISS-011; only if garbled lines in practice |
 | BL-306 | Startup **code version / git hash** in MCP stderr | Detect stale process (P1-ISS-009) |
@@ -444,6 +495,7 @@ Until then: add rows to bundled `model_rates.yaml` when switching models; unknow
 
 | Date | Change |
 |------|--------|
+| 2026-06-07 | Wild test done — BL-320 failed-attempt archive; BL-321 tiered model selection (P2-ISS-007/008) |
 | 2026-06-06 | P2-120 done — usage telemetry; BL-319 dynamic rates deferred; BL-154 partial |
 | 2026-06-06 | P1-199 exit — Post–Phase 1 focus reordered; BL-314 partial, BL-315–318 added; P1 issues migrated |
 | 2026-06-05 | BL-309–312 from expense-splitter E2E; BL-150 done |

@@ -25,7 +25,141 @@ Status: `open` | `scheduled` | `done` | `wontfix-p2`
 
 | ID | Status | Priority | Title | Target | Notes |
 |----|--------|----------|-------|--------|-------|
-| *(none yet — added as Phase 2 work surfaces them)* | | | | | |
+| P2-ISS-001 | `open` | low | `(none)` placeholder parsed as Files contract path | P2-110 follow-up or Wave 2 | Wave 1 dogfood hello spec |
+| P2-ISS-002 | `open` | medium | `files_changed` misses new paths without git | P2-200 / BL-314 | `app/app/*` not in audit |
+| P2-ISS-003 | `open` | medium | `tokens.actual` stays `unavailable` | P2-308 / usage telemetry | Aider prints counts in output |
+| P2-ISS-004 | `open` | medium | Planner can ignore `contract_warnings` | Rules / BL-311b / P2-200 | Read-dep omit → broken layout |
+| P2-ISS-005 | `open` | high | P1-ISS-012 live confirm (cheap model 500) | Wild test / Wave 1 | Timeout path confirmed Phase 4; `upstream_5xx` not reproduced |
+| P2-ISS-006 | `open` | medium | Timeout returns late — executor thread blocks shutdown | P2-125 follow-up | Phase 4: timeout @120s, MCP returned @219s |
+| P2-ISS-007 | `open` | medium | Failed-delegate audit trail weak vs JSONL | BL-320 | Wild test: Qwen fails in Run log but no separate attempt archive |
+| P2-ISS-008 | `open` | low | Progressive / tiered executor model selection | BL-321 | Wild test: manual `.env` swap; Cursor guessed right |
+
+---
+
+## P2-ISS-001: `(none)` placeholder parsed as contract path
+
+**Found:** Wave 1 dogfood Phase 1 (`hello-wave1-01-create-hello`), 2026-06-07.
+
+**Problem:** Spec Files section listed `(none)` under Read (planner placeholder). Parser treated it as a real path → `contract_warnings: … (none)` and `spec_files_missing_from_target: ["(none)"]`.
+
+**Impact:** Noise in MCP response and JSONL; may confuse planner.
+
+**Mitigation today:** Avoid `(none)` in Files bullets; omit Read subsection or leave empty.
+
+**Target:** P2-110 follow-up or Wave 2 contract parser — ignore `(none)`, `n/a`, empty bullets.
+
+**Acceptance:** Spec with Read `(none)` produces no contract warn.
+
+---
+
+## P2-ISS-002: `files_changed` misses new paths without git
+
+**Found:** Wave 1 dogfood Phase 2 (`app-greet-01`), 2026-06-07 — E2E workspace **not** a git repo.
+
+**Problem:** Delegate with `target_files: ["app/cli.py"]` only. Aider created `app/app/{cli,core,__init__}.py` but JSONL reported `files_changed: ["app/cli.py"]` only (`files_unexpected: []`). Empty `app/cli.py` was the only audited touch.
+
+**Impact:** Audit loop layer 4 incomplete; planner cannot trust `files_changed` / `files_unexpected` in sandboxes without git.
+
+**Mitigation today:** Use git init in consumer workspaces; include full read-deps in `target_files`.
+
+**Target:** P2-200 materialization + git-less snapshot (BL-314); honest reporting for untracked paths.
+
+**Acceptance:** Non-git workspace delegate lists all new/modified paths under workspace, including `app/app/*`.
+
+---
+
+## P2-ISS-003: `tokens.actual` stays `unavailable`
+
+**Found:** Wave 1 dogfood Phase 1–2, 2026-06-07.
+
+**Problem:** Aider output includes `Tokens: 2.4k sent, 53 received` but JSONL `tokens.source: unavailable` and `usage.actual` null. Cost falls back to `preflight_only_approximate`.
+
+**Impact:** Usage telemetry understates real executor cost; harder to compare models.
+
+**Target:** P2-308 rich `ExecutionResult` or P2-120 follow-up — parse Aider output / coder state reliably.
+
+**Acceptance:** Successful delegate populates `usage.actual.total` when Aider reports token line.
+
+---
+
+## P2-ISS-004: Planner can ignore `contract_warnings`
+
+**Found:** Wave 1 dogfood Phase 2 (intentional read-dep omit test), 2026-06-07.
+
+**Problem:** MCP correctly warned `app/core.py` missing from `target_files`. Delegation still ran (`success: true`). Aider produced broken layout (`app/app/` nest, empty `app/cli.py`). Planner correctly marked spec `blocked` **after** manual verify — warning did not prevent bad delegate.
+
+**Impact:** P2-110 warn-only is necessary but insufficient if planner does not expand `target_files` or re-delegate before accepting.
+
+**Mitigation today:** Cursor rules v7 — heed `contract_warnings`; never implement with missing read-deps.
+
+**Target:** End of Phase 2 — pick one or combine: (a) stronger planner rule / checklist in response summary, (b) BL-311b auto-merge read paths into adapter input when `spec_path` set, (c) optional `contract_warnings` → `needs_input` outcome (discuss).
+
+**Acceptance:** Dogfood read-dep test either blocked pre-delegate or auto-includes read paths; no nested stray tree on success path.
+
+---
+
+## P2-ISS-005: P1-ISS-012 live confirm (cheap model / upstream 500)
+
+**Found:** Historical P1 E2E; P2-125 shipped with mock tests only.
+
+**Problem:** Weak-model OpenRouter 500 caused browser storm + long hangs pre-P2-125. Fix not yet verified live.
+
+**Impact:** Wave 1 exit sign-off incomplete until Phase 4 dogfood run.
+
+**Target:** Dogfood Phase 4 — `AIDER_MODEL=qwen…`, expect `error_class: upstream_5xx`, no browser, &lt; timeout.
+
+**Acceptance:** BACKLOG BL-309 §8 criteria met in live run; record `delegation_id` in `wave1-exit-validation.md`.
+
+**Update 2026-06-07:** Phase 4 dogfood — Qwen multi-file step timed out cleanly (`error_class: timeout`, no browser/stripe). Not `upstream_5xx`. Wild test may still trigger 500 path.
+
+---
+
+## P2-ISS-006: Timeout returns late — executor thread blocks shutdown
+
+**Found:** Wave 1 dogfood Phase 4 (`bee09f52`), 2026-06-07.
+
+**Problem:** `delegation_timeout` logged at ~120s but total `duration_ms` ~219s before MCP tool returned. Likely `ThreadPoolExecutor` context `shutdown(wait=True)` waits for Aider thread after `future.result(timeout=...)`.
+
+**Impact:** Cursor still blocked ~2× configured timeout; operator thinks hang continues.
+
+**Target:** P2-125 follow-up — `shutdown(wait=False, cancel_futures=True)` or equivalent; document that orphan thread may run until kill.
+
+**Acceptance:** After timeout, MCP response within few seconds of `delegation_timeout` log; `duration_ms` ≈ timeout + overhead.
+
+---
+
+## P2-ISS-007: Failed-delegate audit trail weak vs JSONL
+
+**Found:** Wave 1 wild test step 1 (`d60ddeb9`, `7f498721`, `4c4192bf`), 2026-06-07.
+
+**Problem:** Failed implement attempts are only partially visible in the planner-facing spec/report layer:
+
+- When a **report file exists**, failures append to the main report **Run log** (300-char output preview) and set Status `blocked` until a later success overwrites Blockers.
+- There is **no separate archive** for failed-only attempts; the canonical report is optimized for the current step outcome, not a full retry history.
+- **JSONL** (`delegations.jsonl`) has the full trail but is not surfaced to Cursor by default and is hard to browse per step.
+- Edge cases (MCP disconnect, no `spec_report_path` yet, abandoned step) may leave **no markdown trail** at all.
+
+**Impact:** Post-mortem and “what did we try?” debugging relies on JSONL grep; planner chat may lose context across retries; no config to retain richer failure artifacts.
+
+**Mitigation today:** Read `~/.mcp-coder/.../delegations.jsonl`; successful step reports include prior failures in Run log (as in `expense-splitter-01-core-split.md`).
+
+**Target:** **BL-320** — optional workspace config (e.g. `retain_failed_attempts: true`) writes per-attempt files under something like `.mcp-coder/specs/attempts/<spec_id>/<delegation_id>.md` (or append-only `attempts.jsonl` beside reports). Main `reports/*.md` stays current status + summary; failures link out.
+
+**Acceptance:** After N failed implements on one step spec, N attempt files exist (when config on); each links `delegation_id`, model, `error_class`, duration; planner/MCP tool can list recent attempts for a `spec_path`.
+
+---
+
+## P2-ISS-008: Progressive / tiered executor model selection
+
+**Found:** Wave 1 wild test — Qwen failed ×3, manual swap to `gpt-4o-mini` in `.env` + MCP restart succeeded; Cursor correctly suggested timeout/model upgrade.
+
+**Problem:** Model choice is **global** (`AIDER_MODEL` in server env). No structured tier menu, no MCP-side upgrade/downgrade on classified failure, no optional `model_tier` hint on delegate.
+
+**Impact:** Operator edits `.env` and restarts MCP between retries; no automatic “step up one tier on timeout” or “step down after success on easy step.”
+
+**Target:** **BL-321** — collaborative selection: Cursor passes vague tier (`cheap` / `mid` / `strong`); MCP resolves from annotated catalog (`resources/model_tiers.yaml` or generated); optional auto-retry with next tier on `timeout` / `upstream_5xx` / test failure (config-gated).
+
+**Acceptance:** Documented tier catalog; delegate accepts optional `model_tier`; one config mode auto-retries with upgraded model (max 1 step-up per call); JSONL records `model_requested_tier`, `model_resolved`, `model_retry`.
 
 ---
 
@@ -43,3 +177,6 @@ Status: `open` | `scheduled` | `done` | `wontfix-p2`
 | Date | Change |
 |------|--------|
 | 2026-06-06 | Tracker created at Phase 2 start |
+| 2026-06-07 | P2-ISS-001–005 from Wave 1 dogfood (`mcp_coder_phase1_e2e`) |
+| 2026-06-07 | P2-ISS-006 timeout shutdown; P2-ISS-005 partial (timeout not 500) |
+| 2026-06-07 | Wild test done — P2-ISS-007 failed-attempt archive; P2-ISS-008 tiered models → BL-320/321 |
