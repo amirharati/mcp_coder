@@ -8,7 +8,7 @@
 
 # Phase 2 MVP — Product manager doc
 
-**Status:** Wave 1 **done** (2026-06-07) — Wave 2 next (**P2-200**)
+**Status:** Wave 2 in progress — **P2-200 done** (2026-06-07); next **P2-205**
 **Host:** Cursor (Aider backend; other hosts deferred)
 **Technical reference:** [PHASES.md](./PHASES.md) § Phase 2 · [phase2-owned-context.md](./notes/phase2-owned-context.md)
 **Vision:** [IDEA.md](./IDEA.md) · [VISION_DOCS.md](./VISION_DOCS.md)
@@ -108,11 +108,11 @@ Work proceeds in four waves. Milestones within a wave can run in sequence or be 
 
 **Goal:** L2 compiler + L3 adapter hinge — **architectural center of Phase 2**.  
 **Design:** [phase2-owned-context.md § L2–L3](./notes/phase2-owned-context.md#three-layers-backend-agnostic-middle)  
-**First worker spec:** `docs/tasks/P2-2.00-assemble-context.md` (create before implement session)
+**Next worker spec:** `docs/tasks/P2-2.05-excerpt-engine.md` (create before P2-205 session)
 
 | Milestone | Task ID | Status | Implements (D-P2 / BL) | Summary |
 |-----------|---------|--------|------------------------|---------|
-| `ContextPackage` + assembler | P2-200 | `todo` | D-P2-1, D-P2-4, D-P2-6, D-P2-7, BL-316, BL-001 | `core/context/assemble_context()` → tiers, `brief`, `metadata`; spec Files primary when `spec_path` set; unit tests without Aider. |
+| `ContextPackage` + assembler | P2-200 | `done` | `P2-2.00-assemble-context.md` | D-P2-4/6/7 — `assemble_context()` + `ContextPackage`; rules-only v0; 218 pytest (+6) |
 | Excerpt engine | P2-205 | `todo` | D-P2-4 | Ripgrep/symbol excerpts → `.mcp-coder/context/excerpts/`; materialize untracked/gitignored read-deps. |
 | Engine adapter boundary | P2-210 | `todo` | D-P2-1 | **Hinge:** `ExecutionEngine.run(context: ContextPackage)`; `AiderEngine.translate()` → `fnames` + prompt blocks; keep `target_files` MCP arg as hint only. |
 | Backend capabilities + audit | P2-212 | `todo` | D-P2-5 | `BackendCapabilities` dataclass; log on delegation; capability-aware tier degradation warnings in package/result. |
@@ -195,7 +195,7 @@ Same pattern as Phase 1:
 ## Phase 2 success checklist
 
 - [x] **L1 contract:** `files_edit` / `files_read` / policies parsed from spec; `target_files` is hint only (D-P2-6; P2-115)
-- [ ] **L2 compiler:** `assemble_context()` owns tiers; untracked paths materialized (D-P2-4)
+- [x] **L2 compiler (v0):** `assemble_context()` + tiers + untracked metadata (P2-200); wire + excerpts → P2-205/210
 - [ ] **L3 adapter:** `run(ContextPackage)` — no `target_files` in engine signature (D-P2-1, P2-210)
 - [ ] **Capabilities:** `BackendCapabilities` logged; degradation warnings visible (D-P2-5)
 - [ ] **Audit loop:** JSONL has contract → package summary → adapter snapshot → result (four layers)
@@ -211,9 +211,9 @@ Same pattern as Phase 1:
 
 ## Next action
 
-1. **Wave 2 kickoff:** attach `docs/tasks/P2-2.00-assemble-context.md` in a **new worker session** (composer-2.5 or sonnet-thinking).
-2. **P2-200** — `core/context/assemble_context()` + `ContextPackage` datatypes; unit tests only (no Aider wire yet).
-3. After P2-200 → P2-205 → **P2-210** (engine hinge).
+1. **Commit P2-200** — `core/context/{package,assemble}.py`, `tests/test_assemble_context.py` (if not already).
+2. **P2-205** — excerpt engine; draft `docs/tasks/P2-2.05-excerpt-engine.md` before worker session.
+3. **P2-210** — hinge: wire `ContextPackage` into `AiderEngine` (after P2-205 or parallel if scoped).
 
 ---
 
@@ -228,3 +228,4 @@ Same pattern as Phase 1:
 | 2026-06-06 | **P2-120 done** — usage telemetry; static `model_rates.yaml`; BL-319 dynamic rates deferred |
 | 2026-06-07 | **Wave 1 complete** — P2-125 + structured dogfood + wild test; P2-ISS-007/008 → BL-320/321 |
 | 2026-06-07 | **Wave 2 active** — P2-200 worker spec ready |
+| 2026-06-07 | **P2-200 done** — `assemble_context()` + `ContextPackage`; 218 pytest |
