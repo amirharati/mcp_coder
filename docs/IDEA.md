@@ -11,7 +11,7 @@
 
 An MCP server (with optional CLI) that wraps CLI coding agents (Aider, OpenCode, Claude Code, etc.) and exposes them as MCP tools — with task-level orchestration, cross-session memory, and optional spec-driven workflows.
 
-**Delivery plan:** [PHASES.md](./PHASES.md) · **Phase 1 tasks:** [PHASE1_MVP.md](./PHASE1_MVP.md) · **Backlog:** [BACKLOG.md](./BACKLOG.md) · **Vision map:** [VISION_DOCS.md](./VISION_DOCS.md)
+**Delivery plan:** [PHASES.md](./PHASES.md) · **Active PM:** [PHASE3_MVP.md](./PHASE3_MVP.md) · **Backlog:** [BACKLOG.md](./BACKLOG.md) · **Vision map:** [VISION_DOCS.md](./VISION_DOCS.md)
 
 ---
 
@@ -74,19 +74,17 @@ Actual LLM provider
 
 ---
 
-## Phase 1 today vs long-term vision
+## Shipped vs next (phase arc)
 
-| | **Now (Phase 1)** | **Later (Phase 2+)** |
-|---|-------------------|----------------------|
-| **MCP tools** | `delegate_to_agent` (+ logging) | Spec tools, RAG query, session APIs |
-| **Context** | Summary in MCP args; opt-in Cursor transcript dump (`host_transcript: dump`) | Owned context pipeline |
-| **Sessions** | Disk registry under `~/.mcp-coder`; `always_new` \| `align_host`; workspace `config.yaml` | Cross-day memory, explicit continue |
-| **Storage** | User-home canonical logs; `session.json` pointer + user `config.yaml` | Team sync / DB optional |
-| **Specs** | Dogfood local worker specs while building; **product spec at Phase 1 exit review** | `.mcp-coder/specs/` + gatekeeper (later) |
+| | **Shipped (Phases 1–2)** | **Active / next (Phase 3+)** |
+|---|---|---|
+| **MCP tools** | `delegate_to_agent`, spec review/implement, `inspect-context` | Attempt archive, `delegation_diff`, RAG query (lite) |
+| **Context** | **Context compiler** — tiers, budget, read-deps ([PHASE2_MVP.md](./PHASE2_MVP.md)) | Workspace tracker + honest non-git attribution (BL-322) |
+| **Sessions** | Disk registry; `always_new` \| `align_host`; workspace `config.yaml` | Cross-session recall via RAG lite (BL-002) |
+| **Storage** | `~/.mcp-coder` JSONL + sessions | `workspace_history.db`, attempt specs, optional RAG index |
+| **Specs** | Local worker specs + review loop (P1-151) | Pre/post gates (BL-151); product `.mcp-coder/specs/` later |
 
-**Checkpoint:** End of Phase 1 — spec strategy, gatekeeper, Phase 2 goals ([PHASE1_MVP.md](./PHASE1_MVP.md)) — **completed P1-199 (2026-06-06)**.
-
-**Current status (2026-06-06):** Phase 1 **closed** — delegate + pass-through context, home storage, sessions, spec workflow (review/implement), honest file reporting (P1-152). **Next:** Phase 2 **owned context compiler** ([BACKLOG.md](./BACKLOG.md) § Post–Phase 1 focus; [notes/phase2-owned-context.md](./notes/phase2-owned-context.md)).
+**Current status (2026-06-08):** Phase 1 **closed** (P1-199). Phase 2 **closed** (P2-499) — owned context compiler, audit loop ([phase2-exit-validation.md](./notes/phase2-exit-validation.md)). **Active:** Phase 3 — workspace truth + planner history + RAG lite ([PHASE3_MVP.md](./PHASE3_MVP.md); entry **P3-322a**). Phase 4 = smart context builder / janitor / verify; Phase 5+ = interactive sessions and product surface — see [PHASES.md](./PHASES.md) phase arc table.
 
 ---
 
@@ -175,8 +173,9 @@ You (human)
   └── MCP Host (Cursor / Claude Desktop / etc.)
        └── mcp-coder
             ├── Spec tools (controlled MD contract)
-            ├── Router / janitor (cheap LLM — Phase 2+)
-            ├── RAG memory (Phase 3)
+            ├── Context compiler (Phase 2 — shipped)
+            ├── Workspace tracker + RAG lite (Phase 3)
+            ├── Router / janitor (Phase 4+)
             ├── Session scheduler
             └── CLI Coder adapter (Aider / OpenCode)
                  └── context_optimizer_proxy (optional)
@@ -377,12 +376,13 @@ mcp-coder rag "pagination params"
 ## Suggested evolution (from ideation — not a fixed schedule)
 
 1. ~~Thin MCP wrapper calling Aider~~ → **Phase 1 spine (done)** ([PHASE1_MVP.md](./PHASE1_MVP.md)).
-2. P1-199 + **spec experiment** → close Phase 1; light spec-as-contract (no gatekeeper).
-3. **Phase 2 — owned context:** creation (what to add) + window management (rolling, summarize, skills, topic detection) + **executor cache** evolution — **not** new adapters ([PHASES.md](./PHASES.md), [BACKLOG.md](./BACKLOG.md) § Post–Phase 1 focus).
-4. RAG + cross-session memory → **Phase 3** (alongside **workspace history** — BL-322 — delegation-granularity version control, independent of git).
-5. Connect `context_optimizer_proxy` by default in templates → backlog / polish.
-6. Sub-agents, critic, ensemble → **Phase 4+**.
-7. OpenCode / other hosts → **very low priority** (BL-004, BL-201/202).
+2. ~~P1-199 + spec experiment~~ → **Phase 1 closed** (review/implement loop).
+3. ~~**Phase 2 — context compiler**~~ → **done** (P2-499): assemble_context, tiers, budget, audit — not full smart builder ([PHASE2_MVP.md](./PHASE2_MVP.md)).
+4. **Phase 3 — workspace truth + memory lite:** BL-322 tracker (manifest-primary `files_changed`), BL-320 attempt archive, BL-002 keyword RAG, BL-151 gates ([PHASE3_MVP.md](./PHASE3_MVP.md)).
+5. **Phase 4 — smart context lifecycle:** cheap LLM builder (BL-001), janitor/skills/topic, verify, Cursor workflow, BL-161 internal pipeline ([PHASES.md](./PHASES.md) § Phase 4).
+6. **Phase 5+:** interactive supervised delegate (BL-160), multi-host, product UX (BL-152), ensemble (BL-007).
+7. Connect `context_optimizer_proxy` by default in templates → backlog / polish.
+8. OpenCode / other hosts → **very low priority** (BL-004, BL-201/202).
 
 Manual familiarity with Aider in real repos remains valuable while MCP automates delegation.
 
@@ -396,3 +396,4 @@ Manual familiarity with Aider in real repos remains valuable while MCP automates
 | 2026-06-04 | Grok ideation: spec system, role division, interaction modes, Phase 1 vs long-term; P1-100 status |
 | 2026-06-05 | Stewardship banner; restored original README anchors; [VISION_DOCS.md](./VISION_DOCS.md) map; P1 spine + transcript dump status |
 | 2026-06-07 | Added **workspace history** (BL-322) as core capability — delegation-granularity version control, Phase 3 |
+| 2026-06-08 | Phase 2 closed (P2-499); Phase 3 active; phase arc 3–5 in PHASES; tracker-primary attribution |

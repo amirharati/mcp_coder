@@ -8,7 +8,7 @@
 
 # Phase 2 MVP — Product manager doc
 
-**Status:** **Phase 2 exit complete** (2026-06-08) — P2-499 signed off; structured dogfood + wild test (tip-calc step 1)
+**Status:** **Closed / frozen** at P2-499 (2026-06-08). Active PM → [PHASE3_MVP.md](./PHASE3_MVP.md)
 **Host:** Cursor (Aider backend; other hosts deferred)
 **Technical reference:** [PHASES.md](./PHASES.md) § Phase 2 · [phase2-owned-context.md](./notes/phase2-owned-context.md)
 **Vision:** [IDEA.md](./IDEA.md) · [VISION_DOCS.md](./VISION_DOCS.md)
@@ -22,7 +22,7 @@
 
 - **What:** Track Phase 2 milestones, tasks, status, and acceptance.
 - **How we build:** Same worker-session model as Phase 1 — one spec per step (`docs/tasks/P2-*.md`), implement, report results.
-- **Not here:** Phase 3+ (RAG, cross-session memory); unscheduled ideas → [BACKLOG.md](./BACKLOG.md).
+- **Not here:** Phase 3+ — see [PHASE3_MVP.md](./PHASE3_MVP.md); unscheduled ideas → [BACKLOG.md](./BACKLOG.md).
 
 ---
 
@@ -133,25 +133,20 @@ Work proceeds in four waves. Milestones within a wave can run in sequence or be 
 | Rich `ExecutionResult` | P2-308 | `done` | `P2-3.08-rich-result.md` | D-P2-3 — MCP `capability_warnings`, enriched summary, `preflight_token_estimate`; Aider output token parse; 324 pytest (+12) |
 | Review model config | P2-310 | `done` | `P2-3.10-review-model.md` | BL-162 partial — `MCP_CODER_REVIEW_MODEL` + yaml `review_model`; role-appropriate (not executor); yaml wins; 331 pytest (+7) |
 | Pre-exit polish | P2-3.15 | `done` | `P2-3.15-pre-exit-polish.md` | P2-ISS-001 placeholder filter; P2-ISS-006 fast timeout return; P2-ISS-010 CLI shim + INSTALL; 348 pytest (+7) |
-| MCP progress notifications | P2-315 | `todo` | BL-106 | Long-run progress to Cursor (if transport supports). Deferred past Phase 2 exit. |
-| Phase 2 exit review | P2-499 | `done` | `P2-4.99-exit-review.md` | Structured dogfood 6/6 + wild tip-calc step 1; issues triaged; Phase 3 goals locked |
+| MCP progress notifications | P2-315 | `deferred` | BL-106 | → [BACKLOG.md](./BACKLOG.md); not Phase 2 exit scope |
+| Phase 2 exit review | P2-499 | `done` | `phase2-exit-validation.md` | Structured dogfood 6/6 + wild tip-calc step 1 |
 
-### Wave 4 — Intelligence layer
+### Wave 4 — Intelligence layer (deferred)
 
-**Goal:** Cheap intelligence on top of compiler (not before it).  
-**Design:** [phase2-owned-context.md § Non-goals](./notes/phase2-owned-context.md#non-goals-still-deferred)
+**Not shipped in Phase 2.** Items → [BACKLOG.md](./BACKLOG.md) (BL-153, BL-008, BL-003) or [PHASE3_MVP.md](./PHASE3_MVP.md) where relevant.
 
-| Milestone | Task ID | Status | Implements (D-P2 / BL) | Summary |
-|-----------|---------|--------|------------------------|---------|
-| Topic / task detection | P2-400 | `todo` | BL-153 | Topic boundaries for sessions and context slices. |
-| Skills + prompt packs | P2-405 | `todo` | BL-008 | Inject skills by topic/task type into assembler. |
-| Router / janitor (lite) | P2-410 | `todo` | BL-003, BL-162 | Freshness audit + cheap orchestrator LLM after assembly basics. |
+| Milestone | Task ID | Status | Notes |
+|-----------|---------|--------|-------|
+| Topic / task detection | P2-400 | `deferred` | BL-153 |
+| Skills + prompt packs | P2-405 | `deferred` | BL-008 |
+| Router / janitor (lite) | P2-410 | `deferred` | BL-003, BL-162 |
 
-### Phase 3 anchor (post-exit)
-
-**Workspace history** ([OTEHR_RELATED_IDEAS/WORKSPACE_HISTORY.md](./OTEHR_RELATED_IDEAS/WORKSPACE_HISTORY.md), BL-322) — delegation-granularity version control via SQLite delta store. Closes P2-ISS-002 (non-git attribution), enables post-delegation gateway (BL-151), time-travel to any MCP call boundary. Independent of user's git. Phase 3 entry point alongside RAG (BL-002).
-
-Status: `todo` | `in_progress` | `done` | `blocked` | `optional`
+**Phase 3** planning continues in [PHASE3_MVP.md](./PHASE3_MVP.md).
 
 ---
 
@@ -219,9 +214,7 @@ Same pattern as Phase 1:
 
 ## Next action
 
-1. **Phase 3** — BL-322 workspace history (anchor); BL-002 RAG; gatekeeper BL-151 when history ships.
-2. Optional: tip-calc wild step 2 (CLI) in e2e workspace; P2-315 progress notifications.
-3. Push `main` if not on remote.
+**None — board frozen.** See [PHASE3_MVP.md](./PHASE3_MVP.md).
 
 ---
 
@@ -252,3 +245,4 @@ Same pattern as Phase 1:
 | 2026-06-07 | **P2-300 done (lite)** — ContextPackage hash executor cache key; BL-155 partial; 341 pytest (+10) |
 | 2026-06-07 | **P2-3.15 done** — Files placeholder filter, fast timeout return, CLI shim; 348 pytest (+7); P2-499 next |
 | 2026-06-08 | **P2-499 done** — Phase 2 exit; structured dogfood 6/6; wild tip-calc step 1 (`06418163`); ISS triage |
+| 2026-06-08 | **Board frozen** — PHASE3_MVP + PHASE3_ISSUES created; all open ISS triaged |

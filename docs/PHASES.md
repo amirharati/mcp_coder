@@ -10,7 +10,7 @@
 
 This document is the **delivery plan**: what to build, in what order, and how we validate each step. Vision and rationale live in [IDEA.md](./IDEA.md) · doc map: [VISION_DOCS.md](./VISION_DOCS.md). Implementation happens in focused coding sessions once a phase (or sub-step) is agreed.
 
-**Status:** Phase 1 **complete** (P1-199, 2026-06-06). Phase 2 = owned context compiler — see [BACKLOG.md](./BACKLOG.md) § Post–Phase 1 focus.
+**Status:** Phase 1 **complete** (P1-199). Phase 2 **complete** (P2-499, 2026-06-08). **Active:** Phase 3 — [PHASE3_MVP.md](./PHASE3_MVP.md).
 
 ---
 
@@ -38,6 +38,18 @@ This document is the **delivery plan**: what to build, in what order, and how we
 | **Session logic** | Disk-backed `mcp_session_id` under `~/.mcp-coder`; link to `host_session_id`; policies `always_new` \| `align_host` | Cross-day memory, explicit `continue_session`, RAG |
 | **Storage** | Canonical logs/sessions in `MCP_CODER_HOME`; workspace pointer only | Optional team sync / DB |
 | **Smart steps** | **None** beyond delegate + pass context + session heuristic | File picking, summarization, janitor, verification, sub-agents, etc. |
+
+### Phase arc (what each phase owns)
+
+| Phase | One-line focus | PM / design |
+|-------|----------------|-------------|
+| **1** | Delegate + pass-through context + sessions + specs | [PHASE1_MVP.md](./PHASE1_MVP.md) (frozen) |
+| **2** | **Context compiler** — what goes *in* the prompt per delegate | [PHASE2_MVP.md](./PHASE2_MVP.md) (frozen); [phase2-owned-context.md](./notes/phase2-owned-context.md) |
+| **3** | **Workspace truth** + planner history + **RAG lite** — what happened *on disk* and *before* | [PHASE3_MVP.md](./PHASE3_MVP.md); [WORKSPACE_HISTORY.md](./OTEHR_RELATED_IDEAS/WORKSPACE_HISTORY.md) |
+| **4** | **Smart context lifecycle** — janitor, builder LLM, verify, Cursor workflow, internal multi-agent | [BACKLOG.md](./BACKLOG.md) BL-001, 003, 006, 008, 153, 155, 161 |
+| **5+** | Interactive/long-running sessions, multi-host, product UX, ensemble | BL-160, BL-201/202, BL-007, BL-152 |
+
+**Principle (Phase 3+ attribution):** MCP reports `files_changed` from **delegation-scoped workspace manifest delta** — git-agnostic, backend-agnostic. User git is complementary; optional `git_tracked` metadata later (trivial).
 
 ---
 
@@ -532,35 +544,71 @@ Phase 1 uses only the executor (via Aider). Phase 2+ adds the context-builder **
 
 *(Cheap LLM session classifier remains optional — BL-102; may feed topic detection.)*
 
-### Phase 3: RAG and cross-session memory
+### Phase 3: Workspace truth, planner history, and memory
 
-**Goal:** “Have we done this before?” across sessions and days.
+**PM board:** [PHASE3_MVP.md](./PHASE3_MVP.md) · **Issues:** [PHASE3_ISSUES.md](./PHASE3_ISSUES.md)
 
-**Scope:**
+**Goal:** Trustworthy delegation audit in non-git workspaces; planner-visible retry history; light cross-session recall. **Not** a full smart context-builder phase — that is Phase 4.
 
-- SQLite (or JSON) + FTS for `session_entry` / `rag_entry` (see IDEA.md).
-- After each delegation: store summary, keywords, files, diff snippet.
-- Before launch: context-builder LLM searches RAG and injects relevant past work.
-- Explicit tools optional: `continue_session`, `get_session_status`, `rag_search`, `rag_summarize`.
-- Embeddings optional; keyword + recency enough for v1.
+**What Phase 3 is:**
 
-**Success:** User does not re-explain architecture; agent recalls prior decisions.
+| In | Out (→ Phase 4+ / backlog) |
+|----|------------------------------|
+| Workspace tracker (`workspace_history.db`) | Cheap LLM file picker / janitor |
+| Manifest-primary `files_changed` / `files_unexpected` | Rolling chat summarization |
+| Failed-attempt archive (BL-320) | Skills, topic router (BL-008, BL-153) |
+| RAG **lite** — keyword + recency (BL-002) | Embeddings-first RAG |
+| Post/pre gates (322c, BL-151) | Multi-step internal pipeline (BL-161) |
+| `delegation_diff` in MCP (322d) | Live terminal / supervised mega-delegate (BL-160) |
 
-### Phase 4: Advanced orchestration
+**Waves:** See [PHASE3_MVP.md](./PHASE3_MVP.md) — entry **P3-322a** (manifest + DB + honest attribution).
 
-**Goal:** Janitor, verification, composable sub-agents.
+**Success:** Non-git sandboxes report all file touches; failed retries browsable without JSONL grep; basic “we did this before” retrieval works.
 
-**Scope:** Context freshness audit, cheap model grades executor output, critic / test-writer one-shots, optional multi-model ensemble (see IDEA.md).
+---
 
-### Kept on the list — decide when (not Phase 2 required)
+### Phase 4: Smart context management + orchestration
 
-Tracked in [BACKLOG.md](./BACKLOG.md) § On the list — timing TBD:
+**Goal:** Use Phase 2 compiler + Phase 3 history to **actively manage** context — not only assemble rules and record outcomes.
 
-| ID | Theme |
-|----|--------|
-| BL-160 | **Interactive sessions** — supervised complex task, live terminal visibility, optional handoff/CLI (see BACKLOG § BL-160a–d) |
-| BL-161 | **Multi-agent inside MCP** — internal planner/architect steps before executor (Aider) |
-| BL-162 | **Multi-model routing** — cheap vs expensive models per role (partially overlaps Phase 2 context-builder) |
+| Theme | Backlog / intent |
+|-------|------------------|
+| **Smart context builder** | BL-001 — cheap LLM (or hybrid) assembles brief; uses RAG + delegation diffs as input |
+| **Topic / skills** | BL-153 topic boundaries; BL-008 skills injection |
+| **Janitor / router** | BL-003 freshness audit; BL-006 critic / test-writer one-shots |
+| **Window & cache** | BL-155 multi-turn executor cache; BL-154 rolling transcript beyond per-call budget |
+| **Verification** | BL-310b pytest hook; `partial` outcomes; optional auto re-delegate |
+| **Cursor workflow** | BL-106 progress; BL-312 auto-review suggest; richer tool payloads; host transcript policy |
+| **Internal pipeline** | BL-161 — architect pass then executor inside one MCP call |
+| **Models** | BL-162 / BL-321 tiered roles (if not fully shipped in Phase 3) |
+
+**Success:** Fewer wrong-file edits from smarter prompts; planner acts on structured MCP context; optional verify-before-accept loop.
+
+---
+
+### Phase 5+: Long-running workflows & product surface
+
+**Goal:** How humans and hosts live in the system for hours/days — not core compiler features.
+
+| Theme | Backlog |
+|-------|---------|
+| Interactive / supervised delegate | BL-160a–d |
+| Multi-host | BL-201/202 |
+| Git-native task branches | BL-502 (pairs with non-git BL-322) |
+| Alternate engines | BL-004 OpenCode |
+| Product UX (viewer, team) | BL-152 |
+| Multi-model ensemble | BL-007 |
+
+**Turn-level optimization** stays **[context_optimizer_proxy](https://github.com/amirharati/context_optimizer_proxy)** — separate repo under Aider.
+
+### Deferred — tracked in [BACKLOG.md](./BACKLOG.md)
+
+| ID | Theme | Typical phase |
+|----|--------|----------------|
+| BL-160 | Interactive sessions | 5+ |
+| BL-161 | Multi-agent inside MCP | 4 |
+| BL-162 | Multi-model routing | 3 optional / 4 |
+| BL-315 / P2-315 | MCP progress notifications | 3 optional / 4 |
 
 ---
 
@@ -582,10 +630,15 @@ Phase 1:
     → mcp-coder (pass-through context, session heuristic only)
          → Aider → [optional] context_optimizer_proxy → LLM
 
-Phase 2+:
-  Cursor (thin orchestrator)
-    → mcp-coder (context-builder LLM + RAG + …)
-         → Aider (executor LLM) → [optional] proxy → LLM
+Phase 2 (shipped):
+  Cursor → mcp-coder (context compiler: assemble_context, tiers, budget)
+         → Aider → [optional] proxy → LLM
+
+Phase 3+:
+  + workspace tracker + attempt archive + RAG lite
+
+Phase 4+:
+  + smart context builder / janitor / verify / internal multi-agent
 ```
 
 Both projects can be developed in parallel. Phase 1 does not require the proxy or any LLM inside `mcp-coder`.
@@ -600,4 +653,5 @@ Both projects can be developed in parallel. Phase 1 does not require the proxy o
 - [x] Persistent server log ([PHASE1_ISSUES.md](./PHASE1_ISSUES.md) P1-ISS-004 / P1-125).
 - [x] Spec-based delegate + review loop ([PHASE1_MVP.md](./PHASE1_MVP.md) P1-150/151; BL-150 done).
 - [x] Phase 1 exit review P1-199 — closed 2026-06-06; [PHASE1_ISSUES.md](./PHASE1_ISSUES.md) frozen.
-- [ ] **Next:** Phase 2 Wave 1 — context compiler (BL-316/BL-001), window budget (BL-154), read-deps warn (BL-311).
+- [x] Phase 2 complete — context compiler, audit loop, P2-499 exit ([PHASE2_MVP.md](./PHASE2_MVP.md)).
+- [ ] **Active:** Phase 3 — P3-322a workspace tracker ([PHASE3_MVP.md](./PHASE3_MVP.md)).

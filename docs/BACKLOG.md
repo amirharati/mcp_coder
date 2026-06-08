@@ -250,7 +250,7 @@ Re-run steps 3–4 with Qwen; expect `success: false` with short classified erro
 | Sub | Item |
 |-----|------|
 | BL-311a | Warn in tool response when `mode=implement` and spec Files paths ⊄ `target_files` |
-| BL-311b | Auto-merge read-only paths into Aider context (no edit) from spec Files |
+| BL-311b | Auto-merge read-only paths into Aider context (no edit) from spec Files — **Phase 3** P3-311 / P3-ISS-003 |
 | BL-311c | Cursor rule generator: split Files into “edit” vs “read” in delegate call hints |
 
 **E2E:** Step 2 implement #1 without `splitter.py` → wrong `load_expenses` signature; fixed by planner delegates #2–3.
@@ -349,7 +349,7 @@ By design today: `project_key` = SHA-256(resolved path).
 
 ### BL-320: Failed-delegate attempt archive (spec-adjacent)
 
-**Status:** `idea` — from wild test P2-ISS-007.
+**Status:** `scheduled` — Phase 3 Wave 2 ([PHASE3_MVP.md](./PHASE3_MVP.md)); P3-ISS-002.
 
 **Problem:** Planner-facing `specs/reports/*.md` tracks **current** step status; failed retries are either buried in Run log (truncated) or only in JSONL. No first-class “attempt history” per step.
 
@@ -364,13 +364,13 @@ By design today: `project_key` = SHA-256(resolved path).
 
 **Not in scope:** Replacing `delegations.jsonl` (still canonical); duplicating full Aider transcripts unless `MCP_CODER_LOG_VERBOSE`.
 
-**Target:** Phase 2 polish or early Wave 3 UX — after P2-200 if tied to context package metadata.
+**Target:** Phase 3 Wave 2 — P3-320a/b/c/d.
 
 ---
 
 ### BL-322: Workspace history — delegation-granularity version control
 
-**Status:** `idea` — designed in master session 2026-06-07 (chat [Phase 2 tail review](d44a5b15-2ed4-4834-bc91-91f776e5dd02)).  
+**Status:** `scheduled` — Phase 3 Wave 1 entry ([PHASE3_MVP.md](./PHASE3_MVP.md)); P3-ISS-001. Designed 2026-06-07 (chat [Phase 2 tail review](d44a5b15-2ed4-4834-bc91-91f776e5dd02)).  
 **Full design:** [docs/OTEHR_RELATED_IDEAS/WORKSPACE_HISTORY.md](./OTEHR_RELATED_IDEAS/WORKSPACE_HISTORY.md)
 
 **Problem addressed:** P2-ISS-002 (`files_changed` misses new files without git); strict scope enforcement that reports violations but leaves workspace dirty; inability to time-travel to any MCP call boundary across a project lifecycle.
@@ -387,7 +387,7 @@ By design today: `project_key` = SHA-256(resolved path).
 
 | Sub | Item | Notes |
 |-----|------|-------|
-| **BL-322a** | **Workspace hash snapshot** (manifest) | Before delegation: SHA-256 all text files in workspace into `.mcp-coder/snapshots/<delegation_id>/manifest.json`. After delegation: diff manifest vs current → exact `created`, `modified`, `deleted` lists. Replaces fragile mtime fallback. Works in non-git workspaces. Discard snapshot after diff computed. |
+| **BL-322a** | **Workspace hash snapshot** (manifest) | Before delegation: SHA-256 walk → in-memory manifest; persist delegation row + file deltas in `~/.mcp-coder/projects/<key>/workspace_history.db` (see [WORKSPACE_HISTORY.md](./OTEHR_RELATED_IDEAS/WORKSPACE_HISTORY.md)). After delegation: diff manifests → `created` / `modified` / `deleted`. Replaces fragile mtime fallback. Git-primary when git works; manifest when `used_git=False` or env override. |
 | **BL-322b** | **Content snapshot for contract files** | Store full content of `files_edit` + `files_read` files (not hashes) before delegation. Enables **revert** of violation files to pre-delegation state. Other files: hash-only. |
 | **BL-322c** | **Post-delegation gateway** (diff vs policy) | After diff computed, check against spec `files_edit` / `files_read`. `strict`: revert violation files using BL-322b content + block. `discover`: report only (current P2-305 behavior). New `gateway` mode: surface diff to human or pass to reviewer model (see BL-322d). |
 | **BL-322d** | **Diff in MCP response + human-in-loop approval** | Return `delegation_diff` in MCP response: `{created, modified, deleted, violations}`. Planner (Cursor) sees exact changes between calls. Optional config: require human `approve_delegation` call before accepting result on violation. Pairs with BL-151 pre-gate for full cycle. |
@@ -400,7 +400,7 @@ By design today: `project_key` = SHA-256(resolved path).
 SKIP (hard exclusions — by directory):
   node_modules/  .venv/  venv/  env/  __pycache__/
   .git/  dist/  build/  .tox/  .mypy_cache/  .pytest_cache/
-  .mcp-coder/snapshots/   ← avoid recursion
+  .mcp-coder/             ← entire tree skipped (workspace-owned MCP metadata)
 
 SKIP (by extension or binary heuristic):
   .pyc  .so  .dll  .exe  .jpg  .png  .gif  .pdf  .zip  .tar  .gz
@@ -477,9 +477,21 @@ Result: workspace has ONLY the contract-allowed changes
 
 ---
 
+### BL-323: Context budget override semantics (dev ergonomics)
+
+**Status:** `idea` — from P2-ISS-009 (frozen at Phase 2 exit).
+
+**Problem:** `MCP_CODER_CONTEXT_BUDGET_TOKENS` loses to per-model `context_budget_tokens` in `model_rates.yaml` — dogfood budget tests require fake model id.
+
+**Options:** (a) env overrides yaml when set, (b) `MCP_CODER_CONTEXT_BUDGET_OVERRIDE_TOKENS`, (c) `inspect-context --budget-tokens N` only, (d) document yaml-wins.
+
+**Target:** Not Phase 3 core — ship when touching P2-220 / INSTALL docs.
+
+---
+
 ### BL-321: Progressive / tiered executor model selection
 
-**Status:** `idea` — from wild test P2-ISS-008; extends BL-003 (router) and BL-319 (rates).
+**Status:** `scheduled` — Phase 3 optional ([PHASE3_MVP.md](./PHASE3_MVP.md) P3-321); P3-ISS-004.
 
 **Problem:** Single global `AIDER_MODEL`; operator manually swaps `.env` and restarts MCP. Cursor can *suggest* upgrades but cannot *invoke* tiered retry without human.
 
@@ -604,6 +616,7 @@ Until then: add rows to bundled `model_rates.yaml` when switching models; unknow
 
 | Date | Change |
 |------|--------|
+| 2026-06-08 | Phase 3 start — BL-320/322 `scheduled`; BL-323 budget override; BL-322a storage aligned to WORKSPACE_HISTORY |
 | 2026-06-07 | Wild test done — BL-320 failed-attempt archive; BL-321 tiered model selection (P2-ISS-007/008) |
 | 2026-06-07 | BL-322 workspace hash snapshot + post-delegation gateway — Phase 3 design (chat [Phase 2 tail review](d44a5b15-2ed4-4834-bc91-91f776e5dd02)) |
 | 2026-06-06 | P2-120 done — usage telemetry; BL-319 dynamic rates deferred; BL-154 partial |

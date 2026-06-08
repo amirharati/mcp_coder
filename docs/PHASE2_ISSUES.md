@@ -7,12 +7,15 @@
 
 # Phase 2 issue tracker
 
-**Purpose:** Gaps, limitations, and follow-ups discovered during Phase 2 work.
-**Milestone board:** [PHASE2_MVP.md](./PHASE2_MVP.md)
-**Phase 1 issues (frozen/historical):** [PHASE1_ISSUES.md](./PHASE1_ISSUES.md)
+**Status:** **Frozen** at P2-499 (2026-06-08). No new P2-ISS rows. Carried work → [PHASE3_ISSUES.md](./PHASE3_ISSUES.md) or [BACKLOG.md](./BACKLOG.md).
+
+**Purpose:** Historical gaps discovered during Phase 2 work.
+**Milestone board:** [PHASE2_MVP.md](./PHASE2_MVP.md) (closed)
+**Phase 3 tracker:** [PHASE3_ISSUES.md](./PHASE3_ISSUES.md)
+**Phase 1 issues (frozen):** [PHASE1_ISSUES.md](./PHASE1_ISSUES.md)
 **Backlog:** [BACKLOG.md](./BACKLOG.md)
 
-Status: `open` | `scheduled` | `done` | `wontfix-p2`
+Status: `open` | `scheduled` | `done` | `wontfix-p2` | `accepted`
 
 | When to fix | Milestone |
 |-------------|-----------|
@@ -28,12 +31,12 @@ Status: `open` | `scheduled` | `done` | `wontfix-p2`
 | P2-ISS-001 | `done` | low | `(none)` placeholder parsed as Files contract path | P2-3.15 | Phase 2 exit dogfood Phase 1 |
 | P2-ISS-002 | `wontfix-p2` | medium | `files_changed` misses new paths without git | BL-322 | Phase 3 workspace history |
 | P2-ISS-003 | `done` | medium | `tokens.actual` stays `unavailable` | P2-308 | Fixed: `aider_output_parse` fallback; dogfood confirm optional |
-| P2-ISS-004 | `open` | medium | Planner can ignore `contract_warnings` | Rules / BL-311b / P2-200 | Read-dep omit → broken layout |
-| P2-ISS-005 | `open` | high | P1-ISS-012 live confirm (cheap model 500) | Wild test / Wave 1 | Timeout path confirmed Phase 4; `upstream_5xx` not reproduced |
+| P2-ISS-004 | `wontfix-p2` | medium | Planner can ignore `contract_warnings` | P3-ISS-003 / BL-311b | Carried → Phase 3 |
+| P2-ISS-005 | `accepted` | high | P1-ISS-012 live confirm (cheap model 500) | BL-309 | Timeout path OK; `upstream_5xx` not reproduced — accepted risk |
 | P2-ISS-006 | `done` | medium | Timeout returns late — executor thread blocks shutdown | P2-3.15 | Exit dogfood: ~33s @ 30s timeout |
 | P2-ISS-007 | `wontfix-p2` | medium | Failed-delegate audit trail weak vs JSONL | BL-320 | Phase 3 attempt archive |
 | P2-ISS-008 | `wontfix-p2` | low | Progressive / tiered executor model selection | BL-321 | Phase 3 tier catalog |
-| P2-ISS-009 | `open` | low | `MCP_CODER_CONTEXT_BUDGET_TOKENS` cannot override per-model yaml budget | P2-220 follow-up / decide later | Wave 2 dogfood: env `200` ignored when model in `model_rates.yaml` |
+| P2-ISS-009 | `wontfix-p2` | low | `MCP_CODER_CONTEXT_BUDGET_TOKENS` cannot override per-model yaml budget | BL-323 | Carried → backlog (dev ergonomics) |
 | P2-ISS-010 | `done` | low | CLI shim: `mcp-coder` usable from any cwd without manual venv | P2-3.15 | `scripts/mcp-coder` + INSTALL |
 
 ---
@@ -102,7 +105,9 @@ Status: `open` | `scheduled` | `done` | `wontfix-p2`
 
 **Target:** End of Phase 2 — pick one or combine: (a) stronger planner rule / checklist in response summary, (b) BL-311b auto-merge read paths into adapter input when `spec_path` set, (c) optional `contract_warnings` → `needs_input` outcome (discuss).
 
-**Acceptance:** Dogfood read-dep test either blocked pre-delegate or auto-includes read paths; no nested stray tree on success path.
+**Disposition:** `wontfix-p2` at Phase 3 start → **P3-ISS-003** / P3-311 / BL-311b.
+
+**Acceptance:** Deferred to Phase 3.
 
 ---
 
@@ -119,6 +124,8 @@ Status: `open` | `scheduled` | `done` | `wontfix-p2`
 **Acceptance:** BACKLOG BL-309 §8 criteria met in live run; record `delegation_id` in `wave1-exit-validation.md`.
 
 **Update 2026-06-07:** Phase 4 dogfood — Qwen multi-file step timed out cleanly (`error_class: timeout`, no browser/stripe). Not `upstream_5xx`. Wild test may still trigger 500 path.
+
+**Disposition:** `accepted` at Phase 3 start — BL-309 mitigations shipped (browser block, timeout, classify); live `upstream_5xx` path optional / accepted risk.
 
 ---
 
@@ -189,9 +196,11 @@ Status: `open` | `scheduled` | `done` | `wontfix-p2`
 
 **Mitigation today:** Use unknown model id for budget tests; edit `model_rates.yaml` row; or set `MCP_CODER_CONTEXT_BUDGET_ENABLED=0` to disable.
 
-**Target:** **Decide later** (not required for Wave 2 exit). Options to discuss: (a) env overrides yaml when set (dev-friendly), (b) separate `MCP_CODER_CONTEXT_BUDGET_OVERRIDE_TOKENS`, (c) `inspect-context --budget-tokens N` flag only, (d) keep yaml-wins and document clearly in INSTALL/README.
+**Target:** **BL-323** — budget override semantics (not Phase 3 core).
 
-**Acceptance:** PM decision recorded; behavior matches docs; dogfood budget test does not require fake model id (if we choose override).
+**Disposition:** `wontfix-p2` at Phase 3 start → backlog.
+
+**Acceptance:** Deferred to BL-323.
 
 ---
 
@@ -232,3 +241,4 @@ Status: `open` | `scheduled` | `done` | `wontfix-p2`
 | 2026-06-07 | Wild test done — P2-ISS-007 failed-attempt archive; P2-ISS-008 tiered models → BL-320/321 |
 | 2026-06-07 | Wave 2 dogfood — P2-ISS-009 budget env vs yaml; P2-ISS-010 CLI shim / PATH |
 | 2026-06-08 | **P2-499 exit** — ISS-001/006/010 closed; ISS-002/007/008 `wontfix-p2` → BL-322/320/321 |
+| 2026-06-08 | **Frozen** — ISS-004/009 `wontfix-p2` → P3-ISS-003 / BL-323; ISS-005 `accepted` (BL-309) |

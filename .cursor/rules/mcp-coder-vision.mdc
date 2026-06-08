@@ -9,8 +9,8 @@ alwaysApply: true
 
 ## Do not edit without explicit user instruction
 
-- `docs/IDEA.md`, `docs/PHASES.md`, `docs/PHASE1_MVP.md`, `docs/PHASE2_MVP.md`, `docs/BACKLOG.md`
-- `docs/PHASE1_ISSUES.md`, `docs/PHASE2_ISSUES.md`
+- `docs/IDEA.md`, `docs/PHASES.md`, `docs/PHASE1_MVP.md`, `docs/PHASE2_MVP.md`, `docs/PHASE3_MVP.md`, `docs/BACKLOG.md`
+- `docs/PHASE1_ISSUES.md`, `docs/PHASE2_ISSUES.md`, `docs/PHASE3_ISSUES.md`
 - `docs/VISION_DOCS.md`, `docs/notes/spec-based-development.md`, `docs/notes/phase2-owned-context.md`
 - `docs/OTEHR_RELATED_IDEAS/*` (related ideas, not product truth)
 
@@ -18,7 +18,7 @@ Each file has an HTML stewardship comment at the top — read it before any edit
 
 ## Workers (implementation sessions)
 
-**Single source of truth:** the attached `docs/tasks/P2-*.md` or `P1-*.md` spec only (gitignored).
+**Single source of truth:** the attached `docs/tasks/P3-*.md`, `P2-*.md`, or `P1-*.md` spec only (gitignored).
 
 ### Workers **must**
 
@@ -39,7 +39,7 @@ Each file has an HTML stewardship comment at the top — read it before any edit
 
 ## Planning / master session
 
-- **OK:** status rows in `PHASE2_MVP` / `PHASE2_ISSUES`, new BL-* / P2-ISS, small alignment with shipped reality.
+- **OK:** status rows in `PHASE3_MVP` / `PHASE3_ISSUES` (active); `PHASE2_*` frozen; new BL-* / P3-ISS, small alignment with shipped reality.
 - **NOT OK:** delete original vision, replan phases, or contradict IDEA without user agreement.
 - When adapting vision docs: **add** context and phase reality; preserve intent from initial commit `074753b`.
 
@@ -51,4 +51,4 @@ Each file has an HTML stewardship comment at the top — read it before any edit
 
 ## Quick anchors
 
-Cross-session memory + task orchestration; Cursor thin; executor via adapter; Phase 2 = context compiler + behavioral contract (not Aider-shaped APIs in core).
+Cross-session memory + task orchestration; Cursor thin; executor via adapter; Phase 2 shipped context compiler; Phase 3 = workspace truth + planner history + RAG (see PHASE3_MVP).

@@ -2,33 +2,83 @@
 
 **Purpose:** Hand off from Phase 2 exit to a **new planning/master chat** without loading full history. This session can run in **parallel** with the Phase 2 wrap-up chat until Phase 3 PM owns the board.
 
-**Phase 2 status:** **Closed** (2026-06-08) — [phase2-exit-validation.md](./phase2-exit-validation.md), [PHASE2_MVP.md](../PHASE2_MVP.md) P2-499.
+**Phase 2 status:** **Closed / frozen** (2026-06-08) — [phase2-exit-validation.md](./phase2-exit-validation.md), [PHASE2_MVP.md](../PHASE2_MVP.md).
+**Phase 3 PM:** [PHASE3_MVP.md](../PHASE3_MVP.md) · [PHASE3_ISSUES.md](../PHASE3_ISSUES.md).
 
 ---
 
 ## Copy-paste prompt (new master session)
 
 ```
-You are the mcp-coder planning/master session for Phase 3.
+You are the mcp-coder Phase 3 planning/master session (PM + task orchestration).
 
-Read first (do NOT load full chat history):
-1. docs/notes/phase3-master-session-bootstrap.md (this file)
-2. docs/VISION_DOCS.md — doc tiers
-3. docs/IDEA.md — tier 0 vision (skim Core problem + architecture)
-4. docs/PHASES.md — § Phase 3 (RAG) + read Phase 2 summary for what shipped
-5. docs/PHASE2_MVP.md — exit status + Phase 3 anchor section
-6. docs/BACKLOG.md — BL-322, BL-320, BL-002, BL-151
+## Read first (in order — do NOT load prior chat history)
 
-Deep context (search only — do NOT read linearly):
-- Prior master transcript: agent-transcripts/d44a5b15-2ed4-4834-bc91-91f776e5dd02/d44a5b15-2ed4-4834-bc91-91f776e5dd02.jsonl
-  Search for: P2-499, workspace history, BL-322, attempt archive, BL-320, context compiler, dogfood
+1. docs/notes/phase3-master-session-bootstrap.md — this handoff
+2. docs/VISION_DOCS.md — doc tiers + stewardship
+3. docs/PHASES.md — phase arc table + § Phase 3–5 (skim Phase 1–2 as needed)
+4. docs/PHASE3_MVP.md — waves, D-P3 decisions, milestone order, open questions
+5. docs/PHASE3_ISSUES.md — P3-ISS-001–004 (carried from P2)
+6. docs/PHASE2_MVP.md — frozen; exit reference only
+7. docs/notes/phase2-exit-validation.md — P2-499 dogfood sign-off
+8. docs/OTEHR_RELATED_IDEAS/WORKSPACE_HISTORY.md — BL-322 design (scan rules, schema)
+9. docs/BACKLOG.md — BL-322, BL-320, BL-002, BL-151, BL-323
+10. .cursor/rules/mcp-coder-vision.mdc — worker vs master boundaries
 
-Your job:
-- Draft Phase 3 PM scope (PHASE3_MVP or extend PHASES — user decides)
-- Prioritize entry milestones; workers use docs/tasks/P3-*.md only
-- Overlap OK: Phase 2 chat may still commit/push; you own Phase 3 planning
+Skim docs/IDEA.md § Shipped vs next + Suggested evolution (tier 0 — do not rewrite).
 
-Rules: .cursor/rules/mcp-coder-vision.mdc — workers do not edit tier 0–2 vision/PM without explicit ask.
+## Deep context (search only — never read linearly)
+
+Transcript: agent-transcripts/d44a5b15-2ed4-4834-bc91-91f776e5dd02/d44a5b15-2ed4-4834-bc91-91f776e5dd02.jsonl
+
+Search keywords: P2-499, BL-322, WORKSPACE_HISTORY, tracker-primary, D-P3-2, BL-320, attempt archive, P2-ISS-002, P2-ISS-007, tip-calc, dogfood
+
+## Locked decisions (do not re-debate without user)
+
+| ID | Decision |
+|----|----------|
+| D-P3-1 | `workspace_history.db` lives in ~/.mcp-coder/projects/<key>/ — NOT under workspace .mcp-coder/ |
+| D-P3-2 | **Tracker-primary:** files_changed from manifest before/after walk every delegate — git-agnostic |
+| D-P3-3 | Main spec report stays current; failures → attempt archive (BL-320) |
+| D-P3-5 | RAG v1 = keyword + recency before embeddings |
+
+**Phase boundary:** Phase 3 = workspace truth + attempt archive + RAG lite + gates. Phase 4 = smart context builder / janitor / verify / BL-161. See PHASES.md phase arc.
+
+**Milestone order:** P3-322a → (P3-320 ∥ P3-322b) → P3-322c → P3-322d → P3-002-lite → P3-151
+
+## Your job
+
+1. Confirm with user that milestone order + open questions (Q2–Q5 in PHASE3_MVP) are acceptable.
+2. Verify docs/tasks/P3-322a-workspace-snapshot.md matches D-P3-2 (gitignored — exists locally, not in git).
+3. Dispatch P3-322a worker: attach ONLY that spec; model composer-2.5 or claude-4.6-sonnet-medium-thinking.
+4. After worker § Results: update PHASE3_MVP status rows + PHASE3_ISSUES if needed.
+5. Optional parallel: draft P3-320 spec while 322a runs.
+
+## Worker rules (enforce when dispatching)
+
+- Single source of truth: attached docs/tasks/P3-*.md only
+- Fill § Results in same spec; suggest PM changes as bullets only
+- Do NOT edit IDEA, PHASES, PHASE*_MVP, BACKLOG, PHASE*_ISSUES, VISION_DOCS
+- No Aider API leakage into core/context/ or core/specs/ (backend-neutral rule)
+- New code: core/workspace/ + wire aider_engine.py + git_diff.py
+
+## Confusion traps (read carefully)
+
+1. **Tracker vs git:** files_changed is ALWAYS manifest delta when snapshot on — not git status. Git is optional metadata only.
+2. **Skip .mcp-coder in walk:** entire .mcp-coder/ tree skipped (specs, config) — history DB is in MCP home.
+3. **JSONL stays canonical:** workspace_history.db supplements; does not replace delegations.jsonl.
+4. **P3-322a scope:** snapshot + DB + attribution only — NO revert (322b), NO gateway (322c), NO new MCP tools (322d).
+5. **Worker specs are gitignored:** docs/tasks/P3-*.md not in remote; master creates/refines locally.
+6. **E2E workspace:** mcp_coder_phase1_e2e — dogfood there; pytest in mcp_coder repo (348 passed at P2 exit).
+7. **Phase 2 Wave 4 intelligence** (BL-001, BL-003, BL-008) → Phase 4, not Phase 3.
+
+## Repo state at handoff (2026-06-08)
+
+- main: Phase 2 closed (P2-499 commit 96c9077+); Phase 3 PM stack committed in doc-freeze commit
+- Entry worker spec ready: docs/tasks/P3-322a-workspace-snapshot.md
+- First dispatch: P3-322a
+
+Start by summarizing Phase 3 scope in 5 bullets, then ask user to confirm Q2–Q5 before dispatching P3-322a.
 ```
 
 ---
@@ -92,7 +142,7 @@ PM: [PHASE2_MVP.md](../PHASE2_MVP.md) · Issues: [PHASE2_ISSUES.md](../PHASE2_IS
 
 ---
 
-## Phase 3 — initial scope (planning; not locked)
+## Phase 3 — scope (locked at handoff 2026-06-08)
 
 Two tracks that **overlap** and can ship incrementally:
 
@@ -160,10 +210,10 @@ Overlap is OK: e.g. Phase 3 master drafts BL-322a worker spec while Phase 2 chat
 
 ## First actions for Phase 3 master
 
-1. User agrees Phase 3 entry milestone order (322a vs 320 vs 002).
-2. Create `docs/PHASE3_MVP.md` or extend [PHASES.md](../PHASES.md) § Phase 3 with milestone table (planning session).
-3. Draft first worker spec: e.g. `docs/tasks/P3-322a-workspace-snapshot.md` from [TASK_SPEC_TEMPLATE.md](../TASK_SPEC_TEMPLATE.md).
-4. Optional: tip-calc step 2 wild finish in e2e (not blocking).
+1. Confirm open questions **Q2–Q5** in [PHASE3_MVP.md](../PHASE3_MVP.md) (Q1/git locked as D-P3-2).
+2. Skim `docs/tasks/P3-322a-workspace-snapshot.md` — attribution table must match tracker-primary.
+3. **Dispatch P3-322a** worker (attach spec only).
+4. Optional: draft P3-320 spec in parallel; tip-calc wild step 2 in e2e.
 
 ---
 
@@ -172,3 +222,5 @@ Overlap is OK: e.g. Phase 3 master drafts BL-322a worker spec while Phase 2 chat
 | Date | Change |
 |------|--------|
 | 2026-06-08 | Created at Phase 2 exit; bootstrap prompt + summary for parallel Phase 3 master |
+| 2026-06-08 | PHASE3_MVP + PHASE3_ISSUES created; PHASE2 frozen; issue triage complete |
+| 2026-06-08 | Full handoff prompt v2; D-P3-2 locked; P3-322a spec aligned to tracker-primary |
