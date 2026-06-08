@@ -549,6 +549,15 @@ def delegate_to_agent(
         elif spec_abs_path is not None and spec_abs_path.is_file():
             report_abs_path = ensure_task_report(spec_abs_path, workspace=ws)
             spec_report_rel_path = str(report_abs_path.resolve().relative_to(Path(ws).resolve()))
+            # Compute scope violations before writing report so the report reflects them.
+            if (
+                delegate_mode == DELEGATE_MODE_IMPLEMENT
+                and delegation_policies is not None
+                and delegation_policies.edit_scope == "strict"
+            ):
+                scope_violations = compute_scope_violations(
+                    files_changed, delegation_policies.files_edit
+                )
             apply_post_delegation_report_updates(
                 report_abs_path,
                 timestamp=timestamp_end,
@@ -561,6 +570,9 @@ def delegate_to_agent(
                 error=error,
                 task_spec=spec_rel_path,
                 usage_summary=usage_summary_line,
+                scope_violations=scope_violations or None,
+                files_unexpected=files_unexpected or None,
+                edit_scope=delegation_policies.edit_scope if delegation_policies else None,
             )
             spec_read = read_task_spec(spec_abs_path, workspace=ws)
             spec_sha256 = spec_read.sha256
@@ -577,9 +589,6 @@ def delegate_to_agent(
                 and delegation_policies is not None
                 and delegation_policies.edit_scope == "strict"
             ):
-                scope_violations = compute_scope_violations(
-                    files_changed, delegation_policies.files_edit
-                )
                 outcome = apply_scope_outcome(
                     outcome,
                     edit_scope=delegation_policies.edit_scope,

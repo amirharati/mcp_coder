@@ -121,7 +121,7 @@ Work proceeds in four waves. Milestones within a wave can run in sequence or be 
 
 ### Wave 3 — Executor + host contracts ← **active**
 
-**Next worker spec:** `docs/tasks/P2-3.05-scope-expansion.md` or `P2-3.08-rich-result.md` (draft)
+**Next worker spec:** `docs/tasks/P2-3.08-rich-result.md` (draft)
 
 **Goal:** Close audit loop layers 3–4; richer outcomes back to Cursor and spec reports.  
 **Design:** [phase2-owned-context.md § Audit loop](./notes/phase2-owned-context.md#audit-loop-four-layers)
@@ -129,7 +129,7 @@ Work proceeds in four waves. Milestones within a wave can run in sequence or be 
 | Milestone | Task ID | Status | Implements (D-P2 / BL) | Summary |
 |-----------|---------|--------|------------------------|---------|
 | Executor cache evolution | P2-300 | `todo` | BL-155 | Cache key on `ContextPackage` hash (not raw `target_files`); rolling brief; TTL. |
-| Scope expansion report | P2-305 | `todo` | D-P2-3, D-SPEC-8, BL-314 | `files_unexpected` → **Scope expansion** section in `specs/reports/`; `outcome: scope_violation` when `edit_scope: strict`. |
+| Scope expansion report | P2-305 | `done` | `P2-3.05-scope-expansion.md` | D-P2-3, D-SPEC-8, BL-314c — Scope expansion in reports; strict → blocked + re-plan; discover → informational; 312 pytest (+7) |
 | Rich `ExecutionResult` | P2-308 | `todo` | D-P2-3 | `scope_violations`, `capability_warnings`, `preflight_token_estimate` on result + JSONL. |
 | Cheap model for review | P2-310 | `todo` | BL-162 partial | Route `mode=review` to cheap model; separate from executor config. |
 | MCP progress notifications | P2-315 | `todo` | BL-106 | Long-run progress to Cursor (if transport supports). |
@@ -160,7 +160,7 @@ Status: `todo` | `in_progress` | `done` | `blocked` | `optional`
 | D-SPEC-5 | Same task file; `revision++` after review | — |
 | D-SPEC-6 | Brainstorm in review, not implement | — |
 | D-SPEC-7 | Lean context; `host_transcript: none` default | BL-001, BL-154 |
-| D-SPEC-8 | `edit_scope` + policies parsed **P2-115**; scope expansion report → **P2-305** | BL-315 |
+| D-SPEC-8 | `edit_scope` + policies parsed **P2-115**; scope expansion report **P2-305 done** | BL-315 |
 
 ---
 
@@ -240,3 +240,4 @@ Same pattern as Phase 1:
 | 2026-06-07 | **P2-212 done** — `BackendCapabilities` + capability-aware adjust; JSONL layer 3; 288 pytest (+23) |
 | 2026-06-07 | **P2-220 done** — window budget; `COMPILER_VERSION` 0.3.0; 305 pytest (+17) |
 | 2026-06-07 | **Wave 2 complete** — L2 compiler core + L3 hinge + inspect + caps + budget |
+| 2026-06-07 | **P2-305 done** — Scope expansion in spec reports; strict planner handoff; 312 pytest (+7) |

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import re
 from pathlib import Path
 
 from core.context.summary import redact_secrets
@@ -76,6 +77,50 @@ def _failure_blockers(error: str | None, output: str) -> str:
     return "\n\n".join(parts) if parts else "Delegation failed; see Run log and delegations.jsonl."
 
 
+def _remove_section_if_present(body: str, title: str) -> str:
+    """Remove a ## section (header + body) entirely if present; leave body unchanged if absent."""
+    pattern = re.compile(
+        rf"^## {re.escape(title)}\s*\n.*?(?=^## |\Z)",
+        re.MULTILINE | re.DOTALL,
+    )
+    result = pattern.sub("", body)
+    return re.sub(r"\n{3,}", "\n\n", result)
+
+
+def _format_scope_expansion_discover(files_unexpected: list[str]) -> str:
+    paths = "\n".join(f"- `{p}`" for p in files_unexpected)
+    return (
+        "Executor touched paths outside the spec contract (edit_scope: discover).\n"
+        "Consider updating the spec Files section if these changes were intentional.\n\n"
+        f"**Unexpected paths:**\n{paths}"
+    )
+
+
+def _format_scope_expansion_strict(scope_violations: list[str]) -> str:
+    paths = "\n".join(f"- `{p}`" for p in scope_violations)
+    return (
+        "**scope_violation** — executor edited paths outside `files_edit` (edit_scope: strict).\n"
+        "Update the spec Files section and re-delegate; do not patch in the worker session.\n\n"
+        f"**Violation paths (outside files_edit):**\n{paths}"
+    )
+
+
+def _scope_violation_blockers(scope_violations: list[str]) -> str:
+    paths_inline = ", ".join(scope_violations)
+    return (
+        "scope_violation: executor touched paths outside files_edit.\n"
+        "Update spec Files → Edit to include all intended paths, then re-delegate.\n"
+        f"Violation paths: {paths_inline}"
+    )
+
+
+def _scope_violation_suggestions() -> str:
+    return (
+        "- Update spec Files section (add violation paths to Edit list or narrow task scope).\n"
+        "- Re-delegate with the same spec_path after updating."
+    )
+
+
 def _failure_suggestions(error: str | None, delegate_mode: str) -> str:
     hints: list[str] = []
     lower = (error or "").lower()
@@ -109,11 +154,19 @@ def apply_post_delegation_report_updates(
     error: str | None,
     task_spec: str | None = None,
     usage_summary: str | None = None,
+    scope_violations: list[str] | None = None,
+    files_unexpected: list[str] | None = None,
+    edit_scope: str | None = None,
 ) -> tuple[str, str]:
     """Append Run log on report file; update Status, Blockers, Worker feedback; sync YAML status."""
     raw = path.read_text(encoding="utf-8")
     front_matter, body = split_front_matter(raw)
-    status = _status_value(success=success, delegate_mode=delegate_mode)
+
+    strict_violation = bool(scope_violations) and edit_scope == "strict"
+    if strict_violation:
+        status = REPORT_STATUS_BLOCKED
+    else:
+        status = _status_value(success=success, delegate_mode=delegate_mode)
 
     run_entry = _format_run_log_entry(
         timestamp=timestamp,
@@ -133,7 +186,27 @@ def apply_post_delegation_report_updates(
     body = replace_section_body(body, "Run log", new_run)
     body = replace_section_body(body, "Status", f"`{status}`")
 
-    if delegate_mode == DELEGATE_MODE_REVIEW and success and output.strip():
+    # Scope expansion section: write when unexpected paths exist; remove when clean.
+    discover_expansion = bool(files_unexpected) and edit_scope != "strict"
+    if strict_violation:
+        body = replace_section_body(
+            body, "Scope expansion", _format_scope_expansion_strict(scope_violations or [])
+        )
+    elif discover_expansion:
+        body = replace_section_body(
+            body, "Scope expansion", _format_scope_expansion_discover(files_unexpected or [])
+        )
+    else:
+        body = _remove_section_if_present(body, "Scope expansion")
+
+    if strict_violation:
+        body = replace_section_body(
+            body, "Blockers / questions", _scope_violation_blockers(scope_violations or [])
+        )
+        body = replace_section_body(
+            body, "Suggested next (hints only)", _scope_violation_suggestions()
+        )
+    elif delegate_mode == DELEGATE_MODE_REVIEW and success and output.strip():
         feedback_body = redact_secrets(output[:WORKER_FEEDBACK_PREVIEW_CHARS])
         feedback_entry = _format_worker_feedback_entry(
             timestamp=timestamp,

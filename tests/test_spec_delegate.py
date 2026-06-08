@@ -390,6 +390,52 @@ def test_delegate_strict_scope_violation(tmp_path, monkeypatch):
     assert record["delegation_policies"]["edit_scope"] == "strict"
 
 
+def test_delegate_strict_scope_violation_report_content(tmp_path, monkeypatch):
+    """Report file must contain Scope expansion section with violation details after strict run."""
+    home = tmp_path / "home"
+    ws = tmp_path / "workspace"
+    ws.mkdir()
+    task = ws / ".mcp-coder" / "specs" / "tasks" / "strict-cli-report.md"
+    task.parent.mkdir(parents=True)
+    task.write_text(STRICT_YAML_SPEC, encoding="utf-8")
+
+    monkeypatch.setenv("MCP_CODER_HOME", str(home))
+    monkeypatch.setenv("MCP_CODER_USE_CONTEXT_PACKAGE", "0")
+    monkeypatch.chdir(ws)
+
+    fake = ExecutionResult(
+        success=True,
+        output="done",
+        files_changed=["expense_splitter/cli.py", "expense_splitter/splitter.py"],
+        model="m",
+    )
+    mock_engine = type("E", (), {"model_name": "m", "run": lambda *a, **k: fake})()
+
+    with patch("server.mcp_server.get_engine", return_value=mock_engine):
+        raw = delegate_to_agent(
+            task="Implement CLI",
+            target_files=[
+                "expense_splitter/cli.py",
+                "expense_splitter/splitter.py",
+            ],
+            context_summary="",
+            spec_path="tasks/strict-cli-report.md",
+        )
+
+    payload = json.loads(raw)
+    report_path = ws / payload["spec_report_path"]
+    report_text = report_path.read_text(encoding="utf-8")
+
+    assert "## Scope expansion" in report_text
+    assert "scope_violation" in report_text
+    assert "expense_splitter/splitter.py" in report_text
+
+    from core.specs.sections import split_front_matter
+
+    fm, _ = split_front_matter(report_text)
+    assert fm["status"] == "blocked"
+
+
 def test_delegate_invalid_edit_scope_invalid_spec(tmp_path, monkeypatch):
     home = tmp_path / "home"
     ws = tmp_path / "workspace"

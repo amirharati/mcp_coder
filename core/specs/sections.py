@@ -25,6 +25,7 @@ EPIC_SECTION_TITLES = (
 MCP_OWNED_SECTION_TITLES = (
     "Status",
     "Run log",
+    "Scope expansion",
     "Worker feedback",
     "Blockers / questions",
     "Suggested next (hints only)",
