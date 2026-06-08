@@ -96,6 +96,7 @@ Actual LLM provider
 - **Session management** — Persistent sessions, smart new-vs-continue, library of past work (Phase 1.3+ / Phase 3).
 - **Memory system** — Semantic / keyword search over old tasks and decisions (RAG — Phase 3).
 - **Spec-driven development** — Markdown artifacts as the **contract** between planner and executor (Phase 2+; see below).
+- **Workspace history** — Delegation-granularity version control: hash the workspace before each MCP call, store diffs, accumulate checkpoints across sessions. Time-travel to any past call boundary; revert individual files; detect all changes including untracked/new files — independent of user's git ([BACKLOG.md](./BACKLOG.md) **BL-322**; [design](./OTEHR_RELATED_IDEAS/WORKSPACE_HISTORY.md) — Phase 3).
 - **Interactive / supervised modes** — supervised multi-step delegate, live terminal tail, optional terminal handoff ([BACKLOG.md](./BACKLOG.md) **BL-160a–d** — timing TBD; not full Cursor-in-terminal chat by default).
 - **Internal multi-agent pipeline** — Planner/architect then executor inside one MCP call ([BACKLOG.md](./BACKLOG.md) **BL-161**).
 - **Multi-model per role** — Cheap context/cleanup vs expensive code ([BACKLOG.md](./BACKLOG.md) **BL-162**; overlaps Phase 2 context-builder).
@@ -378,7 +379,7 @@ mcp-coder rag "pagination params"
 1. ~~Thin MCP wrapper calling Aider~~ → **Phase 1 spine (done)** ([PHASE1_MVP.md](./PHASE1_MVP.md)).
 2. P1-199 + **spec experiment** → close Phase 1; light spec-as-contract (no gatekeeper).
 3. **Phase 2 — owned context:** creation (what to add) + window management (rolling, summarize, skills, topic detection) + **executor cache** evolution — **not** new adapters ([PHASES.md](./PHASES.md), [BACKLOG.md](./BACKLOG.md) § Post–Phase 1 focus).
-4. RAG + cross-session memory → **Phase 3**.
+4. RAG + cross-session memory → **Phase 3** (alongside **workspace history** — BL-322 — delegation-granularity version control, independent of git).
 5. Connect `context_optimizer_proxy` by default in templates → backlog / polish.
 6. Sub-agents, critic, ensemble → **Phase 4+**.
 7. OpenCode / other hosts → **very low priority** (BL-004, BL-201/202).
@@ -394,3 +395,4 @@ Manual familiarity with Aider in real repos remains valuable while MCP automates
 | 2026-06-03 | Initial vision (`074753b` README): core problem, three context sources, future MCP/CLI, backends |
 | 2026-06-04 | Grok ideation: spec system, role division, interaction modes, Phase 1 vs long-term; P1-100 status |
 | 2026-06-05 | Stewardship banner; restored original README anchors; [VISION_DOCS.md](./VISION_DOCS.md) map; P1 spine + transcript dump status |
+| 2026-06-07 | Added **workspace history** (BL-322) as core capability — delegation-granularity version control, Phase 3 |

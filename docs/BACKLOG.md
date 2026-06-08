@@ -368,6 +368,115 @@ By design today: `project_key` = SHA-256(resolved path).
 
 ---
 
+### BL-322: Workspace history — delegation-granularity version control
+
+**Status:** `idea` — designed in master session 2026-06-07 (chat [Phase 2 tail review](d44a5b15-2ed4-4834-bc91-91f776e5dd02)).  
+**Full design:** [docs/OTEHR_RELATED_IDEAS/WORKSPACE_HISTORY.md](./OTEHR_RELATED_IDEAS/WORKSPACE_HISTORY.md)
+
+**Problem addressed:** P2-ISS-002 (`files_changed` misses new files without git); strict scope enforcement that reports violations but leaves workspace dirty; inability to time-travel to any MCP call boundary across a project lifecycle.
+
+**Core insight:** mcp-coder can own a lightweight, delegation-scoped version control layer — SQLite delta store, independent of git, invisible to the user, automatic. Hash the whole workspace before each delegation; store unified diffs (not full copies) of what changed; accumulate checkpoints across sessions. Purpose-built for the "what did the AI do between calls?" question that no existing tool answers at this granularity.
+
+**Why it matters:** AI coding tools either ignore the audit problem, force auto-commits (pollutes git), or depend on git (fails for untracked files, dirty workspaces, non-git repos). This approach is non-invasive — user's git, WIP, and untracked files are untouched — and works at exactly the right granularity (per delegation call = per human review opportunity).
+
+**Storage:** `~/.mcp-coder/projects/<key>/workspace_history.db` — SQLite, stdlib only. Delta + content-addressable blobs. ~6–10MB for months of work on a typical project.
+
+---
+
+#### Phase 3 sub-items
+
+| Sub | Item | Notes |
+|-----|------|-------|
+| **BL-322a** | **Workspace hash snapshot** (manifest) | Before delegation: SHA-256 all text files in workspace into `.mcp-coder/snapshots/<delegation_id>/manifest.json`. After delegation: diff manifest vs current → exact `created`, `modified`, `deleted` lists. Replaces fragile mtime fallback. Works in non-git workspaces. Discard snapshot after diff computed. |
+| **BL-322b** | **Content snapshot for contract files** | Store full content of `files_edit` + `files_read` files (not hashes) before delegation. Enables **revert** of violation files to pre-delegation state. Other files: hash-only. |
+| **BL-322c** | **Post-delegation gateway** (diff vs policy) | After diff computed, check against spec `files_edit` / `files_read`. `strict`: revert violation files using BL-322b content + block. `discover`: report only (current P2-305 behavior). New `gateway` mode: surface diff to human or pass to reviewer model (see BL-322d). |
+| **BL-322d** | **Diff in MCP response + human-in-loop approval** | Return `delegation_diff` in MCP response: `{created, modified, deleted, violations}`. Planner (Cursor) sees exact changes between calls. Optional config: require human `approve_delegation` call before accepting result on violation. Pairs with BL-151 pre-gate for full cycle. |
+
+---
+
+#### What to include in snapshot scan
+
+```text
+SKIP (hard exclusions — by directory):
+  node_modules/  .venv/  venv/  env/  __pycache__/
+  .git/  dist/  build/  .tox/  .mypy_cache/  .pytest_cache/
+  .mcp-coder/snapshots/   ← avoid recursion
+
+SKIP (by extension or binary heuristic):
+  .pyc  .so  .dll  .exe  .jpg  .png  .gif  .pdf  .zip  .tar  .gz
+
+INCLUDE everything else — including:
+  .env  config files  new untracked files  files outside spec contract
+```
+
+**Key:** No `.gitignore` dependency. Binary detection by extension + UTF-8 decode attempt. Size cap: skip files > configurable limit (default 1 MB, configurable `MCP_CODER_SNAPSHOT_MAX_FILE_MB`).
+
+---
+
+#### How this upgrades scope violation detection
+
+Today (P2-115 / P2-305):
+```
+scope_violations = files_changed ∩ (not in files_edit)
+                   ↑ incomplete in non-git workspaces
+```
+
+With BL-322a:
+```
+scope_violations = snapshot_delta.all_changes ∩ (not in files_edit)
+                   ↑ complete — catches everything including new files,
+                     modified untracked files, files outside target_files
+```
+
+---
+
+#### Relation to existing items
+
+| Item | Relation |
+|------|----------|
+| **P2-ISS-002** | Closed by BL-322a (non-git attribution) |
+| **BL-314** | BL-322a completes the "honest file reporting" story |
+| **BL-151** (gatekeeper MCP) | BL-322c is the post-run gate; BL-151 is the pre-run gate — together form full enforcement cycle |
+| **BL-502** (git worktree / diff return) | BL-322 is the simpler, non-git version of the same idea; BL-502 (git-native) remains for teams that want git-managed task branches |
+| **P2-305** (scope expansion report) | BL-322c replaces soft reporting with hard enforcement when configured |
+
+---
+
+#### Performance estimate
+
+Typical Python project (~500 text files, avg 5 KB each):
+- SHA-256 scan: ~20ms — negligible vs 30–200s delegation
+- Manifest JSON: ~100 KB — trivial
+- Content snapshot (files_edit only, e.g. 5 files × 10 KB): ~50 KB
+
+Node project without `node_modules`: similar. With `node_modules` included: 50k+ files — **must exclude** (already in hard skip list).
+
+---
+
+#### Rollback design (BL-322b + BL-322c strict)
+
+```text
+Before delegation:
+  snapshot/contents/src/splitter.py  ← saved content of files_edit
+
+Aider runs, also modifies config/settings.py (violation)
+
+Post-gate (strict):
+  config/settings.py → revert to pre-delegation content from snapshot
+  src/splitter.py    → accept (was in files_edit)
+  src/utils.py       → revert (was created, not in files_edit)
+
+Result: workspace has ONLY the contract-allowed changes
+```
+
+**Strict mode with teeth** — today strict reports violations but leaves workspace dirty. With BL-322b: strict mode can enforce a clean post-state.
+
+---
+
+**Target:** Phase 3 entry point. BL-322a (snapshot + attribution) ships first; BL-322b/c/d (content + gate + revert) follow in order.
+
+---
+
 ### BL-321: Progressive / tiered executor model selection
 
 **Status:** `idea` — from wild test P2-ISS-008; extends BL-003 (router) and BL-319 (rates).
@@ -470,7 +579,7 @@ Until then: add rows to bundled `model_rates.yaml` when switching models; unknow
 | ID | Item |
 |----|------|
 | BL-501 | Job ID + async delegation (poll / MCP notification) for long Aider runs |
-| BL-502 | Git worktree / dry-run diff return to Cursor instead of direct write |
+| BL-502 | Git worktree / task-branch per delegation — git-native audit trail + rollback (pairs with BL-322 non-git approach) |
 | BL-503 | Grade executor output with cheap model before returning to Cursor |
 | BL-504 | Global `~/.mcp-coder/config.yaml` defaults | Per-repo `config.yaml` shipped P1-130 |
 | BL-506 | Generic `transcript.md` watch folder (non-Cursor hosts) |
@@ -496,6 +605,7 @@ Until then: add rows to bundled `model_rates.yaml` when switching models; unknow
 | Date | Change |
 |------|--------|
 | 2026-06-07 | Wild test done — BL-320 failed-attempt archive; BL-321 tiered model selection (P2-ISS-007/008) |
+| 2026-06-07 | BL-322 workspace hash snapshot + post-delegation gateway — Phase 3 design (chat [Phase 2 tail review](d44a5b15-2ed4-4834-bc91-91f776e5dd02)) |
 | 2026-06-06 | P2-120 done — usage telemetry; BL-319 dynamic rates deferred; BL-154 partial |
 | 2026-06-06 | P1-199 exit — Post–Phase 1 focus reordered; BL-314 partial, BL-315–318 added; P1 issues migrated |
 | 2026-06-05 | BL-309–312 from expense-splitter E2E; BL-150 done |

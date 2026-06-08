@@ -145,6 +145,10 @@ Work proceeds in four waves. Milestones within a wave can run in sequence or be 
 | Skills + prompt packs | P2-405 | `todo` | BL-008 | Inject skills by topic/task type into assembler. |
 | Router / janitor (lite) | P2-410 | `todo` | BL-003, BL-162 | Freshness audit + cheap orchestrator LLM after assembly basics. |
 
+### Phase 3 anchor (post-exit)
+
+**Workspace history** ([OTEHR_RELATED_IDEAS/WORKSPACE_HISTORY.md](./OTEHR_RELATED_IDEAS/WORKSPACE_HISTORY.md), BL-322) — delegation-granularity version control via SQLite delta store. Closes P2-ISS-002 (non-git attribution), enables post-delegation gateway (BL-151), time-travel to any MCP call boundary. Independent of user's git. Phase 3 entry point alongside RAG (BL-002).
+
 Status: `todo` | `in_progress` | `done` | `blocked` | `optional`
 
 ---
@@ -242,3 +246,4 @@ Same pattern as Phase 1:
 | 2026-06-07 | **Wave 2 complete** — L2 compiler core + L3 hinge + inspect + caps + budget |
 | 2026-06-07 | **P2-305 done** — Scope expansion in spec reports; strict planner handoff; 312 pytest (+7) |
 | 2026-06-07 | **P2-308 done** — Rich MCP result + Aider token parse; Wave 3 minimum complete; 324 pytest (+12) |
+| 2026-06-07 | **BL-322 / WORKSPACE_HISTORY** — workspace history design captured; Phase 3 anchor |
