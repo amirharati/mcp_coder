@@ -210,9 +210,10 @@ All Q1–Q5 resolved (2026-06-08). Locked as D-P3-2/6/7/8 and Q3 deferred.
 - [ ] Failed attempts archived when config on (P3-320)
 - [x] Content snapshot + `revert_to_before` API (P3-322b)
 - [x] Strict gateway auto-reverts violations (P3-322c)
-- [ ] MCP returns `delegation_diff` on implement (P3-322d)
+- [x] MCP returns `delegation_diff` on implement (P3-322d)
+- [ ] Wave 1 dogfood sign-off (P3-401)
 - [ ] RAG lite retrieves prior delegation summary for same project (P3-002-lite)
-- [ ] Phase 3 exit review (P3-499) + dogfood
+- [ ] Phase 3 exit review (P3-499)
 
 ---
 
