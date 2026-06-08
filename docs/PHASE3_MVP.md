@@ -67,7 +67,7 @@ Later:            RAG index from delegation summaries + diffs
 | D-P3-6 | Attempt archive: `on_failure_only` **default ON**; user disables via `attempt_archive: off` in workspace `config.yaml` | P3-320 |
 | D-P3-7 | `auto_merge_spec_read` **default ON** in L2 compiler when `spec_path` set — merges spec `Files: read` into `ContextPackage` at read tier; opt-out `auto_merge_spec_read: false` in config | P3-311 |
 | D-P3-8 | P3-322d ships `delegation_diff` in MCP response only; `approve_delegation` MCP tool deferred to P3-151 / BL-151 | P3-322d, P3-151 |
-| D-P3-9 | **Delegation checkpoint labels** in `workspace_history.db` — see § below; **not** user git | P3-322e `optional` |
+| D-P3-9 | **Delegation checkpoint labels** in `workspace_history.db` — see § below; **not** user git | P3-322e `done` |
 
 ### D-P3-9 — What checkpoint metadata is (and why)
 
@@ -130,21 +130,24 @@ Task specs: `docs/tasks/P3-*.md` (gitignored; created per worker session).
 | Content snapshot + revert | P3-322b | `done` | BL-322b | blobs + unified diffs + `revert_to_before`; 364 pytest (+9) |
 | Post-delegation gateway | P3-322c | `done` | BL-322c, D-P3-4 | `gateway.py`; strict auto-revert; 374 pytest (+10) |
 | MCP diff + CLI history | P3-322d | `done` | BL-322d | `delegation_diff` + `get_delegation_diff` + CLI history; 385 pytest (+11) |
-| Checkpoint metadata (dataset) | P3-322e | `optional` | D-P3-9 | `checkpoint_summary` + spec ref on DB rows; AI debug/RAG/dataset — see § D-P3-9 |
+| Checkpoint metadata (dataset) | P3-322e | `done` | D-P3-9 | `checkpoint_summary` + telemetry on `snapshots` rows; `history list`; 388 pytest (+6) |
+| History inspect (browse DB) | P3-322f | `todo` | BL-322e | MCP `list_delegations` + `get_checkpoint_detail`; CLI `show`/`latest`; `diff --latest`; `list --file` |
 
-**Wave 1 extras (before dogfood):** P3-322e and/or P3-320 — master picks order.
+**Wave 1 extras (before dogfood):** P3-322e `done` → **P3-322f** next.
 
-**Next:** P3-401 Wave 1 dogfood runbook after extras (or skip extras → dogfood).
+**Deferred:** P3-320 attempt archive → **end of Phase 3** (needs design: avoid dirtying specs tree; brainstorm before spec).
 
-### Wave 2 — Planner-visible history
+**Next after 322f:** P3-401 Wave 1 dogfood runbook.
+
+### Wave 2 — Planner-visible history (**deferred — end of Phase 3**)
 
 **Goal:** Close P3-ISS-002; surface retry history without overwriting reports.  
-**Can parallel:** after P3-322a lands (different modules) or alongside P3-322b.
+**Status:** Deferred past Wave 1 dogfood — needs design brainstorm (attempt storage without confusing/dirtying specs tree). Target: before **P3-499** exit.
 
 | Milestone | Task ID | Status | Implements | Summary |
 |-----------|---------|--------|------------|---------|
-| Attempt archive | P3-320a/b | `todo` | BL-320a/b | `specs/attempts/<spec_id>/<delegation_id>.md` |
-| Report links + list tool | P3-320c/d | `todo` | BL-320c/d | Attempts section; MCP `list_delegation_attempts` |
+| Attempt archive | P3-320a/b | `deferred` | BL-320a/b | `specs/attempts/<spec_id>/<delegation_id>.md` — location TBD |
+| Report links + list tool | P3-320c/d | `deferred` | BL-320c/d | Attempts section; MCP `list_delegation_attempts` |
 
 ### Wave 3 — Cross-session memory
 
@@ -168,7 +171,9 @@ Task specs: `docs/tasks/P3-*.md` (gitignored; created per worker session).
 
 | Item | Disposition |
 |------|-------------|
-| P3-322e checkpoint metadata (D-P3-9) | **Optional extra** before P3-401 dogfood — `checkpoint_summary` on DB rows for AI/RAG/history list |
+| P3-322e checkpoint metadata (D-P3-9) | **Done** — 388 pytest (+6); JSONL `checkpoint` block |
+| P3-322f history inspect (MCP list + CLI show/latest) | **Active** — after 322e, before dogfood |
+| P3-320 attempt archive | **Deferred end of Phase 3** — brainstorm storage layout (keep specs clean) before worker spec |
 | P2-315 MCP progress notifications | BACKLOG BL-106 |
 | P2-400/405/410 intelligence wave | BACKLOG BL-153, BL-008, BL-003 |
 | P2-ISS-005 upstream_5xx live | BACKLOG BL-309 accepted risk |
@@ -219,9 +224,10 @@ All Q1–Q5 resolved (2026-06-08). Locked as D-P3-2/6/7/8 and Q3 deferred.
 
 ## Next action
 
-1. **Extras (optional, before dogfood):** P3-322e checkpoint labels and/or P3-320 attempt archive.
-2. **P3-401** — Wave 1 dogfood runbook + sign-off in e2e workspace.
-3. Revisit P3-311 priority at end of Wave 2; **Exit:** P3-499 when waves 1–4 checklist green.
+1. **Dispatch P3-322f** — MCP browse + CLI `show`/`latest`/`diff --latest`.
+2. **P3-401** — Wave 1 dogfood after 322f.
+3. **P3-320** — attempt archive design + implement before Phase 3 exit (P3-499).
+4. Revisit P3-311 priority at end of Wave 2; **Exit:** P3-499 when waves 1–4 checklist green.
 
 ---
 
@@ -233,6 +239,9 @@ All Q1–Q5 resolved (2026-06-08). Locked as D-P3-2/6/7/8 and Q3 deferred.
 | 2026-06-08 | Q1–Q5 resolved; D-P3-6/7/8 added; P3-322a spec aligned to tracker-primary (D-P3-2) |
 | 2026-06-08 | **P3-322a done** — `core/workspace/`; tracker-primary; P3-ISS-001 closed; 355 pytest |
 | 2026-06-08 | **P3-322b done** — blobs + diffs + revert; 364 pytest (+9) |
-| 2026-06-08 | **D-P3-9 / P3-322e** — checkpoint metadata § added; deferred after Wave 1 dogfood |
+| 2026-06-08 | **P3-322e done** — checkpoint metadata on snapshots; 388 pytest (+6) |
+| 2026-06-08 | **P3-322f added** — MCP `list_delegations` + CLI inspect after 322e |
+| 2026-06-08 | **P3-322e active** — checkpoint metadata before dogfood; **P3-320 deferred** end of Phase 3 |
+| 2026-06-08 | **D-P3-9 / P3-322e** — checkpoint metadata § added |
 | 2026-06-08 | **P3-322c done** — post-delegation gateway; strict auto-revert; 374 pytest (+10) |
 | 2026-06-08 | **P3-322d done** — Wave 1 code complete; delegation_diff + CLI history; 385 pytest (+11) |

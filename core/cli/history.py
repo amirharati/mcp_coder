@@ -39,7 +39,11 @@ def _cmd_list(args: argparse.Namespace) -> int:
             f" ~{row['modified_count']}"
             f" -{row['deleted_count']}"
         )
-        print(f"{ts}  {did[:8]}…  {counts}  {spec}")
+        summary = row.get("checkpoint_summary") or ""
+        line = f"{ts}  {did[:8]}…  {counts}  {spec}"
+        if summary:
+            line = f"{line}  {summary}"
+        print(line)
     return 0
 
 

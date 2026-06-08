@@ -678,13 +678,47 @@ def delegate_to_agent(
         usage_dict["preflight_tokens_est"] if context_package is not None else None
     )
 
+    t_post = time.perf_counter()
+    duration_ms = int((time.perf_counter() - t0) * 1000)
+    timing["post_process_ms"] = int((time.perf_counter() - t_post) * 1000)
+
+    checkpoint_block: dict[str, Any] | None = None
+    if workspace_snapshot is not None:
+        from core.workspace.checkpoint_summary import resolve_checkpoint_summary
+        from core.workspace.history_db import WorkspaceHistoryDB
+        from core.workspace.snapshot import is_snapshot_enabled
+
+        if is_snapshot_enabled():
+            summary = resolve_checkpoint_summary(
+                task=task,
+                spec_path=spec_rel_path,
+                workspace=ws,
+            )
+            delta = workspace_snapshot.get("delta") or {}
+            actual_usage = (usage_dict.get("actual") or {}) if usage_dict else {}
+            tokens_total = actual_usage.get("total")
+            db = WorkspaceHistoryDB(ws)
+            db.finalize_checkpoint_metadata(
+                delegation_id=delegation_id,
+                checkpoint_summary=summary,
+                delegate_mode=delegate_mode,
+                outcome=outcome,
+                model=resolved_model,
+                duration_ms=duration_ms,
+                tokens_total=tokens_total,
+                error_class=error_class if not success else None,
+                delta_created=len(delta.get("created") or []),
+                delta_modified=len(delta.get("modified") or []),
+                delta_deleted=len(delta.get("deleted") or []),
+            )
+            checkpoint_block = {"summary": summary, "outcome": outcome}
+
     delegation_diff_payload: dict[str, Any] | None = None
     if delegate_mode == DELEGATE_MODE_IMPLEMENT and workspace_snapshot is not None:
         from core.workspace.history_query import safe_delegation_diff_dict
 
         delegation_diff_payload = safe_delegation_diff_dict(ws, delegation_id)
 
-    t_post = time.perf_counter()
     response = _response_payload(
         success=success,
         output=output,
@@ -728,8 +762,6 @@ def delegate_to_agent(
         mcp_request["delegation_policies"] = policies_response
     if scope_violations:
         mcp_request["scope_violations"] = scope_violations
-    duration_ms = int((time.perf_counter() - t0) * 1000)
-    timing["post_process_ms"] = int((time.perf_counter() - t_post) * 1000)
 
     record = build_delegation_record(
         delegation_id=delegation_id,
@@ -778,6 +810,7 @@ def delegate_to_agent(
         error_message=error_message if not success else None,
         workspace_snapshot=workspace_snapshot,
         post_gateway=post_gateway,
+        checkpoint=checkpoint_block,
     )
     log_path = append_delegation_record(record, ws=ws)
     log_delegation_sent(

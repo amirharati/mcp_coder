@@ -20,6 +20,27 @@ def _history_db_path(workspace: str | Path) -> Path:
     return workspace_history_db_path(workspace)
 
 
+_SNAPSHOT_CHECKPOINT_COLUMNS: tuple[tuple[str, str], ...] = (
+    ("checkpoint_summary", "TEXT"),
+    ("delegate_mode", "TEXT"),
+    ("outcome", "TEXT"),
+    ("model", "TEXT"),
+    ("duration_ms", "INTEGER"),
+    ("tokens_total", "INTEGER"),
+    ("error_class", "TEXT"),
+    ("delta_created", "INTEGER"),
+    ("delta_modified", "INTEGER"),
+    ("delta_deleted", "INTEGER"),
+)
+
+_SNAPSHOT_SELECT = """
+    delegation_id, mcp_session_id, timestamp_start, timestamp_end, spec_path,
+    workspace_path, checkpoint_summary, delegate_mode, outcome, model,
+    duration_ms, tokens_total, error_class, delta_created, delta_modified,
+    delta_deleted
+"""
+
+
 class WorkspaceHistoryDB:
     """SQLite persistence for delegation workspace snapshots + content blobs."""
 
@@ -70,6 +91,16 @@ class WorkspaceHistoryDB:
         }
         if "diff" not in cols:
             conn.execute("ALTER TABLE file_deltas ADD COLUMN diff TEXT")
+        WorkspaceHistoryDB._migrate_snapshot_checkpoint_columns(conn)
+
+    @staticmethod
+    def _migrate_snapshot_checkpoint_columns(conn: sqlite3.Connection) -> None:
+        cols = {
+            row[1] for row in conn.execute("PRAGMA table_info(snapshots)").fetchall()
+        }
+        for name, sql_type in _SNAPSHOT_CHECKPOINT_COLUMNS:
+            if name not in cols:
+                conn.execute(f"ALTER TABLE snapshots ADD COLUMN {name} {sql_type}")
 
     @staticmethod
     def _insert_blob(conn: sqlite3.Connection, data: bytes) -> str:
@@ -285,15 +316,65 @@ class WorkspaceHistoryDB:
         with self._connect() as conn:
             conn.row_factory = sqlite3.Row
             row = conn.execute(
-                """
-                SELECT delegation_id, mcp_session_id, timestamp_start, timestamp_end,
-                       spec_path, workspace_path
+                f"""
+                SELECT {_SNAPSHOT_SELECT}
                 FROM snapshots
                 WHERE delegation_id = ?
                 """,
                 (delegation_id,),
             ).fetchone()
         return dict(row) if row else None
+
+    def finalize_checkpoint_metadata(
+        self,
+        *,
+        delegation_id: str,
+        checkpoint_summary: str,
+        delegate_mode: str | None,
+        outcome: str | None,
+        model: str | None,
+        duration_ms: int | None,
+        tokens_total: int | None,
+        error_class: str | None,
+        delta_created: int,
+        delta_modified: int,
+        delta_deleted: int,
+    ) -> None:
+        if not self.db_path.is_file():
+            return
+        with self._connect() as conn:
+            cur = conn.execute(
+                """
+                UPDATE snapshots SET
+                    checkpoint_summary = ?,
+                    delegate_mode = ?,
+                    outcome = ?,
+                    model = ?,
+                    duration_ms = ?,
+                    tokens_total = ?,
+                    error_class = ?,
+                    delta_created = ?,
+                    delta_modified = ?,
+                    delta_deleted = ?
+                WHERE delegation_id = ?
+                """,
+                (
+                    checkpoint_summary,
+                    delegate_mode,
+                    outcome,
+                    model,
+                    duration_ms,
+                    tokens_total,
+                    error_class,
+                    delta_created,
+                    delta_modified,
+                    delta_deleted,
+                    delegation_id,
+                ),
+            )
+            conn.commit()
+            if cur.rowcount == 0:
+                return
 
     def list_snapshots(
         self,
@@ -308,8 +389,8 @@ class WorkspaceHistoryDB:
             conn.row_factory = sqlite3.Row
             if spec_path:
                 rows = conn.execute(
-                    """
-                    SELECT delegation_id, timestamp_start, timestamp_end, spec_path
+                    f"""
+                    SELECT {_SNAPSHOT_SELECT}
                     FROM snapshots
                     WHERE spec_path = ?
                     ORDER BY timestamp_end DESC, timestamp_start DESC
@@ -319,8 +400,8 @@ class WorkspaceHistoryDB:
                 ).fetchall()
             else:
                 rows = conn.execute(
-                    """
-                    SELECT delegation_id, timestamp_start, timestamp_end, spec_path
+                    f"""
+                    SELECT {_SNAPSHOT_SELECT}
                     FROM snapshots
                     ORDER BY timestamp_end DESC, timestamp_start DESC
                     LIMIT ?

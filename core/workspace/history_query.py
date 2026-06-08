@@ -72,6 +72,7 @@ class DelegationDiff:
     timestamp_end: str | None = None
     diff_truncated: bool = False
     diff_truncated_paths: list[str] = field(default_factory=list)
+    checkpoint_summary: str | None = None
 
     def to_dict(self) -> dict[str, Any]:
         payload: dict[str, Any] = {
@@ -84,6 +85,8 @@ class DelegationDiff:
             "timestamp_start": self.timestamp_start,
             "timestamp_end": self.timestamp_end,
         }
+        if self.checkpoint_summary:
+            payload["checkpoint_summary"] = self.checkpoint_summary
         if self.diff_truncated:
             payload["diff_truncated"] = True
             payload["diff_truncated_paths"] = self.diff_truncated_paths
@@ -124,6 +127,7 @@ def build_delegation_diff(
 
     diffs, truncated, truncated_paths = apply_diff_truncation(raw_diffs)
 
+    summary = snapshot.get("checkpoint_summary")
     return DelegationDiff(
         delegation_id=delegation_id,
         created=sorted(created),
@@ -135,6 +139,7 @@ def build_delegation_diff(
         timestamp_end=snapshot.get("timestamp_end"),
         diff_truncated=truncated,
         diff_truncated_paths=truncated_paths,
+        checkpoint_summary=str(summary) if summary else None,
     )
 
 
@@ -150,21 +155,39 @@ def list_delegations(
     out: list[dict[str, Any]] = []
     for row in rows:
         delegation_id = str(row["delegation_id"])
-        deltas = db.get_file_deltas(delegation_id)
-        created = sum(1 for d in deltas if d["change_type"] == "created")
-        modified = sum(1 for d in deltas if d["change_type"] == "modified")
-        deleted = sum(1 for d in deltas if d["change_type"] == "deleted")
-        out.append(
-            {
-                "delegation_id": delegation_id,
-                "timestamp_start": row.get("timestamp_start"),
-                "timestamp_end": row.get("timestamp_end"),
-                "spec_path": row.get("spec_path"),
-                "created_count": created,
-                "modified_count": modified,
-                "deleted_count": deleted,
-            }
-        )
+        delta_created = row.get("delta_created")
+        delta_modified = row.get("delta_modified")
+        delta_deleted = row.get("delta_deleted")
+        if (
+            delta_created is not None
+            and delta_modified is not None
+            and delta_deleted is not None
+        ):
+            created = int(delta_created)
+            modified = int(delta_modified)
+            deleted = int(delta_deleted)
+        else:
+            deltas = db.get_file_deltas(delegation_id)
+            created = sum(1 for d in deltas if d["change_type"] == "created")
+            modified = sum(1 for d in deltas if d["change_type"] == "modified")
+            deleted = sum(1 for d in deltas if d["change_type"] == "deleted")
+        item: dict[str, Any] = {
+            "delegation_id": delegation_id,
+            "timestamp_start": row.get("timestamp_start"),
+            "timestamp_end": row.get("timestamp_end"),
+            "spec_path": row.get("spec_path"),
+            "created_count": created,
+            "modified_count": modified,
+            "deleted_count": deleted,
+            "checkpoint_summary": row.get("checkpoint_summary"),
+            "delegate_mode": row.get("delegate_mode"),
+            "outcome": row.get("outcome"),
+            "model": row.get("model"),
+            "duration_ms": row.get("duration_ms"),
+            "tokens_total": row.get("tokens_total"),
+            "error_class": row.get("error_class"),
+        }
+        out.append(item)
     return out
 
 

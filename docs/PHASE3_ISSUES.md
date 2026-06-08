@@ -27,7 +27,7 @@ Status: `open` | `scheduled` | `done` | `wontfix-p3` | `carried`
 | ID | Status | Priority | Title | Target | Notes |
 |----|--------|----------|-------|--------|-------|
 | P3-ISS-001 | `done` | medium | `files_changed` misses new paths without git | P3-322a / BL-322a | Fixed 2026-06-08 — manifest tracker-primary |
-| P3-ISS-002 | `carried` | medium | Failed-delegate audit trail weak vs JSONL | P3-320 / BL-320 | From **P2-ISS-007**; report Blockers overwrite |
+| P3-ISS-002 | `carried` | medium | Failed-delegate audit trail weak vs JSONL | P3-320 / BL-320 (`deferred` end P3) | From **P2-ISS-007**; report Blockers overwrite |
 | P3-ISS-003 | `scheduled` | medium | Planner can ignore `contract_warnings` | P3-311 / BL-311b | From **P2-ISS-004**; auto-merge read paths when `spec_path` set |
 | P3-ISS-004 | `scheduled` | low | Tiered executor model selection | P3-321 / BL-321 | From **P2-ISS-008** |
 
@@ -51,7 +51,7 @@ Status: `open` | `scheduled` | `done` | `wontfix-p3` | `carried`
 
 **Problem:** Main `specs/reports/*.md` overwrites Blockers on success; Run log truncated; JSONL canonical but not planner-visible.
 
-**Target:** BL-320 / P3-320 — attempt archive under `.mcp-coder/specs/attempts/`; optional `list_delegation_attempts` MCP tool.
+**Target:** BL-320 / P3-320 — **deferred end of Phase 3** (before P3-499). Open design: attempt storage without dirtying/confusing specs tree; location may differ from `.mcp-coder/specs/attempts/`.
 
 **Acceptance:** N failed implements → N attempt files (when config on); report links last N attempts.
 

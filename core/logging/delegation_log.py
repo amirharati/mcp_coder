@@ -148,6 +148,7 @@ def build_delegation_record(
     error_message: str | None = None,
     workspace_snapshot: dict[str, Any] | None = None,
     post_gateway: dict[str, Any] | None = None,
+    checkpoint: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     session_dir_str = str(Path(session_dir).resolve())
     log_path_str = str(Path(log_path).resolve())
@@ -224,6 +225,8 @@ def build_delegation_record(
         record["workspace_snapshot"] = workspace_snapshot
     if post_gateway is not None:
         record["post_gateway"] = post_gateway
+    if checkpoint is not None:
+        record["checkpoint"] = checkpoint
     return record
 
 
