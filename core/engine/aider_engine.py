@@ -253,6 +253,12 @@ class AiderEngine(ExecutionEngine):
                 files_changed, edit_paths_rel, used_git=used_git
             )
             tokens = _extract_tokens(coder, partial)
+            if tokens.get("source") == "unavailable" and output:
+                from core.usage.aider_tokens import parse_aider_output_tokens
+
+                parsed = parse_aider_output_tokens(output)
+                if parsed:
+                    tokens = parsed
             success, error = infer_run_success(
                 io=io,
                 output=output,

@@ -27,7 +27,7 @@ Status: `open` | `scheduled` | `done` | `wontfix-p2`
 |----|--------|----------|-------|--------|-------|
 | P2-ISS-001 | `open` | low | `(none)` placeholder parsed as Files contract path | P2-110 follow-up or Wave 2 | Wave 1 dogfood hello spec |
 | P2-ISS-002 | `open` | medium | `files_changed` misses new paths without git | P2-200 / BL-314 | `app/app/*` not in audit |
-| P2-ISS-003 | `open` | medium | `tokens.actual` stays `unavailable` | P2-308 / usage telemetry | Aider prints counts in output |
+| P2-ISS-003 | `done` | medium | `tokens.actual` stays `unavailable` | P2-308 | Fixed: `aider_output_parse` fallback; dogfood confirm optional |
 | P2-ISS-004 | `open` | medium | Planner can ignore `contract_warnings` | Rules / BL-311b / P2-200 | Read-dep omit → broken layout |
 | P2-ISS-005 | `open` | high | P1-ISS-012 live confirm (cheap model 500) | Wild test / Wave 1 | Timeout path confirmed Phase 4; `upstream_5xx` not reproduced |
 | P2-ISS-006 | `open` | medium | Timeout returns late — executor thread blocks shutdown | P2-125 follow-up | Phase 4: timeout @120s, MCP returned @219s |
@@ -80,7 +80,9 @@ Status: `open` | `scheduled` | `done` | `wontfix-p2`
 
 **Target:** P2-308 rich `ExecutionResult` or P2-120 follow-up — parse Aider output / coder state reliably.
 
-**Acceptance:** Successful delegate populates `usage.actual.total` when Aider reports token line.
+**Fixed:** P2-308 (2026-06-07) — `core/usage/aider_tokens.py` + `aider_engine` fallback when coder attrs empty; `source: aider_output_parse`.
+
+**Acceptance:** Successful delegate populates `usage.actual.total` when Aider reports token line. *(Unit + delegate tests green; optional live dogfood confirm in e2e workspace.)*
 
 ---
 

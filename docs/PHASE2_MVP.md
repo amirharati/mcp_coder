@@ -8,7 +8,7 @@
 
 # Phase 2 MVP — Product manager doc
 
-**Status:** **Wave 2 complete** (2026-06-07) — context compiler core shipped; **Wave 3** next (P2-305 / P2-308)
+**Status:** **Wave 3 minimum complete** (2026-06-07) — P2-305 + P2-308 shipped; **P2-499** exit review next
 **Host:** Cursor (Aider backend; other hosts deferred)
 **Technical reference:** [PHASES.md](./PHASES.md) § Phase 2 · [phase2-owned-context.md](./notes/phase2-owned-context.md)
 **Vision:** [IDEA.md](./IDEA.md) · [VISION_DOCS.md](./VISION_DOCS.md)
@@ -119,9 +119,9 @@ Work proceeds in four waves. Milestones within a wave can run in sequence or be 
 | Inspect context (dry-run) | P2-215 | `done` | `P2-2.15-inspect-context.md` | D-P2-7 — CLI `inspect-context` + MCP `inspect_context`; `adapter_preview` via translate; 265 pytest (+12) |
 | Window budget | P2-220 | `done` | `P2-2.20-window-budget.md` | BL-154 compiler caps — `apply_context_budget`; per-model `context_budget_tokens` in yaml; read-tier truncation only; 305 pytest (+17) |
 
-### Wave 3 — Executor + host contracts ← **active**
+### Wave 3 — Executor + host contracts ← **minimum done** (optional: P2-300 / P2-310 / P2-315)
 
-**Next worker spec:** `docs/tasks/P2-3.08-rich-result.md` (draft)
+**Next worker spec:** `docs/tasks/P2-4.99-exit-review.md` (draft) or optional Wave 3 tail
 
 **Goal:** Close audit loop layers 3–4; richer outcomes back to Cursor and spec reports.  
 **Design:** [phase2-owned-context.md § Audit loop](./notes/phase2-owned-context.md#audit-loop-four-layers)
@@ -130,7 +130,7 @@ Work proceeds in four waves. Milestones within a wave can run in sequence or be 
 |-----------|---------|--------|------------------------|---------|
 | Executor cache evolution | P2-300 | `todo` | BL-155 | Cache key on `ContextPackage` hash (not raw `target_files`); rolling brief; TTL. |
 | Scope expansion report | P2-305 | `done` | `P2-3.05-scope-expansion.md` | D-P2-3, D-SPEC-8, BL-314c — Scope expansion in reports; strict → blocked + re-plan; discover → informational; 312 pytest (+7) |
-| Rich `ExecutionResult` | P2-308 | `todo` | D-P2-3 | `scope_violations`, `capability_warnings`, `preflight_token_estimate` on result + JSONL. |
+| Rich `ExecutionResult` | P2-308 | `done` | `P2-3.08-rich-result.md` | D-P2-3 — MCP `capability_warnings`, enriched summary, `preflight_token_estimate`; Aider output token parse; 324 pytest (+12) |
 | Cheap model for review | P2-310 | `todo` | BL-162 partial | Route `mode=review` to cheap model; separate from executor config. |
 | MCP progress notifications | P2-315 | `todo` | BL-106 | Long-run progress to Cursor (if transport supports). |
 
@@ -198,7 +198,7 @@ Same pattern as Phase 1:
 - [x] **L2 compiler (v0):** `assemble_context()` + tiers + excerpts + untracked metadata (P2-200/205)
 - [x] **L3 adapter (Aider hinge):** `run_context(ContextPackage)` on spec implement (P2-210); legacy path when no spec / env off
 - [x] **Capabilities:** `BackendCapabilities` logged; degradation warnings visible (D-P2-5; P2-212)
-- [ ] **Audit loop:** JSONL has contract → package summary → adapter snapshot → result (four layers)
+- [x] **Audit loop:** JSONL + MCP expose contract → package summary → adapter snapshot → result (four layers; P2-308 MCP layer 4)
 - [x] **Inspect:** dry-run `ContextPackage` without backend (P2-215)
 - [x] Read-deps missing → warning (P2-110); scope expansion in reports (P2-305)
 - [x] Usage telemetry on every delegation — preflight + actual + cost (P2-120)
@@ -206,17 +206,17 @@ Same pattern as Phase 1:
 - [x] Delegation hardening: classified failures, no browser storm (P2-125; P2-ISS-006 timeout UX follow-up)
 - [x] **Wave 1 complete** (P2-110/115/120/125 + wild test)
 - [x] **Wave 2 complete** (P2-200 → P2-220)
-- [ ] Wave 3 at least P2-305 + P2-308 done
+- [x] Wave 3 at least P2-305 + P2-308 done
 - [ ] Phase 2 exit review (P2-499) completed; Phase 3 goals locked
 
 ---
 
 ## Next action
 
-1. **Push** `main` (P2-305 + prior commits) if not on remote.
-2. **P2-308** — draft worker spec: rich `ExecutionResult` + MCP response (`capability_warnings`, compiler snapshot, tokens).
-3. Optional dogfood: strict-scope delegate → confirm report `## Scope expansion` + `blocked` without JSONL.
-4. BACKLOG: note BL-314c partial done (P2-305).
+1. **Commit + push** P2-308; push `main` if not on remote.
+2. **P2-499** — Phase 2 exit review spec: checklist sign-off, open issues triage, Phase 3 goals.
+3. Optional dogfood: live delegate → confirm `usage.actual.source: aider_output_parse` (P2-ISS-003).
+4. Optional Wave 3 tail: P2-300 cache, P2-310 cheap review model.
 
 ---
 
@@ -241,3 +241,4 @@ Same pattern as Phase 1:
 | 2026-06-07 | **P2-220 done** — window budget; `COMPILER_VERSION` 0.3.0; 305 pytest (+17) |
 | 2026-06-07 | **Wave 2 complete** — L2 compiler core + L3 hinge + inspect + caps + budget |
 | 2026-06-07 | **P2-305 done** — Scope expansion in spec reports; strict planner handoff; 312 pytest (+7) |
+| 2026-06-07 | **P2-308 done** — Rich MCP result + Aider token parse; Wave 3 minimum complete; 324 pytest (+12) |

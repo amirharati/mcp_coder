@@ -246,6 +246,21 @@ def test_scope_expansion_discover_no_unexpected_no_section(tmp_path: Path):
     assert "## Scope expansion" not in report.read_text(encoding="utf-8")
 
 
+def test_run_log_includes_capability_warnings(tmp_path: Path):
+    report = tmp_path / "report.md"
+    report.write_text(REPORT_SAMPLE, encoding="utf-8")
+
+    apply_post_delegation_report_updates(
+        report,
+        **_base_kwargs(),
+        capability_warnings=["capability_degraded:read_only_not_supported:pkg/core.py"],
+    )
+
+    sections = parse_sections(split_front_matter(report.read_text(encoding="utf-8"))[1])
+    assert "**capability:**" in sections["Run log"]
+    assert "capability_degraded:read_only_not_supported:pkg/core.py" in sections["Run log"]
+
+
 def test_scope_expansion_idempotent(tmp_path: Path):
     """Calling twice with the same unexpected paths does not duplicate Scope expansion."""
     report = tmp_path / "report.md"

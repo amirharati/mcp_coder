@@ -422,3 +422,140 @@ def test_capability_warnings_in_jsonl_when_degraded(tmp_path, monkeypatch):
         "capability_warnings must appear in JSONL when degradation occurred"
     )
     assert any("pkg/core.py" in w for w in record["context"]["capability_warnings"])
+
+
+def test_capability_warnings_on_mcp_response_when_degraded(tmp_path, monkeypatch):
+    """Top-level capability_warnings mirror JSONL when degradation occurs."""
+    ws = _setup_workspace(tmp_path)
+    home = tmp_path / "home"
+    monkeypatch.setenv("MCP_CODER_HOME", str(home))
+    monkeypatch.delenv("MCP_CODER_USE_CONTEXT_PACKAGE", raising=False)
+    monkeypatch.chdir(ws)
+
+    no_read_caps = BackendCapabilities(
+        backend_id="test",
+        repo_map_source="git-tracked-only",
+        chat_file_mode="full-text-in-chat",
+        supports_read_only_in_chat=False,
+        dynamic_add_files=True,
+        dynamic_create_files=True,
+        shell_default=False,
+        session_continuity=False,
+    )
+
+    fake = ExecutionResult(success=True, output="ok", files_changed=[])
+    captured: dict = {}
+    engine = _make_mock_engine(fake, captured, caps=no_read_caps)
+
+    with patch("server.mcp_server.get_engine", return_value=engine):
+        raw = delegate_to_agent(
+            task="Implement CLI",
+            target_files=["pkg/cli.py"],
+            context_summary="Step 1",
+            spec_path="tasks/step-b.md",
+        )
+
+    payload = json.loads(raw)
+    assert "capability_warnings" in payload
+    assert any("pkg/core.py" in w for w in payload["capability_warnings"])
+    assert "capability_warnings" in payload["context_package_summary"]
+
+
+def test_context_package_summary_includes_truncations(tmp_path, monkeypatch):
+    """MCP context_package_summary includes budget truncations from compiler metadata."""
+    ws = _setup_workspace(tmp_path)
+    home = tmp_path / "home"
+    monkeypatch.setenv("MCP_CODER_HOME", str(home))
+    monkeypatch.setenv("MCP_CODER_CONTEXT_BUDGET_TOKENS", "200")
+    monkeypatch.delenv("MCP_CODER_USE_CONTEXT_PACKAGE", raising=False)
+    monkeypatch.chdir(ws)
+
+    big_content = "\n".join(f"x{i} = {i}" for i in range(400))
+    (ws / "pkg" / "core.py").write_text(big_content, encoding="utf-8")
+
+    fake = ExecutionResult(success=True, output="ok", files_changed=[])
+    captured: dict = {}
+    engine = _make_mock_engine(fake, captured)
+
+    with patch("server.mcp_server.get_engine", return_value=engine):
+        raw = delegate_to_agent(
+            task="Implement CLI",
+            target_files=["pkg/cli.py"],
+            context_summary="Step 1",
+            spec_path="tasks/step-b.md",
+        )
+
+    payload = json.loads(raw)
+    summary = payload["context_package_summary"]
+    assert "truncations" in summary
+    assert any(t.get("path") == "pkg/core.py" for t in summary["truncations"])
+    assert "entries" in summary
+    assert any(e["path"] == "pkg/core.py" for e in summary["entries"])
+
+
+def test_preflight_token_estimate_when_usage_report_disabled(tmp_path, monkeypatch):
+    """preflight_token_estimate present on package path even when usage_report=false."""
+    ws = _setup_workspace(tmp_path)
+    home = tmp_path / "home"
+    monkeypatch.setenv("MCP_CODER_HOME", str(home))
+    monkeypatch.setenv("MCP_CODER_USAGE_REPORT", "0")
+    monkeypatch.delenv("MCP_CODER_USE_CONTEXT_PACKAGE", raising=False)
+    monkeypatch.chdir(ws)
+
+    fake = ExecutionResult(success=True, output="ok", files_changed=[])
+    captured: dict = {}
+    engine = _make_mock_engine(fake, captured)
+
+    with patch("server.mcp_server.get_engine", return_value=engine):
+        raw = delegate_to_agent(
+            task="Implement CLI",
+            target_files=["pkg/cli.py"],
+            context_summary="Step 1",
+            spec_path="tasks/step-b.md",
+        )
+
+    payload = json.loads(raw)
+    assert "usage" not in payload
+    assert "preflight_token_estimate" in payload
+    assert isinstance(payload["preflight_token_estimate"], int)
+    assert payload["preflight_token_estimate"] > 0
+
+    record = json.loads(Path(payload["log_path"]).read_text(encoding="utf-8").strip())
+    assert "usage" in record
+
+
+def test_actual_tokens_from_output_parse(tmp_path, monkeypatch):
+    """usage.actual reflects aider_output_parse when engine provides parsed tokens."""
+    ws = _setup_workspace(tmp_path)
+    home = tmp_path / "home"
+    monkeypatch.setenv("MCP_CODER_HOME", str(home))
+    monkeypatch.delenv("MCP_CODER_USE_CONTEXT_PACKAGE", raising=False)
+    monkeypatch.chdir(ws)
+
+    fake = ExecutionResult(
+        success=True,
+        output="Tokens: 2.4k sent, 53 received.",
+        files_changed=[],
+        model="mock-model",
+        tokens={
+            "input": 2400,
+            "output": 53,
+            "total": 2453,
+            "source": "aider_output_parse",
+        },
+    )
+    captured: dict = {}
+    engine = _make_mock_engine(fake, captured)
+
+    with patch("server.mcp_server.get_engine", return_value=engine):
+        raw = delegate_to_agent(
+            task="Implement CLI",
+            target_files=["pkg/cli.py"],
+            context_summary="Step 1",
+            spec_path="tasks/step-b.md",
+        )
+
+    payload = json.loads(raw)
+    assert payload["usage"]["actual"]["source"] == "aider_output_parse"
+    assert payload["usage"]["actual"]["total"] == 2453
+    assert payload["preflight_token_estimate"] == payload["usage"]["preflight_tokens_est"]

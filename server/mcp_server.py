@@ -13,6 +13,7 @@ from core.context.assemble import assemble_context
 from core.context.budget import apply_context_budget, resolve_context_budget_tokens
 from core.context.capability_adjust import apply_backend_capabilities
 from core.context.inspect import inspect_context_package
+from core.context.mcp_summary import build_mcp_context_summary
 from core.context.package import (
     TIER_EDIT_FULL,
     TIER_READ_EXCERPT,
@@ -128,6 +129,8 @@ def _response_payload(
     error_class: str | None = None,
     error_message: str | None = None,
     context_package_summary: dict[str, Any] | None = None,
+    capability_warnings: list[str] | None = None,
+    preflight_token_estimate: int | None = None,
 ) -> dict[str, Any]:
     payload: dict[str, Any] = {
         "success": success,
@@ -178,6 +181,10 @@ def _response_payload(
         payload["error_message"] = error_message
     if context_package_summary is not None:
         payload["context_package_summary"] = context_package_summary
+    if capability_warnings:
+        payload["capability_warnings"] = capability_warnings
+    if preflight_token_estimate is not None:
+        payload["preflight_token_estimate"] = preflight_token_estimate
     return payload
 
 
@@ -573,6 +580,7 @@ def delegate_to_agent(
                 scope_violations=scope_violations or None,
                 files_unexpected=files_unexpected or None,
                 edit_scope=delegation_policies.edit_scope if delegation_policies else None,
+                capability_warnings=cap_warnings or None,
             )
             spec_read = read_task_spec(spec_abs_path, workspace=ws)
             spec_sha256 = spec_read.sha256
@@ -612,6 +620,15 @@ def delegate_to_agent(
     ):
         policies_response = delegation_policies.to_response_dict()
 
+    mcp_context_summary = (
+        build_mcp_context_summary(context_package, capability_warnings=cap_warnings or None)
+        if context_package is not None
+        else None
+    )
+    preflight_token_estimate = (
+        usage_dict["preflight_tokens_est"] if context_package is not None else None
+    )
+
     t_post = time.perf_counter()
     response = _response_payload(
         success=success,
@@ -641,21 +658,9 @@ def delegate_to_agent(
         usage_warnings=usage_warnings if usage_report_enabled else None,
         error_class=error_class if not success else None,
         error_message=error_message if not success else None,
-        context_package_summary=(
-            {
-                "compiler_version": context_package.metadata.get("compiler_version"),
-                "edit_paths": sorted(
-                    e.path for e in context_package.entries if e.tier == TIER_EDIT_FULL
-                ),
-                "read_paths": [
-                    e.path
-                    for e in context_package.entries
-                    if e.tier in (TIER_READ_FULL, TIER_READ_EXCERPT)
-                ],
-            }
-            if context_package is not None
-            else None
-        ),
+        context_package_summary=mcp_context_summary,
+        capability_warnings=cap_warnings or None,
+        preflight_token_estimate=preflight_token_estimate,
     )
     if spec_files_missing:
         mcp_request["spec_files_missing_from_target"] = spec_files_missing
