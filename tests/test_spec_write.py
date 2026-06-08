@@ -196,6 +196,42 @@ def test_scope_expansion_strict_blocks_and_fills_sections(tmp_path: Path):
     assert "Re-delegate" in sections["Suggested next (hints only)"]
 
 
+def test_scope_expansion_strict_includes_reverted_paths(tmp_path: Path):
+    report = tmp_path / "report.md"
+    report.write_text(REPORT_SAMPLE, encoding="utf-8")
+
+    apply_post_delegation_report_updates(
+        report,
+        **_base_kwargs(),
+        scope_violations=["expense_splitter/utils.py"],
+        edit_scope="strict",
+        reverted_paths=["expense_splitter/utils.py"],
+    )
+
+    text = report.read_text(encoding="utf-8")
+    _, body = split_front_matter(text)
+    sections = parse_sections(body)
+    assert "reverted" in sections["Scope expansion"]
+    assert "expense_splitter/utils.py" in sections["Scope expansion"]
+
+
+def test_scope_expansion_strict_revert_skipped_in_blockers(tmp_path: Path):
+    report = tmp_path / "report.md"
+    report.write_text(REPORT_SAMPLE, encoding="utf-8")
+
+    apply_post_delegation_report_updates(
+        report,
+        **_base_kwargs(),
+        scope_violations=["expense_splitter/utils.py"],
+        edit_scope="strict",
+        revert_skipped=["expense_splitter/utils.py"],
+    )
+
+    _, body = split_front_matter(report.read_text(encoding="utf-8"))
+    sections = parse_sections(body)
+    assert "Revert skipped" in sections["Blockers / questions"]
+
+
 def test_scope_expansion_clean_no_section(tmp_path: Path):
     """Both empty → no ## Scope expansion section at all."""
     report = tmp_path / "report.md"

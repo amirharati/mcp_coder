@@ -100,22 +100,43 @@ def _format_scope_expansion_discover(files_unexpected: list[str]) -> str:
     )
 
 
-def _format_scope_expansion_strict(scope_violations: list[str]) -> str:
+def _format_scope_expansion_strict(
+    scope_violations: list[str],
+    *,
+    reverted_paths: list[str] | None = None,
+) -> str:
     paths = "\n".join(f"- `{p}`" for p in scope_violations)
-    return (
-        "**scope_violation** — executor edited paths outside `files_edit` (edit_scope: strict).\n"
-        "Update the spec Files section and re-delegate; do not patch in the worker session.\n\n"
-        f"**Violation paths (outside files_edit):**\n{paths}"
-    )
+    lines = [
+        "**scope_violation** — executor edited paths outside `files_edit` (edit_scope: strict).",
+        "Update the spec Files section and re-delegate; do not patch in the worker session.",
+        "",
+        f"**Violation paths (outside files_edit):**\n{paths}",
+    ]
+    if reverted_paths:
+        lines.append("")
+        lines.append("**Reverted (restored to pre-delegation state):**")
+        for path in reverted_paths:
+            lines.append(f"- **reverted:** `{path}` (restored to pre-delegation state)")
+    return "\n".join(lines)
 
 
-def _scope_violation_blockers(scope_violations: list[str]) -> str:
+def _scope_violation_blockers(
+    scope_violations: list[str],
+    *,
+    revert_skipped: list[str] | None = None,
+) -> str:
     paths_inline = ", ".join(scope_violations)
-    return (
-        "scope_violation: executor touched paths outside files_edit.\n"
-        "Update spec Files → Edit to include all intended paths, then re-delegate.\n"
-        f"Violation paths: {paths_inline}"
-    )
+    lines = [
+        "scope_violation: executor touched paths outside files_edit.",
+        "Update spec Files → Edit to include all intended paths, then re-delegate.",
+        f"Violation paths: {paths_inline}",
+    ]
+    if revert_skipped:
+        skipped_inline = ", ".join(revert_skipped)
+        lines.append(
+            f"Revert skipped (missing snapshot data): {skipped_inline}"
+        )
+    return "\n".join(lines)
 
 
 def _scope_violation_suggestions() -> str:
@@ -162,6 +183,8 @@ def apply_post_delegation_report_updates(
     files_unexpected: list[str] | None = None,
     edit_scope: str | None = None,
     capability_warnings: list[str] | None = None,
+    reverted_paths: list[str] | None = None,
+    revert_skipped: list[str] | None = None,
 ) -> tuple[str, str]:
     """Append Run log on report file; update Status, Blockers, Worker feedback; sync YAML status."""
     raw = path.read_text(encoding="utf-8")
@@ -196,7 +219,12 @@ def apply_post_delegation_report_updates(
     discover_expansion = bool(files_unexpected) and edit_scope != "strict"
     if strict_violation:
         body = replace_section_body(
-            body, "Scope expansion", _format_scope_expansion_strict(scope_violations or [])
+            body,
+            "Scope expansion",
+            _format_scope_expansion_strict(
+                scope_violations or [],
+                reverted_paths=reverted_paths,
+            ),
         )
     elif discover_expansion:
         body = replace_section_body(
@@ -207,7 +235,12 @@ def apply_post_delegation_report_updates(
 
     if strict_violation:
         body = replace_section_body(
-            body, "Blockers / questions", _scope_violation_blockers(scope_violations or [])
+            body,
+            "Blockers / questions",
+            _scope_violation_blockers(
+                scope_violations or [],
+                revert_skipped=revert_skipped,
+            ),
         )
         body = replace_section_body(
             body, "Suggested next (hints only)", _scope_violation_suggestions()

@@ -67,6 +67,35 @@ Later:            RAG index from delegation summaries + diffs
 | D-P3-6 | Attempt archive: `on_failure_only` **default ON**; user disables via `attempt_archive: off` in workspace `config.yaml` | P3-320 |
 | D-P3-7 | `auto_merge_spec_read` **default ON** in L2 compiler when `spec_path` set — merges spec `Files: read` into `ContextPackage` at read tier; opt-out `auto_merge_spec_read: false` in config | P3-311 |
 | D-P3-8 | P3-322d ships `delegation_diff` in MCP response only; `approve_delegation` MCP tool deferred to P3-151 / BL-151 | P3-322d, P3-151 |
+| D-P3-9 | **Delegation checkpoint labels** in `workspace_history.db` — see § below; **not** user git | P3-322e `optional` |
+
+### D-P3-9 — What checkpoint metadata is (and why)
+
+**What it is:** Each `delegate_to_agent` call is already a **time-machine checkpoint** (manifest + diffs in our DB). Today checkpoints are keyed by `delegation_id` and timestamps — hard for humans or models to answer *“what was this delegation about?”* **D-P3-9** adds a **commit-message-shaped label** and **spec link** on each `snapshots` row in **`workspace_history.db`** (mcp-coder home only — **not** the user’s git repo).
+
+**Example fields (target shape):**
+
+| Field | Source | Purpose |
+|-------|--------|---------|
+| `spec_path` | MCP request | Which task contract this checkpoint belongs to |
+| `checkpoint_summary` | Spec Goal or `task` arg | Short “what was this about” (like a commit subject) |
+| `delegate_mode` | implement / review | What kind of run |
+| `outcome` | spec outcome / blocked | Did the contract succeed |
+| `model`, `duration_ms`, token counts | delegation telemetry | Executor context |
+| `delta_counts` | manifest delta | How much changed (created/modified/deleted) |
+
+**Why we want it (primary: AI / system, not git):**
+
+1. **Debug** — Models and tools can retrieve “the step that broke `loader.py`” with intent + diff + outcome in one query, without parsing raw JSONL.
+2. **RAG (Wave 3)** — Keyword/recency search over *meaningful* checkpoint text + `spec_path`, not UUIDs.
+3. **Improvement loop** — Structured rows pair **intent** (spec + context summary) with **reality** (delta, violations, errors) — a dataset for analyzing failures and tuning delegation behavior (and potentially future model training/export).
+4. **Human browse** — `history list` reads like a task log; side effect, not the main driver.
+
+**What it is not:**
+
+- Not user git commit messages, not `git commit`, not replacing git.
+- Not used for `files_changed` attribution (D-P3-2 manifest stays canonical).
+- Not blocking Wave 1 — ship after **P3-322d** + Wave 1 dogfood (**P3-322e**).
 
 ---
 
@@ -98,10 +127,13 @@ Task specs: `docs/tasks/P3-*.md` (gitignored; created per worker session).
 |-----------|---------|--------|------------|---------|
 | Manifest + delta + DB | P3-322a | `done` | BL-322a, P3-ISS-001 | `core/workspace/`; tracker-primary attribution; JSONL `workspace_snapshot`; 355 pytest (+7) |
 | Content snapshot + revert | P3-322b | `done` | BL-322b | blobs + unified diffs + `revert_to_before`; 364 pytest (+9) |
-| Post-delegation gateway | P3-322c | `todo` | BL-322c | Strict with teeth; discover unchanged |
+| Post-delegation gateway | P3-322c | `done` | BL-322c, D-P3-4 | `gateway.py`; strict auto-revert; 374 pytest (+10) |
 | MCP diff + CLI history | P3-322d | `todo` | BL-322d | `delegation_diff` in response; optional approve |
+| Checkpoint metadata (dataset) | P3-322e | `optional` | D-P3-9 | `checkpoint_summary` + spec ref on DB rows; AI debug/RAG/dataset — see § D-P3-9 |
 
-**Next worker spec:** `docs/tasks/P3-322c-post-gateway.md` (draft when ready)
+**Next worker spec:** `docs/tasks/P3-322d-delegation-diff.md` (draft when ready)
+
+**Deferred (not blocking):** P3-322e after Wave 1 dogfood or when 322d ships — see D-P3-9.
 
 ### Wave 2 — Planner-visible history
 
@@ -131,10 +163,11 @@ Task specs: `docs/tasks/P3-*.md` (gitignored; created per worker session).
 | Pre-delegation gatekeeper | P3-151 | `todo` | BL-151 | Pairs with P3-322c post-gate |
 | Tiered executor models | P3-321 | `optional` | BL-321, P3-ISS-004 | Tier catalog; optional auto step-up |
 
-### Carried from Phase 2 (not Phase 3 core)
+### Carried / deferred features (not blocking main path)
 
 | Item | Disposition |
 |------|-------------|
+| P3-322e checkpoint metadata (D-P3-9) | **Deferred** — after 322d + Wave 1 dogfood. Adds human-readable + AI-queryable labels to our DB (not git). See § D-P3-9. |
 | P2-315 MCP progress notifications | BACKLOG BL-106 |
 | P2-400/405/410 intelligence wave | BACKLOG BL-153, BL-008, BL-003 |
 | P2-ISS-005 upstream_5xx live | BACKLOG BL-309 accepted risk |
@@ -175,7 +208,7 @@ All Q1–Q5 resolved (2026-06-08). Locked as D-P3-2/6/7/8 and Q3 deferred.
 - [x] `workspace_history.db` records per-delegation delta; JSONL links `delegation_id`
 - [ ] Failed attempts archived when config on (P3-320)
 - [x] Content snapshot + `revert_to_before` API (P3-322b)
-- [ ] Strict gateway auto-reverts violations (P3-322c)
+- [x] Strict gateway auto-reverts violations (P3-322c)
 - [ ] MCP returns `delegation_diff` on implement (P3-322d)
 - [ ] RAG lite retrieves prior delegation summary for same project (P3-002-lite)
 - [ ] Phase 3 exit review (P3-499) + dogfood
@@ -184,8 +217,8 @@ All Q1–Q5 resolved (2026-06-08). Locked as D-P3-2/6/7/8 and Q3 deferred.
 
 ## Next action
 
-1. **Draft + dispatch** P3-322c (post-delegation strict gateway + auto-revert).
-2. Revisit P3-311 priority at end of Wave 2; Wave 1 dogfood after P3-322d.
+1. **Draft + dispatch** P3-322d (`delegation_diff` in MCP + CLI history).
+2. Wave 1 dogfood after 322d; P3-322e deferred; revisit P3-311 at end of Wave 2.
 2. **Exit:** P3-499 dogfood when waves 1–4 checklist green.
 
 ---
@@ -198,3 +231,5 @@ All Q1–Q5 resolved (2026-06-08). Locked as D-P3-2/6/7/8 and Q3 deferred.
 | 2026-06-08 | Q1–Q5 resolved; D-P3-6/7/8 added; P3-322a spec aligned to tracker-primary (D-P3-2) |
 | 2026-06-08 | **P3-322a done** — `core/workspace/`; tracker-primary; P3-ISS-001 closed; 355 pytest |
 | 2026-06-08 | **P3-322b done** — blobs + diffs + revert; 364 pytest (+9) |
+| 2026-06-08 | **D-P3-9 / P3-322e** — checkpoint metadata § added; deferred after Wave 1 dogfood |
+| 2026-06-08 | **P3-322c done** — post-delegation gateway; strict auto-revert; 374 pytest (+10) |

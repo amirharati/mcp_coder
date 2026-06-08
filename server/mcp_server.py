@@ -54,9 +54,9 @@ from core.engine.spec_review import run_spec_review
 from core.specs.delegation_policies import (
     DelegationPolicies,
     PolicyValidationError,
-    compute_scope_violations,
     load_delegation_policies,
 )
+from core.workspace.gateway import apply_post_delegation_gateway
 from core.specs.files_contract import build_contract_warnings, paths_missing_from_target
 from core.specs.modes import DELEGATE_MODE_IMPLEMENT, DELEGATE_MODE_REVIEW, normalize_delegate_mode
 from core.specs.outcome import (
@@ -124,6 +124,8 @@ def _response_payload(
     contract_warnings: list[str] | None = None,
     delegation_policies: dict[str, Any] | None = None,
     scope_violations: list[str] | None = None,
+    reverted_paths: list[str] | None = None,
+    revert_skipped: list[str] | None = None,
     usage: dict[str, Any] | None = None,
     usage_warnings: list[str] | None = None,
     error_class: str | None = None,
@@ -171,6 +173,10 @@ def _response_payload(
         payload["delegation_policies"] = delegation_policies
     if scope_violations:
         payload["scope_violations"] = scope_violations
+    if reverted_paths:
+        payload["reverted_paths"] = reverted_paths
+    if revert_skipped:
+        payload["revert_skipped"] = revert_skipped
     if usage is not None:
         payload["usage"] = usage
     if usage_warnings:
@@ -566,22 +572,43 @@ def delegate_to_agent(
     spec_mtime: str | None = spec_read.mtime_iso if spec_read else None
     outcome: str | None = None
     scope_violations: list[str] = []
+    reverted_paths: list[str] = []
+    revert_skipped: list[str] = []
+    post_gateway: dict[str, Any] | None = None
     spec_report_rel_path: str | None = None
+
+    if (
+        spec_path
+        and not spec_invalid_reason
+        and delegate_mode == DELEGATE_MODE_IMPLEMENT
+        and delegation_policies is not None
+    ):
+        gateway_result = apply_post_delegation_gateway(
+            workspace=ws,
+            delegation_id=delegation_id,
+            delegate_mode=delegate_mode,
+            edit_scope=delegation_policies.edit_scope,
+            files_changed=files_changed,
+            files_edit=delegation_policies.files_edit,
+        )
+        scope_violations = gateway_result.scope_violations
+        reverted_paths = gateway_result.reverted_paths
+        revert_skipped = gateway_result.revert_skipped
+        if gateway_result.gateway_applied or scope_violations:
+            post_gateway = {
+                "edit_scope": delegation_policies.edit_scope,
+                "violations": scope_violations,
+                "reverted": reverted_paths,
+                "skipped": revert_skipped,
+                "gateway_applied": gateway_result.gateway_applied,
+            }
+
     if spec_path:
         if spec_invalid_reason:
             outcome = OUTCOME_INVALID_SPEC
         elif spec_abs_path is not None and spec_abs_path.is_file():
             report_abs_path = ensure_task_report(spec_abs_path, workspace=ws)
             spec_report_rel_path = str(report_abs_path.resolve().relative_to(Path(ws).resolve()))
-            # Compute scope violations before writing report so the report reflects them.
-            if (
-                delegate_mode == DELEGATE_MODE_IMPLEMENT
-                and delegation_policies is not None
-                and delegation_policies.edit_scope == "strict"
-            ):
-                scope_violations = compute_scope_violations(
-                    files_changed, delegation_policies.files_edit
-                )
             apply_post_delegation_report_updates(
                 report_abs_path,
                 timestamp=timestamp_end,
@@ -598,6 +625,8 @@ def delegate_to_agent(
                 files_unexpected=files_unexpected or None,
                 edit_scope=delegation_policies.edit_scope if delegation_policies else None,
                 capability_warnings=cap_warnings or None,
+                reverted_paths=reverted_paths or None,
+                revert_skipped=revert_skipped or None,
             )
             spec_read = read_task_spec(spec_abs_path, workspace=ws)
             spec_sha256 = spec_read.sha256
@@ -671,6 +700,8 @@ def delegate_to_agent(
         contract_warnings=contract_warnings or None,
         delegation_policies=policies_response,
         scope_violations=scope_violations or None,
+        reverted_paths=reverted_paths or None,
+        revert_skipped=revert_skipped or None,
         usage=usage_dict if usage_report_enabled else None,
         usage_warnings=usage_warnings if usage_report_enabled else None,
         error_class=error_class if not success else None,
@@ -736,6 +767,7 @@ def delegate_to_agent(
         error_class=error_class if not success else None,
         error_message=error_message if not success else None,
         workspace_snapshot=workspace_snapshot,
+        post_gateway=post_gateway,
     )
     log_path = append_delegation_record(record, ws=ws)
     log_delegation_sent(
