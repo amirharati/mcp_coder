@@ -213,10 +213,10 @@ Same pattern as Phase 1:
 
 ## Next action
 
-1. **Commit + push** P2-220 (Wave 2 exit) if not on remote.
-2. **Wave 3** — draft worker spec for **P2-305** (scope expansion in spec reports) or **P2-308** (rich `ExecutionResult` / MCP response).
-3. Optional dogfood: `inspect-context` on a large read-dep spec with low `MCP_CODER_CONTEXT_BUDGET_TOKENS` — confirm `truncations` in output.
-4. BACKLOG: note BL-154 compiler caps done (telemetry was P2-120).
+1. **Push** `main` (P2-305 + prior commits) if not on remote.
+2. **P2-308** — draft worker spec: rich `ExecutionResult` + MCP response (`capability_warnings`, compiler snapshot, tokens).
+3. Optional dogfood: strict-scope delegate → confirm report `## Scope expansion` + `blocked` without JSONL.
+4. BACKLOG: note BL-314c partial done (P2-305).
 
 ---
 
