@@ -91,3 +91,9 @@ def test_compute_files_unexpected(tmp_path):
     assert unexpected == ["src/extra.py"]
 
     assert compute_files_unexpected(["a.py"], ["a.py"], used_git=False) == []
+
+    assert compute_files_unexpected(
+        ["a.py", "b.py"],
+        ["a.py"],
+        attribution_source="manifest",
+    ) == ["b.py"]

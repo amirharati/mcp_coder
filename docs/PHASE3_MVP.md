@@ -8,7 +8,7 @@
 
 # Phase 3 MVP — Product manager doc
 
-**Status:** **Planning** (2026-06-08) — entry milestone **P3-322a** spec ready; worker not dispatched
+**Status:** **Wave 1 in progress** (2026-06-08) — **P3-322a done**; next **P3-322b** (or P3-320 ∥)
 **Host:** Cursor (Aider backend; other hosts deferred)
 **Technical reference:** [PHASES.md](./PHASES.md) § Phase 3 · [WORKSPACE_HISTORY.md](./OTEHR_RELATED_IDEAS/WORKSPACE_HISTORY.md)
 **Vision:** [IDEA.md](./IDEA.md) · [VISION_DOCS.md](./VISION_DOCS.md)
@@ -60,10 +60,13 @@ Later:            RAG index from delegation summaries + diffs
 | ID | Decision | Primary tasks |
 |----|----------|---------------|
 | D-P3-1 | Workspace delta DB in MCP home, not consumer workspace | P3-322a |
-| D-P3-2 | **Tracker-primary:** `files_changed` from manifest delta every delegate — git-agnostic; git optional metadata only (322d) | P3-322a |
+| D-P3-2 | **Tracker-primary:** `files_changed` / `files_unexpected` always from manifest before/after walk — git-agnostic; user git is secondary metadata only (commit messages etc. useful context, not attribution) | P3-322a |
 | D-P3-3 | Main report = current status; failures → attempt archive (BL-320) | P3-320 |
 | D-P3-4 | Strict scope can revert violations when content snapshot exists | P3-322b/c |
 | D-P3-5 | RAG v1 keyword + recency before embeddings | P3-002-lite |
+| D-P3-6 | Attempt archive: `on_failure_only` **default ON**; user disables via `attempt_archive: off` in workspace `config.yaml` | P3-320 |
+| D-P3-7 | `auto_merge_spec_read` **default ON** in L2 compiler when `spec_path` set — merges spec `Files: read` into `ContextPackage` at read tier; opt-out `auto_merge_spec_read: false` in config | P3-311 |
+| D-P3-8 | P3-322d ships `delegation_diff` in MCP response only; `approve_delegation` MCP tool deferred to P3-151 / BL-151 | P3-322d, P3-151 |
 
 ---
 
@@ -93,12 +96,12 @@ Task specs: `docs/tasks/P3-*.md` (gitignored; created per worker session).
 
 | Milestone | Task ID | Status | Implements | Summary |
 |-----------|---------|--------|------------|---------|
-| Manifest + delta + DB | P3-322a | `todo` | BL-322a, P3-ISS-001 | `core/workspace/`; wire `git_diff` + `aider_engine`; JSONL `workspace_snapshot` |
+| Manifest + delta + DB | P3-322a | `done` | BL-322a, P3-ISS-001 | `core/workspace/`; tracker-primary attribution; JSONL `workspace_snapshot`; 355 pytest (+7) |
 | Content snapshot + revert | P3-322b | `todo` | BL-322b | Contract files full content before delegate |
 | Post-delegation gateway | P3-322c | `todo` | BL-322c | Strict with teeth; discover unchanged |
 | MCP diff + CLI history | P3-322d | `todo` | BL-322d | `delegation_diff` in response; optional approve |
 
-**Next worker spec:** `docs/tasks/P3-322a-workspace-snapshot.md`
+**Next worker spec:** `docs/tasks/P3-322b-content-snapshot.md` (draft when ready) or P3-320 after Wave 1 planning
 
 ### Wave 2 — Planner-visible history
 
@@ -154,20 +157,22 @@ Status: `todo` | `in_progress` | `done` | `blocked` | `optional`
 
 ## Open questions (PM track)
 
-| # | Question | When |
-|---|----------|------|
-| Q1 | ~~Git vs manifest~~ → **locked:** tracker-primary attribution (D-P3-2) | — |
-| Q2 | Attempt archive default `on_failure_only` vs off? | P3-320 |
-| Q3 | RAG store in same SQLite vs separate DB? | P3-002 |
-| Q4 | BL-311b auto-merge default on when `spec_path` set? | P3-311 |
-| Q5 | Gateway `approve_delegation` MCP tool in 322d or later? | P3-322d |
+All Q1–Q5 resolved (2026-06-08). Locked as D-P3-2/6/7/8 and Q3 deferred.
+
+| # | Question | **Locked answer** | D-P3 |
+|---|----------|-------------------|------|
+| Q1 | Git vs manifest attribution | Tracker-primary — manifest always | D-P3-2 |
+| Q2 | Attempt archive default | `on_failure_only` default ON; `off` to disable | D-P3-6 |
+| Q3 | RAG store location | Decide at P3-002-lite (not a blocker for Waves 1–2) | — |
+| Q4 | auto-merge spec read default | ON in L2 compiler when `spec_path` set | D-P3-7 |
+| Q5 | `approve_delegation` in 322d? | No — `delegation_diff` only; approve → P3-151 | D-P3-8 |
 
 ---
 
 ## Phase 3 success checklist (draft)
 
-- [ ] Non-git workspace: `files_changed` lists all delegation touches (P3-322a)
-- [ ] `workspace_history.db` records per-delegation delta; JSONL links `delegation_id`
+- [x] Non-git workspace: `files_changed` lists all delegation touches (P3-322a)
+- [x] `workspace_history.db` records per-delegation delta; JSONL links `delegation_id`
 - [ ] Failed attempts archived when config on (P3-320)
 - [ ] Strict + content snapshot can revert violations (P3-322b/c)
 - [ ] MCP returns `delegation_diff` on implement (P3-322d)
@@ -178,9 +183,8 @@ Status: `todo` | `in_progress` | `done` | `blocked` | `optional`
 
 ## Next action
 
-1. **Dispatch** P3-322a worker (tracker-primary attribution locked in D-P3-2).
-2. **Parallel:** draft P3-320 spec while 322a implements (optional).
-3. **Exit:** P3-499 dogfood when waves 1–4 checklist green.
+1. **Draft + dispatch** P3-322b (content snapshot + revert) or P3-320 (attempt archive) — revisit P3-311 priority at end of Wave 2.
+2. **Exit:** P3-499 dogfood when waves 1–4 checklist green.
 
 ---
 
@@ -189,3 +193,5 @@ Status: `todo` | `in_progress` | `done` | `blocked` | `optional`
 | Date | Change |
 |------|--------|
 | 2026-06-08 | Initial Phase 3 PM doc; waves 1–4; carried items from P2-499 exit |
+| 2026-06-08 | Q1–Q5 resolved; D-P3-6/7/8 added; P3-322a spec aligned to tracker-primary (D-P3-2) |
+| 2026-06-08 | **P3-322a done** — `core/workspace/`; tracker-primary; P3-ISS-001 closed; 355 pytest |

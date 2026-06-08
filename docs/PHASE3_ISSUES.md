@@ -26,7 +26,7 @@ Status: `open` | `scheduled` | `done` | `wontfix-p3` | `carried`
 
 | ID | Status | Priority | Title | Target | Notes |
 |----|--------|----------|-------|--------|-------|
-| P3-ISS-001 | `carried` | medium | `files_changed` misses new paths without git | P3-322a / BL-322a | From **P2-ISS-002** |
+| P3-ISS-001 | `done` | medium | `files_changed` misses new paths without git | P3-322a / BL-322a | Fixed 2026-06-08 — manifest tracker-primary |
 | P3-ISS-002 | `carried` | medium | Failed-delegate audit trail weak vs JSONL | P3-320 / BL-320 | From **P2-ISS-007**; report Blockers overwrite |
 | P3-ISS-003 | `scheduled` | medium | Planner can ignore `contract_warnings` | P3-311 / BL-311b | From **P2-ISS-004**; auto-merge read paths when `spec_path` set |
 | P3-ISS-004 | `scheduled` | low | Tiered executor model selection | P3-321 / BL-321 | From **P2-ISS-008** |
@@ -41,7 +41,7 @@ Status: `open` | `scheduled` | `done` | `wontfix-p3` | `carried`
 
 **Target:** P3-322a — workspace manifest walk + delta in `workspace_history.db`; wire into `files_changed` / `files_unexpected`.
 
-**Acceptance:** Non-git E2E delegate lists all created/modified paths under workspace (P2-ISS-002 dogfood scenario).
+**Acceptance:** Non-git E2E delegate lists all created/modified paths under workspace (P2-ISS-002 dogfood scenario). ✓ P3-322a unit tests + 355 pytest.
 
 ---
 
@@ -97,3 +97,4 @@ Status: `open` | `scheduled` | `done` | `wontfix-p3` | `carried`
 | Date | Change |
 |------|--------|
 | 2026-06-08 | Tracker created at Phase 3 start; P3-ISS-001–004 carried from P2 exit |
+| 2026-06-08 | **P3-ISS-001 done** — P3-322a manifest attribution |

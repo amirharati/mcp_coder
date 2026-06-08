@@ -146,6 +146,7 @@ def build_delegation_record(
     usage: dict[str, Any] | None = None,
     error_class: str | None = None,
     error_message: str | None = None,
+    workspace_snapshot: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     session_dir_str = str(Path(session_dir).resolve())
     log_path_str = str(Path(log_path).resolve())
@@ -218,6 +219,8 @@ def build_delegation_record(
             "error_class": error_class,
             "error_message": error_message,
         }
+    if workspace_snapshot is not None:
+        record["workspace_snapshot"] = workspace_snapshot
     return record
 
 

@@ -60,13 +60,21 @@ def _make_mock_engine(
 
     _caps = caps if caps is not None else AIDER_CAPABILITIES
 
-    def _run_context(self_ref, package, *, workspace_path, mcp_session_id=None, host_transcript=None):
+    def _run_context(
+        self_ref,
+        package,
+        *,
+        workspace_path,
+        mcp_session_id=None,
+        host_transcript=None,
+        **kwargs,
+    ):
         captured["package"] = package
         captured["called"] = "run_context"
         fake_result.prompt_used = "## Task\ntest"
         return fake_result
 
-    def _run(self_ref, prompt, target_files, *, workspace_path, mcp_session_id=None):
+    def _run(self_ref, prompt, target_files, *, workspace_path, mcp_session_id=None, **kwargs):
         captured["called"] = "run"
         return fake_result
 

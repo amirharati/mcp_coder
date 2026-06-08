@@ -25,12 +25,8 @@ from core.config.providers import apply_provider_env
 from core.engine.base import BackendRunRequest, ExecutionEngine, ExecutionResult
 from core.engine.capabilities import AIDER_CAPABILITIES, BackendCapabilities
 from core.engine.factory import register_engine
-from core.engine.git_diff import (
-    compute_files_unexpected,
-    files_touched_since_snapshot,
-    snapshot_git_dirty,
-    snapshot_mtimes,
-)
+from core.engine.git_diff import snapshot_git_dirty, snapshot_mtimes
+from core.workspace.snapshot import begin_delegation_snapshot, resolve_delegation_attribution
 from core.engine.stdio_isolation import isolated_stdio, merged_capture
 
 BACKEND_ID = "aider"
@@ -142,6 +138,10 @@ class AiderEngine(ExecutionEngine):
         workspace_path: str,
         mcp_session_id: str | None,
         context_package_key: str | None = None,
+        delegation_id: str | None = None,
+        spec_path: str | None = None,
+        contract_paths: list[str] | None = None,
+        timestamp_start: str | None = None,
     ) -> ExecutionResult:
         """Core Aider execution shared by run() and run_context().
 
@@ -156,6 +156,8 @@ class AiderEngine(ExecutionEngine):
         executor_recreated = False
         before_git: set[str] | None = None
         before_mtimes: dict[str, float | None] | None = None
+        snapshot_session = None
+        contract = contract_paths or edit_paths_rel
         try:
             os.chdir(workspace_path)
             resolved_files = [
@@ -165,6 +167,13 @@ class AiderEngine(ExecutionEngine):
             model = Model(self._model_name)
             before_git = snapshot_git_dirty(workspace_path)
             before_mtimes = snapshot_mtimes(workspace_path, edit_paths_rel)
+            snapshot_session = begin_delegation_snapshot(
+                workspace_path=workspace_path,
+                delegation_id=delegation_id,
+                mcp_session_id=mcp_session_id,
+                timestamp_start=timestamp_start,
+                spec_path=spec_path,
+            )
 
             def _make_coder() -> tuple[Any, Any, Any]:
                 io, out_buffer = create_delegation_io()
@@ -226,23 +235,32 @@ class AiderEngine(ExecutionEngine):
                     model=self._model_name,
                     timeout_s=timeout_s,
                 )
-                files_changed_t, used_git_t = files_touched_since_snapshot(
-                    workspace_path,
-                    before_git,
-                    target_files=edit_paths_rel,
+                (
+                    files_changed_t,
+                    files_unexpected_t,
+                    workspace_snapshot_t,
+                    _used_git_t,
+                    snapshot_ms_t,
+                ) = resolve_delegation_attribution(
+                    workspace_path=workspace_path,
+                    snapshot_session=snapshot_session,
+                    contract_paths=contract,
+                    edit_paths_rel=edit_paths_rel,
+                    before_git=before_git,
                     before_mtimes=before_mtimes,
+                    delegation_id=delegation_id,
                 )
                 return ExecutionResult(
                     success=False,
                     output="Delegation timed out; engine did not complete within the allowed time.",
                     files_changed=files_changed_t,
-                    files_unexpected=compute_files_unexpected(
-                        files_changed_t, edit_paths_rel, used_git=used_git_t
-                    ),
+                    files_unexpected=files_unexpected_t,
                     model=self._model_name,
                     error="Delegation timed out.",
                     error_class="timeout",
                     tokens={"source": "unavailable"},
+                    workspace_snapshot=workspace_snapshot_t,
+                    workspace_snapshot_ms=snapshot_ms_t or None,
                 )
             except Exception:
                 if not pool_shutdown:
@@ -256,14 +274,20 @@ class AiderEngine(ExecutionEngine):
             partial_str = str(partial) if partial is not None else ""
             output = "\n".join(s for s in (captured.strip(), partial_str.strip()) if s)
 
-            files_changed, used_git = files_touched_since_snapshot(
-                workspace_path,
-                before_git,
-                target_files=edit_paths_rel,
+            (
+                files_changed,
+                files_unexpected,
+                workspace_snapshot,
+                _used_git,
+                snapshot_ms,
+            ) = resolve_delegation_attribution(
+                workspace_path=workspace_path,
+                snapshot_session=snapshot_session,
+                contract_paths=contract,
+                edit_paths_rel=edit_paths_rel,
+                before_git=before_git,
                 before_mtimes=before_mtimes,
-            )
-            files_unexpected = compute_files_unexpected(
-                files_changed, edit_paths_rel, used_git=used_git
+                delegation_id=delegation_id,
             )
             tokens = _extract_tokens(coder, partial)
             if tokens.get("source") == "unavailable" and output:
@@ -292,13 +316,24 @@ class AiderEngine(ExecutionEngine):
                 tokens=tokens,
                 executor_reused=executor_reused,
                 executor_recreated=executor_recreated,
+                workspace_snapshot=workspace_snapshot,
+                workspace_snapshot_ms=snapshot_ms or None,
             )
         except Exception as exc:
-            files_changed, used_git = files_touched_since_snapshot(
-                workspace_path,
-                before_git,
-                target_files=edit_paths_rel,
+            (
+                files_changed,
+                files_unexpected,
+                workspace_snapshot,
+                _used_git,
+                snapshot_ms,
+            ) = resolve_delegation_attribution(
+                workspace_path=workspace_path,
+                snapshot_session=snapshot_session,
+                contract_paths=contract,
+                edit_paths_rel=edit_paths_rel,
+                before_git=before_git,
                 before_mtimes=before_mtimes,
+                delegation_id=delegation_id,
             )
             err_text = f"{type(exc).__name__}: {exc}"
             error_class, _short = classify_delegation_error(err_text, exc=exc)
@@ -306,13 +341,13 @@ class AiderEngine(ExecutionEngine):
                 success=False,
                 output=sanitize_delegation_output(err_text, error_class=error_class),
                 files_changed=files_changed,
-                files_unexpected=compute_files_unexpected(
-                    files_changed, edit_paths_rel, used_git=used_git
-                ),
+                files_unexpected=files_unexpected,
                 model=self._model_name,
                 error=err_text,
                 error_class=error_class,
                 tokens={"source": "unavailable"},
+                workspace_snapshot=workspace_snapshot,
+                workspace_snapshot_ms=snapshot_ms or None,
             )
         finally:
             os.chdir(prev_cwd)
@@ -324,6 +359,10 @@ class AiderEngine(ExecutionEngine):
         *,
         workspace_path: str,
         mcp_session_id: str | None = None,
+        delegation_id: str | None = None,
+        spec_path: str | None = None,
+        contract_paths: list[str] | None = None,
+        timestamp_start: str | None = None,
     ) -> ExecutionResult:
         apply_provider_env()
         config_error = provider_hint_for_model(self._model_name)
@@ -342,6 +381,10 @@ class AiderEngine(ExecutionEngine):
             edit_paths_rel=target_files,
             workspace_path=workspace_path,
             mcp_session_id=mcp_session_id,
+            delegation_id=delegation_id,
+            spec_path=spec_path,
+            contract_paths=contract_paths or target_files,
+            timestamp_start=timestamp_start,
         )
 
     def run_context(
@@ -351,6 +394,9 @@ class AiderEngine(ExecutionEngine):
         workspace_path: str,
         mcp_session_id: str | None = None,
         host_transcript: str | None = None,
+        delegation_id: str | None = None,
+        spec_path: str | None = None,
+        timestamp_start: str | None = None,
     ) -> ExecutionResult:
         apply_provider_env()
         config_error = provider_hint_for_model(self._model_name)
@@ -365,8 +411,20 @@ class AiderEngine(ExecutionEngine):
             )
         from core.context.package_cache import compute_context_package_cache_key
 
+        from core.context.package import TIER_EDIT_FULL, TIER_READ_EXCERPT, TIER_READ_FULL
+
         req = translate_context_package(package, host_transcript=host_transcript)
         pkg_key = compute_context_package_cache_key(package)
+        if package.policies is not None:
+            contract_paths = sorted(
+                set(package.policies.files_edit) | set(package.policies.files_read)
+            )
+        else:
+            contract_paths = sorted(
+                e.path
+                for e in package.entries
+                if e.tier in (TIER_EDIT_FULL, TIER_READ_FULL, TIER_READ_EXCERPT)
+            )
         result = self._execute_delegation(
             prompt=req.prompt,
             fnames_rel=req.fnames,
@@ -374,6 +432,10 @@ class AiderEngine(ExecutionEngine):
             workspace_path=workspace_path,
             mcp_session_id=mcp_session_id,
             context_package_key=pkg_key,
+            delegation_id=delegation_id,
+            spec_path=spec_path,
+            contract_paths=contract_paths,
+            timestamp_start=timestamp_start,
         )
         result.prompt_used = req.prompt
         return result

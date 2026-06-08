@@ -210,10 +210,11 @@ Overlap is OK: e.g. Phase 3 master drafts BL-322a worker spec while Phase 2 chat
 
 ## First actions for Phase 3 master
 
-1. Confirm open questions **Q2–Q5** in [PHASE3_MVP.md](../PHASE3_MVP.md) (Q1/git locked as D-P3-2).
-2. Skim `docs/tasks/P3-322a-workspace-snapshot.md` — attribution table must match tracker-primary.
+1. ~~Confirm open questions **Q2–Q5**~~ — **all resolved** (2026-06-08). See locked table in [PHASE3_MVP.md](../PHASE3_MVP.md) § Open questions + D-P3-6/7/8.
+2. ~~Skim P3-322a attribution table~~ — **aligned** to D-P3-2 tracker-primary; spec fixed.
 3. **Dispatch P3-322a** worker (attach spec only).
-4. Optional: draft P3-320 spec in parallel; tip-calc wild step 2 in e2e.
+4. P3-320 spec: draft after P3-322a § Results — not before.
+5. P3-311 priority: revisit at end of Wave 2.
 
 ---
 
@@ -224,3 +225,4 @@ Overlap is OK: e.g. Phase 3 master drafts BL-322a worker spec while Phase 2 chat
 | 2026-06-08 | Created at Phase 2 exit; bootstrap prompt + summary for parallel Phase 3 master |
 | 2026-06-08 | PHASE3_MVP + PHASE3_ISSUES created; PHASE2 frozen; issue triage complete |
 | 2026-06-08 | Full handoff prompt v2; D-P3-2 locked; P3-322a spec aligned to tracker-primary |
+| 2026-06-08 | Q1–Q5 fully resolved; D-P3-6/7/8 locked; bootstrap first-actions updated |

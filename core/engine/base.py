@@ -33,6 +33,8 @@ class ExecutionResult:
     executor_reused: bool = False
     executor_recreated: bool = False
     prompt_used: str | None = None  # set by run_context for usage/JSONL logging
+    workspace_snapshot: dict[str, Any] | None = None
+    workspace_snapshot_ms: int | None = None
 
 
 class ExecutionEngine(ABC):

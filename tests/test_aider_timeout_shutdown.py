@@ -40,7 +40,11 @@ def mock_aider_slow_coder(monkeypatch):
     monkeypatch.setattr("core.engine.aider_engine.create_delegation_io", lambda: (mock_io, mock_buffer))
     monkeypatch.setattr("core.engine.aider_engine.snapshot_git_dirty", lambda ws: set())
     monkeypatch.setattr("core.engine.aider_engine.snapshot_mtimes", lambda ws, paths: {})
-    monkeypatch.setattr("core.engine.aider_engine.files_touched_since_snapshot", lambda *a, **k: ([], False))
+    monkeypatch.setattr("core.engine.aider_engine.begin_delegation_snapshot", lambda **k: None)
+    monkeypatch.setattr(
+        "core.engine.aider_engine.resolve_delegation_attribution",
+        lambda **k: ([], [], None, False, 0),
+    )
     monkeypatch.setattr("core.engine.aider_engine.merged_capture", lambda *a: "")
 
     @contextmanager

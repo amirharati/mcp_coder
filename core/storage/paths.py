@@ -33,6 +33,11 @@ def project_dir(workspace: str | Path) -> Path:
     return mcp_coder_home() / "projects" / project_key(workspace)
 
 
+def workspace_history_db_path(workspace: str | Path) -> Path:
+    """Per-project workspace hash history (D-P3-1 — not under workspace .mcp-coder/)."""
+    return project_dir(workspace) / "workspace_history.db"
+
+
 def project_json_path(workspace: str | Path) -> Path:
     return project_dir(workspace) / "project.json"
 

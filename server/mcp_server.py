@@ -353,6 +353,7 @@ def delegate_to_agent(
     tokens: dict[str, Any] = {"source": "unavailable"}
     executor_reused = False
     executor_recreated = False
+    workspace_snapshot: dict[str, Any] | None = None
     timing: dict[str, int] = {
         "context_load_ms": context_load_ms,
         "session_decision_ms": session_decision_ms + host_resolve_ms,
@@ -457,6 +458,9 @@ def delegate_to_agent(
                     workspace_path=ws,
                     mcp_session_id=storage.mcp_session_id,
                     host_transcript=host_transcript_text,
+                    delegation_id=delegation_id,
+                    spec_path=spec_rel_path,
+                    timestamp_start=timestamp_start,
                 )
                 executor_prompt = result.prompt_used or context_package.brief
             else:
@@ -466,11 +470,21 @@ def delegate_to_agent(
                     caps = engine.capabilities()
                 except (NotImplementedError, AttributeError):
                     caps = None
+                legacy_contract: list[str] | None = None
+                if delegation_policies is not None:
+                    legacy_contract = sorted(
+                        set(delegation_policies.files_edit)
+                        | set(delegation_policies.files_read)
+                    )
                 result = engine.run(
                     prompt,
                     target_files,
                     workspace_path=ws,
                     mcp_session_id=storage.mcp_session_id,
+                    delegation_id=delegation_id,
+                    spec_path=spec_rel_path,
+                    contract_paths=legacy_contract,
+                    timestamp_start=timestamp_start,
                 )
             timing["engine_run_ms"] = int((time.perf_counter() - t_engine) * 1000)
 
@@ -488,6 +502,9 @@ def delegate_to_agent(
                     error_class = _ec
             executor_reused = result.executor_reused
             executor_recreated = result.executor_recreated
+            workspace_snapshot = result.workspace_snapshot
+            if result.workspace_snapshot_ms is not None:
+                timing["workspace_snapshot_ms"] = result.workspace_snapshot_ms
             if not success and error and not output:
                 output = error
 
@@ -718,6 +735,7 @@ def delegate_to_agent(
         usage=usage_dict,
         error_class=error_class if not success else None,
         error_message=error_message if not success else None,
+        workspace_snapshot=workspace_snapshot,
     )
     log_path = append_delegation_record(record, ws=ws)
     log_delegation_sent(

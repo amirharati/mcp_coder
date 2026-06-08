@@ -143,14 +143,20 @@ def files_touched_since_snapshot(
 
 def compute_files_unexpected(
     files_changed: list[str],
-    target_files: list[str],
+    contract_paths: list[str],
     *,
-    used_git: bool,
+    used_git: bool = False,
+    attribution_source: str = "legacy",
 ) -> list[str]:
-    """Paths touched outside normalized target_files; empty when git fallback."""
+    """Paths touched outside normalized contract paths."""
+    if attribution_source == "manifest":
+        norm_contract = {normalize_repo_path(f) for f in contract_paths}
+        return sorted(
+            {normalize_repo_path(f) for f in files_changed} - norm_contract
+        )
     if not used_git:
         return []
-    norm_targets = {normalize_repo_path(f) for f in target_files}
+    norm_targets = {normalize_repo_path(f) for f in contract_paths}
     return sorted(
         {normalize_repo_path(f) for f in files_changed} - norm_targets
     )
