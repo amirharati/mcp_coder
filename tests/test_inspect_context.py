@@ -66,7 +66,7 @@ def test_read_dep_omitted_from_target_files(tmp_path):
     )
 
     assert result["ok"] is True
-    assert result["compiler_version"] == "0.2.0"
+    assert result["compiler_version"] == "0.3.0"
     assert result["spec_files_missing_from_target"] == ["expense_splitter/loader.py"]
     assert any("loader.py" in w for w in result["contract_warnings"])
 
@@ -173,7 +173,7 @@ def test_mcp_tool_returns_parseable_json(tmp_path, monkeypatch):
     payload = json.loads(raw)
     assert payload["ok"] is True
     assert "adapter_preview" in payload
-    assert payload["context_package"]["summary"]["compiler_version"] == "0.2.0"
+    assert payload["context_package"]["summary"]["compiler_version"] == "0.3.0"
 
 
 def test_no_engine_called(tmp_path, monkeypatch):

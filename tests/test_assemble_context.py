@@ -83,7 +83,7 @@ def test_spec_edit_read_tiers_and_contract_wins_over_hint(tmp_path):
     assert pkg.metadata["hint_paths"] == []
     assert pkg.metadata["missing_paths"] == ["pkg/cli.py"]
     assert pkg.metadata["untracked_paths"] == ["pkg/core.py"]
-    assert pkg.metadata["compiler_version"] == "0.2.0"
+    assert pkg.metadata["compiler_version"] == "0.3.0"
     assert pkg.metadata["truncations"] == []
 
     assert "Implement CLI" in pkg.brief

@@ -6,6 +6,7 @@ from pathlib import Path
 from typing import Any
 
 from core.context.assemble import assemble_context
+from core.context.budget import apply_context_budget, resolve_context_budget_tokens
 from core.context.package import (
     COMPILER_VERSION,
     TIER_READ_EXCERPT,
@@ -15,6 +16,7 @@ from core.context.package import (
     summarize_context_package,
 )
 from core.context.summary import estimate_tokens, sha256_hex
+from core.config.models import resolve_model_name
 from core.engine.aider_engine import translate_context_package
 from core.specs.delegation_policies import (
     DelegationPolicies,
@@ -134,6 +136,12 @@ def inspect_context_package(
         context_summary=context_summary,
         policies=delegation_policies,
     )
+
+    # Apply budget pass (mirrors delegate pipeline for dry-run parity)
+    budget_model = resolve_model_name()
+    budget = resolve_context_budget_tokens(model=budget_model)
+    if budget is not None:
+        package = apply_context_budget(package, workspace=ws, budget_tokens=budget)
 
     result: dict[str, Any] = {
         "ok": True,

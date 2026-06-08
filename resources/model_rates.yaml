@@ -16,27 +16,36 @@ models:
   openrouter/qwen/qwen-2.5-coder-32b-instruct:
     input_per_million: 0.18
     output_per_million: 0.18
+    context_budget_tokens: 32768
   openrouter/openai/gpt-4o-mini:
     input_per_million: 0.15
     output_per_million: 0.60
+    context_budget_tokens: 128000
   openrouter/deepseek/deepseek-chat-v3.1:
     input_per_million: 0.20
     output_per_million: 0.80
+    context_budget_tokens: 64000
   openrouter/deepseek/deepseek-chat-v3-0324:
     input_per_million: 0.27
     output_per_million: 1.10
+    context_budget_tokens: 64000
   openrouter/deepseek/deepseek-v3.2:
     input_per_million: 0.25
     output_per_million: 0.40
+    context_budget_tokens: 64000
   openrouter/google/gemini-2.5-flash:
     input_per_million: 0.15
     output_per_million: 0.60
+    context_budget_tokens: 1000000
   openrouter/anthropic/claude-3.5-haiku:
     input_per_million: 0.80
     output_per_million: 4.00
+    context_budget_tokens: 200000
   openrouter/openai/gpt-4o:
     input_per_million: 2.50
     output_per_million: 10.00
+    context_budget_tokens: 128000
   openrouter/anthropic/claude-sonnet-4:
     input_per_million: 3.0
     output_per_million: 15.0
+    context_budget_tokens: 200000

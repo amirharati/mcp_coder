@@ -10,6 +10,7 @@ from mcp.server.fastmcp import FastMCP
 
 from core.config.models import resolve_model_name
 from core.context.assemble import assemble_context
+from core.context.budget import apply_context_budget, resolve_context_budget_tokens
 from core.context.capability_adjust import apply_backend_capabilities
 from core.context.inspect import inspect_context_package
 from core.context.package import (
@@ -439,6 +440,11 @@ def delegate_to_agent(
                     )
                 except (NotImplementedError, AttributeError):
                     caps = None
+                budget = resolve_context_budget_tokens(model=model)
+                if budget is not None:
+                    context_package = apply_context_budget(
+                        context_package, workspace=Path(ws), budget_tokens=budget
+                    )
                 result = engine.run_context(
                     context_package,
                     workspace_path=ws,

@@ -97,6 +97,21 @@ def estimate_cost_usd(
     return result
 
 
+def lookup_context_budget_tokens(model: str) -> int | None:
+    """Return per-model context budget (tokens) from model_rates.yaml, or None if not set."""
+    rates = lookup_model_rates(model)
+    if not rates:
+        return None
+    val = rates.get("context_budget_tokens")
+    if val is None:
+        return None
+    try:
+        result = int(val)
+        return result if result > 0 else None
+    except (ValueError, TypeError):
+        return None
+
+
 def clear_rates_cache() -> None:
     """Test helper to reload model_rates.yaml."""
     _load_rates_file.cache_clear()

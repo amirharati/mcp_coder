@@ -194,7 +194,7 @@ def test_response_has_context_package_summary(tmp_path, monkeypatch):
     payload = json.loads(raw)
     assert "context_package_summary" in payload
     summary = payload["context_package_summary"]
-    assert summary["compiler_version"] == "0.2.0"
+    assert summary["compiler_version"] == "0.3.0"
     assert "read_paths" in summary
     assert "pkg/core.py" in summary["read_paths"]
 

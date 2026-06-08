@@ -15,7 +15,7 @@ TIER_POINTER = "pointer"
 TIER_MAP_ONLY = "map-only"
 TIER_HIDE = "hide"
 
-COMPILER_VERSION = "0.2.0"
+COMPILER_VERSION = "0.3.0"
 
 
 @dataclass

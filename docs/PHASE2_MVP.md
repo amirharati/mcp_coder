@@ -8,7 +8,7 @@
 
 # Phase 2 MVP — Product manager doc
 
-**Status:** Wave 2 in progress — **P2-200/205/210/215/212 done** (2026-06-07); next **P2-220** (Wave 2 exit)
+**Status:** **Wave 2 complete** (2026-06-07) — context compiler core shipped; **Wave 3** next (P2-305 / P2-308)
 **Host:** Cursor (Aider backend; other hosts deferred)
 **Technical reference:** [PHASES.md](./PHASES.md) § Phase 2 · [phase2-owned-context.md](./notes/phase2-owned-context.md)
 **Vision:** [IDEA.md](./IDEA.md) · [VISION_DOCS.md](./VISION_DOCS.md)
@@ -104,11 +104,11 @@ Work proceeds in four waves. Milestones within a wave can run in sequence or be 
 | Usage telemetry | P2-120 | `done` | `P2-1.20-usage-telemetry.md` | BL-154 partial — preflight + actual + static `model_rates.yaml`; JSONL + report always; MCP `usage` when `usage_report` (default on); BL-319 dynamic rates deferred; 172 pytest |
 | Delegation hardening + Wave 1 exit | P2-125 | `done` | `P2-1.25-delegation-hardening.md` | BL-309a/b/e — 212 pytest; dogfood Phases 1–4 pass; wild test → [wave1-wild-test-runbook.md](./notes/wave1-wild-test-runbook.md) |
 
-### Wave 2 — Context compiler core ← **active**
+### Wave 2 — Context compiler core ✓
 
 **Goal:** L2 compiler + L3 adapter hinge — **architectural center of Phase 2**.  
 **Design:** [phase2-owned-context.md § L2–L3](./notes/phase2-owned-context.md#three-layers-backend-agnostic-middle)  
-**Next worker spec:** `docs/tasks/P2-2.20-window-budget.md`
+**Exit:** `COMPILER_VERSION` 0.3.0; pipeline `assemble → capability_adjust → budget → run_context`
 
 | Milestone | Task ID | Status | Implements (D-P2 / BL) | Summary |
 |-----------|---------|--------|------------------------|---------|
@@ -117,11 +117,11 @@ Work proceeds in four waves. Milestones within a wave can run in sequence or be 
 | Engine adapter boundary | P2-210 | `done` | `P2-2.10-engine-adapter.md` | D-P2-1 — `run_context` + `translate_context_package`; edit-only `fnames`; JSONL `context_package` + `adapter_in`; 253 pytest (+20) |
 | Backend capabilities + audit | P2-212 | `done` | `P2-2.12-backend-capabilities.md` | D-P2-5 — `BackendCapabilities` + `apply_backend_capabilities`; JSONL `backend_capabilities`; degradation when `supports_read_only_in_chat=False`; 288 pytest (+23) |
 | Inspect context (dry-run) | P2-215 | `done` | `P2-2.15-inspect-context.md` | D-P2-7 — CLI `inspect-context` + MCP `inspect_context`; `adapter_preview` via translate; 265 pytest (+12) |
-| Window budget | P2-220 | `todo` | BL-154 | Enforce per-model byte/token budget in compiler; rolling truncation with logged reason. |
+| Window budget | P2-220 | `done` | `P2-2.20-window-budget.md` | BL-154 compiler caps — `apply_context_budget`; per-model `context_budget_tokens` in yaml; read-tier truncation only; 305 pytest (+17) |
 
-**Suggested order:** P2-200 → P2-205 → P2-210 → P2-215 → **P2-212** → **P2-220** (Wave 2 exit).
+### Wave 3 — Executor + host contracts ← **active**
 
-### Wave 3 — Executor + host contracts
+**Next worker spec:** `docs/tasks/P2-3.05-scope-expansion.md` or `P2-3.08-rich-result.md` (draft)
 
 **Goal:** Close audit loop layers 3–4; richer outcomes back to Cursor and spec reports.  
 **Design:** [phase2-owned-context.md § Audit loop](./notes/phase2-owned-context.md#audit-loop-four-layers)
@@ -202,20 +202,21 @@ Same pattern as Phase 1:
 - [x] **Inspect:** dry-run `ContextPackage` without backend (P2-215)
 - [x] Read-deps missing → warning (P2-110); scope expansion in reports (P2-305)
 - [x] Usage telemetry on every delegation — preflight + actual + cost (P2-120)
-- [ ] Window budget enforcement in compiler (P2-220)
+- [x] Window budget enforcement in compiler (P2-220; BL-154 compiler half)
 - [x] Delegation hardening: classified failures, no browser storm (P2-125; P2-ISS-006 timeout UX follow-up)
 - [x] **Wave 1 complete** (P2-110/115/120/125 + wild test)
-- [ ] Wave 2 complete; Wave 3 at least P2-305 + P2-308 done
+- [x] **Wave 2 complete** (P2-200 → P2-220)
+- [ ] Wave 3 at least P2-305 + P2-308 done
 - [ ] Phase 2 exit review (P2-499) completed; Phase 3 goals locked
 
 ---
 
 ## Next action
 
-1. **Commit + push** P2-212 + P2-215 if not on remote.
-2. **P2-220** — implement window budget; worker spec `docs/tasks/P2-2.20-window-budget.md`.
-3. **P2-308** follow-up — surface `capability_warnings` on MCP delegate response (JSONL-only today).
-4. Optional: `backend_capabilities` on `mode=review` delegations (review skips engine today).
+1. **Commit + push** P2-220 (Wave 2 exit) if not on remote.
+2. **Wave 3** — draft worker spec for **P2-305** (scope expansion in spec reports) or **P2-308** (rich `ExecutionResult` / MCP response).
+3. Optional dogfood: `inspect-context` on a large read-dep spec with low `MCP_CODER_CONTEXT_BUDGET_TOKENS` — confirm `truncations` in output.
+4. BACKLOG: note BL-154 compiler caps done (telemetry was P2-120).
 
 ---
 
@@ -237,3 +238,5 @@ Same pattern as Phase 1:
 | 2026-06-07 | **P2-215 spec** — `inspect_context` dry-run (CLI + MCP); worker spec ready |
 | 2026-06-07 | **P2-215 done** — `inspect_context_package`; CLI + MCP tool; 265 pytest (+12) |
 | 2026-06-07 | **P2-212 done** — `BackendCapabilities` + capability-aware adjust; JSONL layer 3; 288 pytest (+23) |
+| 2026-06-07 | **P2-220 done** — window budget; `COMPILER_VERSION` 0.3.0; 305 pytest (+17) |
+| 2026-06-07 | **Wave 2 complete** — L2 compiler core + L3 hinge + inspect + caps + budget |
