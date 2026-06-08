@@ -121,14 +121,14 @@ Work proceeds in four waves. Milestones within a wave can run in sequence or be 
 
 ### Wave 3 — Executor + host contracts ← **tail in progress** (P2-300a → polish → P2-499)
 
-**Next worker spec:** `docs/tasks/P2-3.00-cache-hash.md` (draft) or `P2-3.XX-polish.md`
+**Next worker spec:** `docs/tasks/P2-3.XX-polish.md` (draft) → P2-499
 
 **Goal:** Close audit loop layers 3–4; richer outcomes back to Cursor and spec reports.  
 **Design:** [phase2-owned-context.md § Audit loop](./notes/phase2-owned-context.md#audit-loop-four-layers)
 
 | Milestone | Task ID | Status | Implements (D-P2 / BL) | Summary |
 |-----------|---------|--------|------------------------|---------|
-| Executor cache evolution | P2-300 | `todo` | BL-155 | Cache key on `ContextPackage` hash (not raw `target_files`); rolling brief; TTL. |
+| Executor cache evolution | P2-300 | `done` (lite) | `P2-3.00-cache-hash.md` | BL-155 partial — package hash cache key on `run_context`; legacy `run()` unchanged; TTL/rolling brief deferred; 341 pytest (+10) |
 | Scope expansion report | P2-305 | `done` | `P2-3.05-scope-expansion.md` | D-P2-3, D-SPEC-8, BL-314c — Scope expansion in reports; strict → blocked + re-plan; discover → informational; 312 pytest (+7) |
 | Rich `ExecutionResult` | P2-308 | `done` | `P2-3.08-rich-result.md` | D-P2-3 — MCP `capability_warnings`, enriched summary, `preflight_token_estimate`; Aider output token parse; 324 pytest (+12) |
 | Review model config | P2-310 | `done` | `P2-3.10-review-model.md` | BL-162 partial — `MCP_CODER_REVIEW_MODEL` + yaml `review_model`; role-appropriate (not executor); yaml wins; 331 pytest (+7) |
@@ -217,10 +217,9 @@ Same pattern as Phase 1:
 
 ## Next action
 
-1. **Commit + push** P2-310; push `main` if not on remote.
-2. **P2-300a** — package-hash executor cache key (worker spec).
-3. **P2-3.XX-polish** — ISS-001 + ISS-006 + ISS-010 bundled.
-4. **P2-499** — Phase 2 exit review after tail.
+1. **Commit + push** P2-300a; push `main` if not on remote.
+2. **P2-3.XX-polish** — ISS-001 + ISS-006 + ISS-010 bundled.
+3. **P2-499** — Phase 2 exit review after polish.
 
 ---
 
@@ -248,3 +247,4 @@ Same pattern as Phase 1:
 | 2026-06-07 | **P2-308 done** — Rich MCP result + Aider token parse; Wave 3 minimum complete; 324 pytest (+12) |
 | 2026-06-07 | **BL-322 / WORKSPACE_HISTORY** — workspace history design captured; Phase 3 anchor |
 | 2026-06-07 | **P2-310 done** — Review model config (`review_model` / env); BL-162 partial; 331 pytest (+7) |
+| 2026-06-07 | **P2-300 done (lite)** — ContextPackage hash executor cache key; BL-155 partial; 341 pytest (+10) |

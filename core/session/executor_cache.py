@@ -7,7 +7,7 @@ from typing import Any, TypeVar
 
 T = TypeVar("T")
 
-_CODERS: dict[str, tuple[Any, frozenset[str]]] = {}
+_CODERS: dict[str, tuple[Any, tuple[frozenset[str], str]]] = {}
 
 
 def clear_executor_cache() -> None:
@@ -20,21 +20,23 @@ def drop_coder(mcp_session_id: str) -> None:
 
 def get_or_create_coder(
     mcp_session_id: str,
-    target_files: list[str],
+    edit_paths: list[str],
     create_fn: Callable[[], T],
+    *,
+    context_package_key: str | None = None,
 ) -> tuple[T, bool, bool]:
     """
     Return (bundle, executor_reused, executor_recreated).
 
     bundle is whatever create_fn returns (typically coder + io + buffer).
-    executor_reused: cache hit with same target_files set.
-    executor_recreated: new Coder instance (cache miss or target_files changed).
+    executor_reused: cache hit with same edit_paths + context package key.
+    executor_recreated: new Coder instance (cache miss or cache token changed).
     """
-    key_files = frozenset(target_files)
+    cache_token = (frozenset(edit_paths), context_package_key or "")
     cached = _CODERS.get(mcp_session_id)
-    if cached is not None and cached[1] == key_files:
+    if cached is not None and cached[1] == cache_token:
         return cached[0], True, False
 
     bundle = create_fn()
-    _CODERS[mcp_session_id] = (bundle, key_files)
+    _CODERS[mcp_session_id] = (bundle, cache_token)
     return bundle, False, True

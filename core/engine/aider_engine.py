@@ -141,6 +141,7 @@ class AiderEngine(ExecutionEngine):
         edit_paths_rel: list[str],
         workspace_path: str,
         mcp_session_id: str | None,
+        context_package_key: str | None = None,
     ) -> ExecutionResult:
         """Core Aider execution shared by run() and run_context().
 
@@ -187,6 +188,7 @@ class AiderEngine(ExecutionEngine):
                                 mcp_session_id,
                                 edit_paths_rel,
                                 _make_coder,
+                                context_package_key=context_package_key,
                             )
                         )
                     else:
@@ -350,13 +352,17 @@ class AiderEngine(ExecutionEngine):
                 error=config_error,
                 tokens={"source": "unavailable"},
             )
+        from core.context.package_cache import compute_context_package_cache_key
+
         req = translate_context_package(package, host_transcript=host_transcript)
+        pkg_key = compute_context_package_cache_key(package)
         result = self._execute_delegation(
             prompt=req.prompt,
             fnames_rel=req.fnames,
             edit_paths_rel=req.edit_paths,
             workspace_path=workspace_path,
             mcp_session_id=mcp_session_id,
+            context_package_key=pkg_key,
         )
         result.prompt_used = req.prompt
         return result
