@@ -6,6 +6,7 @@ from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
     from core.context.package import ContextPackage
+    from core.engine.capabilities import BackendCapabilities
 
 
 @dataclass
@@ -63,9 +64,19 @@ class ExecutionEngine(ABC):
     ) -> ExecutionResult:
         """Execute one delegation in workspace_path."""
 
+    def capabilities(self) -> "BackendCapabilities":
+        """Return the static capability declaration for this backend.
+
+        Engines must override. The compiler calls this before run_context
+        to adjust tiers for what the backend can honour.
+        """
+        raise NotImplementedError(
+            f"{self.backend_id} does not implement capabilities()"
+        )
+
     def run_context(
         self,
-        package: ContextPackage,
+        package: "ContextPackage",
         *,
         workspace_path: str,
         mcp_session_id: str | None = None,

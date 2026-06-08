@@ -23,6 +23,7 @@ from core.delegation.errors import (
 from core.config.models import provider_hint_for_model, resolve_model_name
 from core.config.providers import apply_provider_env
 from core.engine.base import BackendRunRequest, ExecutionEngine, ExecutionResult
+from core.engine.capabilities import AIDER_CAPABILITIES, BackendCapabilities
 from core.engine.factory import register_engine
 from core.engine.git_diff import (
     compute_files_unexpected,
@@ -128,6 +129,9 @@ class AiderEngine(ExecutionEngine):
     @property
     def model_name(self) -> str:
         return self._model_name
+
+    def capabilities(self) -> BackendCapabilities:
+        return AIDER_CAPABILITIES
 
     def _execute_delegation(
         self,

@@ -10,6 +10,7 @@ from mcp.server.fastmcp import FastMCP
 
 from core.config.models import resolve_model_name
 from core.context.assemble import assemble_context
+from core.context.capability_adjust import apply_backend_capabilities
 from core.context.inspect import inspect_context_package
 from core.context.package import (
     TIER_EDIT_FULL,
@@ -404,6 +405,9 @@ def delegate_to_agent(
             "Use mode=implement to change files, or mode=review with an empty target_files list."
         )
 
+    caps = None
+    cap_warnings: list[str] = []
+
     if spec_invalid_reason:
         success = False
         error = spec_invalid_reason
@@ -428,6 +432,13 @@ def delegate_to_agent(
                 )
                 engine = get_engine(backend)
                 model = engine.model_name
+                try:
+                    caps = engine.capabilities()
+                    context_package, cap_warnings = apply_backend_capabilities(
+                        context_package, caps, workspace=Path(ws)
+                    )
+                except (NotImplementedError, AttributeError):
+                    caps = None
                 result = engine.run_context(
                     context_package,
                     workspace_path=ws,
@@ -438,6 +449,10 @@ def delegate_to_agent(
             else:
                 engine = get_engine(backend)
                 model = engine.model_name
+                try:
+                    caps = engine.capabilities()
+                except (NotImplementedError, AttributeError):
+                    caps = None
                 result = engine.run(
                     prompt,
                     target_files,
@@ -498,6 +513,11 @@ def delegate_to_agent(
             "prompt_tokens_est": estimate_tokens(executor_prompt),
             "prompt_hash": sha256_hex(executor_prompt),
         }
+        if cap_warnings:
+            context_block["capability_warnings"] = cap_warnings
+
+    if caps is not None:
+        context_block["backend_capabilities"] = caps.to_dict()
 
     usage_dict = build_usage_report(
         model=resolved_model,

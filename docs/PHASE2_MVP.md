@@ -8,7 +8,7 @@
 
 # Phase 2 MVP — Product manager doc
 
-**Status:** Wave 2 in progress — **P2-200/205/210/215 done** (2026-06-07); next **P2-212** or **P2-220**
+**Status:** Wave 2 in progress — **P2-200/205/210/215/212 done** (2026-06-07); next **P2-220** (Wave 2 exit)
 **Host:** Cursor (Aider backend; other hosts deferred)
 **Technical reference:** [PHASES.md](./PHASES.md) § Phase 2 · [phase2-owned-context.md](./notes/phase2-owned-context.md)
 **Vision:** [IDEA.md](./IDEA.md) · [VISION_DOCS.md](./VISION_DOCS.md)
@@ -108,14 +108,14 @@ Work proceeds in four waves. Milestones within a wave can run in sequence or be 
 
 **Goal:** L2 compiler + L3 adapter hinge — **architectural center of Phase 2**.  
 **Design:** [phase2-owned-context.md § L2–L3](./notes/phase2-owned-context.md#three-layers-backend-agnostic-middle)  
-**Next worker spec:** `docs/tasks/P2-2.12-backend-capabilities.md`
+**Next worker spec:** `docs/tasks/P2-2.20-window-budget.md`
 
 | Milestone | Task ID | Status | Implements (D-P2 / BL) | Summary |
 |-----------|---------|--------|------------------------|---------|
 | `ContextPackage` + assembler | P2-200 | `done` | `P2-2.00-assemble-context.md` | D-P2-4/6/7 — `assemble_context()` + `ContextPackage`; rules-only v0; 218 pytest (+6) |
 | Excerpt engine | P2-205 | `done` | `P2-2.05-excerpt-engine.md` | `read-excerpt` tier + `.mcp-coder/context/excerpts/`; `MCP_CODER_READ_FULL_MAX_BYTES`; 233 pytest (+15) |
 | Engine adapter boundary | P2-210 | `done` | `P2-2.10-engine-adapter.md` | D-P2-1 — `run_context` + `translate_context_package`; edit-only `fnames`; JSONL `context_package` + `adapter_in`; 253 pytest (+20) |
-| Backend capabilities + audit | P2-212 | `todo` | D-P2-5 | `BackendCapabilities` dataclass; log on delegation; capability-aware tier degradation warnings in package/result. |
+| Backend capabilities + audit | P2-212 | `done` | `P2-2.12-backend-capabilities.md` | D-P2-5 — `BackendCapabilities` + `apply_backend_capabilities`; JSONL `backend_capabilities`; degradation when `supports_read_only_in_chat=False`; 288 pytest (+23) |
 | Inspect context (dry-run) | P2-215 | `done` | `P2-2.15-inspect-context.md` | D-P2-7 — CLI `inspect-context` + MCP `inspect_context`; `adapter_preview` via translate; 265 pytest (+12) |
 | Window budget | P2-220 | `todo` | BL-154 | Enforce per-model byte/token budget in compiler; rolling truncation with logged reason. |
 
@@ -197,7 +197,7 @@ Same pattern as Phase 1:
 - [x] **L1 contract:** `files_edit` / `files_read` / policies parsed from spec; `target_files` is hint only (D-P2-6; P2-115)
 - [x] **L2 compiler (v0):** `assemble_context()` + tiers + excerpts + untracked metadata (P2-200/205)
 - [x] **L3 adapter (Aider hinge):** `run_context(ContextPackage)` on spec implement (P2-210); legacy path when no spec / env off
-- [ ] **Capabilities:** `BackendCapabilities` logged; degradation warnings visible (D-P2-5)
+- [x] **Capabilities:** `BackendCapabilities` logged; degradation warnings visible (D-P2-5; P2-212)
 - [ ] **Audit loop:** JSONL has contract → package summary → adapter snapshot → result (four layers)
 - [x] **Inspect:** dry-run `ContextPackage` without backend (P2-215)
 - [x] Read-deps missing → warning (P2-110); scope expansion in reports (P2-305)
@@ -212,10 +212,10 @@ Same pattern as Phase 1:
 
 ## Next action
 
-1. **Commit + push** P2-215 code (`inspect.py`, CLI, MCP tool, tests) if not yet on remote.
-2. **Dogfood** — `mcp-coder inspect-context` on expense-splitter 5b before delegate; compare to JSONL `adapter_in`.
-3. **P2-212** — implement `BackendCapabilities`; worker spec `docs/tasks/P2-2.12-backend-capabilities.md`.
-4. Optional follow-up: wire `host_transcript` in inspect via `get_host_provider()` (BL-001 parity).
+1. **Commit + push** P2-212 + P2-215 if not on remote.
+2. **P2-220** — implement window budget; worker spec `docs/tasks/P2-2.20-window-budget.md`.
+3. **P2-308** follow-up — surface `capability_warnings` on MCP delegate response (JSONL-only today).
+4. Optional: `backend_capabilities` on `mode=review` delegations (review skips engine today).
 
 ---
 
@@ -236,3 +236,4 @@ Same pattern as Phase 1:
 | 2026-06-07 | **P2-210 dogfood** — expense-splitter 5b: `read_paths_in_prompt` includes `loader.py`, `fnames` edit-only; delegation `1c066db1` |
 | 2026-06-07 | **P2-215 spec** — `inspect_context` dry-run (CLI + MCP); worker spec ready |
 | 2026-06-07 | **P2-215 done** — `inspect_context_package`; CLI + MCP tool; 265 pytest (+12) |
+| 2026-06-07 | **P2-212 done** — `BackendCapabilities` + capability-aware adjust; JSONL layer 3; 288 pytest (+23) |
