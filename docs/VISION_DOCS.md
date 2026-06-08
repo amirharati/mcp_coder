@@ -23,6 +23,8 @@ Use this page so **main vision** ([IDEA.md](./IDEA.md)) is not lost when editing
 | **3 — Direction notes** | [notes/spec-based-development.md](./notes/spec-based-development.md) | Spec-as-contract — **shipped experiment** (P1-151) | Update when workflow changes |
 | **3 — Direction notes** | [notes/spec-review-loop.md](./notes/spec-review-loop.md) | Review vs implement modes | Same |
 | **3 — Direction notes** | [notes/phase2-owned-context.md](./notes/phase2-owned-context.md) | Context compiler design — locked P1-199 | Update as Phase 2 decisions land |
+| **3 — Handoff** | [notes/phase3-master-session-bootstrap.md](./notes/phase3-master-session-bootstrap.md) | Phase 3 master session prompt + summary | Planning session |
+| **3 — Exit** | [notes/phase2-exit-validation.md](./notes/phase2-exit-validation.md) | P2-499 dogfood sign-off | Frozen at exit |
 | **3 — Related ideas** | [OTEHR_RELATED_IDEAS/](./OTEHR_RELATED_IDEAS/) | Gatekeeper, experiments — **not** canonical vision | Optional; may inform backlog only |
 
 ## Operational (not vision — safe to update when implementing)
@@ -49,12 +51,14 @@ Use this page so **main vision** ([IDEA.md](./IDEA.md)) is not lost when editing
 - **Problem:** Stateless coding agents → cross-session memory + task-level orchestration ([IDEA.md](./IDEA.md)).
 - **Two tiers:** Task-level (`mcp-coder`) + turn-level (`context_optimizer_proxy`) — separate repos.
 - **Phase 1:** Delegate + pass-through context + home storage + sessions + opt-in transcript — **no** owned RAG/router yet.
-- **Phase 2:** Owned context compiler (tiers, materialization, budget, read-deps) — see [PHASE2_MVP.md](./PHASE2_MVP.md), [PHASES.md](./PHASES.md), and [notes/phase2-owned-context.md](./notes/phase2-owned-context.md).
+- **Phase 2:** Owned context compiler — **exit complete** [PHASE2_MVP.md](./PHASE2_MVP.md), [phase2-exit-validation.md](./notes/phase2-exit-validation.md).
+- **Phase 3:** BL-322 workspace history, BL-320 attempt archive, BL-002 RAG — bootstrap [phase3-master-session-bootstrap.md](./notes/phase3-master-session-bootstrap.md).
 - **Executor:** Aider-first; OpenCode/other hosts very low priority.
 
 ## Changelog
 
 | Date | Change |
 |------|--------|
+| 2026-06-08 | Phase 2 exit; phase2-exit-validation + phase3-master-session-bootstrap added |
 | 2026-06-06 | PHASE2_MVP + PHASE2_ISSUES created; PHASE1_ISSUES frozen; phase2-owned-context note added; doc map updated |
 | 2026-06-05 | Initial vision-doc map + stewardship tiers (with IDEA audit) |

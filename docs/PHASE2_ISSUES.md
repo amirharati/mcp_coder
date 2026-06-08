@@ -25,16 +25,16 @@ Status: `open` | `scheduled` | `done` | `wontfix-p2`
 
 | ID | Status | Priority | Title | Target | Notes |
 |----|--------|----------|-------|--------|-------|
-| P2-ISS-001 | `open` | low | `(none)` placeholder parsed as Files contract path | P2-110 follow-up or Wave 2 | Wave 1 dogfood hello spec |
-| P2-ISS-002 | `open` | medium | `files_changed` misses new paths without git | P2-200 / BL-314 | `app/app/*` not in audit |
+| P2-ISS-001 | `done` | low | `(none)` placeholder parsed as Files contract path | P2-3.15 | Phase 2 exit dogfood Phase 1 |
+| P2-ISS-002 | `wontfix-p2` | medium | `files_changed` misses new paths without git | BL-322 | Phase 3 workspace history |
 | P2-ISS-003 | `done` | medium | `tokens.actual` stays `unavailable` | P2-308 | Fixed: `aider_output_parse` fallback; dogfood confirm optional |
 | P2-ISS-004 | `open` | medium | Planner can ignore `contract_warnings` | Rules / BL-311b / P2-200 | Read-dep omit → broken layout |
 | P2-ISS-005 | `open` | high | P1-ISS-012 live confirm (cheap model 500) | Wild test / Wave 1 | Timeout path confirmed Phase 4; `upstream_5xx` not reproduced |
-| P2-ISS-006 | `open` | medium | Timeout returns late — executor thread blocks shutdown | P2-125 follow-up | Phase 4: timeout @120s, MCP returned @219s |
-| P2-ISS-007 | `open` | medium | Failed-delegate audit trail weak vs JSONL | BL-320 | Wild test: Qwen fails in Run log but no separate attempt archive |
-| P2-ISS-008 | `open` | low | Progressive / tiered executor model selection | BL-321 | Wild test: manual `.env` swap; Cursor guessed right |
+| P2-ISS-006 | `done` | medium | Timeout returns late — executor thread blocks shutdown | P2-3.15 | Exit dogfood: ~33s @ 30s timeout |
+| P2-ISS-007 | `wontfix-p2` | medium | Failed-delegate audit trail weak vs JSONL | BL-320 | Phase 3 attempt archive |
+| P2-ISS-008 | `wontfix-p2` | low | Progressive / tiered executor model selection | BL-321 | Phase 3 tier catalog |
 | P2-ISS-009 | `open` | low | `MCP_CODER_CONTEXT_BUDGET_TOKENS` cannot override per-model yaml budget | P2-220 follow-up / decide later | Wave 2 dogfood: env `200` ignored when model in `model_rates.yaml` |
-| P2-ISS-010 | `open` | low | CLI shim: `mcp-coder` usable from any cwd without manual venv | End of Phase 2 / ops | PATH, `.env`, workspace — bash wrapper or install docs |
+| P2-ISS-010 | `done` | low | CLI shim: `mcp-coder` usable from any cwd without manual venv | P2-3.15 | `scripts/mcp-coder` + INSTALL |
 
 ---
 
@@ -50,7 +50,9 @@ Status: `open` | `scheduled` | `done` | `wontfix-p2`
 
 **Target:** P2-110 follow-up or Wave 2 contract parser — ignore `(none)`, `n/a`, empty bullets.
 
-**Acceptance:** Spec with Read `(none)` produces no contract warn.
+**Fixed:** P2-3.15 (2026-06-07) — `_is_placeholder_path()` in `files_contract.py`. Confirmed P2-499 Phase 1 dogfood.
+
+**Acceptance:** Spec with Read `(none)` produces no contract warn. ✓
 
 ---
 
@@ -64,9 +66,11 @@ Status: `open` | `scheduled` | `done` | `wontfix-p2`
 
 **Mitigation today:** Use git init in consumer workspaces; include full read-deps in `target_files`.
 
-**Target:** P2-200 materialization + git-less snapshot (BL-314); honest reporting for untracked paths.
+**Target:** **BL-322** workspace history (Phase 3) — delegation-granularity checkpoints supersede git-less `files_changed` audit.
 
-**Acceptance:** Non-git workspace delegate lists all new/modified paths under workspace, including `app/app/*`.
+**Disposition:** `wontfix-p2` at P2-499. Mitigation: `git init` in consumer workspaces until BL-322 ships.
+
+**Acceptance:** Deferred to BL-322 / workspace history design.
 
 ---
 
@@ -128,7 +132,11 @@ Status: `open` | `scheduled` | `done` | `wontfix-p2`
 
 **Target:** P2-125 follow-up — `shutdown(wait=False, cancel_futures=True)` or equivalent; document that orphan thread may run until kill.
 
-**Acceptance:** After timeout, MCP response within few seconds of `delegation_timeout` log; `duration_ms` ≈ timeout + overhead.
+**Fixed:** P2-3.15 — explicit `ThreadPoolExecutor` lifecycle. P2-499 Phase 2: ~33s wall clock @ 30s timeout (was ~219s).
+
+**Known limit:** Orphan Aider thread may continue; MCP returns immediately.
+
+**Acceptance:** After timeout, MCP response within few seconds of `delegation_timeout` log. ✓
 
 ---
 
@@ -149,7 +157,9 @@ Status: `open` | `scheduled` | `done` | `wontfix-p2`
 
 **Target:** **BL-320** — optional workspace config (e.g. `retain_failed_attempts: true`) writes per-attempt files under something like `.mcp-coder/specs/attempts/<spec_id>/<delegation_id>.md` (or append-only `attempts.jsonl` beside reports). Main `reports/*.md` stays current status + summary; failures link out.
 
-**Acceptance:** After N failed implements on one step spec, N attempt files exist (when config on); each links `delegation_id`, model, `error_class`, duration; planner/MCP tool can list recent attempts for a `spec_path`.
+**Disposition:** `wontfix-p2` at P2-499 → Phase 3.
+
+**Acceptance:** Deferred to BL-320.
 
 ---
 
@@ -163,7 +173,9 @@ Status: `open` | `scheduled` | `done` | `wontfix-p2`
 
 **Target:** **BL-321** — collaborative selection: Cursor passes vague tier (`cheap` / `mid` / `strong`); MCP resolves from annotated catalog (`resources/model_tiers.yaml` or generated); optional auto-retry with next tier on `timeout` / `upstream_5xx` / test failure (config-gated).
 
-**Acceptance:** Documented tier catalog; delegate accepts optional `model_tier`; one config mode auto-retries with upgraded model (max 1 step-up per call); JSONL records `model_requested_tier`, `model_resolved`, `model_retry`.
+**Disposition:** `wontfix-p2` at P2-499 → Phase 3.
+
+**Acceptance:** Deferred to BL-321.
 
 ---
 
@@ -195,7 +207,9 @@ Status: `open` | `scheduled` | `done` | `wontfix-p2`
 
 **Target:** Low priority end-of-session ops — e.g. `scripts/mcp-coder` bash shim that: resolves repo root, activates or invokes `.venv/bin/python -m` / `main.py`, loads `mcp_coder/.env` (or `MCP_CODER_ENV_FILE`), forwards subcommands (`inspect-context`, `test-model`, …). Optional: `make install-cli` symlink into `/usr/local/bin` or document PATH one-liner in INSTALL.md.
 
-**Acceptance:** From any directory, one documented command runs `mcp-coder inspect-context` with correct Python and env without manual venv activation.
+**Fixed:** P2-3.15 — `scripts/mcp-coder` + INSTALL § CLI from any workspace. P2-499 Phase 3 confirmed.
+
+**Acceptance:** From any directory, one documented command runs `mcp-coder inspect-context` with correct Python and env without manual venv activation. ✓
 
 ---
 
@@ -217,3 +231,4 @@ Status: `open` | `scheduled` | `done` | `wontfix-p2`
 | 2026-06-07 | P2-ISS-006 timeout shutdown; P2-ISS-005 partial (timeout not 500) |
 | 2026-06-07 | Wild test done — P2-ISS-007 failed-attempt archive; P2-ISS-008 tiered models → BL-320/321 |
 | 2026-06-07 | Wave 2 dogfood — P2-ISS-009 budget env vs yaml; P2-ISS-010 CLI shim / PATH |
+| 2026-06-08 | **P2-499 exit** — ISS-001/006/010 closed; ISS-002/007/008 `wontfix-p2` → BL-322/320/321 |

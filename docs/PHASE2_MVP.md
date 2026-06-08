@@ -8,7 +8,7 @@
 
 # Phase 2 MVP — Product manager doc
 
-**Status:** **Wave 3 tail complete** (2026-06-07) — P2-3.15 polish shipped; **P2-499** exit review + dogfood next
+**Status:** **Phase 2 exit complete** (2026-06-08) — P2-499 signed off; structured dogfood + wild test (tip-calc step 1)
 **Host:** Cursor (Aider backend; other hosts deferred)
 **Technical reference:** [PHASES.md](./PHASES.md) § Phase 2 · [phase2-owned-context.md](./notes/phase2-owned-context.md)
 **Vision:** [IDEA.md](./IDEA.md) · [VISION_DOCS.md](./VISION_DOCS.md)
@@ -121,7 +121,7 @@ Work proceeds in four waves. Milestones within a wave can run in sequence or be 
 
 ### Wave 3 — Executor + host contracts ✓ (tail; P2-315 deferred)
 
-**Next worker spec:** `docs/tasks/P2-4.99-exit-review.md` (P2-499)
+**Exit:** P2-499 done — [phase2-exit-validation.md](./notes/phase2-exit-validation.md)
 
 **Goal:** Close audit loop layers 3–4; richer outcomes back to Cursor and spec reports.  
 **Design:** [phase2-owned-context.md § Audit loop](./notes/phase2-owned-context.md#audit-loop-four-layers)
@@ -134,6 +134,7 @@ Work proceeds in four waves. Milestones within a wave can run in sequence or be 
 | Review model config | P2-310 | `done` | `P2-3.10-review-model.md` | BL-162 partial — `MCP_CODER_REVIEW_MODEL` + yaml `review_model`; role-appropriate (not executor); yaml wins; 331 pytest (+7) |
 | Pre-exit polish | P2-3.15 | `done` | `P2-3.15-pre-exit-polish.md` | P2-ISS-001 placeholder filter; P2-ISS-006 fast timeout return; P2-ISS-010 CLI shim + INSTALL; 348 pytest (+7) |
 | MCP progress notifications | P2-315 | `todo` | BL-106 | Long-run progress to Cursor (if transport supports). Deferred past Phase 2 exit. |
+| Phase 2 exit review | P2-499 | `done` | `P2-4.99-exit-review.md` | Structured dogfood 6/6 + wild tip-calc step 1; issues triaged; Phase 3 goals locked |
 
 ### Wave 4 — Intelligence layer
 
@@ -212,15 +213,15 @@ Same pattern as Phase 1:
 - [x] **Wave 1 complete** (P2-110/115/120/125 + wild test)
 - [x] **Wave 2 complete** (P2-200 → P2-220)
 - [x] Wave 3 tail: P2-305/308/310/300 + P2-3.15 polish
-- [ ] Phase 2 exit review (P2-499) + structured dogfood; Phase 3 goals locked
+- [x] Phase 2 exit review (P2-499) + structured dogfood; Phase 3 goals locked (BL-322, BL-002, BL-151)
 
 ---
 
 ## Next action
 
-1. **P2-499** — exit review worker spec + structured dogfood (`mcp_coder_phase1_e2e`; see [wave1-wild-test-runbook.md](./notes/wave1-wild-test-runbook.md)).
-2. Close P2-ISS-001/006/010; triage remaining issues (`wontfix-p2` → BL-* where locked).
-3. Push `main` (7+ commits ahead of origin).
+1. **Phase 3** — BL-322 workspace history (anchor); BL-002 RAG; gatekeeper BL-151 when history ships.
+2. Optional: tip-calc wild step 2 (CLI) in e2e workspace; P2-315 progress notifications.
+3. Push `main` if not on remote.
 
 ---
 
@@ -250,3 +251,4 @@ Same pattern as Phase 1:
 | 2026-06-07 | **P2-310 done** — Review model config (`review_model` / env); BL-162 partial; 331 pytest (+7) |
 | 2026-06-07 | **P2-300 done (lite)** — ContextPackage hash executor cache key; BL-155 partial; 341 pytest (+10) |
 | 2026-06-07 | **P2-3.15 done** — Files placeholder filter, fast timeout return, CLI shim; 348 pytest (+7); P2-499 next |
+| 2026-06-08 | **P2-499 done** — Phase 2 exit; structured dogfood 6/6; wild tip-calc step 1 (`06418163`); ISS triage |
