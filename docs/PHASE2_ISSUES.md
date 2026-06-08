@@ -33,6 +33,8 @@ Status: `open` | `scheduled` | `done` | `wontfix-p2`
 | P2-ISS-006 | `open` | medium | Timeout returns late — executor thread blocks shutdown | P2-125 follow-up | Phase 4: timeout @120s, MCP returned @219s |
 | P2-ISS-007 | `open` | medium | Failed-delegate audit trail weak vs JSONL | BL-320 | Wild test: Qwen fails in Run log but no separate attempt archive |
 | P2-ISS-008 | `open` | low | Progressive / tiered executor model selection | BL-321 | Wild test: manual `.env` swap; Cursor guessed right |
+| P2-ISS-009 | `open` | low | `MCP_CODER_CONTEXT_BUDGET_TOKENS` cannot override per-model yaml budget | P2-220 follow-up / decide later | Wave 2 dogfood: env `200` ignored when model in `model_rates.yaml` |
+| P2-ISS-010 | `open` | low | CLI shim: `mcp-coder` usable from any cwd without manual venv | End of Phase 2 / ops | PATH, `.env`, workspace — bash wrapper or install docs |
 
 ---
 
@@ -163,6 +165,38 @@ Status: `open` | `scheduled` | `done` | `wontfix-p2`
 
 ---
 
+## P2-ISS-009: `MCP_CODER_CONTEXT_BUDGET_TOKENS` cannot override per-model yaml budget
+
+**Found:** Wave 2 dogfood (`inspect-context`, expense-splitter 5b), 2026-06-07.
+
+**Problem:** `resolve_context_budget_tokens()` priority is: per-model `context_budget_tokens` in `resources/model_rates.yaml` **before** `MCP_CODER_CONTEXT_BUDGET_TOKENS` env. Dogfood with `MCP_CODER_CONTEXT_BUDGET_TOKENS=200` had no effect while `AIDER_MODEL` resolved to `openrouter/openai/gpt-4o-mini` (yaml budget 128k). Forcing truncation required `AIDER_MODEL=openrouter/test/unknown-for-budget` so env/env-default applied.
+
+**Impact:** Operators cannot easily “turn down” budget for one-off testing or a smaller effective window without editing yaml or faking model id. Documented env var is misleading for dev dogfood.
+
+**Mitigation today:** Use unknown model id for budget tests; edit `model_rates.yaml` row; or set `MCP_CODER_CONTEXT_BUDGET_ENABLED=0` to disable.
+
+**Target:** **Decide later** (not required for Wave 2 exit). Options to discuss: (a) env overrides yaml when set (dev-friendly), (b) separate `MCP_CODER_CONTEXT_BUDGET_OVERRIDE_TOKENS`, (c) `inspect-context --budget-tokens N` flag only, (d) keep yaml-wins and document clearly in INSTALL/README.
+
+**Acceptance:** PM decision recorded; behavior matches docs; dogfood budget test does not require fake model id (if we choose override).
+
+---
+
+## P2-ISS-010: CLI shim — `mcp-coder` from any workspace without manual venv
+
+**Found:** Wave 2 dogfood, 2026-06-07 — running `mcp-coder inspect-context` from `mcp_coder_phase1_e2e` failed with `command not found` unless `mcp_coder/.venv` was activated or on `PATH`.
+
+**Problem:** `[project.scripts] mcp-coder` exists after `pip install -e .` in the **mcp_coder** venv only. Consumer workspaces (E2E, real projects) do not get the CLI unless the operator remembers `source …/mcp_coder/.venv/bin/activate` or adds venv `bin` to shell `PATH`. MCP server path via `mcp.json` is separate and already wired.
+
+**Impact:** Dogfood and ops friction; easy to run inspect/CLI against wrong Python or missing entry point.
+
+**Mitigation today:** `export PATH="$HOME/…/mcp_coder/.venv/bin:$PATH"` in `~/.zshrc`; or `pip install --user -e` from mcp_coder repo.
+
+**Target:** Low priority end-of-session ops — e.g. `scripts/mcp-coder` bash shim that: resolves repo root, activates or invokes `.venv/bin/python -m` / `main.py`, loads `mcp_coder/.env` (or `MCP_CODER_ENV_FILE`), forwards subcommands (`inspect-context`, `test-model`, …). Optional: `make install-cli` symlink into `/usr/local/bin` or document PATH one-liner in INSTALL.md.
+
+**Acceptance:** From any directory, one documented command runs `mcp-coder inspect-context` with correct Python and env without manual venv activation.
+
+---
+
 ## How to add an issue
 
 1. Append row to table above with next `P2-ISS-NNN`.
@@ -180,3 +214,4 @@ Status: `open` | `scheduled` | `done` | `wontfix-p2`
 | 2026-06-07 | P2-ISS-001–005 from Wave 1 dogfood (`mcp_coder_phase1_e2e`) |
 | 2026-06-07 | P2-ISS-006 timeout shutdown; P2-ISS-005 partial (timeout not 500) |
 | 2026-06-07 | Wild test done — P2-ISS-007 failed-attempt archive; P2-ISS-008 tiered models → BL-320/321 |
+| 2026-06-07 | Wave 2 dogfood — P2-ISS-009 budget env vs yaml; P2-ISS-010 CLI shim / PATH |
