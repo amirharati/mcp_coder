@@ -145,6 +145,30 @@ Verified combo when lock was generated (example — check file header):
 
 ---
 
+## CLI from any workspace
+
+After bootstrap, you can run the CLI without activating `.venv` by adding the repo `scripts/` directory to `PATH`:
+
+```bash
+# One-time: add to PATH (example — use your clone path)
+export PATH="/path/to/mcp_coder/scripts:$PATH"
+
+# From any project (cwd stays your consumer workspace):
+mcp-coder inspect-context --task "..." --spec tasks/foo.md --workspace .
+mcp-coder test-model --help
+```
+
+The shim (`scripts/mcp-coder`) resolves the mcp-coder repo root, uses `.venv/bin/python`, and runs `main.py` with your current working directory unchanged.
+
+| Variable | Purpose |
+|----------|---------|
+| `MCP_CODER_REPO_ROOT` | Override repo root (default: parent of `scripts/`) |
+| `MCP_CODER_ENV_FILE` | Source this env file instead of `$REPO_ROOT/.env` |
+
+If `.venv` is missing, the shim prints a hint to run `./scripts/bootstrap.sh`.
+
+---
+
 ## Cursor MCP
 
 After install, point Cursor at the venv Python (see [README.md](../README.md) § Cursor `mcp.json`). Set `cwd` to the **target repo** you want Aider to edit, not necessarily the `mcp_coder` repo.

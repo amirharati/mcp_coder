@@ -8,7 +8,7 @@
 
 # Phase 2 MVP — Product manager doc
 
-**Status:** **Wave 3 minimum complete** (2026-06-07) — P2-305 + P2-308 shipped; **P2-499** exit review next
+**Status:** **Wave 3 tail complete** (2026-06-07) — P2-3.15 polish shipped; **P2-499** exit review + dogfood next
 **Host:** Cursor (Aider backend; other hosts deferred)
 **Technical reference:** [PHASES.md](./PHASES.md) § Phase 2 · [phase2-owned-context.md](./notes/phase2-owned-context.md)
 **Vision:** [IDEA.md](./IDEA.md) · [VISION_DOCS.md](./VISION_DOCS.md)
@@ -119,9 +119,9 @@ Work proceeds in four waves. Milestones within a wave can run in sequence or be 
 | Inspect context (dry-run) | P2-215 | `done` | `P2-2.15-inspect-context.md` | D-P2-7 — CLI `inspect-context` + MCP `inspect_context`; `adapter_preview` via translate; 265 pytest (+12) |
 | Window budget | P2-220 | `done` | `P2-2.20-window-budget.md` | BL-154 compiler caps — `apply_context_budget`; per-model `context_budget_tokens` in yaml; read-tier truncation only; 305 pytest (+17) |
 
-### Wave 3 — Executor + host contracts ← **tail in progress** (P2-300a → polish → P2-499)
+### Wave 3 — Executor + host contracts ✓ (tail; P2-315 deferred)
 
-**Next worker spec:** `docs/tasks/P2-3.XX-polish.md` (draft) → P2-499
+**Next worker spec:** `docs/tasks/P2-4.99-exit-review.md` (P2-499)
 
 **Goal:** Close audit loop layers 3–4; richer outcomes back to Cursor and spec reports.  
 **Design:** [phase2-owned-context.md § Audit loop](./notes/phase2-owned-context.md#audit-loop-four-layers)
@@ -132,7 +132,8 @@ Work proceeds in four waves. Milestones within a wave can run in sequence or be 
 | Scope expansion report | P2-305 | `done` | `P2-3.05-scope-expansion.md` | D-P2-3, D-SPEC-8, BL-314c — Scope expansion in reports; strict → blocked + re-plan; discover → informational; 312 pytest (+7) |
 | Rich `ExecutionResult` | P2-308 | `done` | `P2-3.08-rich-result.md` | D-P2-3 — MCP `capability_warnings`, enriched summary, `preflight_token_estimate`; Aider output token parse; 324 pytest (+12) |
 | Review model config | P2-310 | `done` | `P2-3.10-review-model.md` | BL-162 partial — `MCP_CODER_REVIEW_MODEL` + yaml `review_model`; role-appropriate (not executor); yaml wins; 331 pytest (+7) |
-| MCP progress notifications | P2-315 | `todo` | BL-106 | Long-run progress to Cursor (if transport supports). |
+| Pre-exit polish | P2-3.15 | `done` | `P2-3.15-pre-exit-polish.md` | P2-ISS-001 placeholder filter; P2-ISS-006 fast timeout return; P2-ISS-010 CLI shim + INSTALL; 348 pytest (+7) |
+| MCP progress notifications | P2-315 | `todo` | BL-106 | Long-run progress to Cursor (if transport supports). Deferred past Phase 2 exit. |
 
 ### Wave 4 — Intelligence layer
 
@@ -207,19 +208,19 @@ Same pattern as Phase 1:
 - [x] Read-deps missing → warning (P2-110); scope expansion in reports (P2-305)
 - [x] Usage telemetry on every delegation — preflight + actual + cost (P2-120)
 - [x] Window budget enforcement in compiler (P2-220; BL-154 compiler half)
-- [x] Delegation hardening: classified failures, no browser storm (P2-125; P2-ISS-006 timeout UX follow-up)
+- [x] Delegation hardening: classified failures, no browser storm (P2-125; P2-ISS-006 fast timeout return — P2-3.15)
 - [x] **Wave 1 complete** (P2-110/115/120/125 + wild test)
 - [x] **Wave 2 complete** (P2-200 → P2-220)
-- [x] Wave 3 at least P2-305 + P2-308 done
-- [ ] Phase 2 exit review (P2-499) completed; Phase 3 goals locked
+- [x] Wave 3 tail: P2-305/308/310/300 + P2-3.15 polish
+- [ ] Phase 2 exit review (P2-499) + structured dogfood; Phase 3 goals locked
 
 ---
 
 ## Next action
 
-1. **Commit + push** P2-300a; push `main` if not on remote.
-2. **P2-3.XX-polish** — ISS-001 + ISS-006 + ISS-010 bundled.
-3. **P2-499** — Phase 2 exit review after polish.
+1. **P2-499** — exit review worker spec + structured dogfood (`mcp_coder_phase1_e2e`; see [wave1-wild-test-runbook.md](./notes/wave1-wild-test-runbook.md)).
+2. Close P2-ISS-001/006/010; triage remaining issues (`wontfix-p2` → BL-* where locked).
+3. Push `main` (7+ commits ahead of origin).
 
 ---
 
@@ -248,3 +249,4 @@ Same pattern as Phase 1:
 | 2026-06-07 | **BL-322 / WORKSPACE_HISTORY** — workspace history design captured; Phase 3 anchor |
 | 2026-06-07 | **P2-310 done** — Review model config (`review_model` / env); BL-162 partial; 331 pytest (+7) |
 | 2026-06-07 | **P2-300 done (lite)** — ContextPackage hash executor cache key; BL-155 partial; 341 pytest (+10) |
+| 2026-06-07 | **P2-3.15 done** — Files placeholder filter, fast timeout return, CLI shim; 348 pytest (+7); P2-499 next |

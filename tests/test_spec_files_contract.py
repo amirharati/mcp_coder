@@ -88,6 +88,62 @@ def test_contract_paths_normalizes_target_files():
     assert missing == []
 
 
+READ_NONE_SECTION = """\
+### Edit
+
+- `expense_splitter/cli.py`
+
+### Read
+
+- `(none)`
+"""
+
+EDIT_NA_SECTION = """\
+### Edit
+
+- n/a
+- `pkg/real.py`
+
+### Read
+
+- `(none)`
+"""
+
+
+def test_read_placeholder_none_ignored():
+    contract = parse_files_contract(READ_NONE_SECTION)
+    assert contract.read == []
+    assert "(none)" not in contract.all_paths
+    assert contract.edit == ["expense_splitter/cli.py"]
+
+
+def test_edit_placeholder_na_ignored():
+    contract = parse_files_contract(EDIT_NA_SECTION)
+    assert contract.edit == ["pkg/real.py"]
+    assert "n/a" not in contract.all_paths
+
+
+def test_real_paths_with_none_in_name_not_filtered():
+    section = """\
+### Edit
+
+- `none.py`
+- `n/a/foo.py`
+"""
+    contract = parse_files_contract(section)
+    assert contract.edit == ["n/a/foo.py", "none.py"]
+    assert contract.all_paths == ["n/a/foo.py", "none.py"]
+
+
+def test_placeholder_read_not_in_missing_from_target():
+    contract = parse_files_contract(READ_NONE_SECTION)
+    missing = contract_paths_missing_from_target(
+        contract, ["expense_splitter/cli.py"]
+    )
+    assert "(none)" not in missing
+    assert missing == []
+
+
 def test_build_contract_warnings():
     warnings = build_contract_warnings(["a.py", "b.py"])
     assert warnings == [

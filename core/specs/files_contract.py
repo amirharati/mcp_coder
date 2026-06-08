@@ -13,12 +13,22 @@ EDIT_SUBSECTION_RE = re.compile(r"^###\s+Edit\b", re.MULTILINE)
 READ_SUBSECTION_RE = re.compile(r"^###\s+Read\b", re.MULTILINE)
 SUBSECTION_SPLIT_RE = re.compile(r"^###\s+(.+)$", re.MULTILINE)
 
+_PLACEHOLDER_PATHS = frozenset({"(none)", "none", "n/a", "na", "-"})
+
 
 @dataclass
 class FilesContract:
     edit: list[str]
     read: list[str]
     all_paths: list[str]
+
+
+def _is_placeholder_path(path: str) -> bool:
+    """True for planner placeholders — not real repo paths."""
+    normalized = path.strip().lower()
+    if not normalized:
+        return True
+    return normalized in _PLACEHOLDER_PATHS
 
 
 def _extract_path_from_bullet_line(line: str) -> str | None:
@@ -28,13 +38,19 @@ def _extract_path_from_bullet_line(line: str) -> str | None:
     content = match.group(1).strip()
     tick = PATH_IN_BACKTICKS_RE.search(content)
     if tick:
-        return normalize_repo_path(tick.group(1))
-    for sep in (" — ", " - "):
-        if sep in content:
-            content = content.split(sep, 1)[0].strip()
-            break
-    path = content.strip("`").strip()
-    return normalize_repo_path(path) if path else None
+        path = normalize_repo_path(tick.group(1))
+    else:
+        for sep in (" — ", " - "):
+            if sep in content:
+                content = content.split(sep, 1)[0].strip()
+                break
+        path = content.strip("`").strip()
+        if not path:
+            return None
+        path = normalize_repo_path(path)
+    if _is_placeholder_path(path):
+        return None
+    return path
 
 
 def _parse_bullet_paths(text: str) -> list[str]:

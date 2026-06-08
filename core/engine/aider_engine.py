@@ -207,40 +207,51 @@ class AiderEngine(ExecutionEngine):
                     return coder, io, partial, captured, executor_reused_local, executor_recreated_local
 
             timeout_s = delegation_timeout_seconds()
-            with concurrent.futures.ThreadPoolExecutor(max_workers=1) as executor:
-                future = executor.submit(_run_coder)
-                try:
-                    coder, io, partial, captured, executor_reused, executor_recreated = (
-                        future.result(timeout=timeout_s)
-                    )
-                except concurrent.futures.TimeoutError:
-                    future.cancel()
-                    from core.logging.server_log import server_log_emit
+            pool = concurrent.futures.ThreadPoolExecutor(max_workers=1)
+            future = pool.submit(_run_coder)
+            pool_shutdown = False
+            try:
+                coder, io, partial, captured, executor_reused, executor_recreated = (
+                    future.result(timeout=timeout_s)
+                )
+            except concurrent.futures.TimeoutError:
+                future.cancel()
+                pool.shutdown(wait=False, cancel_futures=True)
+                pool_shutdown = True
+                from core.logging.server_log import server_log_emit
 
-                    server_log_emit(
-                        "delegation_timeout",
-                        level="error",
-                        model=self._model_name,
-                        timeout_s=timeout_s,
-                    )
-                    files_changed_t, used_git_t = files_touched_since_snapshot(
-                        workspace_path,
-                        before_git,
-                        target_files=edit_paths_rel,
-                        before_mtimes=before_mtimes,
-                    )
-                    return ExecutionResult(
-                        success=False,
-                        output="Delegation timed out; engine did not complete within the allowed time.",
-                        files_changed=files_changed_t,
-                        files_unexpected=compute_files_unexpected(
-                            files_changed_t, edit_paths_rel, used_git=used_git_t
-                        ),
-                        model=self._model_name,
-                        error="Delegation timed out.",
-                        error_class="timeout",
-                        tokens={"source": "unavailable"},
-                    )
+                server_log_emit(
+                    "delegation_timeout",
+                    level="error",
+                    model=self._model_name,
+                    timeout_s=timeout_s,
+                )
+                files_changed_t, used_git_t = files_touched_since_snapshot(
+                    workspace_path,
+                    before_git,
+                    target_files=edit_paths_rel,
+                    before_mtimes=before_mtimes,
+                )
+                return ExecutionResult(
+                    success=False,
+                    output="Delegation timed out; engine did not complete within the allowed time.",
+                    files_changed=files_changed_t,
+                    files_unexpected=compute_files_unexpected(
+                        files_changed_t, edit_paths_rel, used_git=used_git_t
+                    ),
+                    model=self._model_name,
+                    error="Delegation timed out.",
+                    error_class="timeout",
+                    tokens={"source": "unavailable"},
+                )
+            except Exception:
+                if not pool_shutdown:
+                    pool.shutdown(wait=False, cancel_futures=True)
+                    pool_shutdown = True
+                raise
+            else:
+                pool.shutdown(wait=True)
+                pool_shutdown = True
 
             partial_str = str(partial) if partial is not None else ""
             output = "\n".join(s for s in (captured.strip(), partial_str.strip()) if s)
