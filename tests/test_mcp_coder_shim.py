@@ -25,4 +25,5 @@ def test_shim_help_lists_subcommands():
     )
     assert proc.returncode == 0
     assert "inspect-context" in proc.stdout
+    assert "history" in proc.stdout
     assert "test-model" in proc.stdout

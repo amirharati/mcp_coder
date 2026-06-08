@@ -206,6 +206,7 @@ Canonical write is under `~/.mcp-coder/projects/.../sessions/.../delegations.jso
 
 | Date | Note |
 |------|------|
+| 2026-06-08 | P3-322d: MCP `get_delegation_diff`; `delegation_diff` on delegate response; CLI `history list\|diff\|revert` |
 | 2026-06-08 | P3-322b: `blobs` table + `file_deltas.diff`; contract content snapshot; `revert_to_before` API |
 | 2026-06-08 | P3-322a: `workspace_history.db` under `projects/<project_key>/`; JSONL `workspace_snapshot` block |
 | 2026-06-05 | P1-151: epics/tasks/reports split; `delegate_mode`; review loop |

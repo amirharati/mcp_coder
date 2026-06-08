@@ -133,6 +133,7 @@ def _response_payload(
     context_package_summary: dict[str, Any] | None = None,
     capability_warnings: list[str] | None = None,
     preflight_token_estimate: int | None = None,
+    delegation_diff: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     payload: dict[str, Any] = {
         "success": success,
@@ -191,6 +192,8 @@ def _response_payload(
         payload["capability_warnings"] = capability_warnings
     if preflight_token_estimate is not None:
         payload["preflight_token_estimate"] = preflight_token_estimate
+    if delegation_diff is not None:
+        payload["delegation_diff"] = delegation_diff
     return payload
 
 
@@ -675,6 +678,12 @@ def delegate_to_agent(
         usage_dict["preflight_tokens_est"] if context_package is not None else None
     )
 
+    delegation_diff_payload: dict[str, Any] | None = None
+    if delegate_mode == DELEGATE_MODE_IMPLEMENT and workspace_snapshot is not None:
+        from core.workspace.history_query import safe_delegation_diff_dict
+
+        delegation_diff_payload = safe_delegation_diff_dict(ws, delegation_id)
+
     t_post = time.perf_counter()
     response = _response_payload(
         success=success,
@@ -709,6 +718,7 @@ def delegate_to_agent(
         context_package_summary=mcp_context_summary,
         capability_warnings=cap_warnings or None,
         preflight_token_estimate=preflight_token_estimate,
+        delegation_diff=delegation_diff_payload,
     )
     if spec_files_missing:
         mcp_request["spec_files_missing_from_target"] = spec_files_missing
@@ -813,6 +823,27 @@ def inspect_context(
         include_adapter_preview=include_adapter_preview,
         host_transcript=None,
     )
+    return json.dumps(result, ensure_ascii=False)
+
+
+@mcp.tool(
+    name="get_delegation_diff",
+    description=(
+        "Return unified diffs and file delta summary for a past delegation_id "
+        "from workspace_history.db. Use after delegate_to_agent to inspect "
+        "what changed without re-running the executor."
+    ),
+)
+def get_delegation_diff(
+    delegation_id: str,
+    workspace_path: str | None = None,
+) -> str:
+    """Fetch delegation_diff for a past delegation (read-only)."""
+    from core.logging.delegation_log import workspace_path as default_workspace
+    from core.workspace.history_query import delegation_diff_for_mcp
+
+    ws = workspace_path or default_workspace()
+    result = delegation_diff_for_mcp(ws, delegation_id)
     return json.dumps(result, ensure_ascii=False)
 
 

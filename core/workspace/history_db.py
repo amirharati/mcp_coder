@@ -278,3 +278,53 @@ class WorkspaceHistoryDB:
     def fetch_blob(self, content_hash: str) -> bytes | None:
         with self._connect() as conn:
             return self.get_blob_content(conn, content_hash)
+
+    def get_snapshot(self, delegation_id: str) -> dict[str, object] | None:
+        if not self.db_path.is_file():
+            return None
+        with self._connect() as conn:
+            conn.row_factory = sqlite3.Row
+            row = conn.execute(
+                """
+                SELECT delegation_id, mcp_session_id, timestamp_start, timestamp_end,
+                       spec_path, workspace_path
+                FROM snapshots
+                WHERE delegation_id = ?
+                """,
+                (delegation_id,),
+            ).fetchone()
+        return dict(row) if row else None
+
+    def list_snapshots(
+        self,
+        *,
+        limit: int = 20,
+        spec_path: str | None = None,
+    ) -> list[dict[str, object]]:
+        if not self.db_path.is_file():
+            return []
+        limit = max(1, min(limit, 500))
+        with self._connect() as conn:
+            conn.row_factory = sqlite3.Row
+            if spec_path:
+                rows = conn.execute(
+                    """
+                    SELECT delegation_id, timestamp_start, timestamp_end, spec_path
+                    FROM snapshots
+                    WHERE spec_path = ?
+                    ORDER BY timestamp_end DESC, timestamp_start DESC
+                    LIMIT ?
+                    """,
+                    (spec_path, limit),
+                ).fetchall()
+            else:
+                rows = conn.execute(
+                    """
+                    SELECT delegation_id, timestamp_start, timestamp_end, spec_path
+                    FROM snapshots
+                    ORDER BY timestamp_end DESC, timestamp_start DESC
+                    LIMIT ?
+                    """,
+                    (limit,),
+                ).fetchall()
+        return [dict(row) for row in rows]

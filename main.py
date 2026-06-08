@@ -66,6 +66,16 @@ def main() -> None:
     )
     inspect_p.add_argument("--pretty", action="store_true", help="Pretty-print JSON")
 
+    history_p = sub.add_parser(
+        "history",
+        help="Browse workspace_history.db (list, diff, revert)",
+    )
+    history_p.add_argument(
+        "history_args",
+        nargs=argparse.REMAINDER,
+        help="history subcommand: list | diff | revert",
+    )
+
     parser.add_argument(
         "--mcp",
         action="store_true",
@@ -89,6 +99,14 @@ def main() -> None:
         from core.cli.inspect_context import main_inspect_context
 
         raise SystemExit(main_inspect_context(sys.argv[2:]))
+
+    if args.command == "history":
+        from core.cli.history import main_history
+
+        history_argv = args.history_args or []
+        if history_argv and history_argv[0] == "--":
+            history_argv = history_argv[1:]
+        raise SystemExit(main_history(history_argv))
     from core.config import apply_provider_env, load_env_files
     from core.server.singleton import enforce_single_stdio_server
     from server.mcp_server import run_stdio
