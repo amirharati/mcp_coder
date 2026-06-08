@@ -106,6 +106,84 @@ def test_review_mode_rejects_target_files(tmp_path, monkeypatch):
     assert "target_files=[]" in payload["output"]
 
 
+def test_review_uses_review_model_and_workspace_path(tmp_path, monkeypatch):
+    home = tmp_path / "home"
+    ws = _setup(tmp_path)
+    monkeypatch.setenv("MCP_CODER_HOME", str(home))
+    monkeypatch.setenv("MCP_CODER_REVIEW_MODEL", "openrouter/test/review-model")
+    monkeypatch.chdir(ws)
+
+    captured: dict = {}
+
+    def _fake_review(prompt, *, model_name=None, workspace_path=None):
+        captured["workspace_path"] = workspace_path
+        from core.config.review_model import resolve_review_model_name
+
+        resolved = (
+            resolve_review_model_name(workspace_path)
+            if workspace_path
+            else "openrouter/test/fallback"
+        )
+        return ExecutionResult(
+            success=True,
+            output="**Questions:** None\nREADY_TO_IMPLEMENT",
+            model=resolved,
+        )
+
+    with patch("server.mcp_server.run_spec_review", side_effect=_fake_review):
+        raw = delegate_to_agent(
+            task="Review this spec before we implement.",
+            target_files=[],
+            context_summary="",
+            spec_path="tasks/widget-step.md",
+            mode="review",
+        )
+
+    assert captured["workspace_path"] == str(ws.resolve())
+    payload = json.loads(raw)
+    assert payload["usage"]["model"] == "openrouter/test/review-model"
+
+
+def test_implement_ignores_review_model(tmp_path, monkeypatch):
+    home = tmp_path / "home"
+    ws = _setup(tmp_path)
+    monkeypatch.setenv("MCP_CODER_HOME", str(home))
+    monkeypatch.setenv("MCP_CODER_REVIEW_MODEL", "openrouter/test/review-model")
+    monkeypatch.setenv("AIDER_MODEL", "openrouter/test/implement-model")
+    monkeypatch.setenv("MCP_CODER_USE_CONTEXT_PACKAGE", "0")
+    monkeypatch.chdir(ws)
+
+    fake = ExecutionResult(
+        success=True,
+        output="done",
+        files_changed=["widget.py"],
+        model="openrouter/test/implement-model",
+    )
+    mock_engine = type(
+        "E",
+        (),
+        {
+            "model_name": "openrouter/test/implement-model",
+            "run": lambda *a, **k: fake,
+        },
+    )()
+
+    with patch("server.mcp_server.run_spec_review") as review:
+        with patch("server.mcp_server.get_engine", return_value=mock_engine):
+            raw = delegate_to_agent(
+                task="Implement widget",
+                target_files=["widget.py"],
+                context_summary="",
+                spec_path="tasks/widget-step.md",
+                mode="implement",
+            )
+        review.assert_not_called()
+
+    payload = json.loads(raw)
+    assert payload["usage"]["model"] == "openrouter/test/implement-model"
+    assert payload["usage"]["model"] != "openrouter/test/review-model"
+
+
 def test_implement_rejects_chat_questions():
     from core.config.aider_runtime import infer_run_success
 

@@ -6,6 +6,7 @@ import concurrent.futures
 from typing import Any
 
 from core.config.models import provider_hint_for_model, resolve_model_name
+from core.config.review_model import resolve_review_model_name
 from core.config.providers import apply_provider_env
 from core.engine.base import ExecutionResult
 from core.engine.stdio_isolation import isolated_stdio, merged_capture
@@ -33,10 +34,16 @@ def run_spec_review(
     prompt: str,
     *,
     model_name: str | None = None,
+    workspace_path: str | None = None,
 ) -> ExecutionResult:
     """One-shot model call for spec review (no Coder, no file changes)."""
     apply_provider_env()
-    resolved = model_name or resolve_model_name()
+    if model_name is not None:
+        resolved = model_name
+    elif workspace_path:
+        resolved = resolve_review_model_name(workspace_path)
+    else:
+        resolved = resolve_model_name()
     config_error = provider_hint_for_model(resolved)
     if config_error:
         return ExecutionResult(

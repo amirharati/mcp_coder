@@ -428,7 +428,7 @@ def delegate_to_agent(
         try:
             t_engine = time.perf_counter()
             if delegate_mode == DELEGATE_MODE_REVIEW:
-                result = run_spec_review(prompt)
+                result = run_spec_review(prompt, workspace_path=ws)
             elif _use_pkg:
                 context_package = assemble_context(
                     workspace=Path(ws),
