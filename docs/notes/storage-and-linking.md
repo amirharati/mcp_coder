@@ -22,7 +22,7 @@ Default root: `MCP_CODER_HOME` → `~/.mcp-coder` (or `$XDG_DATA_HOME/mcp-coder`
   projects/
     <project_key>/
       project.json                    # workspace_path, timestamps
-      workspace_history.db            # delegation hash snapshots + file_deltas (P3-322a)
+      workspace_history.db            # snapshots, file_deltas (+diff), blobs (P3-322a/b)
       server.jsonl                    # optional per-project server log (scope=project|both)
       sessions/
         <mcp_session_id>/
@@ -81,7 +81,7 @@ Legacy: `<workspace>/.mcp-coder/project.json` is still read as pointer fallback 
 | `host_session_id` | Host chat id (e.g. Cursor transcript file stem) |
 | `host_transcript_path` | Optional full path to host transcript file |
 | `delegation_id` | UUID — one MCP `delegate_to_agent` call |
-| `workspace_history.db` | Per-project SQLite store for manifest snapshots (`snapshots`, `file_deltas`) |
+| `workspace_history.db` | Per-project SQLite: `snapshots`, `file_deltas` (incl. unified `diff`), `blobs` (content-addressable) |
 
 **Link chain:**
 
@@ -206,6 +206,7 @@ Canonical write is under `~/.mcp-coder/projects/.../sessions/.../delegations.jso
 
 | Date | Note |
 |------|------|
+| 2026-06-08 | P3-322b: `blobs` table + `file_deltas.diff`; contract content snapshot; `revert_to_before` API |
 | 2026-06-08 | P3-322a: `workspace_history.db` under `projects/<project_key>/`; JSONL `workspace_snapshot` block |
 | 2026-06-05 | P1-151: epics/tasks/reports split; `delegate_mode`; review loop |
 | 2026-06-05 | P1-150: workspace `specs/tasks/` + optional `spec_path` on delegate |

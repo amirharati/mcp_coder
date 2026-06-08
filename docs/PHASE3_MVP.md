@@ -97,11 +97,11 @@ Task specs: `docs/tasks/P3-*.md` (gitignored; created per worker session).
 | Milestone | Task ID | Status | Implements | Summary |
 |-----------|---------|--------|------------|---------|
 | Manifest + delta + DB | P3-322a | `done` | BL-322a, P3-ISS-001 | `core/workspace/`; tracker-primary attribution; JSONL `workspace_snapshot`; 355 pytest (+7) |
-| Content snapshot + revert | P3-322b | `todo` | BL-322b | Contract files full content before delegate |
+| Content snapshot + revert | P3-322b | `done` | BL-322b | blobs + unified diffs + `revert_to_before`; 364 pytest (+9) |
 | Post-delegation gateway | P3-322c | `todo` | BL-322c | Strict with teeth; discover unchanged |
 | MCP diff + CLI history | P3-322d | `todo` | BL-322d | `delegation_diff` in response; optional approve |
 
-**Next worker spec:** `docs/tasks/P3-322b-content-snapshot.md` (draft when ready) or P3-320 after Wave 1 planning
+**Next worker spec:** `docs/tasks/P3-322c-post-gateway.md` (draft when ready)
 
 ### Wave 2 — Planner-visible history
 
@@ -174,7 +174,8 @@ All Q1–Q5 resolved (2026-06-08). Locked as D-P3-2/6/7/8 and Q3 deferred.
 - [x] Non-git workspace: `files_changed` lists all delegation touches (P3-322a)
 - [x] `workspace_history.db` records per-delegation delta; JSONL links `delegation_id`
 - [ ] Failed attempts archived when config on (P3-320)
-- [ ] Strict + content snapshot can revert violations (P3-322b/c)
+- [x] Content snapshot + `revert_to_before` API (P3-322b)
+- [ ] Strict gateway auto-reverts violations (P3-322c)
 - [ ] MCP returns `delegation_diff` on implement (P3-322d)
 - [ ] RAG lite retrieves prior delegation summary for same project (P3-002-lite)
 - [ ] Phase 3 exit review (P3-499) + dogfood
@@ -183,7 +184,8 @@ All Q1–Q5 resolved (2026-06-08). Locked as D-P3-2/6/7/8 and Q3 deferred.
 
 ## Next action
 
-1. **Draft + dispatch** P3-322b (content snapshot + revert) or P3-320 (attempt archive) — revisit P3-311 priority at end of Wave 2.
+1. **Draft + dispatch** P3-322c (post-delegation strict gateway + auto-revert).
+2. Revisit P3-311 priority at end of Wave 2; Wave 1 dogfood after P3-322d.
 2. **Exit:** P3-499 dogfood when waves 1–4 checklist green.
 
 ---
@@ -195,3 +197,4 @@ All Q1–Q5 resolved (2026-06-08). Locked as D-P3-2/6/7/8 and Q3 deferred.
 | 2026-06-08 | Initial Phase 3 PM doc; waves 1–4; carried items from P2-499 exit |
 | 2026-06-08 | Q1–Q5 resolved; D-P3-6/7/8 added; P3-322a spec aligned to tracker-primary (D-P3-2) |
 | 2026-06-08 | **P3-322a done** — `core/workspace/`; tracker-primary; P3-ISS-001 closed; 355 pytest |
+| 2026-06-08 | **P3-322b done** — blobs + diffs + revert; 364 pytest (+9) |

@@ -47,10 +47,12 @@ class SnapshotSession:
         before_manifest: Manifest,
         history_db: WorkspaceHistoryDB | None,
         walk_ms_before: int = 0,
+        contract_paths_snapshotted: int = 0,
     ) -> None:
         self.before_manifest = before_manifest
         self.history_db = history_db
         self.walk_ms_before = walk_ms_before
+        self.contract_paths_snapshotted = contract_paths_snapshotted
 
 
 def begin_delegation_snapshot(
@@ -60,6 +62,7 @@ def begin_delegation_snapshot(
     mcp_session_id: str | None,
     timestamp_start: str | None,
     spec_path: str | None,
+    contract_paths: list[str] | None = None,
 ) -> SnapshotSession | None:
     if not is_snapshot_enabled():
         return None
@@ -71,20 +74,24 @@ def begin_delegation_snapshot(
     walk_ms = int((time.perf_counter() - t0) * 1000)
 
     history_db: WorkspaceHistoryDB | None = None
+    contract_paths_snapshotted = 0
     if delegation_id and mcp_session_id:
         history_db = WorkspaceHistoryDB(workspace_path)
-        history_db.begin_snapshot(
+        begin_stats = history_db.begin_snapshot(
             delegation_id=delegation_id,
             mcp_session_id=mcp_session_id,
             timestamp_start=timestamp_start or utc_now_iso(),
             spec_path=spec_path,
             before_manifest=before_manifest,
+            contract_paths=contract_paths,
         )
+        contract_paths_snapshotted = begin_stats.get("contract_paths_snapshotted", 0)
 
     return SnapshotSession(
         before_manifest=before_manifest,
         history_db=history_db,
         walk_ms_before=walk_ms,
+        contract_paths_snapshotted=contract_paths_snapshotted,
     )
 
 
@@ -112,13 +119,15 @@ def resolve_delegation_attribution(
         delta = diff_manifests(snapshot_session.before_manifest, after_manifest)
         timestamp_end = utc_now_iso()
 
+        diffs_stored = 0
         if snapshot_session.history_db and delegation_id:
-            snapshot_session.history_db.commit_snapshot(
+            commit_stats = snapshot_session.history_db.commit_snapshot(
                 delegation_id=delegation_id,
                 timestamp_end=timestamp_end,
                 delta=delta,
                 after_manifest=after_manifest,
             )
+            diffs_stored = commit_stats.get("diffs_stored", 0)
 
         paths = contract_paths if contract_paths else edit_paths_rel
         files_changed = delta.all_changed
@@ -141,6 +150,8 @@ def resolve_delegation_attribution(
                 "deleted": delta.deleted,
             },
             "db_path": str(workspace_history_db_path(workspace_path)),
+            "diffs_stored": diffs_stored,
+            "contract_paths_snapshotted": snapshot_session.contract_paths_snapshotted,
         }
         return files_changed, files_unexpected, workspace_snapshot, used_git, total_walk_ms
 

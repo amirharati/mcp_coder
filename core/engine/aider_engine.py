@@ -173,6 +173,7 @@ class AiderEngine(ExecutionEngine):
                 mcp_session_id=mcp_session_id,
                 timestamp_start=timestamp_start,
                 spec_path=spec_path,
+                contract_paths=contract,
             )
 
             def _make_coder() -> tuple[Any, Any, Any]:

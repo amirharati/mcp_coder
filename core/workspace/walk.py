@@ -43,7 +43,7 @@ SKIP_EXTENSIONS = frozenset(
 )
 
 
-def _max_file_bytes() -> int:
+def max_file_bytes() -> int:
     raw = os.environ.get("MCP_CODER_SNAPSHOT_MAX_FILE_MB", "1").strip()
     try:
         mb = float(raw)
@@ -52,11 +52,11 @@ def _max_file_bytes() -> int:
     return max(1, int(mb * 1024 * 1024))
 
 
-def _sha256_bytes(data: bytes) -> str:
+def sha256_bytes(data: bytes) -> str:
     return hashlib.sha256(data).hexdigest()
 
 
-def _is_binary(data: bytes) -> bool:
+def is_binary_content(data: bytes) -> bool:
     try:
         data.decode("utf-8")
         return False
@@ -64,25 +64,44 @@ def _is_binary(data: bytes) -> bool:
         return True
 
 
-def _should_skip_dir(name: str) -> bool:
+def should_skip_dir(name: str) -> bool:
     return name in SKIP_DIRS
 
 
-def _should_skip_file(name: str) -> bool:
+def should_skip_file(name: str) -> bool:
     return Path(name).suffix.lower() in SKIP_EXTENSIONS
+
+
+def read_workspace_file(workspace_path: str, rel_path: str) -> bytes | None:
+    """Read a workspace-relative file respecting skip rules and max size."""
+    rel = normalize_repo_path(rel_path)
+    if not rel or should_skip_file(rel):
+        return None
+
+    root = Path(workspace_path).resolve()
+    abs_path = root / rel
+    try:
+        if not abs_path.is_file():
+            return None
+        stat = abs_path.stat()
+        if stat.st_size > max_file_bytes():
+            return None
+        return abs_path.read_bytes()
+    except OSError:
+        return None
 
 
 def walk_workspace(workspace_path: str) -> Manifest:
     """Hash-walk workspace → manifest (path → FileEntry). Not .gitignore-aware."""
     root = Path(workspace_path).resolve()
     manifest: Manifest = {}
-    max_bytes = _max_file_bytes()
+    limit = max_file_bytes()
 
     for dirpath, dirnames, filenames in os.walk(root, topdown=True):
-        dirnames[:] = [d for d in dirnames if not _should_skip_dir(d)]
+        dirnames[:] = [d for d in dirnames if not should_skip_dir(d)]
 
         for filename in filenames:
-            if _should_skip_file(filename):
+            if should_skip_file(filename):
                 continue
 
             abs_path = Path(dirpath) / filename
@@ -100,7 +119,7 @@ def walk_workspace(workspace_path: str) -> Manifest:
             except OSError:
                 continue
 
-            if stat.st_size > max_bytes:
+            if stat.st_size > limit:
                 continue
 
             try:
@@ -109,9 +128,9 @@ def walk_workspace(workspace_path: str) -> Manifest:
                 continue
 
             manifest[rel] = FileEntry(
-                content_hash=_sha256_bytes(data),
+                content_hash=sha256_bytes(data),
                 size_bytes=len(data),
-                is_binary=_is_binary(data),
+                is_binary=is_binary_content(data),
                 mtime=stat.st_mtime,
             )
 

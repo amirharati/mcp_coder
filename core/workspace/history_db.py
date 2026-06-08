@@ -3,7 +3,15 @@ from __future__ import annotations
 import sqlite3
 from pathlib import Path
 
+from core.engine.git_diff import normalize_repo_path
+from core.workspace.diff_util import unified_diff_text
 from core.workspace.manifest import DelegationDelta, Manifest
+from core.workspace.walk import (
+    is_binary_content,
+    max_file_bytes,
+    read_workspace_file,
+    sha256_bytes,
+)
 
 
 def _history_db_path(workspace: str | Path) -> Path:
@@ -13,7 +21,7 @@ def _history_db_path(workspace: str | Path) -> Path:
 
 
 class WorkspaceHistoryDB:
-    """SQLite persistence for delegation workspace snapshots (v1 — no blobs)."""
+    """SQLite persistence for delegation workspace snapshots + content blobs."""
 
     def __init__(self, workspace: str | Path) -> None:
         self.workspace = str(Path(workspace).resolve())
@@ -47,10 +55,78 @@ class WorkspaceHistoryDB:
                 content_hash  TEXT,
                 prev_hash     TEXT,
                 is_binary     INTEGER DEFAULT 0,
+                diff          TEXT,
                 PRIMARY KEY (delegation_id, path)
+            );
+
+            CREATE TABLE IF NOT EXISTS blobs (
+                hash    TEXT PRIMARY KEY,
+                content BLOB NOT NULL
             );
             """
         )
+        cols = {
+            row[1] for row in conn.execute("PRAGMA table_info(file_deltas)").fetchall()
+        }
+        if "diff" not in cols:
+            conn.execute("ALTER TABLE file_deltas ADD COLUMN diff TEXT")
+
+    @staticmethod
+    def _insert_blob(conn: sqlite3.Connection, data: bytes) -> str:
+        content_hash = sha256_bytes(data)
+        conn.execute(
+            "INSERT OR IGNORE INTO blobs (hash, content) VALUES (?, ?)",
+            (content_hash, data),
+        )
+        return content_hash
+
+    @staticmethod
+    def get_blob_content(conn: sqlite3.Connection, content_hash: str) -> bytes | None:
+        row = conn.execute(
+            "SELECT content FROM blobs WHERE hash = ?",
+            (content_hash,),
+        ).fetchone()
+        return row[0] if row else None
+
+    def _store_before_manifest_blobs(
+        self, conn: sqlite3.Connection, before_manifest: Manifest
+    ) -> None:
+        root = Path(self.workspace)
+        limit = max_file_bytes()
+        for path, entry in before_manifest.items():
+            if entry.is_binary:
+                continue
+            abs_path = root / path
+            try:
+                if not abs_path.is_file():
+                    continue
+                data = abs_path.read_bytes()
+            except OSError:
+                continue
+            if len(data) > limit:
+                continue
+            self._insert_blob(conn, data)
+
+    def _snapshot_contract_paths(
+        self,
+        conn: sqlite3.Connection,
+        contract_paths: list[str] | None,
+    ) -> int:
+        if not contract_paths:
+            return 0
+        snapshotted = 0
+        seen: set[str] = set()
+        for raw in contract_paths:
+            path = normalize_repo_path(raw)
+            if not path or path in seen:
+                continue
+            seen.add(path)
+            data = read_workspace_file(self.workspace, path)
+            if data is None or is_binary_content(data):
+                continue
+            self._insert_blob(conn, data)
+            snapshotted += 1
+        return snapshotted
 
     def begin_snapshot(
         self,
@@ -60,9 +136,12 @@ class WorkspaceHistoryDB:
         timestamp_start: str,
         spec_path: str | None,
         before_manifest: Manifest,
-    ) -> None:
+        contract_paths: list[str] | None = None,
+    ) -> dict[str, int]:
         self._before_manifest = before_manifest
         with self._connect() as conn:
+            self._store_before_manifest_blobs(conn, before_manifest)
+            contract_snapshotted = self._snapshot_contract_paths(conn, contract_paths)
             conn.execute(
                 """
                 INSERT INTO snapshots (
@@ -79,6 +158,7 @@ class WorkspaceHistoryDB:
                 ),
             )
             conn.commit()
+        return {"contract_paths_snapshotted": contract_snapshotted}
 
     def commit_snapshot(
         self,
@@ -87,33 +167,56 @@ class WorkspaceHistoryDB:
         timestamp_end: str,
         delta: DelegationDelta,
         after_manifest: Manifest,
-    ) -> None:
+    ) -> dict[str, int]:
         before = self._before_manifest or {}
+        diffs_stored = 0
         with self._connect() as conn:
             conn.execute(
                 "UPDATE snapshots SET timestamp_end = ? WHERE delegation_id = ?",
                 (timestamp_end, delegation_id),
             )
+
             for path in delta.created:
                 entry = after_manifest[path]
+                diff_text: str | None = None
+                if not entry.is_binary:
+                    after_data = read_workspace_file(self.workspace, path)
+                    if after_data is not None:
+                        self._insert_blob(conn, after_data)
                 conn.execute(
                     """
                     INSERT INTO file_deltas (
                         delegation_id, path, change_type,
-                        content_hash, prev_hash, is_binary
-                    ) VALUES (?, ?, 'created', ?, NULL, ?)
+                        content_hash, prev_hash, is_binary, diff
+                    ) VALUES (?, ?, 'created', ?, NULL, ?, ?)
                     """,
-                    (delegation_id, path, entry.content_hash, int(entry.is_binary)),
+                    (
+                        delegation_id,
+                        path,
+                        entry.content_hash,
+                        int(entry.is_binary),
+                        diff_text,
+                    ),
                 )
+
             for path in delta.modified:
                 after_entry = after_manifest[path]
                 before_entry = before[path]
+                diff_text = None
+                if not after_entry.is_binary and not before_entry.is_binary:
+                    before_data = self.get_blob_content(conn, before_entry.content_hash)
+                    after_data = read_workspace_file(self.workspace, path)
+                    if before_data is not None and after_data is not None:
+                        self._insert_blob(conn, after_data)
+                        diff_text = unified_diff_text(path, before_data, after_data)
+                        if diff_text:
+                            diffs_stored += 1
                 conn.execute(
                     """
                     INSERT INTO file_deltas (
                         delegation_id, path, change_type,
-                        content_hash, prev_hash, is_binary
-                    ) VALUES (?, ?, 'modified', ?, ?, ?)
+                        content_hash, prev_hash, is_binary, diff
+                    ) VALUES (?, ?, 'modified', ?, ?, ?, ?)
                     """,
                     (
                         delegation_id,
@@ -121,16 +224,18 @@ class WorkspaceHistoryDB:
                         after_entry.content_hash,
                         before_entry.content_hash,
                         int(after_entry.is_binary),
+                        diff_text,
                     ),
                 )
+
             for path in delta.deleted:
                 before_entry = before[path]
                 conn.execute(
                     """
                     INSERT INTO file_deltas (
                         delegation_id, path, change_type,
-                        content_hash, prev_hash, is_binary
-                    ) VALUES (?, ?, 'deleted', NULL, ?, ?)
+                        content_hash, prev_hash, is_binary, diff
+                    ) VALUES (?, ?, 'deleted', NULL, ?, ?, NULL)
                     """,
                     (
                         delegation_id,
@@ -140,13 +245,14 @@ class WorkspaceHistoryDB:
                     ),
                 )
             conn.commit()
+        return {"diffs_stored": diffs_stored}
 
     def get_file_deltas(self, delegation_id: str) -> list[dict[str, object]]:
         with self._connect() as conn:
             conn.row_factory = sqlite3.Row
             rows = conn.execute(
                 """
-                SELECT path, change_type, content_hash, prev_hash, is_binary
+                SELECT path, change_type, content_hash, prev_hash, is_binary, diff
                 FROM file_deltas
                 WHERE delegation_id = ?
                 ORDER BY path
@@ -154,3 +260,21 @@ class WorkspaceHistoryDB:
                 (delegation_id,),
             ).fetchall()
         return [dict(row) for row in rows]
+
+    def get_file_delta(self, delegation_id: str, path: str) -> dict[str, object] | None:
+        rel = normalize_repo_path(path)
+        with self._connect() as conn:
+            conn.row_factory = sqlite3.Row
+            row = conn.execute(
+                """
+                SELECT path, change_type, content_hash, prev_hash, is_binary, diff
+                FROM file_deltas
+                WHERE delegation_id = ? AND path = ?
+                """,
+                (delegation_id, rel),
+            ).fetchone()
+        return dict(row) if row else None
+
+    def fetch_blob(self, content_hash: str) -> bytes | None:
+        with self._connect() as conn:
+            return self.get_blob_content(conn, content_hash)
