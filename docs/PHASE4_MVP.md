@@ -8,7 +8,7 @@
 
 # Phase 4 MVP — Product manager doc
 
-**Status:** **Planning** — Phase 3 closed (P3-499, 2026-06-09); Phase 4 not yet started  
+**Status:** **Active** — Phase 3 closed (P3-499, 2026-06-09); D-P4-1–7 locked; Wave 1 ready to dispatch  
 **Host:** Cursor (Aider backend; other hosts deferred)  
 **Technical reference:** [PHASES.md](./PHASES.md) § Phase 4  
 **Vision:** [IDEA.md](./IDEA.md) · [VISION_DOCS.md](./VISION_DOCS.md)  
@@ -70,14 +70,17 @@ Parallel:       planner UX fixes (spec path, inspect tools, error messages)
 
 ---
 
-## Phase 4 architecture decisions (D-P4 — draft)
+## Phase 4 architecture decisions (D-P4 — locked 2026-06-09)
 
 | ID | Decision | Primary tasks |
 |----|----------|---------------|
 | D-P4-1 | Context builder is a cheap-LLM pass inside `delegate_to_agent` — Cursor stays thin | P4-001 |
 | D-P4-2 | Verify loop is opt-in via config (`auto_verify: true`); not blocking by default | P4-010 |
-| D-P4-3 | Spec paths validated strictly: `.mcp-coder/specs/tasks/` only; clear error with correct path hint | P4-005 |
-| D-P4-4 | Judgment loop: `delegation_diff` summary surfaced prominently in response; rules require cite before done | P4-005 |
+| D-P4-3 | Spec paths **hard-reject** if not under `.mcp-coder/specs/tasks/`; error includes exact correct path + "move and retry" hint | P4-005 |
+| D-P4-4 | Judgment loop: `delegation_diff` summary surfaced prominently in response; rules require cite before done | P4-005/P4-006 |
+| D-P4-5 | Builder opt-out rule: P4-001a (rules-based file picker) ships **opt-out** from day one; P4-001b (cheap-LLM assembly) ships **opt-in**, flips to opt-out after Phase 4 dogfood confirms stability. Config key: `context_builder: false` to disable. Matches `rag_enabled` pattern. | P4-001 |
+| D-P4-6 | P4-001a is rules-based (spec edit paths + ripgrep) — no LLM. When P4-001b needs a model: `CONTEXT_BUILDER_MODEL` env or `context_builder_model:` in config.yaml; **Gemini Flash default** (largest context window, cheapest). Same pattern as `AIDER_MODEL`. | P4-001b |
+| D-P4-7 | Verify loop scope: configurable `test_command` (e.g. `pytest -x`); default = full suite when `auto_verify: true`. Spec-targeted test discovery deferred (fragile heuristic; false negatives worse than full suite). | P4-010 |
 
 ---
 
@@ -133,10 +136,10 @@ Task specs: `docs/tasks/P4-*.md` (gitignored; created per worker session).
 
 | # | Question | Status |
 |---|----------|--------|
-| Q1 | Should context builder be always-on or opt-in? | Open — decide at P4-001 spec |
-| Q2 | Which cheap model for builder? (mini, Flash, haiku) | Open — decide at P4-001 spec |
-| Q3 | Verify loop: run full pytest suite or just spec-targeted tests? | Open — decide at P4-010 |
-| Q4 | Spec path error: reject hard or warn + hint? | Lean reject (D-P4-3) — confirm at P4-005 |
+| Q1 | Should context builder be always-on or opt-in? | **Locked 2026-06-09** — see D-P4-5: P4-001a opt-out; P4-001b opt-in → opt-out after dogfood |
+| Q2 | Which cheap model for builder? (mini, Flash, haiku) | **Locked 2026-06-09** — see D-P4-6: rules-based first; Gemini Flash default when LLM needed; fully configurable |
+| Q3 | Verify loop: run full pytest suite or just spec-targeted tests? | **Locked 2026-06-09** — see D-P4-7: configurable `test_command`; default = full suite |
+| Q4 | Spec path error: reject hard or warn + hint? | **Locked 2026-06-09** — see D-P4-3: hard reject with actionable path hint |
 
 ---
 
@@ -175,4 +178,5 @@ Task specs: `docs/tasks/P4-*.md` (gitignored; created per worker session).
 
 | Date | Change |
 |------|--------|
+| 2026-06-09 | D-P4-5/6/7 locked (Q1–Q4 resolved): builder opt-out rule, Gemini Flash default + configurable, full-suite verify default; D-P4-3 hard-reject confirmed; status → Active |
 | 2026-06-09 | Phase 4 PM doc created at Phase 3 exit (P3-499) |
