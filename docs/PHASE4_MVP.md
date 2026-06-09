@@ -102,17 +102,41 @@ Task specs: `docs/tasks/P4-*.md` (gitignored; created per worker session).
 | Read-deps `(none` parse fix | P4-007 | `done` 2026-06-09 | BL-326 | `_is_placeholder_path` em-dash variants; merge filter; 448 pytest |
 | Failed delegation surface in response | P4-008 | `done` 2026-06-09 | BL-327 | `prior_failed_attempts` + reminder; use-mcp-coder v12, workspace-history v6; 452 pytest |
 
-### Wave 2 — Context builder (cheap LLM)
+### Wave 2 — Context builder (cheap LLM + per-role model infra)
 
-**Goal:** BL-001 — mcp-coder picks relevant files and assembles context brief before delegating.  
-**Depends on:** Wave 1 (UX fixes must be clean before adding complexity).
+**Goal:** BL-001 + D-P4-8 — mcp-coder picks relevant files, assembles a context brief before delegating, and does so through a clean per-role model layer that every future LLM role (critic, escalation, swarm) reuses.
+
+**Depends on:** Wave 1 complete.  
+**Ship order:** P4-004 + P4-001a in parallel (disjoint code) → P4-001b consumes both.
 
 | Milestone | Task ID | Status | Implements | Summary |
 |-----------|---------|--------|------------|---------|
-| File picker (rules + grep) | P4-001a | `todo` | BL-001 | Cheap rules-based file selection: spec edit paths + ripgrep for symbols |
-| Cheap LLM assembly | P4-001b | `todo` | BL-001, BL-162, BL-329 | LLM produces context brief from spec, file scan, session-aligned history, and mode-aware weighting |
+| Per-role model registry + audit | P4-004 | `todo` | D-P4-8, BL-162 | `resolve_role_model_name(role, ws)`; `model_roles` audit block in JSONL; per-role budget stub; executor/review unchanged |
+| File picker (rules + ripgrep) | P4-001a | `todo` | BL-001, D-P4-5 | Spec edit/read paths + ripgrep symbol scan → ranked candidate files; opt-out; no LLM |
+| Cheap LLM brief | P4-001b | `todo` | BL-001, BL-162, BL-329 | Builder LLM assembles context brief; uses P4-004 resolver + audit; opt-in until dogfood; session history + mode-aware |
 | Topic detection | P4-002 | `optional` | BL-153 | Task-type / topic boundaries for file picker |
 | Skills injection | P4-003 | `optional` | BL-008 | Inject skill packs by topic |
+
+**P4-004 — per-role model registry (Stage 1 of D-P4-8):**
+
+| Role | Env var | config.yaml key | Default |
+|------|---------|-----------------|---------|
+| `executor` | `AIDER_MODEL` / `MCP_CODER_MODEL` | — | `gpt-4o-mini` (existing) |
+| `review` | `MCP_CODER_REVIEW_MODEL` | `review_model:` | executor (existing) |
+| `context_builder` | `MCP_CODER_CONTEXT_BUILDER_MODEL` | `context_builder_model:` | Gemini Flash (D-P4-6) |
+| `critic` (stub) | `MCP_CODER_CRITIC_MODEL` | `critic_model:` | executor (future Stage 2) |
+
+Each role call contributes its own `model` / `tokens` / `cost_est_usd` / `duration_ms` block under `model_roles` in the delegation JSONL. Resolvers stay in `core/config/` — no Aider API references. Budget cap per role via `<role>_budget_tokens` in config.yaml.
+
+**P4-001a — file picker inputs and output:**
+
+| Input | Source |
+|-------|--------|
+| Spec `files_edit` + `files_read` | Always — primary contract |
+| Symbols in task + spec text | Ripgrep scan across workspace |
+| Output | Ranked `candidate_files` list passed to `assemble_context()` instead of raw `target_files` |
+
+Planner still passes `target_files` as a hint; picker merges and ranks. Rules update: planner may pass minimal or empty `target_files` and rely on picker (opt-in via `context_builder: true`; with picker opt-out default, `target_files` remains mandatory when picker off).
 
 **P4-001b builder inputs (explicit):**
 
@@ -120,11 +144,11 @@ Task specs: `docs/tasks/P4-*.md` (gitignored; created per worker session).
 |-------|--------|-------|
 | Spec edit/read paths + task description | P4-001a output | Primary contract |
 | Ripgrep symbol scan | P4-001a | Which files reference spec symbols |
-| Session-aligned delegation history | `workspace_history.db` | Last N outcomes for same spec + recent project-wide progress across sessions |
-| Mode-aware history weighting | `mode` param | `implement` → prior APIs/contracts; `review` → spec-vs-diff delta; new subsystem → existing interfaces to integrate with |
-| Host session summary (optional) | `host_transcript` (P1-140 infra) | Recent conversation decisions and constraints; used when `host_transcript` available |
+| Session-aligned delegation history | `workspace_history.db` | Last N outcomes for same spec + recent project-wide progress |
+| Mode-aware history weighting | `mode` param | `implement` → prior APIs/contracts; `review` → spec-vs-diff delta; new subsystem → existing interfaces |
+| Host session summary (optional) | `host_transcript` (P1-140 infra) | Recent conversation decisions; used when available |
 
-Builder token usage logged separately from executor under `context_builder` block in delegation JSONL (see PHASES.md § Phase 2+ token tracking).
+Builder token usage logged via P4-004 role audit block (`model_roles.context_builder`). See [notes/multi-model-roles.md](./notes/multi-model-roles.md) for Stage 2+ escalation/critic vision.
 
 ### Wave 3 — Verify loop
 
@@ -193,6 +217,7 @@ Builder token usage logged separately from executor under `context_builder` bloc
 
 | Date | Change |
 |------|--------|
+| 2026-06-09 | Wave 2 fully aligned: P4-004 (per-role model infra) added; P4-001a/b ship order + inputs locked |
 | 2026-06-09 | D-P4-8 locked — per-role models (Stage 1 simple); future escalation/critic/swarm → notes/multi-model-roles.md |
 | 2026-06-09 | PHASE4_ISSUES created; Wave 1 dogfood partial (tip-calc CLI); open P4-ISS-001–007 |
 | 2026-06-09 | **Wave 1 impl complete** — P4-005–008 done (452 pytest) |
