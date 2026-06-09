@@ -5,7 +5,11 @@ from __future__ import annotations
 from dataclasses import dataclass
 
 from core.engine.git_diff import normalize_repo_path
-from core.specs.files_contract import build_contract_warnings, paths_missing_from_target
+from core.specs.files_contract import (
+    _is_placeholder_path,
+    build_contract_warnings,
+    paths_missing_from_target,
+)
 
 
 @dataclass
@@ -34,7 +38,8 @@ def merge_spec_read_into_target(
     auto_merged = sorted(
         normalize_repo_path(p)
         for p in files_read
-        if normalize_repo_path(p) not in normalized_targets
+        if not _is_placeholder_path(p)
+        and normalize_repo_path(p) not in normalized_targets
     )
     effective = sorted(normalized_targets | set(auto_merged))
     return ReadDepsMergeResult(

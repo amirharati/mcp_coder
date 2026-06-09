@@ -23,12 +23,21 @@ class FilesContract:
     all_paths: list[str]
 
 
+_NONE_WORD_PLACEHOLDER_RE = re.compile(r"^none(?:$|[\s—\-])")
+
+
 def _is_placeholder_path(path: str) -> bool:
     """True for planner placeholders — not real repo paths."""
     normalized = path.strip().lower()
     if not normalized:
         return True
-    return normalized in _PLACEHOLDER_PATHS
+    if normalized in _PLACEHOLDER_PATHS:
+        return True
+    if normalized.startswith("(none"):
+        return True
+    if _NONE_WORD_PLACEHOLDER_RE.match(normalized):
+        return True
+    return False
 
 
 def _extract_path_from_bullet_line(line: str) -> str | None:

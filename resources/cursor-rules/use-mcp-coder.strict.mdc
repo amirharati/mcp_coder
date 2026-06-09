@@ -3,7 +3,7 @@ description: mcp-coder delegate_to_agent only (strict policy; synced by MCP)
 mcp_coder_managed: true
 mcp_coder_rule_id: use-mcp-coder
 mcp_coder_rules_policy: strict
-mcp_coder_rule_version: "9"
+mcp_coder_rule_version: "12"
 globs:
 alwaysApply: true
 ---
@@ -14,36 +14,49 @@ alwaysApply: true
 
 | Phase | You (Cursor) | MCP / Aider |
 |-------|----------------|-------------|
-| **Epic** | `specs/epics/<slug>.md` | — |
-| **Step task** | `specs/tasks/<epic>-<step>-v1.md` (**always versioned from first attempt**) | — |
+| **Epic** | `.mcp-coder/specs/epics/<slug>.md` | — |
+| **Step task** | `.mcp-coder/specs/tasks/<epic>-<step>-v1.md` (**always versioned from first attempt**) | — |
 | **Review** (optional) | `delegate_to_agent(mode=review, spec_path=…, target_files=[], task=…)` | Questions → report **Worker feedback** |
 | **Refine** | Update **same** versioned spec (`revision++`, `status: ready`) before first implement | — |
-| **Implement** | `delegate_to_agent(mode=implement, spec_path=…, target_files=[edit + read deps], …)` | Edits code; report at `reports/<same-name>.md` |
+| **Implement** | `delegate_to_agent(mode=implement, spec_path=…, target_files=[edit + read deps], …)` | Edits code; report at `.mcp-coder/specs/reports/<same-name>.md` |
 | **Retry** | Create `<epic>-<step>-v2.md` (increment); **never edit or overwrite v1** | — |
 
 - **Never** implement on disk yourself.
 - **Never** delegate planning (writing epic/step specs).
 - **Do not** use implement mode to brainstorm — use **review** or Cursor chat.
-- **Do not** edit `specs/reports/` (MCP-owned).
-- After implement: follow **workspace-history** rule (MCP inspect tools + local tests); then set task `status: done` + checkboxes; update epic Steps table.
+- **Do not** edit `.mcp-coder/specs/reports/` (MCP-owned).
+- After implement: follow **workspace-history** judgment loop **in order** (diff → compare → pytest → done); then set task `status: done` + checkboxes; update epic Steps table.
 
-After each `delegate_to_agent` call: run the **judgment loop** in **workspace-history** (diff vs spec Files → Edit, `files_unexpected`, then pytest). Summarize `delegation_id`, `created`/`modified`/`deleted` from `delegation_diff`, and any mismatches before marking done.
+After each `delegate_to_agent` (**implement**): run the **workspace-history** judgment loop — quote **`judgment_checklist`** or inline `delegation_diff` path lists **before** pytest. Do **not** verify implementation by reading source files when `delegation_diff` / `judgment_checklist` is on the delegate response.
+
+## Session / step summary (required)
+
+- When reporting progress to the user, list **every** `delegate_to_agent` attempt for the current step — **including failures** — with `delegation_id`, `success`, and error/outcome.
+- If the response includes **`prior_failed_attempts`**, quote it explicitly before describing the latest success.
+- On step completion after a retry, summary order: **failed attempts first**, then latest outcome.
+- Use `list_delegations(spec_path=…)` when unsure about attempt count.
+
+## Spec location (required)
+
+- **Never** create `specs/` at the **repo root** (no `specs/tasks/`, `specs/epics/`, `specs/reports/` next to `src/` or project files).
+- All planner specs live under **`.mcp-coder/specs/`** only (gitignored MCP workspace metadata).
+- When calling `delegate_to_agent`, `spec_path` must be under `.mcp-coder/specs/tasks/` — use shorthand `tasks/foo.md` **or** full `.mcp-coder/specs/tasks/foo.md` (both accepted by MCP).
 
 ## Spec versioning
 
 Step specs are versioned from first creation: `<epic>-<step>-v1.md`, `<epic>-<step>-v2.md`, …
 
-- MCP writes `specs/reports/<same-name>.md` — report is paired with spec by name automatically.
+- MCP writes `.mcp-coder/specs/reports/<same-name>.md` — report is paired with spec by name automatically.
 - **v1 spec + v1 report = one attempt's audit pair.** Keep them; do not delete.
 - On retry: create `vN+1.md` with fixes (updated Files, constraints, retry note). Old vN pair is the audit trail.
 - Do not rename anything — versioned names from creation make renaming unnecessary.
 
 **Example:**
 ```
-specs/tasks/calc-02-cli-v1.md   ← attempt 1 (kept; do not edit after delegation)
-specs/reports/calc-02-cli-v1.md ← attempt 1 report (MCP-owned)
-specs/tasks/calc-02-cli-v2.md   ← retry: revised spec
-specs/reports/calc-02-cli-v2.md ← retry report (MCP-owned)
+.mcp-coder/specs/tasks/calc-02-cli-v1.md   ← attempt 1 (kept; do not edit after delegation)
+.mcp-coder/specs/reports/calc-02-cli-v1.md ← attempt 1 report (MCP-owned)
+.mcp-coder/specs/tasks/calc-02-cli-v2.md   ← retry: revised spec
+.mcp-coder/specs/reports/calc-02-cli-v2.md ← retry report (MCP-owned)
 ```
 
 ## Read-deps (implement mode)

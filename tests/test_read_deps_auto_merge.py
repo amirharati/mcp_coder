@@ -326,6 +326,67 @@ def test_delegate_opt_out_restores_read_warn(tmp_path, monkeypatch):
     assert any("splitter.py" in w for w in payload["contract_warnings"])
 
 
+READ_NONE_GREENFIELD_SPEC = """---
+spec_id: greenfield-step
+epic: tip-calc
+status: open
+---
+
+# Step 1 core
+
+## Goal
+
+Greenfield core.
+
+## Files
+
+### Edit
+
+- `tip_calc/core.py`
+
+### Read
+
+- (none — greenfield)
+
+## Done when
+
+- [ ] core works
+"""
+
+
+def test_read_none_greenfield_no_auto_merge(tmp_path, monkeypatch):
+    home = tmp_path / "home"
+    ws = _setup_ws(tmp_path, READ_NONE_GREENFIELD_SPEC, "greenfield.md")
+    monkeypatch.setenv("MCP_CODER_HOME", str(home))
+    monkeypatch.setenv("MCP_CODER_USE_CONTEXT_PACKAGE", "0")
+    monkeypatch.chdir(ws)
+
+    fake = ExecutionResult(success=True, output="ok", files_changed=["tip_calc/core.py"], model="m")
+    engine = type("E", (), {"model_name": "m", "run": lambda *a, **k: fake})()
+
+    with patch("server.mcp_server.get_engine", return_value=engine):
+        raw = delegate_to_agent(
+            task="Implement core",
+            target_files=["tip_calc/core.py"],
+            context_summary="greenfield",
+            spec_path="tasks/greenfield.md",
+        )
+
+    payload = json.loads(raw)
+    assert payload.get("auto_merged_read_paths", []) == []
+    assert "auto_merged_read_paths" not in payload or payload["auto_merged_read_paths"] == []
+
+    _, missing, warnings = resolve_spec_read_deps(
+        files_edit=["tip_calc/core.py"],
+        files_read=[],
+        all_paths=["tip_calc/core.py"],
+        target_files=["tip_calc/core.py"],
+        auto_merge_enabled=True,
+    )
+    assert missing == []
+    assert warnings == []
+
+
 def test_inspect_context_parity_with_delegate(tmp_path):
     ws = _setup_ws(tmp_path)
     result = inspect_context_package(

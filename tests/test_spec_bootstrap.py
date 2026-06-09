@@ -63,10 +63,10 @@ def test_resolve_spec_path_under_tasks_only(tmp_path: Path) -> None:
     assert resolved.name == "foo.md"
     assert resolved.parent.name == "tasks"
 
-    with pytest.raises(ValueError, match="step task under"):
+    with pytest.raises(ValueError, match=r"under \.mcp-coder/specs/tasks/"):
         resolve_spec_path(ws, "../outside.md")
 
-    with pytest.raises(ValueError, match="step task under"):
+    with pytest.raises(ValueError, match=r"under \.mcp-coder/specs/tasks/"):
         resolve_spec_path(ws, ".mcp-coder/specs/epics/foo.md")
 
 

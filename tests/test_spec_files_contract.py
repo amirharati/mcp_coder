@@ -117,6 +117,24 @@ def test_read_placeholder_none_ignored():
     assert contract.edit == ["expense_splitter/cli.py"]
 
 
+READ_NONE_GREENFIELD_SECTION = """\
+### Edit
+
+- `expense_splitter/cli.py`
+
+### Read
+
+- (none — greenfield)
+"""
+
+
+def test_read_placeholder_none_em_dash_greenfield_ignored():
+    contract = parse_files_contract(READ_NONE_GREENFIELD_SECTION)
+    assert contract.read == []
+    assert "(none" not in contract.all_paths
+    assert contract.edit == ["expense_splitter/cli.py"]
+
+
 def test_edit_placeholder_na_ignored():
     contract = parse_files_contract(EDIT_NA_SECTION)
     assert contract.edit == ["pkg/real.py"]

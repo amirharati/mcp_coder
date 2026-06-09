@@ -574,6 +574,7 @@ Result: workspace has ONLY the contract-allowed changes
 | BL-326 | P3-ISS-007 | 4 | Read-deps `(none` parse fix |
 | BL-327 | P3-ISS-008 | 4 | Surface failed delegations in host summary |
 | BL-328 | P3-ISS-009 | 4+ | Dogfood spec `v2` retry workflow |
+| BL-330 | P4-ISS-002 | 4+ | `server.jsonl` events for inspect MCP tool calls |
 
 #### BL-324: Planner inspect-tool adoption (judgment loop)
 
@@ -624,6 +625,14 @@ Delegation `58bb9846` failed; host recovered silently with duplicate spec tree.
 **Problem:** P3-499 happy path only — `v1` naming OK; no `v2` retry exercised.
 
 **Target:** Phase 4+ optional dogfood step or acceptance test.
+
+#### BL-330: Inspect-tool audit in `server.jsonl`
+
+**Status:** `deferred` — **P4-ISS-002** (Wave 1 dogfood 2026-06-09).
+
+**Problem:** `server.jsonl` logs delegation lifecycle only — cannot audit whether host called `get_delegation_diff` / `list_delegations` vs quoted inline `judgment_checklist` only.
+
+**Target:** Phase 4+ optional — `inspect_tool_invoked` events for read-only MCP tools; pairs with P4-006 rules.
 
 ---
 
@@ -755,6 +764,7 @@ Until then: add rows to bundled `model_rates.yaml` when switching models; unknow
 
 | Date | Change |
 |------|--------|
+| 2026-06-09 | BL-330 inspect-tool server log audit (P4-ISS-002); PHASE4_ISSUES created |
 | 2026-06-09 | BL-329 added — pre-delegate spec validation + clarifying loop (Phase 4 master session; P4-009 optional Wave 4) |
 | 2026-06-09 | **P3-499 exit** — BL-324–328 from frozen PHASE3_ISSUES; BL-321 deferred Phase 4 |
 | 2026-06-09 | BL-002 design decisions locked — corpus scope, architecture; RAG → Phase 5 (Phase 4 = context builder first); P3-002-lite delegation RAG shipped |

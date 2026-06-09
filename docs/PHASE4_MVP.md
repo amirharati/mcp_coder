@@ -8,12 +8,13 @@
 
 # Phase 4 MVP — Product manager doc
 
-**Status:** **Active** — Phase 3 closed (P3-499, 2026-06-09); D-P4-1–7 locked; Wave 1 ready to dispatch  
+**Status:** **Active** — Wave 1 impl done; partial dogfood (2026-06-09); gaps → [PHASE4_ISSUES.md](./PHASE4_ISSUES.md)  
 **Host:** Cursor (Aider backend; other hosts deferred)  
 **Technical reference:** [PHASES.md](./PHASES.md) § Phase 4  
 **Vision:** [IDEA.md](./IDEA.md) · [VISION_DOCS.md](./VISION_DOCS.md)  
 **Deferred work:** [BACKLOG.md](./BACKLOG.md)  
 **Phase 3 (closed):** [PHASE3_MVP.md](./PHASE3_MVP.md) · [PHASE3_ISSUES.md](./PHASE3_ISSUES.md)  
+**Phase 4 gaps:** [PHASE4_ISSUES.md](./PHASE4_ISSUES.md)  
 **Bootstrap:** [phase4-master-session-bootstrap.md](./notes/phase4-master-session-bootstrap.md)
 
 ---
@@ -88,17 +89,17 @@ Parallel:       planner UX fixes (spec path, inspect tools, error messages)
 
 Task specs: `docs/tasks/P4-*.md` (gitignored; created per worker session).
 
-### Wave 1 — Planner UX fixes ← **start here**
+### Wave 1 — Planner UX fixes ✓ **impl complete** (dogfood partial — see PHASE4_ISSUES)
 
 **Goal:** Close BL-324, BL-325, BL-326, BL-327 — low-code, high-impact fixes from P3-499 dogfood.  
 **Mostly rules + tiny code tweaks. No architecture changes needed.**
 
 | Milestone | Task ID | Status | Implements | Summary |
 |-----------|---------|--------|------------|---------|
-| Spec path enforcement + error UX | P4-005 | `todo` | BL-325, D-P4-3 | Validate `.mcp-coder/specs/tasks/` strictly; error includes correct path hint |
-| Judgment loop rules + response hint | P4-006 | `todo` | BL-324, D-P4-4 | Rules v10: must cite `delegation_diff` paths before pytest; response judgment checklist |
-| Read-deps `(none` parse fix | P4-007 | `todo` | BL-326 | `read_deps_merge` treats none-sentinel as empty |
-| Failed delegation surface in response | P4-008 | `todo` | BL-327 | Response hint when prior attempt failed for same spec |
+| Spec path enforcement + error UX | P4-005 | `done` 2026-06-09 | BL-325, D-P4-3 | Rules v10 + workspace-history v4; `_spec_path_error()` actionable hint; 440 pytest |
+| Judgment loop rules + response hint | P4-006 | `done` 2026-06-09 | BL-324, D-P4-4 | workspace-history v5, use-mcp-coder v11, `judgment_checklist` on implement; 446 pytest |
+| Read-deps `(none` parse fix | P4-007 | `done` 2026-06-09 | BL-326 | `_is_placeholder_path` em-dash variants; merge filter; 448 pytest |
+| Failed delegation surface in response | P4-008 | `done` 2026-06-09 | BL-327 | `prior_failed_attempts` + reminder; use-mcp-coder v12, workspace-history v6; 452 pytest |
 
 ### Wave 2 — Context builder (cheap LLM)
 
@@ -158,10 +159,10 @@ Builder token usage logged separately from executor under `context_builder` bloc
 
 ## Phase 4 success checklist
 
-- [ ] Spec path error includes correct `.mcp-coder/specs/tasks/` hint (P4-005)
-- [ ] `get_delegation_diff` cited in host judgment loop without user prompting (P4-006 rules)
-- [ ] `auto_merged_read_paths: ['(none']` fixed (P4-007)
-- [ ] Failed delegation surfaced in response hint when retrying same spec (P4-008)
+- [x] Spec path error includes correct `.mcp-coder/specs/tasks/` hint (P4-005)
+- [x] Judgment loop rules + `judgment_checklist` on implement responses (P4-006); behavioral dogfood re-run TBD
+- [x] `auto_merged_read_paths: ['(none']` fixed (P4-007)
+- [x] `prior_failed_attempts` on delegate response + rules (P4-008); behavioral dogfood TBD
 - [ ] Context builder selects relevant files before delegate without full file list from planner (P4-001)
 - [ ] Optional pytest hook fires post-delegate; `partial` outcome when tests fail (P4-010)
 - [ ] Phase 4 dogfood: greenfield multi-step project; host never lists all files; builder picks correctly
@@ -170,9 +171,9 @@ Builder token usage logged separately from executor under `context_builder` bloc
 
 ## Next action
 
-1. **Wave 1 now** — draft P4-005 (spec path) + P4-006 (judgment loop rules) specs; dispatch as parallel workers (disjoint files).
-2. **Wave 2** after Wave 1 green — Q1–Q4 already locked (D-P4-5/6/7).
-3. **Wave 4 (P4-009/P4-020)** — design decision required before impl; revisit after Wave 2 dogfood.
+1. **Wave 1 dogfood** — partial pass ([PHASE4_ISSUES.md](./PHASE4_ISSUES.md)); optional re-run for P4-ISS-001 (`prior_failed_attempts`) before or during Wave 2.
+2. **Wave 2 alignment** — confirm P4-001a scope + ship order (001a before 001b); then draft **P4-001a**.
+3. **Wave 4 (P4-009/P4-020)** — design decision after Wave 2 dogfood.
 
 ---
 
@@ -191,6 +192,12 @@ Builder token usage logged separately from executor under `context_builder` bloc
 
 | Date | Change |
 |------|--------|
+| 2026-06-09 | PHASE4_ISSUES created; Wave 1 dogfood partial (tip-calc CLI); open P4-ISS-001–007 |
+| 2026-06-09 | **Wave 1 impl complete** — P4-005–008 done (452 pytest) |
+| 2026-06-09 | **P4-008 done** — BL-327; `prior_failed_attempts`, use-mcp-coder v12, workspace-history v6 |
+| 2026-06-09 | **P4-007 done** — BL-326; `(none — greenfield)` placeholder fix; 448 pytest |
+| 2026-06-09 | **P4-006 done** — BL-324/D-P4-4; workspace-history v5, use-mcp-coder v11, `judgment_checklist`; 446 pytest |
+| 2026-06-09 | **P4-005 done** — BL-325/D-P4-3; rules v10, workspace-history v4, spec path error UX; 440 pytest |
 | 2026-06-09 | P4-001b builder inputs explicit: session-aligned history, mode-aware weighting, host transcript; P4-009 pre-delegate spec validation added (Wave 4 optional, BL-329) |
 | 2026-06-09 | D-P4-5/6/7 locked (Q1–Q4 resolved): builder opt-out rule, Gemini Flash default + configurable, full-suite verify default; D-P4-3 hard-reject confirmed; status → Active |
 | 2026-06-09 | Phase 4 PM doc created at Phase 3 exit (P3-499) |

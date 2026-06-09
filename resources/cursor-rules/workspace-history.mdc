@@ -2,7 +2,7 @@
 description: mcp-coder workspace checkpoints — verify delegations, judge diffs, debug retries (synced by MCP)
 mcp_coder_managed: true
 mcp_coder_rule_id: workspace-history
-mcp_coder_rule_version: "3"
+mcp_coder_rule_version: "6"
 globs:
 alwaysApply: true
 ---
@@ -11,7 +11,7 @@ alwaysApply: true
 
 Use mcp-coder **read-only** inspect tools after every `delegate_to_agent` (**implement**) to see **what changed on disk**, judge whether it matches the **task spec**, and decide: mark done, update spec + retry, or escalate to the human.
 
-- **Do not** edit `specs/reports/` — MCP-owned. Read via `spec_report_path`.
+- **Do not** edit `.mcp-coder/specs/reports/` — MCP-owned. Read via `spec_report_path`.
 - **Do** update **task specs** / **epics** when refining Files lists, placeholders, or constraints before a retry.
 
 ## What we track (no git required)
@@ -29,13 +29,36 @@ Our workspace tracker walks the repo before/after each delegation. It detects:
 
 ## Judgment loop (required after implement)
 
-### 1. Get the diff
+### Order of operations (hard)
 
-- **First:** `delegation_diff` on the `delegate_to_agent` response (inline).
-- **Else:** `get_delegation_diff(delegation_id=…)` or `get_delegation_diff(latest=true)`.
-- **One file:** add `file_path=…` or use `get_file_history(file_path=…)` across attempts.
+After `mode=implement` delegate returns:
 
-### 2. Compare to the task spec
+1. **Step A — Diff first:** Quote `delegation_id` and list every path in `created`, `modified`, `deleted` from **inline `delegation_diff`** or **`judgment_checklist`** on the response. If missing, call `get_delegation_diff(delegation_id=…)` or `get_delegation_diff(latest=true)` — **before anything else**.
+2. **Step B — Compare:** Check paths against spec **Files → Edit**; note `files_unexpected` from the response.
+3. **Step C — Pytest last:** Run pytest / Done-when **only after** Step A–B are written in your reply to the user.
+4. **Step D — Mark done:** Include `delegation_id` + path lists + pass/fail on spec match in the same message where you set `status: done`.
+
+### Forbidden shortcuts
+
+- Do **not** use host `Read` / `Grep` on implementation files **for verify** when `delegation_diff`, `judgment_checklist`, or `get_delegation_diff` is available (diff bodies are in `diffs`).
+- Do **not** mark a step done or tell the user "tests pass" without citing the path lists from MCP diff data in that turn.
+
+### Required host summary template
+
+Use this block (or equivalent) in your reply **before** pytest:
+
+```markdown
+## Delegation judgment
+- delegation_id: …
+- created: […]
+- modified: […]
+- deleted: […]
+- files_unexpected: […]
+- spec Files → Edit match: yes/no — …
+- pytest: …
+```
+
+### Compare to the task spec
 
 Open the **task spec** (`spec_path`) → **Files → Edit** and **Done when**.
 
@@ -47,11 +70,7 @@ Open the **task spec** (`spec_path`) → **Files → Edit** and **Done when**.
 | Right code change? | Read `diffs[path]` for each **modified** file — matches intent? | **Not done** — empty stub, wrong logic, placeholder left |
 | Deletes OK? | `deleted` — any surprise removals? | **Not done** if unintended |
 
-### 3. Local verification
-
-Run **pytest** / CLI / Done-when checks from the spec. Diffs + tests together decide done.
-
-### 4. Decide
+### Decide
 
 | Verdict | Action |
 |---------|--------|
@@ -59,7 +78,7 @@ Run **pytest** / CLI / Done-when checks from the spec. Diffs + tests together de
 | **Not done** | `list_delegations(spec_path=…)` → see all attempts → update spec (explicit paths, placeholders for new files, `revision++`) → re-delegate |
 | **Stuck** | Summarize diff findings + `files_unexpected` for the human |
 
-### 5. Between retries (critical)
+### Between retries (critical)
 
 Before re-delegating, **always**:
 
@@ -68,11 +87,12 @@ Before re-delegating, **always**:
 3. If wrong files exist on disk, say so in the **task** text (delete `tip_calc/tip_calc/…`, fix `tests/` location).
 4. Seed **non-empty placeholders** in new files before delegate (`# CLI entry point`) — avoids Aider empty-file failures.
 5. **Create a new versioned spec** — `<epic>-<step>-v2.md` (increment); do **not** edit the v1 spec. Copy relevant content, add a `### Retry note` section explaining what was wrong. The old spec+report pair is the audit trail.
+6. **Cite failed `delegation_id`s** in your host summary (`prior_failed_attempts` on the delegate response when present).
 
 ```
 # Retry spec naming
-specs/tasks/calc-02-cli-v1.md   ← original attempt; do not touch
-specs/tasks/calc-02-cli-v2.md   ← create this; delegate with spec_path pointing here
+.mcp-coder/specs/tasks/calc-02-cli-v1.md   ← original attempt; do not touch
+.mcp-coder/specs/tasks/calc-02-cli-v2.md   ← create this; delegate with spec_path pointing here
 ```
 
 ## MCP tools
@@ -82,7 +102,7 @@ specs/tasks/calc-02-cli-v2.md   ← create this; delegate with spec_path pointin
 | **list_delegations** | All attempts for a step (`spec_path=…`); retry count |
 | **get_checkpoint_detail** | Metadata + created/modified/deleted lists (no diff bodies) |
 | **get_delegation_diff** | Full judgment — `created` / `modified` / `deleted` + `diffs` |
-| **get_file_history** | One file’s timeline across delegations |
+| **get_file_history** | One file's timeline across delegations |
 
 ## Example issues diffs reveal
 

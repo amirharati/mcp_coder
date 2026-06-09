@@ -135,6 +135,9 @@ def _response_payload(
     capability_warnings: list[str] | None = None,
     preflight_token_estimate: int | None = None,
     delegation_diff: dict[str, Any] | None = None,
+    judgment_checklist: dict[str, Any] | None = None,
+    prior_failed_attempts: list[dict[str, Any]] | None = None,
+    prior_failed_attempts_reminder: str | None = None,
     auto_merged_read_paths: list[str] | None = None,
     auto_merge_spec_read: bool | None = None,
 ) -> dict[str, Any]:
@@ -197,6 +200,12 @@ def _response_payload(
         payload["preflight_token_estimate"] = preflight_token_estimate
     if delegation_diff is not None:
         payload["delegation_diff"] = delegation_diff
+    if judgment_checklist is not None:
+        payload["judgment_checklist"] = judgment_checklist
+    if prior_failed_attempts:
+        payload["prior_failed_attempts"] = prior_failed_attempts
+    if prior_failed_attempts_reminder is not None:
+        payload["prior_failed_attempts_reminder"] = prior_failed_attempts_reminder
     if auto_merged_read_paths:
         payload["auto_merged_read_paths"] = auto_merged_read_paths
     if auto_merge_spec_read is not None:
@@ -213,7 +222,8 @@ def _response_payload(
         "context_summary (decisions from chat—the delegate cannot see history). "
         "Optional spec_path: step task under .mcp-coder/specs/tasks/ (e.g. tasks/my-epic-02-cli.md). "
         "mode: implement (default) edits target_files; review asks questions only (target_files must be []). "
-        "MCP appends audit to specs/reports/<same-name>.md. Returns success, output, files_changed, outcome. "
+        "MCP appends audit to specs/reports/<same-name>.md. Returns success, output, files_changed, outcome; "
+        "implement mode may include delegation_diff and judgment_checklist for post-delegate verification. "
         "Default backend: aider."
     ),
 )
@@ -755,10 +765,32 @@ def delegate_to_agent(
     )
 
     delegation_diff_payload: dict[str, Any] | None = None
+    judgment_checklist_payload: dict[str, Any] | None = None
     if delegate_mode == DELEGATE_MODE_IMPLEMENT and workspace_snapshot is not None:
         from core.workspace.history_query import safe_delegation_diff_dict
+        from core.workspace.judgment_checklist import build_judgment_checklist
 
         delegation_diff_payload = safe_delegation_diff_dict(ws, delegation_id)
+        if delegation_diff_payload is not None:
+            judgment_checklist_payload = build_judgment_checklist(
+                delegation_diff=delegation_diff_payload,
+                files_unexpected=files_unexpected,
+            )
+
+    from core.workspace.prior_attempts import (
+        PRIOR_FAILED_ATTEMPTS_REMINDER,
+        find_prior_failed_attempts,
+    )
+
+    prior_failed_attempts_payload = find_prior_failed_attempts(
+        ws,
+        spec_path=spec_rel_path or spec_path,
+        mcp_session_id=storage.mcp_session_id,
+        exclude_delegation_id=delegation_id,
+    )
+    prior_failed_reminder = (
+        PRIOR_FAILED_ATTEMPTS_REMINDER if prior_failed_attempts_payload else None
+    )
 
     response = _response_payload(
         success=success,
@@ -794,6 +826,9 @@ def delegate_to_agent(
         capability_warnings=cap_warnings or None,
         preflight_token_estimate=preflight_token_estimate,
         delegation_diff=delegation_diff_payload,
+        judgment_checklist=judgment_checklist_payload,
+        prior_failed_attempts=prior_failed_attempts_payload or None,
+        prior_failed_attempts_reminder=prior_failed_reminder,
         auto_merged_read_paths=auto_merged_read_paths or None,
         auto_merge_spec_read=auto_merge_spec_read,
     )

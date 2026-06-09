@@ -63,6 +63,34 @@ def bundled_spec_report_template_path() -> Path:
     return resources_dir() / SPEC_REPORT_TEMPLATE_FILENAME
 
 
+def _expected_mcp_coder_spec_path(raw: str) -> str | None:
+    """Map repo-root specs/ paths to their .mcp-coder/ counterparts."""
+    norm = raw.strip().replace("\\", "/").lstrip("/")
+    if norm.startswith("specs/tasks/"):
+        return f".mcp-coder/{norm}"
+    if norm.startswith(("specs/epics/", "specs/reports/")):
+        return f".mcp-coder/{norm}"
+    rest = norm.removeprefix("specs/")
+    if norm.startswith("specs/") and "/" not in rest and rest.endswith(".md"):
+        return f".mcp-coder/specs/tasks/{rest}"
+    if norm.startswith("specs/"):
+        return f".mcp-coder/{norm}"
+    return None
+
+
+def _spec_path_error(got: str) -> str:
+    expected = _expected_mcp_coder_spec_path(got)
+    if expected is not None:
+        return (
+            f"spec_path must be under .mcp-coder/specs/tasks/ (got: {got}). "
+            f"Expected: {expected} — move the file from repo-root specs/ and retry."
+        )
+    return (
+        f"spec_path must be under .mcp-coder/specs/tasks/ "
+        f"(e.g. tasks/my-epic-01-core.md; got {got!r})"
+    )
+
+
 def normalize_spec_path_arg(spec_path: str | Path) -> str:
     """
     Normalize accepted spec_path forms to repo-relative under .mcp-coder/specs/tasks/.
@@ -78,10 +106,7 @@ def normalize_spec_path_arg(spec_path: str | Path) -> str:
         return f".mcp-coder/specs/{raw}"
     if raw.startswith(".mcp-coder/specs/") and "/tasks/" in raw:
         return raw
-    raise ValueError(
-        f"spec_path must be a step task under .mcp-coder/specs/tasks/ "
-        f"(e.g. tasks/my-epic-01-core.md; got {spec_path!r})"
-    )
+    raise ValueError(_spec_path_error(raw))
 
 
 def resolve_spec_path(workspace: str | Path, spec_path: str | Path) -> Path:
