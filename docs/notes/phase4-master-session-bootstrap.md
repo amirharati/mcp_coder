@@ -3,7 +3,8 @@
 **Purpose:** Hand off from Phase 3 exit to a **new planning/master chat** for Phase 4. Read this first; do not load Phase 3 chat history.
 
 **Phase 3 status:** **Closed** (P3-499, 2026-06-09) — [PHASE3_MVP.md](../PHASE3_MVP.md), [PHASE3_ISSUES.md](../PHASE3_ISSUES.md) (frozen).  
-**Phase 4 PM:** [PHASE4_MVP.md](../PHASE4_MVP.md)
+**Phase 4 status:** **Closed** (P4 exit, 2026-06-09) — [PHASE4_MVP.md](../PHASE4_MVP.md), [PHASE4_ISSUES.md](../PHASE4_ISSUES.md) (frozen).  
+**Phase 5 PM:** Start from [PHASES.md](../PHASES.md) § Phase 5 + [BACKLOG.md](../BACKLOG.md) BL-002.
 
 ---
 
@@ -95,13 +96,17 @@ RAG is NOT Phase 4 — it is Phase 5 (after Phase 4 reveals what retrieval is ac
 
 ---
 
-## First actions for Phase 4 master
+## Phase 4 exit summary (2026-06-09)
 
-1. **Confirm Q1–Q4** in [PHASE4_MVP.md](../PHASE4_MVP.md) with user.
-2. **Wave 1** — draft P4-005 (spec path fix) + P4-006 (judgment loop rules v10); dispatch as separate workers.
-3. **P4-007** (read-deps `(none` fix) — tiny code change, attach to P4-006 or separate.
-4. **P4-008** (surface failed delegation) — rules-only.
-5. After Wave 1 green + Q1/Q2 locked: draft P4-001 (context builder).
+| Wave | Shipped |
+|------|---------|
+| 1 | P4-005–008 planner UX (BL-324–327) |
+| 2 | P4-004, P4-001a/b context builder; `context_builder_llm` default on |
+| 3 | P4-010 opt-in verify loop |
+| 4 | P4-009 spec validation; P4-020 `delegation_pipeline` + `architect_pass` |
+
+**pytest:** 573 passed (2 skipped; exclude `test_cli_test_model` without aider).  
+**Carried gaps:** BACKLOG § Phase 4 exit — BL-335 (token audit), BL-338 (executor model guidance), others optional.
 
 ---
 
@@ -109,4 +114,5 @@ RAG is NOT Phase 4 — it is Phase 5 (after Phase 4 reveals what retrieval is ac
 
 | Date | Change |
 |------|--------|
+| 2026-06-09 | **Frozen at P4 exit** — Phase 4 complete; handoff → Phase 5 planning |
 | 2026-06-09 | Created at Phase 3 exit (P3-499); Phase 4 master bootstrap |

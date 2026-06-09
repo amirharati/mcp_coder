@@ -8,7 +8,8 @@
 
 # Phase 4 MVP — Product manager doc
 
-**Status:** **Active** — Waves 1–3 core complete (2026-06-09); verify loop shipped (P4-010, opt-in); optional Wave 4 remains; gaps → [PHASE4_ISSUES.md](./PHASE4_ISSUES.md)  
+**Status:** **Closed** (P4 exit, 2026-06-09) — Waves 1–4 shipped; P4-EXIT partial dogfood (stats add-on); open gaps → [BACKLOG.md](./BACKLOG.md) § Phase 4 exit (BL-335–339)  
+**Exit dogfood:** expensesplit analytics step 1; session `2f01bb11`; issues frozen → [PHASE4_ISSUES.md](./PHASE4_ISSUES.md)  
 **Host:** Cursor (Aider backend; other hosts deferred)  
 **Technical reference:** [PHASES.md](./PHASES.md) § Phase 4  
 **Vision:** [IDEA.md](./IDEA.md) · [VISION_DOCS.md](./VISION_DOCS.md)  
@@ -171,16 +172,16 @@ Builder token usage logged via P4-004 role audit block (`model_roles.context_bui
 | Pytest hook (opt-in) | P4-010 | `done` 2026-06-09 | BL-310b/c, D-P4-2/7 | `auto_verify.py` + `core/verify/runner.py`; `verify_result` on MCP + JSONL; success→partial on fail; 546 pytest (+18) |
 | Outcome hardening | P4-011 | `optional` | BL-309f | Broader `partial` semantics beyond verify hook (overlap partial with P4-010 verify path) |
 
-### Wave 4 — Internal pipeline (in progress)
+### Wave 4 — Internal pipeline ✓ **complete** (dogfood partial)
 
 **Goal:** BL-161 v1 + BL-329 — pre-delegate validation gate + pipeline visibility + optional architect pass.  
-**Locked 2026-06-09:** D-P4-13–20 (see worker specs). **Ship order:** P4-009 → P4-020 → **P4-EXIT** full-stack dogfood.
+**Locked 2026-06-09:** D-P4-13–20 (see worker specs). **Ship order:** P4-009 → P4-020 → **P4-EXIT** dogfood.
 
 | Milestone | Task ID | Status | Implements | Summary |
 |-----------|---------|--------|------------|---------|
-| Pre-delegate spec validation | P4-009 | `ready` | BL-329, D-P4-13–16 | Opt-in `spec_validation`; `clarification_needed` blocks executor; needs `host_transcript: dump` |
-| Internal pipeline v1 | P4-020 | `ready` | BL-161, D-P4-17–20 | Always-on `delegation_pipeline` audit; opt-in `architect_pass` → `## Architect plan` in brief |
-| Phase 4 exit dogfood | P4-EXIT | `ready` | all phases | Master-run E2E after 009+020; ledger-analytics 3-step + failure paths — `docs/tasks/P4-EXIT-phase4-dogfood-v1.md` |
+| Pre-delegate spec validation | P4-009 | `done` 2026-06-09 | BL-329, D-P4-13–16 | Opt-in `spec_validation`; `clarification_needed` blocks executor; rules v14; 561 pytest (+15) |
+| Internal pipeline v1 | P4-020 | `done` 2026-06-09 | BL-161, D-P4-17–20 | Always-on `delegation_pipeline`; opt-in `architect_pass`; 573 pytest (+18) |
+| Phase 4 exit dogfood | P4-EXIT | `partial` | all phases | Step 1 (stats add-on) live — validation/pipeline/prior_failed confirmed; E6/E7 + steps 2–5 → Phase 5 optional |
 
 ---
 
@@ -198,22 +199,22 @@ Builder token usage logged via P4-004 role audit block (`model_roles.context_bui
 ## Phase 4 success checklist
 
 - [x] Spec path error includes correct `.mcp-coder/specs/tasks/` hint (P4-005)
-- [x] Judgment loop rules + `judgment_checklist` on implement responses (P4-006); behavioral dogfood re-run TBD
+- [x] Judgment loop rules + `judgment_checklist` on implement responses (P4-006); live dogfood confirmed (P4-EXIT)
 - [x] `auto_merged_read_paths: ['(none']` fixed (P4-007)
-- [x] `prior_failed_attempts` on delegate response + rules (P4-008); behavioral dogfood TBD
+- [x] `prior_failed_attempts` on delegate response + rules (P4-008); live dogfood confirmed (P4-EXIT stats v2–v3)
 - [x] Context builder shipped + dogfooded — picker (001a) + LLM brief (001b, default on); P4-ISS-013/017 fixed ([PHASE4_ISSUES.md](./PHASE4_ISSUES.md) Wave 2 checklist)
 - [x] Cursor rules v13 — context builder guidance; composable `@include` shared sections at sync
-- [x] Optional pytest hook fires post-delegate; `partial` outcome when tests fail (P4-010); **live dogfood with `auto_verify: true` TBD**
+- [x] Optional pytest hook + `partial` outcome when tests fail (P4-010); unit/integration tests; live success/partial **waived** at exit (executor failures in step 1)
 - [x] Phase 4 dogfood: greenfield multi-step (expense-splitter); picker + LLM brief exercised; minimal `target_files` works
+- [x] Spec validation shipped (P4-009, opt-in); `clarification_needed` live dogfood confirmed (P4-EXIT `c56ad89c`)
+- [x] `delegation_pipeline` + `architect_pass` shipped (P4-020); live dogfood confirmed
 
 ---
 
 ## Next action
 
-1. **P4-009 worker** — spec validation + `clarification_needed` (`docs/tasks/P4-009-spec-validation-v1.md`).
-2. **P4-020 worker** — pipeline phases + architect pass (`docs/tasks/P4-020-internal-pipeline-v1.md`).
-3. **P4-EXIT dogfood** — full-stack session (`docs/tasks/P4-EXIT-phase4-dogfood-v1.md`); fold verify + validation + pipeline into one run.
-4. **Phase 4 close** — after E1–E10 pass; update PHASES.md status.
+1. **Phase 5 planning** — review [BACKLOG.md](./BACKLOG.md) § Phase 4 exit; pull **BL-335** (token audit) and **BL-338** (executor model guidance) into Phase 5 early milestones.
+2. **PHASES.md** — Phase 5 RAG scope; optional resume P4-EXIT steps 2–5 during Phase 5 dogfood.
 
 ---
 
@@ -232,6 +233,9 @@ Builder token usage logged via P4-004 role audit block (`model_roles.context_bui
 
 | Date | Change |
 |------|--------|
+| 2026-06-09 | **Phase 4 complete** — Waves 1–4 shipped; P4-EXIT partial; issues → BACKLOG BL-335–339 |
+| 2026-06-09 | **P4-020 done** — `delegation_pipeline` + `architect_pass`; 573 pytest (+18) |
+| 2026-06-09 | **P4-009 done** — spec validation + `clarification_needed`; BL-329; rules v14; 561 pytest |
 | 2026-06-09 | Wave 4 scoped — D-P4-13–20 locked; P4-009/020/EXIT specs ready |
 | 2026-06-09 | **P4-010 done** — opt-in verify loop; BL-310b/c; 546 pytest (+18) |
 | 2026-06-09 | **Wave 3 core complete** — verify hook shipped; live `auto_verify` dogfood TBD |

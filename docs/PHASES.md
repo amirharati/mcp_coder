@@ -10,7 +10,7 @@
 
 This document is the **delivery plan**: what to build, in what order, and how we validate each step. Vision and rationale live in [IDEA.md](./IDEA.md) · doc map: [VISION_DOCS.md](./VISION_DOCS.md). Implementation happens in focused coding sessions once a phase (or sub-step) is agreed.
 
-**Status:** Phase 1 **complete** (P1-199). Phase 2 **complete** (P2-499). Phase 3 **complete** (P3-499, 2026-06-09). **Active:** Phase 4 — context builder + manager ([PHASES.md](./PHASES.md) § Phase 4).
+**Status:** Phase 1 **complete** (P1-199). Phase 2 **complete** (P2-499). Phase 3 **complete** (P3-499). Phase 4 **complete** (2026-06-09). **Active:** Phase 5 — RAG + builder improvements ([PHASE4_MVP.md](./PHASE4_MVP.md) closed; open items → [BACKLOG.md](./BACKLOG.md) § Phase 4 exit).
 
 ---
 
@@ -46,9 +46,10 @@ This document is the **delivery plan**: what to build, in what order, and how we
 | **1** | Delegate + pass-through context + sessions + specs | [PHASE1_MVP.md](./PHASE1_MVP.md) (frozen) |
 | **2** | **Context compiler** — what goes *in* the prompt per delegate | [PHASE2_MVP.md](./PHASE2_MVP.md) (frozen); [phase2-owned-context.md](./notes/phase2-owned-context.md) |
 | **3** | **Workspace truth** + planner history + delegation RAG shipped (scope → Phase 5) | [PHASE3_MVP.md](./PHASE3_MVP.md); [WORKSPACE_HISTORY.md](./OTEHR_RELATED_IDEAS/WORKSPACE_HISTORY.md) |
-| **4** | **Context builder + manager** — smart assembly, cheap LLM file picker, janitor, verify, internal pipeline | [BACKLOG.md](./BACKLOG.md) BL-001, 003, 006, 008, 153, 155, 161, 162 |
+| **4** | **Context builder + manager** — smart assembly, cheap LLM file picker, janitor, verify, internal pipeline | [PHASE4_MVP.md](./PHASE4_MVP.md) **complete** 2026-06-09; carried gaps → BACKLOG § Phase 4 exit |
 | **5** | **RAG** (workspace-file summaries + delegation search) + **improve** builder/manager from Phase 4 learnings | [BACKLOG.md](./BACKLOG.md) BL-002 |
-| **6+** | Interactive/long-running sessions, multi-host, product UX, ensemble | BL-160, BL-201/202, BL-007, BL-152 |
+| **5+** | **Reasoning trace reuse** + backend prompt control — capture, escalate, transfer intelligence, training flywheel *(placeholder; after Phase 5)* | BL-333, BL-334; [REASONING_TRACE_REUSE.md](./OTEHR_RELATED_IDEAS/REASONING_TRACE_REUSE.md) |
+| **6+** | Interactive/long-running sessions, multi-host, product UX, ensemble | BL-160, BL-201/202, BL-007, BL-152, BL-340 |
 
 **Principle (Phase 3+ attribution):** MCP reports `files_changed` from **delegation-scoped workspace manifest delta** — git-agnostic, backend-agnostic. User git is complementary; optional `git_tracked` metadata later (trivial).
 
@@ -611,6 +612,26 @@ Phase 1 uses only the executor (via Aider). Phase 2+ adds the context-builder **
 
 ---
 
+### Phase 5+: Reasoning traces & backend prompt control *(placeholder — after Phase 5)*
+
+**Goal (draft):** Capture hidden `reasoning_content` from LLM calls (today discarded by Aider) and turn delegation logs into a reusable intelligence layer — not just audit.
+
+**When to enter:** After Phase 5 RAG is running and Phase 4 builder/manager is stable. Prerequisite: reliable per-role token/usage telemetry (P4-ISS-014/015) so capture cost and quality are measurable.
+
+**Three axes** ([REASONING_TRACE_REUSE.md](./OTEHR_RELATED_IDEAS/REASONING_TRACE_REUSE.md)):
+
+| Axis | Intent | Backlog |
+|------|--------|---------|
+| **Model upgrade / escalation** | Use trace confusion/hedging as signal to step up mid-loop or suggest a stronger model to the planner | BL-321, BL-333 |
+| **Transfer intelligence** | Summarize high-end reasoning → inject into later cheap calls (builder, architect, next delegation) | BL-333, P4-001b history |
+| **Training / distillation** | `(task, context, trace, outcome)` tuples for fine-tuning and replacing hand-written modules with learned e2e components | BL-333 (long-term) |
+
+**Companion (smaller):** BL-334 — executor `system_prompt_prefix` + edit-format knobs on the Aider adapter (what we *send* at the LLM boundary; BL-333 is what we *keep*).
+
+**Not in scope until Phase 5+:** no capture implementation during Phase 4/5 unless a small observability fix (token counts) unblocks measurement. Design doc + backlog only for now.
+
+---
+
 ### Phase 6+: Long-running workflows & product surface
 
 **Goal:** How humans and hosts live in the system for hours/days — not core compiler features.
@@ -620,7 +641,7 @@ Phase 1 uses only the executor (via Aider). Phase 2+ adds the context-builder **
 | Interactive / supervised delegate | BL-160a–d |
 | Multi-host | BL-201/202 |
 | Git-native task branches | BL-502 (pairs with non-git BL-322) |
-| Alternate engines | BL-004 OpenCode |
+| Alternate engines | BL-004 OpenCode; **BL-340** Cursor SDK executor |
 | Product UX (viewer, team) | BL-152 |
 | Multi-model ensemble | BL-007 |
 
@@ -631,10 +652,13 @@ Phase 1 uses only the executor (via Aider). Phase 2+ adds the context-builder **
 | ID | Theme | Typical phase |
 |----|--------|----------------|
 | BL-160 | Interactive sessions | 6+ |
-| BL-161 | Multi-agent inside MCP | 4 |
+| BL-161 | Multi-agent inside MCP (v1 pipeline + architect pass) | **done** P4-020; BL-160 full REPL deferred |
 | BL-162 | Multi-model routing | 4 |
 | BL-002 | RAG / cross-session memory | 5 |
 | BL-315 / P2-315 | MCP progress notifications | 4 |
+| BL-333 | Reasoning trace capture + cross-delegation feed | 5+ |
+| BL-334 | Backend prompt customization (system prefix, edit-format) | 5+ |
+| BL-340 | Cursor SDK execution backend (beside Aider) | 6+ |
 
 ---
 
@@ -666,8 +690,12 @@ Phase 3+:
 Phase 4+:
   + smart context builder / file picker / janitor / verify / internal pipeline
 
-Phase 5+:
+Phase 5:
   + workspace-file RAG + improve context builder from Phase 4 learnings
+
+Phase 5+ (placeholder):
+  + reasoning trace capture (escalation, transfer intelligence, training flywheel)
+  + backend prompt control (BL-334)
 ```
 
 Both projects can be developed in parallel. Phase 1 does not require the proxy or any LLM inside `mcp-coder`.
@@ -686,4 +714,5 @@ Both projects can be developed in parallel. Phase 1 does not require the proxy o
 - [x] Phase 3 Wave 1 — workspace tracker + inspect ([PHASE3_MVP.md](./PHASE3_MVP.md); P3-401 signed off 2026-06-09).
 - [x] Phase 3 — **P3-311** read-deps auto-merge (D-P3-7); 412 pytest.
 - [x] Phase 3 exit — **P3-499** (2026-06-09); [PHASE3_MVP.md](./PHASE3_MVP.md) closed.
-- [ ] **Active:** Phase 4 — context builder + manager (BL-001, BL-161, BL-003); planner UX BL-324–325.
+- [x] Phase 4 complete — context builder + manager + pipeline (P4-499 exit 2026-06-09); [PHASE4_MVP.md](./PHASE4_MVP.md).
+- [ ] **Active:** Phase 5 — RAG (BL-002) + builder improvements; review BACKLOG § Phase 4 exit for BL-335/338 pull-ins.

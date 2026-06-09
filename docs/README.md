@@ -54,8 +54,10 @@ Each tier-0–2 file has an HTML **stewardship** comment at the top — agents m
 | [INSTALL.md](./INSTALL.md) | **Install & reproducible env** — Python version, locked deps, bootstrap scripts |
 | [resources/spec-template.md](../resources/spec-template.md) | Task spec template (MCP copy: `.mcp-coder/spec-template.md`) |
 | [IDEA.md](./IDEA.md) | Vision, architecture, design principles (why we’re building this) |
-| [PHASES.md](./PHASES.md) | Multi-phase delivery plan (Phase 1–4, technical detail) |
-| [PHASE1_MVP.md](./PHASE1_MVP.md) | **Phase 1 product manager doc** — tasks, status, worker handoffs |
+| [PHASES.md](./PHASES.md) | Multi-phase delivery plan (Phase 1–5+, technical detail) |
+| [PHASE1_MVP.md](./PHASE1_MVP.md) | **Phase 1 PM** — closed P1-199 |
+| [PHASE4_MVP.md](./PHASE4_MVP.md) | **Phase 4 PM** — closed P4 exit; active → Phase 5 / BACKLOG |
+| [PHASE4_ISSUES.md](./PHASE4_ISSUES.md) | **Phase 4 issues** — frozen; carried → BACKLOG |
 | [BACKLOG.md](./BACKLOG.md) | Project backlog (deferred / later / nice-to-have) |
 | [PHASE1_ISSUES.md](./PHASE1_ISSUES.md) | **Phase 1 issue tracker** — gaps found during P1 (incl. server log) |
 | [TASK_SPEC_TEMPLATE.md](./TASK_SPEC_TEMPLATE.md) | Blank template — **do not edit**; copy into `docs/tasks/` |

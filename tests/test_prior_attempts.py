@@ -215,7 +215,8 @@ def test_bundled_rules_prior_failed_attempts_v12() -> None:
     ):
         raw = path.read_text(encoding="utf-8")
         text = _resolve_includes(raw, rules_dir)  # compiled = what workspaces receive
-        assert 'mcp_coder_rule_version: "13"' in text
+        assert 'mcp_coder_rule_version: "14"' in text
+        assert "clarification_needed" in text
         assert "prior_failed_attempts" in text
         assert "including failures" in text
 

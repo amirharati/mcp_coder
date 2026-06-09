@@ -121,8 +121,9 @@ Phase 1 deferred executor conversation carry-over to here (BL-155); see P1-130 `
 
 ### BL-329: Pre-delegate spec validation + clarifying loop
 
-**Status:** `idea` — Phase 4 master session 2026-06-09.  
-**Target:** Phase 4 Wave 4 optional (P4-009); may defer to Phase 5 if Wave 2 builder proves sufficient.
+**Status:** `done` — P4-009 (2026-06-09).
+
+**Status:** `done` — **P4-009** (2026-06-09). Opt-in `spec_validation`; `clarification_needed` blocks executor; rules v14.
 
 **Goal:** Before delegating, the context builder reads the host session transcript and checks whether the spec is well-aligned with the current conversation. If ambiguous or contradictory, return a `clarification_needed` list to Cursor instead of delegating — forcing the host to answer before retrying.
 
@@ -691,6 +692,80 @@ Delegation `58bb9846` failed; host recovered silently with duplicate spec tree.
 
 ---
 
+### Phase 4 exit — carried from [PHASE4_ISSUES.md](./PHASE4_ISSUES.md) (P4-EXIT partial, 2026-06-09)
+
+**Phase 4 closed** with core Waves 1–4 shipped. Open issues below moved to backlog for **Phase 5 planning review** — pull into a phase milestone when ready; items marked **mandatory** block informed multi-model routing (BL-162 Stage 2), reasoning capture (BL-333), or cost-aware RAG (BL-002).
+
+| ID | Source | Pull by | Mandatory? | Summary |
+|----|--------|---------|------------|---------|
+| BL-309 | P4-ISS-006 | Phase 5+ | recommended | Executor leaves bad partial state → v2 retry (SEARCH/REPLACE quality); see § BL-309 |
+| BL-309e | P4-ISS-004, P4-ISS-018 | Phase 5 | **yes** if long delegates common | Delegation timeout storms; 217s engine_run on full-file replace; document `MCP_CODER_DELEGATION_TIMEOUT_S` in templates |
+| BL-328 | P4-ISS-007 | Phase 5+ | optional | Spec v2 retry after implement failure — **partially dogfooded** P4-EXIT (`prior_failed_attempts` on stats v2–v3); failure-driven versioned retry workflow still thin |
+| BL-330 | P4-ISS-002 | Phase 5+ | optional | Inspect-tool calls not auditable in `server.jsonl` |
+| BL-335 | P4-ISS-014, P4-ISS-015 | **Phase 5** | **yes** | Per-role `model_roles.*.tokens` always `None` — blocks cost audit, BL-162 escalation, BL-333 capture |
+| BL-336 | P4-ISS-003 | Phase 5+ | optional | `judgment_checklist` nested under `response_to_cursor` in JSONL only |
+| BL-337 | P4-ISS-005 | Phase 5+ | optional | `config_deprecated` noise in `server.jsonl` (e.g. `MCP_CODER_FALLBACK_SESSION` in consumer `mcp.json`) |
+| BL-338 | P4-ISS-016, P4-ISS-020 | **Phase 5** | **yes** before BL-321 | Executor `edit_format` / constraint blindness on cheap models (gpt-4o-mini); model-selection guidance or auto-escalation |
+| BL-339 | P4-ISS-021 | Phase 5+ | optional | Spec validation dogfood: retry-history in spec masks deliberate format trap; validation works — improve trap methodology or spec template |
+
+#### BL-335: Per-role token audit in delegation JSONL
+
+**Status:** `deferred` — **P4-ISS-014**, **P4-ISS-015** (P4-EXIT dogfood 2026-06-09).
+
+**Problem:** All `model_roles` blocks (`executor`, `context_builder`, `architect_pass`, `spec_validation`) report `tokens: null` / `cost_est_usd: null` on live delegates. Preflight cost works; `usage.actual` may have executor numbers but is not copied into `model_roles.executor`.
+
+**Why mandatory later:** BL-162 Stage 2 (tiered escalation), BL-333 (reasoning trace + cost flywheel), and BL-002 RAG cost budgeting all need per-role usage. Without this, Phase 5 cannot measure builder vs executor spend or trigger escalation on token budget.
+
+**Fix sketch:** (a) LiteLLM callback for cheap-model calls (builder, validation, architect); (b) `_extract_tokens()` in `aider_engine.py` → `message_tokens_sent` / `message_tokens_received`; (c) merge into `model_roles` from `usage.actual` when available.
+
+**Target:** **Phase 5 early** — small worker task before BL-162 Stage 2 or BL-002 dogfood.
+
+#### BL-336: Top-level JSONL audit fields for judgment loop
+
+**Status:** `deferred` — **P4-ISS-003**.
+
+**Problem:** `judgment_checklist` and `delegation_diff` live only under `response_to_cursor` in `delegations.jsonl`. Log grep scripts report false "absent". MCP response to Cursor is correct.
+
+**Mandatory?** No — ops/PM convenience only.
+
+**Target:** Phase 5+ optional — duplicate keys on JSONL record top-level, or document in `storage-and-linking.md` / `history show`.
+
+#### BL-337: Deprecated config noise in server log
+
+**Status:** `deferred` — **P4-ISS-005**.
+
+**Problem:** `config_deprecated` warn events clutter `server.jsonl` each delegation — likely `MCP_CODER_FALLBACK_SESSION` or legacy keys in consumer `mcp.json`.
+
+**Mandatory?** No — cleanup / operator ergonomics.
+
+**Target:** Phase 5+ — clean e2e MCP env template; document deprecated keys in INSTALL.md.
+
+#### BL-338: Executor model quality — `edit_format` and constraint blindness
+
+**Status:** `deferred` — **P4-ISS-016**, **P4-ISS-020** (P4-EXIT session `2f01bb11`).
+
+**Problem:** gpt-4o-mini repeatedly fails multi-file delegates: malformed SEARCH/REPLACE (`edit_format`), ignores "stdlib only" (`import yaml`), partial apply leaves broken syntax. Architect pass + builder brief correctly state constraints; executor model ignores them. P4-EXIT stats step: 3 failed delegates, host applied v3 spec manually.
+
+**Why mandatory before BL-321:** Auto-escalation needs a reliable failure signal + a stronger fallback model. Without documented model tiers or escalation on `edit_format`, operators hit 3× retry loops on every multi-file task.
+
+**Fix options:** (a) model-selection doc in INSTALL / cursor rules (cheap vs multi-file); (b) BL-321 tiered retry on `edit_format`; (c) BL-334 executor system prefix reinforcing constraints; (d) whole-file edit format for small brownfield files.
+
+**Target:** **Phase 5** — at minimum documentation + cursor rules; BL-321 implementation when escalation ships.
+
+#### BL-339: Spec validation dogfood — retry-history vs format trap
+
+**Status:** `deferred` — **P4-ISS-021**.
+
+**Problem:** Deliberate YAML-vs-plaintext validation trap was overtaken by retry-history ambiguity in spec ("per v1 spec" vs v2/v3 narrative). Validation correctly blocked (`c56ad89c`); clarification was about version confusion, not output format.
+
+**Mandatory?** No — validation feature works; this is dogfood methodology + optional spec template guidance (keep retry notes out of Constraints; use fresh v1 for format traps).
+
+**Target:** Phase 5+ optional — spec template note or validation prompt tweak.
+
+**BL-309e note (P4-ISS-004/018):** Four `delegation_timeout` storms before MCP restart (Wave 1 dogfood); stats v2 full-file replace hit 217s at `MCP_CODER_DELEGATION_TIMEOUT_S=200`. Operator fix: raise to 300s. **Pull into Phase 5** if bounded run time + clearer timeout errors not yet shipped (see § BL-309e).
+
+---
+
 ### BL-321: Progressive / tiered executor model selection
 
 **Status:** `deferred` — Phase 4 optional; **P3-ISS-004** (`wontfix-p3` at P3-499 exit).
@@ -779,12 +854,86 @@ Until then: add rows to bundled `model_rates.yaml` when switching models; unknow
 
 ---
 
-## Very low priority — other execution engines
+## Execution backends (beyond Aider)
 
-| ID | Item | Notes |
-|----|------|-------|
-| BL-004 | **OpenCode adapter** (subprocess) | **Deferred indefinitely** — Aider-only until product is useful; adapter interface exists (`core/engine/`) if ever needed |
-| — | Claude Code / Codex CLI adapters | Same tier as BL-004 — not on roadmap until explicit need |
+| ID | Item | Target | Notes |
+|----|------|--------|-------|
+| **BL-340** | **Cursor SDK executor backend** | later phase | See § BL-340 — practical OpenRouter bypass + Composer models + multi-backend routing; **not Phase 5** |
+| BL-004 | **OpenCode adapter** (subprocess) | deferred | Aider-only until product is useful; adapter interface exists (`core/engine/`) |
+| — | Claude Code / Codex CLI adapters | deferred | Same tier as BL-004 — not on roadmap until explicit need |
+
+### BL-340: Cursor SDK as execution backend (beside Aider)
+
+**Status:** `deferred` — 2026-06-09. **Backlog only** — pull into a **later phase** when multi-backend / provider choice is prioritized; **not Phase 5** (Phase 5 = RAG + builder improvements per [PHASES.md](./PHASES.md)).
+
+**One-liner:** Add a second **execution adapter** that runs implement work via the [Cursor SDK](https://cursor.com/docs/sdk/python) (`cursor-sdk` / `Agent.prompt` local runtime) instead of Aider+OpenRouter — so users can delegate with **Cursor subscription models** (e.g. Composer) and without bringing their own LLM API key for the executor role.
+
+**Host vs backend (important):**
+
+| Layer | What it is today | BL-340 changes |
+|-------|------------------|----------------|
+| **Host** (BL-201/202) | Cursor IDE calls `delegate_to_agent` MCP tool | Unchanged — Cursor remains the planner/orchestrator |
+| **Execution backend** | Aider only (`core/engine/aider_engine.py`) | Add `cursor_sdk_engine.py` — same `ExecutionEngine` contract, different runtime |
+
+This is **not** a host adapter. Cursor-as-host + Cursor-SDK-as-executor is a valid and desirable combo: mcp-coder still owns context compiler, spec contract, pipeline, verify — only the edit engine swaps.
+
+**Why useful:**
+
+1. **No forced OpenRouter** — executor can use models bundled with Cursor; lowers setup friction for personal/small-team use.
+2. **Cursor-native models** — access to Composer and other Cursor-routed models not exposed cleanly via Aider/LiteLLM today.
+3. **Multi-backend routing (BL-162)** — MCP can pick `backend=aider` vs `backend=cursor_sdk` per delegation (or auto-route on task type / failure). Enables parallel experiments: cheap Aider path vs Cursor path; fallback on `edit_format` (BL-338) without operator env swap + MCP restart.
+4. **Pairs with BL-321** — escalation step-up can mean "retry on Cursor SDK with Composer" instead of only "swap OpenRouter model id."
+
+**Proposed architecture (backend-neutral rule holds):**
+
+```text
+delegate_to_agent(backend=…)
+  → context compiler (unchanged)
+  → ExecutionEngine factory
+       aider        → AiderEngine (today)
+       cursor_sdk   → CursorSdkEngine (new)
+  → workspace manifest delta for files_changed (BL-322 — backend-agnostic)
+```
+
+| Piece | Location | Notes |
+|-------|----------|-------|
+| Config resolver | `core/config/executor_backend.py` | `default_backend`, per-role override, env `MCP_CODER_EXECUTOR_BACKEND` |
+| Adapter | `core/engine/cursor_sdk_engine.py` | Translate `ContextPackage` → SDK prompt; `Agent.prompt` / `Agent.create` + `send` for multi-turn if needed |
+| Audit | `delegations.jsonl` | `backend: cursor_sdk`, `model` from SDK result, tokens if exposed |
+| MCP param | `delegate_to_agent` | `backend` already exists — extend factory beyond `aider` |
+
+**Implementation routes (evaluate in spike):**
+
+| Route | How | Trade-offs |
+|-------|-----|------------|
+| **A — Cursor SDK (preferred)** | Python `cursor_sdk.Agent` with `local: { cwd: workspace }`, model e.g. `composer-2.5`; one-shot `prompt()` v0, `create`+`send` v1 for follow-ups | Clean API; beta surface; need spike on file-edit reliability, `files_changed` extraction, auth (`CURSOR_API_KEY` vs local session) |
+| **B — SDK cloud runtime** | Same SDK, cloud VM against cloned repo | CI/automation without local IDE; different auth/billing; not primary for Cursor-as-host dogfood |
+| **C — Intercept / subprocess** | Fallback if SDK lacks file-scoped control: shell out to `cursor` CLI or IDE automation | Fragile, host-coupled; only if Route A cannot produce auditable edits |
+
+**Spike acceptance (before full milestone):**
+
+- [ ] `backend=cursor_sdk` completes a 1-file implement delegate on e2e workspace
+- [ ] `files_changed` matches manifest delta (same as Aider path)
+- [ ] `delegation_pipeline` + JSONL audit parity (`backend`, `model`, duration)
+- [ ] Document auth: what the user must configure vs Aider+OpenRouter
+
+**Multi-backend / parallel (later-phase stretch):**
+
+- Config allowlist: `executor_backends: [aider, cursor_sdk]`
+- BL-162 router: pick backend by spec hint, file count, or prior failure (`edit_format` on Aider → auto-retry cursor_sdk)
+- **Not** literal parallel double-run by default — routing + fallback first; true parallel race (two backends, take first good result) is BL-007 ensemble territory
+
+**Open questions (decide at spec time):**
+
+1. Does local SDK use the user's IDE session auth or require separate `CURSOR_API_KEY`?
+2. Token/cost audit parity with Aider (ties **BL-335** — mandatory for any backend comparison)?
+3. SEARCH/REPLACE vs agentic file writes — does SDK return structured edits or only natural-language result?
+4. MCP recursion: SDK agent with mcp-coder MCP enabled vs mcp-coder orchestrating SDK as dumb executor only (prefer latter for v1).
+5. Relationship to **BL-334** — Cursor backend may not need Aider `system_prompt_prefix`; separate prompt translation in adapter.
+
+**Related:** BL-004 (alternate engines pattern), BL-162/321 (routing/escalation), BL-338 (executor quality — Cursor path may reduce `edit_format` pain), BL-335 (token audit for backend comparison), BL-332 (host rules stay Cursor; this is execution layer).
+
+**Target:** **Later phase (6+ or when scheduled)** — not on Phase 5 roadmap. Natural fit alongside BL-162 Stage 2 multi-backend routing, BL-321 escalation, or when operator demand for non-OpenRouter executor path is clear. Optional early spike only if product direction commits before Phase 5 closes.
 
 ---
 
@@ -797,6 +946,52 @@ Until then: add rows to bundled `model_rates.yaml` when switching models; unknow
 | BL-503 | Grade executor output with cheap model before returning to Cursor |
 | BL-504 | Global `~/.mcp-coder/config.yaml` defaults | Per-repo `config.yaml` shipped P1-130 |
 | BL-506 | Generic `transcript.md` watch folder (non-Cursor hosts) |
+| **BL-333** | **Reasoning trace capture + cross-delegation context feed** | See § BL-333 + [REASONING_TRACE_REUSE.md](./OTEHR_RELATED_IDEAS/REASONING_TRACE_REUSE.md) |
+| **BL-334** | **Backend prompt customization** (system prefix + edit-format control) | See § BL-334 |
+| **BL-340** | **Cursor SDK execution backend** (beside Aider) | See § Execution backends — BL-340 |
+
+### BL-333: Reasoning trace capture + cross-delegation context feed
+
+**Status:** `idea` — 2026-06-09.
+**Full design + motivation:** [docs/OTEHR_RELATED_IDEAS/REASONING_TRACE_REUSE.md](./OTEHR_RELATED_IDEAS/REASONING_TRACE_REUSE.md)
+
+**One-liner:** High-end reasoning models emit a hidden `reasoning_content` trace per call which Aider discards (`remove_reasoning_content()`). Capture it once and it powers **three axes**: (1) **model upgrade/escalation** signal inside the MCP loop (or suggestion-only), (2) **transfer intelligence** — feed traces as context into later *cheaper* calls so a mid-tier model inherits the expensive thinking, (3) **training data** — `(task, context, trace, outcome)` tuples for distillation and for replacing hand-written modules (picker, builder, validation) with learned e2e components. "Reason once expensively, propagate downhill" + a data flywheel.
+
+**Capture route (recommended):** LiteLLM `success_callback` at MCP startup — backend-neutral, covers builder/validation/architect *and* Aider executor calls; no Aider patching. Alternatives (`model.reasoning_tag = None`, Coder subclass) in the design doc.
+
+**Storage:** `delegation_reasoning_summary` (truncated) in JSONL + in-memory session dict; optional `workspace_history.db` column for cross-session. Inject via `gather_builder_history()` (P4-001b) under existing token budget.
+
+**Related:** BL-162 (multi-model routing — this is the propagation mechanism), BL-321 (reasoning trace = escalation trigger), BL-334 (backend prompt control — both modify what we send/receive at the LLM boundary), P4-001b builder history (injection point), P4-ISS-014/015 (token tracking; reasoning tokens extend the same gap).
+
+---
+
+### BL-334: Backend prompt customization (system prompt prefix + edit-format control)
+
+**Status:** `idea` — 2026-06-09. Smaller than BL-333; mostly knobs on the existing Aider adapter.
+
+**Origin:** Same Phase 4 discussion. We hand Aider a prompt, but Aider wraps it with **its own** system prompt (`main_system`), hard-coded example conversations, and a SEARCH/REPLACE `system_reminder`. We currently pass content only; we don't shape Aider's framing.
+
+**Aider hooks available (no forking):**
+
+| Hook | What it does | mcp-coder use |
+|------|--------------|---------------|
+| `model.system_prompt_prefix` | String prepended to Aider's `main_system` before the LLM call (Aider uses it for `/no_think`, "Formatting re-enabled."). | Inject delegation-level constraints / persona / "respect spec contract" reminder ahead of Aider's generic prompt. Set on the `Model` in `aider_engine.py` before `Coder.create()`. |
+| `Coder.create(edit_format=…)` | Selects edit format (editblock, whole-file, udiff, …) → different `gpt_prompts` + system reminder. | Per-delegation or per-model edit-format choice (e.g. whole-file for tiny files, editblock default). Already partly model-driven; expose as config. |
+| Subclass `gpt_prompts` | Replace `main_system` / `system_reminder` wholesale. | Heavier; only if we want to fundamentally change executor instructions. Out of scope for v1. |
+
+**Proposed scope (v1, small):**
+
+| Sub | Item |
+|-----|------|
+| BL-334a | `core/config/` resolver for an optional **executor system prompt prefix** (env `MCP_CODER_EXECUTOR_SYSTEM_PREFIX` + yaml `executor_system_prefix`); applied via `model.system_prompt_prefix` in `aider_engine.py`. Default: none (byte-identical to today). |
+| BL-334b | Optional **edit-format override** (env/yaml `executor_edit_format`) passed into `delegation_coder_kwargs()` / `Coder.create()`. Default: model's native format. Audit chosen format in JSONL `context` block. |
+| BL-334c | Audit: record `system_prefix_applied: bool` and `edit_format` on the delegation record so prompt-shaping is visible in history. |
+
+**Backend-neutral rule:** the *resolver* lives in `core/config/` (no Aider terms); the *application* (`system_prompt_prefix`, `edit_format`) stays in `core/engine/aider_engine.py` / `aider_runtime.py`. Other backends ignore unknown knobs.
+
+**Why useful:** lets mcp-coder steer the executor (tone, constraints, format) without rewriting prompts per call, and is a prerequisite for per-role/per-model prompt tuning under BL-162. Pairs with BL-333 at the same LLM boundary (334 = what we send; 333 = what we keep from the response).
+
+**Open question:** does prefix injection interfere with Aider's prompt caching (cache key includes system prompt)? Measure before enabling by default.
 
 ---
 
@@ -819,11 +1014,18 @@ Until then: add rows to bundled `model_rates.yaml` when switching models; unknow
 
 | Date | Change |
 |------|--------|
+| 2026-06-09 | BL-340 added — Cursor SDK execution backend (deferred, later phase — not Phase 5) |
+| 2026-06-09 | Phase 4 exit — P4-ISS-002–007/014–021 carried; BL-335–339 added; BL-309e/328/330 cross-linked |
+| 2026-06-09 | BL-329 done — P4-009 spec validation + clarifying loop |
 | 2026-06-09 | BL-310 partial — P4-010 verify loop (310b/c done; 310a deferred) |
 | 2026-06-09 | BL-332 added — host-agnostic planner rules sync (deferred; Cursor-coupled today, compile engine reusable) |
 | 2026-06-09 | BL-331 added — symbol-scoped/chunked edit files (Phase 5+, executor format change) |
 | 2026-06-09 | BL-162 staged (Stage 1 per-role D-P4-8 → escalation → swarm); notes/multi-model-roles.md |
 | 2026-06-09 | BL-330 inspect-tool server log audit (P4-ISS-002); PHASE4_ISSUES created |
+| 2026-06-09 | BL-334 added — backend prompt customization (system prompt prefix + edit-format control; small Aider-adapter knobs) |
+| 2026-06-09 | BL-333 expanded — three axes (model upgrade/escalation, transfer intelligence, training/distillation + learned modules) added to REASONING_TRACE_REUSE.md |
+| 2026-06-09 | BL-333 design doc — OTEHR_RELATED_IDEAS/REASONING_TRACE_REUSE.md; backlog entry condensed to pointer |
+| 2026-06-09 | BL-333 added — reasoning trace capture + cross-delegation context feed (idea; LiteLLM callback route recommended) |
 | 2026-06-09 | BL-329 added — pre-delegate spec validation + clarifying loop (Phase 4 master session; P4-009 optional Wave 4) |
 | 2026-06-09 | **P3-499 exit** — BL-324–328 from frozen PHASE3_ISSUES; BL-321 deferred Phase 4 |
 | 2026-06-09 | BL-002 design decisions locked — corpus scope, architecture; RAG → Phase 5 (Phase 4 = context builder first); P3-002-lite delegation RAG shipped |

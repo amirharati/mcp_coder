@@ -14,10 +14,12 @@ from core.config.auto_verify import (
     resolve_verify_command,
     resolve_verify_timeout_s,
 )
+from core.config.architect_pass import architect_pass_enabled
 from core.config.context_builder import (
     context_builder_enabled,
     context_builder_llm_enabled,
 )
+from core.config.spec_validation import spec_validation_enabled
 from core.config.models import resolve_model_name
 from core.config.role_models import (
     ROLE_CONTEXT_BUILDER,
@@ -79,6 +81,7 @@ from core.specs.read_deps_merge import resolve_spec_read_deps
 from core.specs.modes import DELEGATE_MODE_IMPLEMENT, DELEGATE_MODE_REVIEW, normalize_delegate_mode
 from core.specs.outcome import (
     OUTCOME_INVALID_SPEC,
+    OUTCOME_NEEDS_INPUT,
     OUTCOME_SUCCESS,
     apply_scope_outcome,
     apply_verify_outcome,
@@ -88,6 +91,7 @@ from core.verify.runner import VerifyResult, run_verify_command
 from core.specs.paths import normalize_spec_path_arg, resolve_spec_path
 from core.specs.read import read_task_spec
 from core.specs.write import apply_post_delegation_report_updates
+from core.pipeline.phases import PipelineRecorder
 from core.usage import (
     build_usage_report,
     build_usage_warnings,
@@ -123,6 +127,11 @@ def _truncate_output(text: str, max_chars: int = OUTPUT_MAX_CHARS) -> str:
 
 _BUILDER_BRIEF_HEADER = "## Builder brief"
 
+_SPEC_VALIDATION_BLOCK_OUTPUT = (
+    "Spec validation blocked delegation. Answer clarifications in Cursor, "
+    "update spec if needed, then retry delegate_to_agent."
+)
+
 
 def _merge_brief(mechanical_brief: str, llm_brief: str) -> str:
     """Prepend LLM narrative; keep mechanical brief (incl. accurate ## Paths) below.
@@ -137,6 +146,11 @@ def _merge_brief(mechanical_brief: str, llm_brief: str) -> str:
         "---\n\n"
         f"{mechanical_brief.strip()}"
     )
+
+
+def _merge_architect_plan(architect_plan: str, brief: str) -> str:
+    """Prepend architect plan above whatever brief is currently assembled."""
+    return f"{architect_plan.strip()}\n\n---\n\n{brief.strip()}"
 
 
 def _apply_builder_llm(
@@ -203,6 +217,140 @@ def _apply_builder_llm(
     return context_package, False, llm_result.error, builder_record
 
 
+def _apply_architect_pass(
+    *,
+    context_package: "ContextPackage",
+    spec_read: "Any",
+    picker_result: "CandidateFilesResult | None",
+    workspace: str,
+    task: str,
+    context_summary: str,
+    host_transcript: str | None,
+    timing: dict[str, int | float],
+    delegation_id: str,
+) -> tuple[str | None, str | None, dict[str, Any] | None]:
+    """Run architect pass and return (architect_plan, error, model_record)."""
+    from core.context.architect_prompt import build_architect_pass_prompt
+    from core.engine.architect_pass_llm import run_architect_pass_llm
+
+    t_arch = time.perf_counter()
+    prompt = build_architect_pass_prompt(
+        spec_read=spec_read,
+        mechanical_brief=context_package.brief,
+        picker_result=picker_result,
+        host_transcript=host_transcript,
+        task=task,
+        context_summary=context_summary,
+    )
+    llm_result = run_architect_pass_llm(prompt, workspace_path=workspace)
+    timing["architect_pass_ms"] = int((time.perf_counter() - t_arch) * 1000)
+
+    architect_record = build_role_usage_record(
+        role="architect_pass",
+        model=llm_result.model,
+        input_tokens=llm_result.tokens.get("input"),
+        output_tokens=llm_result.tokens.get("output"),
+        total_tokens=llm_result.tokens.get("total"),
+        duration_ms=llm_result.duration_ms,
+        source=str(llm_result.tokens.get("source") or "architect_pass"),
+    )
+
+    if llm_result.success:
+        return llm_result.plan, None, architect_record
+
+    server_log_emit(
+        "architect_pass_failed",
+        level="warn",
+        delegation_id=delegation_id,
+        model=llm_result.model,
+        error=llm_result.error,
+    )
+    return None, llm_result.error, architect_record
+
+
+def _apply_spec_validation(
+    *,
+    spec_read: "Any",
+    workspace: str,
+    task: str,
+    context_summary: str,
+    host_transcript: str,
+    timing: dict[str, int | float],
+    delegation_id: str,
+) -> tuple[
+    bool,
+    list[str] | None,
+    bool,
+    bool | None,
+    str | None,
+    dict[str, Any] | None,
+    dict[str, Any] | None,
+]:
+    """Run pre-delegate spec validation LLM.
+
+    Returns (blocked, clarifications, ran, passed, error, audit_dict, model_record).
+    On LLM/parse failure: not blocked, ran=False, audit includes error.
+    """
+    from core.context.spec_validation_prompt import build_spec_validation_prompt
+    from core.engine.spec_validation_llm import run_spec_validation_llm
+
+    t_val = time.perf_counter()
+    prompt = build_spec_validation_prompt(
+        spec_read=spec_read,
+        host_transcript=host_transcript,
+        task=task,
+        context_summary=context_summary,
+    )
+    llm_result = run_spec_validation_llm(prompt, workspace_path=workspace)
+    timing["spec_validation_ms"] = int((time.perf_counter() - t_val) * 1000)
+
+    model_record = build_role_usage_record(
+        role="spec_validation",
+        model=llm_result.model,
+        input_tokens=llm_result.tokens.get("input"),
+        output_tokens=llm_result.tokens.get("output"),
+        total_tokens=llm_result.tokens.get("total"),
+        duration_ms=llm_result.duration_ms,
+        source=str(llm_result.tokens.get("source") or "spec_validation"),
+    )
+
+    if not llm_result.success or llm_result.passed is None:
+        server_log_emit(
+            "spec_validation_failed",
+            level="warn",
+            delegation_id=delegation_id,
+            model=llm_result.model,
+            error=llm_result.error,
+        )
+        audit: dict[str, Any] = {
+            "ran": False,
+            "passed": None,
+            "clarifications_count": 0,
+            "duration_ms": llm_result.duration_ms,
+        }
+        if llm_result.error:
+            audit["error"] = llm_result.error
+        return False, None, False, None, llm_result.error, audit, model_record
+
+    if llm_result.passed is True:
+        audit = {
+            "ran": True,
+            "passed": True,
+            "clarifications_count": 0,
+            "duration_ms": llm_result.duration_ms,
+        }
+        return False, None, True, True, None, audit, model_record
+
+    clarifications = llm_result.clarifications
+    audit = {
+        "ran": True,
+        "passed": False,
+        "clarifications_count": len(clarifications),
+        "duration_ms": llm_result.duration_ms,
+    }
+    return True, clarifications, True, False, None, audit, model_record
+
+
 def _build_model_roles_payload(
     *,
     delegate_mode: str,
@@ -211,13 +359,15 @@ def _build_model_roles_payload(
     timing: dict[str, int | float],
     workspace: str,
     builder_record: dict[str, Any] | None = None,
+    spec_validation_record: dict[str, Any] | None = None,
+    architect_record: dict[str, Any] | None = None,
 ) -> dict[str, Any] | None:
     """Per-role audit block for JSONL + MCP response (D-P4-8 Stage 1)."""
     engine_ms = timing.get("engine_run_ms")
     duration_ms = int(engine_ms) if engine_ms is not None else None
 
     if delegate_mode == DELEGATE_MODE_REVIEW:
-        return merge_model_roles(
+        roles = merge_model_roles(
             build_role_usage_record(
                 role=ROLE_REVIEW,
                 model=resolved_model,
@@ -228,18 +378,24 @@ def _build_model_roles_payload(
                 source=str(tokens.get("source") or "unavailable"),
             )
         )
-
-    if delegate_mode == DELEGATE_MODE_IMPLEMENT:
-        return merge_model_roles(
+    elif delegate_mode == DELEGATE_MODE_IMPLEMENT:
+        roles = merge_model_roles(
             build_role_usage_record(
                 role=ROLE_EXECUTOR,
                 model=resolve_role_model_name(ROLE_EXECUTOR, workspace),
                 source="executor",
             ),
             builder_record,
+            architect_record,
         )
+    else:
+        roles = None
 
-    return None
+    if spec_validation_record:
+        if roles is None:
+            roles = {}
+        roles["spec_validation"] = spec_validation_record
+    return roles or None
 
 
 def _response_payload(
@@ -288,6 +444,10 @@ def _response_payload(
     builder_brief_applied: bool | None = None,
     auto_verify_enabled_flag: bool | None = None,
     verify_result: dict[str, Any] | None = None,
+    clarification_needed: list[str] | None = None,
+    spec_validation_ran: bool | None = None,
+    spec_validation_passed: bool | None = None,
+    delegation_pipeline: list[dict[str, Any]] | None = None,
 ) -> dict[str, Any]:
     payload: dict[str, Any] = {
         "success": success,
@@ -370,6 +530,14 @@ def _response_payload(
         payload["auto_verify_enabled"] = True
         if verify_result is not None:
             payload["verify_result"] = verify_result
+    if clarification_needed:
+        payload["clarification_needed"] = clarification_needed
+    if spec_validation_ran is not None:
+        payload["spec_validation_ran"] = spec_validation_ran
+    if spec_validation_passed is not None:
+        payload["spec_validation_passed"] = spec_validation_passed
+    if delegation_pipeline is not None:
+        payload["delegation_pipeline"] = delegation_pipeline
     return payload
 
 
@@ -433,6 +601,8 @@ def delegate_to_agent(
     spec_abs_path = None
     spec_read = None
     spec_invalid_reason: str | None = None
+    spec_read_duration_ms = 0
+    t_spec_read = time.perf_counter()
     if spec_path:
         try:
             spec_rel_path = normalize_spec_path_arg(spec_path)
@@ -459,6 +629,16 @@ def delegate_to_agent(
             )
         except PolicyValidationError as exc:
             spec_invalid_reason = str(exc)
+    spec_read_duration_ms = int((time.perf_counter() - t_spec_read) * 1000)
+
+    pipeline_recorder: PipelineRecorder | None = None
+    if (
+        delegate_mode == DELEGATE_MODE_IMPLEMENT
+        and spec_read is not None
+        and not spec_invalid_reason
+    ):
+        pipeline_recorder = PipelineRecorder()
+        pipeline_recorder.mark("spec_read", status="ok", duration_ms=spec_read_duration_ms)
     policy = resolve_session_policy(ws)
     host_transcript_policy = resolve_host_transcript_policy(ws)
 
@@ -615,10 +795,66 @@ def delegate_to_agent(
     caps = None
     cap_warnings: list[str] = []
     picker_result: CandidateFilesResult | None = None
+    architect_enabled = False
+    architect_plan_applied = False
+    architect_pass_error: str | None = None
+    architect_record: dict[str, Any] | None = None
+    architect_plan: str | None = None
     builder_llm_enabled = False
     builder_brief_applied = False
     builder_llm_error: str | None = None
     builder_record: dict[str, Any] | None = None
+    spec_validation_blocked = False
+    clarification_needed: list[str] | None = None
+    spec_validation_ran: bool | None = None
+    spec_validation_passed: bool | None = None
+    spec_validation_audit: dict[str, Any] | None = None
+    spec_validation_record: dict[str, Any] | None = None
+
+    if (
+        pipeline_recorder is not None
+        and not review_target_files_error
+        and spec_validation_enabled(ws)
+    ):
+        if host_transcript_text and host_transcript_text.strip():
+            pipeline_recorder.start("spec_validation")
+            (
+                spec_validation_blocked,
+                clarification_needed,
+                spec_validation_ran,
+                spec_validation_passed,
+                _spec_val_err,
+                spec_validation_audit,
+                spec_validation_record,
+            ) = _apply_spec_validation(
+                spec_read=spec_read,
+                workspace=ws,
+                task=task,
+                context_summary=context_summary,
+                host_transcript=host_transcript_text,
+                timing=timing,
+                delegation_id=delegation_id,
+            )
+            if spec_validation_blocked:
+                pipeline_recorder.end("spec_validation", status="blocked")
+            elif _spec_val_err:
+                pipeline_recorder.end(
+                    "spec_validation", status="error", detail=_spec_val_err[:200]
+                )
+            else:
+                pipeline_recorder.end("spec_validation", status="ok")
+        else:
+            pipeline_recorder.mark(
+                "spec_validation",
+                status="skipped",
+                detail="empty_host_transcript",
+            )
+    elif pipeline_recorder is not None and not review_target_files_error:
+        pipeline_recorder.mark(
+            "spec_validation",
+            status="skipped",
+            detail="disabled",
+        )
 
     if spec_invalid_reason:
         success = False
@@ -628,7 +864,12 @@ def delegate_to_agent(
         success = False
         error = review_target_files_error
         output = review_target_files_error
+    elif spec_validation_blocked:
+        success = False
+        error = None
+        output = _SPEC_VALIDATION_BLOCK_OUTPUT
     else:
+        executor_phase_started = False
         try:
             t_engine = time.perf_counter()
             if delegate_mode == DELEGATE_MODE_REVIEW:
@@ -636,29 +877,103 @@ def delegate_to_agent(
             elif _use_pkg:
                 builder_on = context_builder_enabled(ws)
                 if builder_on and delegation_policies is not None:
-                    picker_result = pick_candidate_files(
-                        workspace=Path(ws),
-                        task=task,
-                        spec_text=spec_read.raw_text if spec_read else None,
-                        policies=delegation_policies,
-                        target_files=effective_target_files,
+                    if pipeline_recorder is not None:
+                        pipeline_recorder.start("file_picker")
+                    try:
+                        picker_result = pick_candidate_files(
+                            workspace=Path(ws),
+                            task=task,
+                            spec_text=spec_read.raw_text if spec_read else None,
+                            policies=delegation_policies,
+                            target_files=effective_target_files,
+                        )
+                    except Exception as exc:
+                        if pipeline_recorder is not None:
+                            pipeline_recorder.end(
+                                "file_picker",
+                                status="error",
+                                detail=f"{type(exc).__name__}: {exc}"[:200],
+                            )
+                        raise
+                    else:
+                        if pipeline_recorder is not None:
+                            pipeline_recorder.end("file_picker", status="ok")
+                elif pipeline_recorder is not None:
+                    pipeline_recorder.mark(
+                        "file_picker",
+                        status="skipped",
+                        detail="context_builder_disabled",
                     )
-                context_package = assemble_context(
-                    workspace=Path(ws),
-                    spec_path=spec_rel_path,
-                    target_files=effective_target_files,
-                    task=task,
-                    context_summary=context_summary,
-                    policies=delegation_policies,
-                    picker_result=picker_result,
-                    include_repo_map=picker_result is not None,
-                )
+                if pipeline_recorder is not None:
+                    pipeline_recorder.start("context_assemble")
+                try:
+                    context_package = assemble_context(
+                        workspace=Path(ws),
+                        spec_path=spec_rel_path,
+                        target_files=effective_target_files,
+                        task=task,
+                        context_summary=context_summary,
+                        policies=delegation_policies,
+                        picker_result=picker_result,
+                        include_repo_map=picker_result is not None,
+                    )
+                except Exception as exc:
+                    if pipeline_recorder is not None:
+                        pipeline_recorder.end(
+                            "context_assemble",
+                            status="error",
+                            detail=f"{type(exc).__name__}: {exc}"[:200],
+                        )
+                    raise
+                else:
+                    if pipeline_recorder is not None:
+                        pipeline_recorder.end("context_assemble", status="ok")
+
+                architect_enabled = architect_pass_enabled(ws)
+                if architect_enabled:
+                    if pipeline_recorder is not None:
+                        pipeline_recorder.start("architect_pass")
+                    (
+                        architect_plan,
+                        architect_pass_error,
+                        architect_record,
+                    ) = _apply_architect_pass(
+                        context_package=context_package,
+                        spec_read=spec_read,
+                        picker_result=picker_result,
+                        workspace=ws,
+                        task=task,
+                        context_summary=context_summary,
+                        host_transcript=host_transcript_text,
+                        timing=timing,
+                        delegation_id=delegation_id,
+                    )
+                    if architect_plan:
+                        architect_plan_applied = True
+                    if pipeline_recorder is not None:
+                        if architect_pass_error:
+                            pipeline_recorder.end(
+                                "architect_pass",
+                                status="error",
+                                detail=architect_pass_error[:200],
+                            )
+                        else:
+                            pipeline_recorder.end("architect_pass", status="ok")
+                elif pipeline_recorder is not None:
+                    pipeline_recorder.mark(
+                        "architect_pass",
+                        status="skipped",
+                        detail="disabled",
+                    )
+
                 builder_llm_enabled = (
                     builder_on
                     and picker_result is not None
                     and context_builder_llm_enabled(ws)
                 )
                 if builder_llm_enabled:
+                    if pipeline_recorder is not None:
+                        pipeline_recorder.start("builder_llm")
                     (
                         context_package,
                         builder_brief_applied,
@@ -675,6 +990,23 @@ def delegate_to_agent(
                         timing=timing,
                         delegation_id=delegation_id,
                     )
+                    if pipeline_recorder is not None:
+                        if builder_llm_error:
+                            pipeline_recorder.end(
+                                "builder_llm", status="error", detail=builder_llm_error[:200]
+                            )
+                        else:
+                            pipeline_recorder.end("builder_llm", status="ok")
+                elif pipeline_recorder is not None:
+                    pipeline_recorder.mark(
+                        "builder_llm",
+                        status="skipped",
+                        detail="disabled",
+                    )
+                if architect_plan:
+                    context_package.brief = _merge_architect_plan(
+                        architect_plan, context_package.brief
+                    )
                 engine = get_engine(backend)
                 model = engine.model_name
                 try:
@@ -689,6 +1021,9 @@ def delegate_to_agent(
                     context_package = apply_context_budget(
                         context_package, workspace=Path(ws), budget_tokens=budget
                     )
+                if pipeline_recorder is not None:
+                    pipeline_recorder.start("executor")
+                    executor_phase_started = True
                 result = engine.run_context(
                     context_package,
                     workspace_path=ws,
@@ -700,6 +1035,27 @@ def delegate_to_agent(
                 )
                 executor_prompt = result.prompt_used or context_package.brief
             else:
+                if pipeline_recorder is not None:
+                    pipeline_recorder.mark(
+                        "file_picker",
+                        status="skipped",
+                        detail="context_package_disabled",
+                    )
+                    pipeline_recorder.mark(
+                        "context_assemble",
+                        status="skipped",
+                        detail="context_package_disabled",
+                    )
+                    pipeline_recorder.mark(
+                        "architect_pass",
+                        status="skipped",
+                        detail="context_package_disabled",
+                    )
+                    pipeline_recorder.mark(
+                        "builder_llm",
+                        status="skipped",
+                        detail="context_package_disabled",
+                    )
                 engine = get_engine(backend)
                 model = engine.model_name
                 try:
@@ -712,6 +1068,9 @@ def delegate_to_agent(
                         set(delegation_policies.files_edit)
                         | set(delegation_policies.files_read)
                     )
+                if pipeline_recorder is not None:
+                    pipeline_recorder.start("executor")
+                    executor_phase_started = True
                 result = engine.run(
                     prompt,
                     effective_target_files,
@@ -743,17 +1102,27 @@ def delegate_to_agent(
                 timing["workspace_snapshot_ms"] = result.workspace_snapshot_ms
             if not success and error and not output:
                 output = error
+            if pipeline_recorder is not None and executor_phase_started:
+                pipeline_recorder.end(
+                    "executor",
+                    status="ok" if success else "error",
+                    detail=error[:200] if (error and not success) else None,
+                )
 
         except UnknownBackendError as exc:
             success = False
             error = str(exc)
             error_class, error_message = classify_delegation_error(error, exc=exc)
             output = error
+            if pipeline_recorder is not None and executor_phase_started:
+                pipeline_recorder.end("executor", status="error", detail=error[:200])
         except Exception as exc:
             success = False
             error = f"{type(exc).__name__}: {exc}"
             error_class, error_message = classify_delegation_error(error, exc=exc)
             output = error
+            if pipeline_recorder is not None and executor_phase_started:
+                pipeline_recorder.end("executor", status="error", detail=error[:200])
 
     resolved_model = model or resolve_model_name()
 
@@ -763,6 +1132,8 @@ def delegate_to_agent(
         context_summary=context_summary,
         transcript_meta=transcript_meta,
     )
+    if spec_validation_audit is not None:
+        context_block["spec_validation"] = spec_validation_audit
     if context_package is not None:
         read_entries_in_prompt = [
             e
@@ -780,6 +1151,10 @@ def delegate_to_agent(
             )
             context_block["repo_map_count"] = pkg_meta.get("repo_map_count", 0)
             context_block["context_builder_llm_enabled"] = builder_llm_enabled
+            context_block["architect_pass_enabled"] = architect_enabled
+            context_block["architect_plan_applied"] = architect_plan_applied
+            if architect_pass_error:
+                context_block["architect_pass_error"] = architect_pass_error
             if builder_llm_enabled:
                 context_block["builder_brief_applied"] = builder_brief_applied
                 if builder_llm_error:
@@ -827,6 +1202,8 @@ def delegate_to_agent(
         and delegate_mode == DELEGATE_MODE_IMPLEMENT
         and delegation_policies is not None
     ):
+        if pipeline_recorder is not None and not spec_validation_blocked:
+            pipeline_recorder.start("post_gateway")
         gateway_result = apply_post_delegation_gateway(
             workspace=ws,
             delegation_id=delegation_id,
@@ -846,11 +1223,17 @@ def delegate_to_agent(
                 "skipped": revert_skipped,
                 "gateway_applied": gateway_result.gateway_applied,
             }
+        if pipeline_recorder is not None and not spec_validation_blocked:
+            pipeline_recorder.end("post_gateway", status="ok")
 
-    if spec_path:
+    if spec_validation_blocked:
+        outcome = OUTCOME_NEEDS_INPUT
+    elif spec_path:
         if spec_invalid_reason:
             outcome = OUTCOME_INVALID_SPEC
         elif spec_abs_path is not None and spec_abs_path.is_file():
+            if pipeline_recorder is not None:
+                pipeline_recorder.start("spec_report")
             report_abs_path = ensure_task_report(spec_abs_path, workspace=ws)
             spec_report_rel_path = str(report_abs_path.resolve().relative_to(Path(ws).resolve()))
             apply_post_delegation_report_updates(
@@ -901,6 +1284,8 @@ def delegate_to_agent(
                         scope_violations=scope_violations,
                         edit_scope=delegation_policies.edit_scope,
                     )
+            if pipeline_recorder is not None:
+                pipeline_recorder.end("spec_report", status="ok")
 
     verify_result: VerifyResult | None = None
     verify_enabled = auto_verify_enabled(ws)
@@ -911,7 +1296,10 @@ def delegate_to_agent(
         and not spec_invalid_reason
         and success
         and files_changed
+        and not spec_validation_blocked
     ):
+        if pipeline_recorder is not None:
+            pipeline_recorder.start("auto_verify")
         t_verify = time.perf_counter()
         verify_result = run_verify_command(
             workspace=Path(ws),
@@ -934,6 +1322,31 @@ def delegate_to_agent(
                 error=verify_result.error,
             )
         context_block["verify"] = verify_result.to_audit_dict(enabled=True)
+        if pipeline_recorder is not None:
+            if verify_result.error:
+                pipeline_recorder.end(
+                    "auto_verify", status="error", detail=verify_result.error[:200]
+                )
+            elif verify_result.passed is False:
+                pipeline_recorder.end(
+                    "auto_verify",
+                    status="error",
+                    detail=f"verify failed (exit_code={verify_result.exit_code})",
+                )
+            else:
+                pipeline_recorder.end("auto_verify", status="ok")
+    elif pipeline_recorder is not None and not spec_validation_blocked:
+        pipeline_recorder.mark(
+            "auto_verify",
+            status="skipped",
+            detail="disabled_or_not_applicable",
+        )
+
+    delegation_pipeline_payload = (
+        pipeline_recorder.to_list() if pipeline_recorder is not None else None
+    )
+    if delegation_pipeline_payload is not None:
+        context_block["delegation_pipeline"] = delegation_pipeline_payload
 
     policies_response: dict[str, Any] | None = None
     if (
@@ -1044,6 +1457,8 @@ def delegate_to_agent(
         timing=timing,
         workspace=ws,
         builder_record=builder_record,
+        spec_validation_record=spec_validation_record,
+        architect_record=architect_record,
     )
 
     suggested_edit_paths_payload: list[str] | None = (
@@ -1095,6 +1510,10 @@ def delegate_to_agent(
         builder_brief_applied=builder_brief_applied if builder_llm_enabled else None,
         auto_verify_enabled_flag=verify_enabled if verify_result is not None else None,
         verify_result=verify_result.to_response_dict() if verify_result is not None else None,
+        clarification_needed=clarification_needed,
+        spec_validation_ran=spec_validation_ran,
+        spec_validation_passed=spec_validation_passed,
+        delegation_pipeline=delegation_pipeline_payload,
     )
     if auto_merged_read_paths:
         mcp_request["auto_merged_read_paths"] = auto_merged_read_paths

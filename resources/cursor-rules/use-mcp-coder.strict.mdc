@@ -3,7 +3,7 @@ description: mcp-coder delegate_to_agent only (strict policy; synced by MCP)
 mcp_coder_managed: true
 mcp_coder_rule_id: use-mcp-coder
 mcp_coder_rules_policy: strict
-mcp_coder_rule_version: "13"
+mcp_coder_rule_version: "14"
 globs:
 alwaysApply: true
 ---

@@ -18,8 +18,8 @@ Use this page so **main vision** ([IDEA.md](./IDEA.md)) is not lost when editing
 | **2 — Phase 1 PM** | [PHASE1_MVP.md](./PHASE1_MVP.md) | Tasks, status, acceptance — **closed/frozen P1-199** | Historical only; do not add new rows |
 | **2 — Phase 2 PM** | [PHASE2_MVP.md](./PHASE2_MVP.md) | Phase 2 milestones — **closed / frozen P2-499** | Historical; new work → PHASE3_MVP |
 | **2 — Phase 3 PM** | [PHASE3_MVP.md](./PHASE3_MVP.md) | Phase 3 milestones — **closed / frozen P3-499** | Historical; new work → PHASE4_MVP |
-|| **2 — Phase 4 PM** | [PHASE4_MVP.md](./PHASE4_MVP.md) | Phase 4 milestones, waves, decisions | Planning / master session updates status |
-| **2 — P4 gaps** | [PHASE4_ISSUES.md](./PHASE4_ISSUES.md) | Issues from Phase 4 — **active** | Planning session updates; workers → § Results |
+| **2 — Phase 4 PM** | [PHASE4_MVP.md](./PHASE4_MVP.md) | Phase 4 milestones — **closed / frozen P4 exit** | Historical; new work → Phase 5 / BACKLOG |
+| **2 — P4 gaps** | [PHASE4_ISSUES.md](./PHASE4_ISSUES.md) | Issues from Phase 4 — **frozen at P4 exit** | Read-only; carried → BACKLOG § Phase 4 exit |
 | **2 — Deferred** | [BACKLOG.md](./BACKLOG.md) | BL-* items, priorities, post–P1/P2 focus | Add/defer with user; do not delete rows silently |
 | **2 — P1 gaps** | [PHASE1_ISSUES.md](./PHASE1_ISSUES.md) | Issues from P1 — **frozen / historical at P1-199** | Read-only; new gaps → BACKLOG |
 | **2 — P2 gaps** | [PHASE2_ISSUES.md](./PHASE2_ISSUES.md) | Issues from Phase 2 — **frozen at P2-499** | Read-only; carried → PHASE3_ISSUES |
@@ -29,7 +29,7 @@ Use this page so **main vision** ([IDEA.md](./IDEA.md)) is not lost when editing
 | **3 — Direction notes** | [notes/phase2-owned-context.md](./notes/phase2-owned-context.md) | Context compiler design — locked P1-199 | Update as Phase 2 decisions land |
 | **3 — Direction notes** | [notes/multi-model-roles.md](./notes/multi-model-roles.md) | Per-role models (D-P4-8) + future escalation/critic/swarm | Update as multi-model decisions land |
 | **3 — Handoff** | [notes/phase3-master-session-bootstrap.md](./notes/phase3-master-session-bootstrap.md) | Phase 3 master session prompt + summary | Frozen at P3-499 |
-|| **3 — Handoff** | [notes/phase4-master-session-bootstrap.md](./notes/phase4-master-session-bootstrap.md) | Phase 4 master session prompt + summary | Planning session |
+| **3 — Handoff** | [notes/phase4-master-session-bootstrap.md](./notes/phase4-master-session-bootstrap.md) | Phase 4 master session prompt + summary | Frozen at P4 exit |
 | **3 — Exit** | [notes/phase2-exit-validation.md](./notes/phase2-exit-validation.md) | P2-499 dogfood sign-off | Frozen at exit |
 | **3 — Related ideas** | [OTEHR_RELATED_IDEAS/](./OTEHR_RELATED_IDEAS/) | Gatekeeper, experiments — **not** canonical vision | Optional; may inform backlog only |
 
@@ -61,14 +61,16 @@ Use this page so **main vision** ([IDEA.md](./IDEA.md)) is not lost when editing
 - **Phase 1:** Delegate + pass-through context + home storage + sessions + opt-in transcript — **no** owned RAG/router yet.
 - **Phase 2:** Owned context compiler — **exit complete** [PHASE2_MVP.md](./PHASE2_MVP.md), [phase2-exit-validation.md](./notes/phase2-exit-validation.md).
 - **Phase 3 (closed P3-499):** [PHASE3_MVP.md](./PHASE3_MVP.md) — workspace tracker, versioned specs, delegation RAG shipped; issues frozen → [PHASE3_ISSUES.md](./PHASE3_ISSUES.md) / BL-324–328.
-- **Phase 4 (active):** Context builder + manager — BL-001, BL-161, BL-003; planner UX BL-324–325. See [PHASES.md](./PHASES.md) § Phase 4.
-- **Phase 5+:** Interactive sessions (BL-160), multi-host, product UX (BL-152), ensemble (BL-007) — not core compiler work.
+- **Phase 4 (closed P4 exit):** Context builder + manager + verify + pipeline — [PHASE4_MVP.md](./PHASE4_MVP.md); gaps → [BACKLOG.md](./BACKLOG.md) § Phase 4 exit (BL-335–339).
+- **Phase 5 (active):** RAG (BL-002) + builder improvements — see [PHASES.md](./PHASES.md) § Phase 5.
+- **Phase 5+ / 6+:** Reasoning traces (BL-333), Cursor SDK backend (BL-340), interactive sessions (BL-160), multi-host, ensemble (BL-007).
 - **Executor:** Aider-first; OpenCode/other hosts very low priority.
 
 ## Changelog
 
 | Date | Change |
 |------|--------|
+| 2026-06-09 | Phase 4 closed (P4 exit); PHASE4_MVP + PHASE4_ISSUES frozen; Phase 5 active; REASONING_TRACE_REUSE.md |
 | 2026-06-09 | multi-model-roles direction note added (D-P4-8 + future stages) |
 | 2026-06-09 | PHASE4_ISSUES added; Wave 1 dogfood gaps tracked |
 | 2026-06-09 | Phase 4 docs created (PHASE4_MVP, phase4-master-session-bootstrap); Phase 3 PM + bootstrap marked frozen; doc map updated |

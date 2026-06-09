@@ -11,3 +11,7 @@
 - List **every** delegate attempt for the step — **including failures** — with `delegation_id`, `success`, and error/outcome.
 - Quote **`prior_failed_attempts`** when present before describing the latest success.
 - After a retry: **failed attempts first**, then latest outcome. Use `list_delegations(spec_path=…)` when unsure.
+
+## Spec validation (`clarification_needed`)
+
+When `clarification_needed` is non-empty: answer each item in Cursor chat, update the spec (`revision++`) if needed, then retry `delegate_to_agent`. Do **not** implement on disk yourself.

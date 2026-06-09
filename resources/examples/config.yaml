@@ -42,6 +42,12 @@ session_policy: always_new
 # Model via context_builder_model / MCP_CODER_CONTEXT_BUILDER_MODEL (set in server .env).
 # context_builder_llm: false   # uncomment to disable
 
+# Pre-delegate spec validation (opt-in; needs host_transcript: dump for transcript text)
+# spec_validation: true
+
+# Architect pass (opt-in; adds ## Architect plan above builder/mechanical brief)
+# architect_pass: true
+
 # Post-delegate verify (opt-in; runs after successful implement with files_changed)
 # auto_verify: true
 # verify_command: "pytest -q"
