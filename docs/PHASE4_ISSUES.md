@@ -8,7 +8,7 @@
 
 # Phase 4 issue tracker
 
-**Status:** **Active** — Wave 2 complete + dogfooded; D-P4-5 done (`context_builder_llm` default on); P4-ISS-012/013/017 fixed; open: P4-ISS-014/015/016/018  
+**Status:** **Active** — Waves 1–3 core complete; P4-010 verify loop shipped (opt-in); verify live dogfood TBD; open: P4-ISS-014/015/016/018/019  
 **Purpose:** Gaps, limitations, and follow-ups discovered during Phase 4 work.  
 **Milestone board:** [PHASE4_MVP.md](./PHASE4_MVP.md)  
 **Phase 3 issues (frozen):** [PHASE3_ISSUES.md](./PHASE3_ISSUES.md)  
@@ -45,6 +45,7 @@ Status: `open` | `scheduled` | `done` | `wontfix-p4` | `carried`
 | P4-ISS-016 | `open` | low | `edit_format` errors on gpt-4o-mini → `needs_input` outcome | model quality | v1 `7c57aab8` merged `validate_ledger` into `load_ledger`; malformed SEARCH/REPLACE |
 | P4-ISS-017 | `done` | medium | Builder brief with embedded code → `context_builder_llm_failed` false reject | 2026-06-09 | `_finalize_builder_brief` strips fences; markers scoped to narrative only; prompt forbids code; 515 pytest |
 | P4-ISS-018 | `open` | medium | v2 retry timeout (217s) on full-file replace delegate | BL-309e | `MCP_CODER_DELEGATION_TIMEOUT_S=200`; engine_run_ms=217230; no files_changed |
+| P4-ISS-019 | `open` | low | Verify loop not dogfooded with `auto_verify: true` | P4-010 exit | 18 unit/integration tests pass; no live workspace run in worker session |
 
 ---
 
@@ -180,6 +181,7 @@ Status: `open` | `scheduled` | `done` | `wontfix-p4` | `carried`
 
 | Date | Change |
 |------|--------|
+| 2026-06-09 | P4-010 done — verify loop opt-in; P4-ISS-019 open (live dogfood TBD); BL-310b/c partial |
 | 2026-06-09 | D-P4-5 done — `context_builder_llm` default on; rules v13 + `@include` shared; P4-ISS-012 done; BL-332 deferred |
 | 2026-06-09 | P4-ISS-017 done (code-fence false reject; narrative-scoped markers; 515 pytest) |
 | 2026-06-09 | P4-ISS-013 hotfixed (reasoning preamble strip + prompt fix; 512 pytest); P4-ISS-014/015/016 logged; W2 dogfood scored |

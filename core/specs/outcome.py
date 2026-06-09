@@ -44,3 +44,19 @@ def apply_scope_outcome(
     if edit_scope == "strict" and scope_violations:
         return OUTCOME_SCOPE_VIOLATION
     return outcome
+
+
+def apply_verify_outcome(
+    outcome: str,
+    *,
+    verify_passed: bool | None,
+    files_changed: list[str],
+) -> str:
+    """Downgrade success→partial when verify failed and edits were applied (BL-310c)."""
+    if (
+        verify_passed is False
+        and outcome == OUTCOME_SUCCESS
+        and files_changed
+    ):
+        return OUTCOME_PARTIAL
+    return outcome

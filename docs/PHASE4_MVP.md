@@ -8,7 +8,7 @@
 
 # Phase 4 MVP — Product manager doc
 
-**Status:** **Active** — Wave 1–2 impl + dogfood done (2026-06-09); `context_builder_llm` default on; gaps → [PHASE4_ISSUES.md](./PHASE4_ISSUES.md)  
+**Status:** **Active** — Waves 1–3 core complete (2026-06-09); verify loop shipped (P4-010, opt-in); optional Wave 4 remains; gaps → [PHASE4_ISSUES.md](./PHASE4_ISSUES.md)  
 **Host:** Cursor (Aider backend; other hosts deferred)  
 **Technical reference:** [PHASES.md](./PHASES.md) § Phase 4  
 **Vision:** [IDEA.md](./IDEA.md) · [VISION_DOCS.md](./VISION_DOCS.md)  
@@ -87,6 +87,14 @@ Parallel:       planner UX fixes (spec path, inspect tools, error messages)
 | D-P4-10 | **Edit files stay `edit-full` (correctness).** Aider SEARCH/REPLACE requires full text to produce valid patches — partial edit files cause broken patches. Large **read** deps use existing `read-excerpt`/`pointer` tiers. Chunked/symbol-scoped edit files require a new executor edit format — deferred Phase 5+ (BL-331). | P4-001a/b |
 | D-P4-11 | mcp-coder builds its **own backend-neutral repo map** from the workspace walk (`core/workspace/`), populating `TIER_MAP_ONLY` entries. Does not rely on Aider's `git-tracked-only` map. Works without git. | P4-001a |
 | D-P4-12 | **`discover` is default; `strict` is opt-in.** Spec is guidance + audit anchor, not a handcuff. Builder may add read context freely; edit additions surface as `suggested_edit_paths` (audited, not silently expanded). Executor keeps `dynamic_create_files`. Planner stays mid-size; does not need to enumerate every file. | P4-001a/b |
+| D-P4-13 | Spec validation **opt-in** (`spec_validation: true`); default off | P4-009 |
+| D-P4-14 | Validation uses context_builder model role in v1 | P4-009 |
+| D-P4-15 | `clarification_needed` non-empty → executor skipped; `outcome: needs_input` | P4-009 |
+| D-P4-16 | Validation skipped when host transcript empty (no block) | P4-009 |
+| D-P4-17 | `delegation_pipeline` phase audit **always on** for implement+valid spec | P4-020 |
+| D-P4-18 | Architect pass **opt-in** (`architect_pass: true`); default off | P4-020 |
+| D-P4-19 | Architect uses context_builder model in v1 | P4-020 |
+| D-P4-20 | Architect plan merged above builder brief; mechanical brief unchanged | P4-020 |
 
 ---
 
@@ -154,24 +162,25 @@ Planner still passes `target_files` as a hint; picker merges and ranks. Rules up
 
 Builder token usage logged via P4-004 role audit block (`model_roles.context_builder`). See [notes/multi-model-roles.md](./notes/multi-model-roles.md) for Stage 2+ escalation/critic vision.
 
-### Wave 3 — Verify loop
+### Wave 3 — Verify loop ✓ **core complete** (dogfood TBD — opt-in)
 
 **Goal:** Optional post-delegation verification before returning to Cursor.
 
 | Milestone | Task ID | Status | Implements | Summary |
 |-----------|---------|--------|------------|---------|
-| Pytest hook (opt-in) | P4-010 | `todo` | BL-310b, D-P4-2 | Run configurable test command post-delegate; `partial` if fails |
-| Outcome hardening | P4-011 | `optional` | BL-309f | `partial` outcome when edits applied but tests fail |
+| Pytest hook (opt-in) | P4-010 | `done` 2026-06-09 | BL-310b/c, D-P4-2/7 | `auto_verify.py` + `core/verify/runner.py`; `verify_result` on MCP + JSONL; success→partial on fail; 546 pytest (+18) |
+| Outcome hardening | P4-011 | `optional` | BL-309f | Broader `partial` semantics beyond verify hook (overlap partial with P4-010 verify path) |
 
-### Wave 4 — Internal pipeline (optional)
+### Wave 4 — Internal pipeline (in progress)
 
-**Goal:** BL-161 — architect pass → executor inside one MCP call. Pre-delegate spec validation (BL-329).  
-**Design before impl:** Needs explicit user decision on scope.
+**Goal:** BL-161 v1 + BL-329 — pre-delegate validation gate + pipeline visibility + optional architect pass.  
+**Locked 2026-06-09:** D-P4-13–20 (see worker specs). **Ship order:** P4-009 → P4-020 → **P4-EXIT** full-stack dogfood.
 
 | Milestone | Task ID | Status | Implements | Summary |
 |-----------|---------|--------|------------|---------|
-| Internal pipeline design | P4-020 | `optional` | BL-161 | Architect/planner step inside `delegate_to_agent` before Aider |
-| Pre-delegate spec validation | P4-009 | `optional` | BL-329 | Builder reads host transcript, checks spec coherence vs session context; returns `clarification_needed: [...]` to Cursor if ambiguous — blocks delegation until answered |
+| Pre-delegate spec validation | P4-009 | `ready` | BL-329, D-P4-13–16 | Opt-in `spec_validation`; `clarification_needed` blocks executor; needs `host_transcript: dump` |
+| Internal pipeline v1 | P4-020 | `ready` | BL-161, D-P4-17–20 | Always-on `delegation_pipeline` audit; opt-in `architect_pass` → `## Architect plan` in brief |
+| Phase 4 exit dogfood | P4-EXIT | `ready` | all phases | Master-run E2E after 009+020; ledger-analytics 3-step + failure paths — `docs/tasks/P4-EXIT-phase4-dogfood-v1.md` |
 
 ---
 
@@ -194,16 +203,17 @@ Builder token usage logged via P4-004 role audit block (`model_roles.context_bui
 - [x] `prior_failed_attempts` on delegate response + rules (P4-008); behavioral dogfood TBD
 - [x] Context builder shipped + dogfooded — picker (001a) + LLM brief (001b, default on); P4-ISS-013/017 fixed ([PHASE4_ISSUES.md](./PHASE4_ISSUES.md) Wave 2 checklist)
 - [x] Cursor rules v13 — context builder guidance; composable `@include` shared sections at sync
-- [ ] Optional pytest hook fires post-delegate; `partial` outcome when tests fail (P4-010)
+- [x] Optional pytest hook fires post-delegate; `partial` outcome when tests fail (P4-010); **live dogfood with `auto_verify: true` TBD**
 - [x] Phase 4 dogfood: greenfield multi-step (expense-splitter); picker + LLM brief exercised; minimal `target_files` works
 
 ---
 
 ## Next action
 
-1. **P4-010 worker** — Wave 3 verify loop (post-delegate pytest hook, opt-in); ready to draft.
-2. **P4-ISS-014/015** — `model_roles` token tracking (observability; not blocking).
-3. **BL-332** — host-agnostic rules sync (deferred; Cursor-only for now).
+1. **P4-009 worker** — spec validation + `clarification_needed` (`docs/tasks/P4-009-spec-validation-v1.md`).
+2. **P4-020 worker** — pipeline phases + architect pass (`docs/tasks/P4-020-internal-pipeline-v1.md`).
+3. **P4-EXIT dogfood** — full-stack session (`docs/tasks/P4-EXIT-phase4-dogfood-v1.md`); fold verify + validation + pipeline into one run.
+4. **Phase 4 close** — after E1–E10 pass; update PHASES.md status.
 
 ---
 
@@ -222,6 +232,9 @@ Builder token usage logged via P4-004 role audit block (`model_roles.context_bui
 
 | Date | Change |
 |------|--------|
+| 2026-06-09 | Wave 4 scoped — D-P4-13–20 locked; P4-009/020/EXIT specs ready |
+| 2026-06-09 | **P4-010 done** — opt-in verify loop; BL-310b/c; 546 pytest (+18) |
+| 2026-06-09 | **Wave 3 core complete** — verify hook shipped; live `auto_verify` dogfood TBD |
 | 2026-06-09 | **Wave 2 complete** — dogfood + D-P4-5 (`context_builder_llm` default on); rules v13 + `@include` shared; 528 pytest; BL-332 deferred |
 | 2026-06-09 | **Wave 2 core complete** — P4-004 + P4-001a + P4-001b; 502 pytest; LLM brief opt-in |
 | 2026-06-09 | **P4-001b done** — `context_builder_llm`; `model_roles.context_builder`; merge_brief |

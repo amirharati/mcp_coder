@@ -292,17 +292,17 @@ Re-run steps 3–4 with Qwen; expect `success: false` with short classified erro
 
 ### BL-310: Planner verify / report status split
 
-**Status:** `deferred` — **P1-ISS-013** (`wontfix-p1` at Phase 1 exit).
+**Status:** `partial` — **BL-310b/c done** P4-010 (2026-06-09); **BL-310a deferred**.
 
 **Goal:** Make the split between **MCP run succeeded** and **step acceptance met** visible in reports and tool responses.
 
-| Sub | Item |
-|-----|------|
-| BL-310a | Report status `verified_ok` (planner sets?) vs MCP `delegated_ok` / `reviewed` / `blocked` |
-| BL-310b | Optional MCP hook: run `pytest` (configurable command) post-implement before `delegated_ok` |
-| BL-310c | `outcome: partial` when edits applied but tests fail (if hook enabled) |
+| Sub | Item | Status |
+|-----|------|--------|
+| BL-310a | Report status `verified_ok` (planner sets?) vs MCP `delegated_ok` / `reviewed` / `blocked` | deferred |
+| BL-310b | Optional MCP hook: run `pytest` (configurable command) post-implement | **done** P4-010 — `auto_verify` opt-in; `verify_result` on MCP + JSONL |
+| BL-310c | `outcome: partial` when edits applied but tests fail (if hook enabled) | **done** P4-010 — `apply_verify_outcome()` |
 
-**Today:** Planner runs `pytest` in Cursor; strict rules forbid marking task `done` without verify ([PHASE1_MVP.md](./PHASE1_MVP.md) D-SPEC-3).
+**Today:** Planner runs `pytest` in Cursor by default; workspaces may opt in via `auto_verify: true` / `MCP_CODER_AUTO_VERIFY=1`. Live dogfood TBD (P4-ISS-019).
 
 ---
 
@@ -819,6 +819,7 @@ Until then: add rows to bundled `model_rates.yaml` when switching models; unknow
 
 | Date | Change |
 |------|--------|
+| 2026-06-09 | BL-310 partial — P4-010 verify loop (310b/c done; 310a deferred) |
 | 2026-06-09 | BL-332 added — host-agnostic planner rules sync (deferred; Cursor-coupled today, compile engine reusable) |
 | 2026-06-09 | BL-331 added — symbol-scoped/chunked edit files (Phase 5+, executor format change) |
 | 2026-06-09 | BL-162 staged (Stage 1 per-role D-P4-8 → escalation → swarm); notes/multi-model-roles.md |

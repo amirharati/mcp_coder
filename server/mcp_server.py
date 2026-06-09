@@ -9,6 +9,11 @@ from typing import Any
 from mcp.server.fastmcp import FastMCP
 
 from core.config.auto_merge import auto_merge_spec_read_enabled
+from core.config.auto_verify import (
+    auto_verify_enabled,
+    resolve_verify_command,
+    resolve_verify_timeout_s,
+)
 from core.config.context_builder import (
     context_builder_enabled,
     context_builder_llm_enabled,
@@ -74,9 +79,12 @@ from core.specs.read_deps_merge import resolve_spec_read_deps
 from core.specs.modes import DELEGATE_MODE_IMPLEMENT, DELEGATE_MODE_REVIEW, normalize_delegate_mode
 from core.specs.outcome import (
     OUTCOME_INVALID_SPEC,
+    OUTCOME_SUCCESS,
     apply_scope_outcome,
+    apply_verify_outcome,
     compute_spec_outcome,
 )
+from core.verify.runner import VerifyResult, run_verify_command
 from core.specs.paths import normalize_spec_path_arg, resolve_spec_path
 from core.specs.read import read_task_spec
 from core.specs.write import apply_post_delegation_report_updates
@@ -278,6 +286,8 @@ def _response_payload(
     suggested_edit_paths: list[str] | None = None,
     context_builder_llm_enabled: bool | None = None,
     builder_brief_applied: bool | None = None,
+    auto_verify_enabled_flag: bool | None = None,
+    verify_result: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     payload: dict[str, Any] = {
         "success": success,
@@ -356,6 +366,10 @@ def _response_payload(
         payload["context_builder_llm_enabled"] = context_builder_llm_enabled
     if builder_brief_applied is not None:
         payload["builder_brief_applied"] = builder_brief_applied
+    if auto_verify_enabled_flag:
+        payload["auto_verify_enabled"] = True
+        if verify_result is not None:
+            payload["verify_result"] = verify_result
     return payload
 
 
@@ -888,6 +902,39 @@ def delegate_to_agent(
                         edit_scope=delegation_policies.edit_scope,
                     )
 
+    verify_result: VerifyResult | None = None
+    verify_enabled = auto_verify_enabled(ws)
+    if (
+        verify_enabled
+        and delegate_mode == DELEGATE_MODE_IMPLEMENT
+        and spec_path
+        and not spec_invalid_reason
+        and success
+        and files_changed
+    ):
+        t_verify = time.perf_counter()
+        verify_result = run_verify_command(
+            workspace=Path(ws),
+            command=resolve_verify_command(ws),
+            timeout_s=resolve_verify_timeout_s(ws),
+        )
+        timing["verify_ms"] = int((time.perf_counter() - t_verify) * 1000)
+        if verify_result.passed is False and outcome == OUTCOME_SUCCESS:
+            outcome = apply_verify_outcome(
+                outcome,
+                verify_passed=False,
+                files_changed=files_changed,
+            )
+        elif verify_result.error:
+            server_log_emit(
+                "verify_command_failed",
+                level="warn",
+                delegation_id=delegation_id,
+                command=verify_result.command,
+                error=verify_result.error,
+            )
+        context_block["verify"] = verify_result.to_audit_dict(enabled=True)
+
     policies_response: dict[str, Any] | None = None
     if (
         delegate_mode == DELEGATE_MODE_IMPLEMENT
@@ -1046,6 +1093,8 @@ def delegate_to_agent(
         suggested_edit_paths=suggested_edit_paths_payload,
         context_builder_llm_enabled=builder_llm_enabled if picker_result is not None else None,
         builder_brief_applied=builder_brief_applied if builder_llm_enabled else None,
+        auto_verify_enabled_flag=verify_enabled if verify_result is not None else None,
+        verify_result=verify_result.to_response_dict() if verify_result is not None else None,
     )
     if auto_merged_read_paths:
         mcp_request["auto_merged_read_paths"] = auto_merged_read_paths

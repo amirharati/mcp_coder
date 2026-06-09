@@ -41,3 +41,8 @@ session_policy: always_new
 # requires context_builder on; env MCP_CODER_CONTEXT_BUILDER_LLM=0 also disables).
 # Model via context_builder_model / MCP_CODER_CONTEXT_BUILDER_MODEL (set in server .env).
 # context_builder_llm: false   # uncomment to disable
+
+# Post-delegate verify (opt-in; runs after successful implement with files_changed)
+# auto_verify: true
+# verify_command: "pytest -q"
+# verify_timeout_s: 120
