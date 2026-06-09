@@ -578,14 +578,15 @@ Phase 1 uses only the executor (via Aider). Phase 2+ adds the context-builder **
 
 | Theme | Backlog / intent |
 |-------|------------------|
-| **Smart context builder** | BL-001 — cheap LLM (or hybrid) assembles brief from spec + file scan + Phase 3 history |
+| **Smart context builder** | BL-001 — file picker (rules + ripgrep, D-P4-11 repo map) + cheap-LLM brief (session history, mode-aware, D-P4-12) |
+| **Per-role models** | D-P4-8 — one configurable model + audit per role (executor/review/builder); Stage 2+ escalation/critic/swarm → BL-162, [notes/multi-model-roles.md](./notes/multi-model-roles.md) |
 | **Topic / skills** | BL-153 topic boundaries; BL-008 skills injection |
 | **Janitor / router** | BL-003 freshness audit; BL-006 critic / test-writer one-shots |
 | **Window & cache** | BL-155 multi-turn executor cache; BL-154 rolling transcript beyond per-call budget |
 | **Verification** | BL-310b pytest hook; `partial` outcomes; optional auto re-delegate |
 | **Cursor workflow** | BL-106 progress; BL-312 auto-review suggest; richer tool payloads; host transcript policy |
 | **Internal pipeline** | BL-161 — architect pass then executor inside one MCP call |
-| **Models** | BL-162 / BL-321 tiered roles |
+| **Deferred hard cases** | BL-331 symbol-scoped edit files (Phase 5+, executor format change) |
 
 **Success:** Fewer wrong-file edits from smarter prompts; planner acts on structured MCP context; verify-before-accept loop in place; clear picture of where RAG would help.
 
@@ -603,6 +604,7 @@ Phase 1 uses only the executor (via Aider). Phase 2+ adds the context-builder **
 | **Delegation search at scale** | BL-002 — `core/rag/` delegation FTS5 already shipped; extend or revise based on Phase 4 use |
 | **Decision log / session memory** | BL-002 — structured exit notes → FTS (Phase 5+ if Phase 4 shows distillation gap) |
 | **Context builder improvements** | Tune file-picker prompts, tier decisions, and janitor based on Phase 4 evidence |
+| **Chunked / symbol-scoped edit files** | BL-331 — new executor edit format (symbol-scoped patches or two-pass locate+edit); needs Phase 4 token telemetry + executor format decision |
 | **Embeddings** | P3-002b — only if FTS5 recall proves insufficient |
 
 **Success:** Planner retrieves relevant files + past delegation outcomes in pre-delegate call without manual spec hints; delegation search used and validated in practice.

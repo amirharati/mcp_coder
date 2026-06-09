@@ -82,7 +82,11 @@ Parallel:       planner UX fixes (spec path, inspect tools, error messages)
 | D-P4-5 | Builder opt-out rule: P4-001a (rules-based file picker) ships **opt-out** from day one; P4-001b (cheap-LLM assembly) ships **opt-in**, flips to opt-out after Phase 4 dogfood confirms stability. Config key: `context_builder: false` to disable. Matches `rag_enabled` pattern. | P4-001 |
 | D-P4-6 | P4-001a is rules-based (spec edit paths + ripgrep) — no LLM. When P4-001b needs a model: `CONTEXT_BUILDER_MODEL` env or `context_builder_model:` in config.yaml; **Gemini Flash default** (largest context window, cheapest). Same pattern as `AIDER_MODEL`. | P4-001b |
 | D-P4-7 | Verify loop scope: configurable `test_command` (e.g. `pytest -x`); default = full suite when `auto_verify: true`. Spec-targeted test discovery deferred (fragile heuristic; false negatives worse than full suite). | P4-010 |
-| D-P4-8 | **Per-role models (start simple).** Each LLM role (executor, review, context builder, future critic) resolves its own model via the same precedence (`<role>_model` env + config.yaml; documented default) and logs its own `model` / `tokens` / `cost_est_usd` / `duration_ms` block in delegation JSONL. One model per role for now. Resolvers live in `core/config/` (backend-neutral). Future multi-model-per-role (escalation, critic redo, swarm/ensemble) is **deferred** — see [notes/multi-model-roles.md](./notes/multi-model-roles.md), BL-162. | P4-001b; review/executor shipped |
+| D-P4-8 | **Per-role models (start simple).** Each LLM role (executor, review, context builder, future critic) resolves its own model via the same precedence (`<role>_model` env + config.yaml; documented default) and logs its own `model` / `tokens` / `cost_est_usd` / `duration_ms` block in delegation JSONL. One model per role for now. Resolvers live in `core/config/` (backend-neutral). Future multi-model-per-role (escalation, critic redo, swarm/ensemble) is **deferred** — see [notes/multi-model-roles.md](./notes/multi-model-roles.md), BL-162. | P4-004; review/executor shipped |
+| D-P4-9 | Picker output is backend-neutral `candidate_files` → fed to `assemble_context()` as compiler input. Never `target_files`/`fnames` directly. Aider mapping stays in `core/engine/aider_engine.py`. | P4-001a |
+| D-P4-10 | **Edit files stay `edit-full` (correctness).** Aider SEARCH/REPLACE requires full text to produce valid patches — partial edit files cause broken patches. Large **read** deps use existing `read-excerpt`/`pointer` tiers. Chunked/symbol-scoped edit files require a new executor edit format — deferred Phase 5+ (BL-331). | P4-001a/b |
+| D-P4-11 | mcp-coder builds its **own backend-neutral repo map** from the workspace walk (`core/workspace/`), populating `TIER_MAP_ONLY` entries. Does not rely on Aider's `git-tracked-only` map. Works without git. | P4-001a |
+| D-P4-12 | **`discover` is default; `strict` is opt-in.** Spec is guidance + audit anchor, not a handcuff. Builder may add read context freely; edit additions surface as `suggested_edit_paths` (audited, not silently expanded). Executor keeps `dynamic_create_files`. Planner stays mid-size; does not need to enumerate every file. | P4-001a/b |
 
 ---
 
@@ -217,6 +221,7 @@ Builder token usage logged via P4-004 role audit block (`model_roles.context_bui
 
 | Date | Change |
 |------|--------|
+| 2026-06-09 | D-P4-9–12 locked (picker output, edit-full correctness, backend-neutral repo map, discover default) |
 | 2026-06-09 | Wave 2 fully aligned: P4-004 (per-role model infra) added; P4-001a/b ship order + inputs locked |
 | 2026-06-09 | D-P4-8 locked — per-role models (Stage 1 simple); future escalation/critic/swarm → notes/multi-model-roles.md |
 | 2026-06-09 | PHASE4_ISSUES created; Wave 1 dogfood partial (tip-calc CLI); open P4-ISS-001–007 |

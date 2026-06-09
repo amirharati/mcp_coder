@@ -575,6 +575,7 @@ Result: workspace has ONLY the contract-allowed changes
 | BL-327 | P3-ISS-008 | 4 | Surface failed delegations in host summary |
 | BL-328 | P3-ISS-009 | 4+ | Dogfood spec `v2` retry workflow |
 | BL-330 | P4-ISS-002 | 4+ | `server.jsonl` events for inspect MCP tool calls |
+| BL-331 | Wave 2 discussion | 5+ | Symbol-scoped / chunked edit files (executor format change) |
 
 #### BL-324: Planner inspect-tool adoption (judgment loop)
 
@@ -633,6 +634,25 @@ Delegation `58bb9846` failed; host recovered silently with duplicate spec tree.
 **Problem:** `server.jsonl` logs delegation lifecycle only — cannot audit whether host called `get_delegation_diff` / `list_delegations` vs quoted inline `judgment_checklist` only.
 
 **Target:** Phase 4+ optional — `inspect_tool_invoked` events for read-only MCP tools; pairs with P4-006 rules.
+
+---
+
+### BL-331: Symbol-scoped / chunked edit files
+
+**Status:** `idea` — Phase 4 Wave 2 discussion, 2026-06-09. **Phase 5+ / executor-capability.**
+
+**Problem:** Today `edit-full` sends the entire file to the executor — correct for Aider SEARCH/REPLACE but wasteful for large files. Chunked edit would send only the target function/class + surrounding signatures, reducing token cost.
+
+**Why not now:**
+- Aider SEARCH/REPLACE requires full file text to produce valid patches. Partial input → broken patch (`pyproject.toml` duplication in dogfood is this class of bug).
+- Needs a new executor edit format (symbol-scoped patches, line-range anchors, or two-pass locate+edit) — adapter-level change, not context-compiler.
+- Only worth building once Phase 4 telemetry shows how often large edit files actually blow the budget.
+
+**Pre-requisites:** D-P4-11 backend-neutral repo map (symbol awareness); Phase 4 cost/token telemetry; executor edit format decision (Aider or replacement).
+
+**What the data model already has:** `TIER_EDIT_FULL` sits alongside `TIER_READ_EXCERPT` / `TIER_POINTER` in `core/context/package.py`. A future `edit-excerpt` tier slot is implicit. No re-architecture needed when the executor format is ready.
+
+**Target:** Phase 5+ — after Phase 4 reveals which files are actually large + frequently edited.
 
 ---
 
@@ -764,6 +784,7 @@ Until then: add rows to bundled `model_rates.yaml` when switching models; unknow
 
 | Date | Change |
 |------|--------|
+| 2026-06-09 | BL-331 added — symbol-scoped/chunked edit files (Phase 5+, executor format change) |
 | 2026-06-09 | BL-162 staged (Stage 1 per-role D-P4-8 → escalation → swarm); notes/multi-model-roles.md |
 | 2026-06-09 | BL-330 inspect-tool server log audit (P4-ISS-002); PHASE4_ISSUES created |
 | 2026-06-09 | BL-329 added — pre-delegate spec validation + clarifying loop (Phase 4 master session; P4-009 optional Wave 4) |
