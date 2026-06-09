@@ -19,7 +19,7 @@ Status: `idea` | `deferred` | `blocked` | `done`
 | ID | Item | Target | Notes |
 |----|------|--------|-------|
 | BL-001 | Owned context pipeline (summarize, rank, trim) | Phase 2 | Phase 1 is pass-through only |
-| BL-002 | RAG / cross-session memory (`rag_search`, SQLite) | **Phase 4-A** | Delegation RAG shipped (P3-002-lite); workspace-file RAG + decisions → Phase 4-A; see § BL-002 |
+| BL-002 | RAG / cross-session memory (`rag_search`, SQLite) | **Phase 5** | Delegation RAG shipped (P3-002-lite); workspace-file RAG + usage → Phase 5 (after Phase 4 context builder reveals real retrieval needs); see § BL-002 |
 | BL-003 | Router / janitor LLM inside mcp-coder | Phase 2+ | Cheap orchestrator pattern |
 | BL-005 | Dual-mode CLI (`mcp-coder run …`) | Phase 2+ | Same core as MCP; after context system useful |
 | BL-006 | Context janitor, critic, test-writer sub-agents | Phase 4 | Composable one-shots |
@@ -349,9 +349,9 @@ By design today: `project_key` = SHA-256(resolved path).
 
 ### BL-002: RAG / cross-session memory
 
-**Status:** `partial` — **delegation RAG shipped** (P3-002-lite, 2026-06-09); workspace-file RAG + usage decisions → **Phase 4-A**.  
+**Status:** `partial` — **delegation RAG shipped** (P3-002-lite, 2026-06-09); workspace-file RAG + usage decisions → **Phase 5**.  
 **Code in place:** `core/rag/` (db.py, index.py, search.py, models.py), `core/config/rag.py`, `core/cli/rag.py`; 431 pytest. Enabled by default; opt-out via `rag_enabled: false`.  
-**Phase 4-A:** RAG master session decides — keep delegation RAG as-is, add workspace-file corpus, unify, or scope down.
+**Phase 5 (after Phase 4 context builder):** Phase 4 will reveal which retrieval problems are real and what query shapes the builder needs. Phase 5 then designs + builds the right RAG layer (workspace-file summaries primary; delegation search revise/extend based on actual use; embeddings only if FTS recall proves insufficient).
 
 #### Corpus decisions
 
@@ -382,8 +382,8 @@ Storage: ~/.mcp-coder/projects/<key>/workspace_rag.db
 - No delegation history in same DB (different lifecycle and access pattern)
 - No raw chat transcript indexing
 
-#### Phase 4-A plan
-Phase 4-A = short design session to finalize: indexing trigger (snapshot hook vs on-demand), summary prompt, symbol extraction strategy, DB schema, MCP tool signature. Then implement as first Phase 4 milestone.
+#### Phase 5 plan
+Phase 5 = RAG master session after Phase 4 context builder ships. Agenda: what retrieval did Phase 4 actually need? Finalize: indexing trigger (snapshot hook vs on-demand), summary prompt, symbol extraction strategy, DB schema, MCP tool signature. Then implement as first Phase 5 milestone.
 
 ---
 
@@ -663,7 +663,7 @@ Until then: add rows to bundled `model_rates.yaml` when switching models; unknow
 
 | Date | Change |
 |------|--------|
-| 2026-06-09 | BL-002 design decisions locked — corpus scope, architecture, Phase 4-A plan; P3-002-lite delegation RAG shipped |
+| 2026-06-09 | BL-002 design decisions locked — corpus scope, architecture; RAG → Phase 5 (Phase 4 = context builder first); P3-002-lite delegation RAG shipped |
 | 2026-06-08 | BL-322a–f done; BL-322g/h deferred (restore + fork/sandbox); BL-502 cross-link |
 | 2026-06-08 | Phase 3 start — BL-320/322 `scheduled`; BL-323 budget override; BL-322a storage aligned to WORKSPACE_HISTORY |
 | 2026-06-07 | Wild test done — BL-320 failed-attempt archive; BL-321 tiered model selection (P2-ISS-007/008) |

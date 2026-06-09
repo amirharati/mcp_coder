@@ -45,9 +45,10 @@ This document is the **delivery plan**: what to build, in what order, and how we
 |-------|----------------|-------------|
 | **1** | Delegate + pass-through context + sessions + specs | [PHASE1_MVP.md](./PHASE1_MVP.md) (frozen) |
 | **2** | **Context compiler** — what goes *in* the prompt per delegate | [PHASE2_MVP.md](./PHASE2_MVP.md) (frozen); [phase2-owned-context.md](./notes/phase2-owned-context.md) |
-| **3** | **Workspace truth** + planner history + **RAG lite** — what happened *on disk* and *before* | [PHASE3_MVP.md](./PHASE3_MVP.md); [WORKSPACE_HISTORY.md](./OTEHR_RELATED_IDEAS/WORKSPACE_HISTORY.md) |
-| **4** | **Smart context lifecycle** — janitor, builder LLM, verify, Cursor workflow, internal multi-agent | [BACKLOG.md](./BACKLOG.md) BL-001, 003, 006, 008, 153, 155, 161 |
-| **5+** | Interactive/long-running sessions, multi-host, product UX, ensemble | BL-160, BL-201/202, BL-007, BL-152 |
+| **3** | **Workspace truth** + planner history + delegation RAG shipped (scope → Phase 5) | [PHASE3_MVP.md](./PHASE3_MVP.md); [WORKSPACE_HISTORY.md](./OTEHR_RELATED_IDEAS/WORKSPACE_HISTORY.md) |
+| **4** | **Context builder + manager** — smart assembly, cheap LLM file picker, janitor, verify, internal pipeline | [BACKLOG.md](./BACKLOG.md) BL-001, 003, 006, 008, 153, 155, 161, 162 |
+| **5** | **RAG** (workspace-file summaries + delegation search) + **improve** builder/manager from Phase 4 learnings | [BACKLOG.md](./BACKLOG.md) BL-002 |
+| **6+** | Interactive/long-running sessions, multi-host, product UX, ensemble | BL-160, BL-201/202, BL-007, BL-152 |
 
 **Principle (Phase 3+ attribution):** MCP reports `files_changed` from **delegation-scoped workspace manifest delta** — git-agnostic, backend-agnostic. User git is complementary; optional `git_tracked` metadata later (trivial).
 
@@ -567,26 +568,46 @@ Phase 1 uses only the executor (via Aider). Phase 2+ adds the context-builder **
 
 ---
 
-### Phase 4: Smart context management + orchestration
+### Phase 4: Context builder + manager
 
-**Goal:** Use Phase 2 compiler + Phase 3 history to **actively manage** context — not only assemble rules and record outcomes.
+**Goal:** Use Phase 2 compiler + Phase 3 history to **actively build and manage** context — smart file selection, cheap-LLM assembly, janitor, verify loop, internal pipeline.
+
+**Rationale (2026-06-09):** Build the context pipeline first; RAG is an *input* to it. Once Phase 4 is running you'll know exactly which retrieval problems are real, what query shapes are needed, and whether the existing delegation RAG (`core/rag/`) is sufficient or needs extending with workspace-file summaries.
 
 | Theme | Backlog / intent |
 |-------|------------------|
-| **Smart context builder** | BL-001 — cheap LLM (or hybrid) assembles brief; uses RAG + delegation diffs as input |
+| **Smart context builder** | BL-001 — cheap LLM (or hybrid) assembles brief from spec + file scan + Phase 3 history |
 | **Topic / skills** | BL-153 topic boundaries; BL-008 skills injection |
 | **Janitor / router** | BL-003 freshness audit; BL-006 critic / test-writer one-shots |
 | **Window & cache** | BL-155 multi-turn executor cache; BL-154 rolling transcript beyond per-call budget |
 | **Verification** | BL-310b pytest hook; `partial` outcomes; optional auto re-delegate |
 | **Cursor workflow** | BL-106 progress; BL-312 auto-review suggest; richer tool payloads; host transcript policy |
 | **Internal pipeline** | BL-161 — architect pass then executor inside one MCP call |
-| **Models** | BL-162 / BL-321 tiered roles (if not fully shipped in Phase 3) |
+| **Models** | BL-162 / BL-321 tiered roles |
 
-**Success:** Fewer wrong-file edits from smarter prompts; planner acts on structured MCP context; optional verify-before-accept loop.
+**Success:** Fewer wrong-file edits from smarter prompts; planner acts on structured MCP context; verify-before-accept loop in place; clear picture of where RAG would help.
 
 ---
 
-### Phase 5+: Long-running workflows & product surface
+### Phase 5: RAG + context builder/manager improvements
+
+**Goal:** Now that Phase 4 reveals what retrieval the context builder actually needs, build the right RAG layer and improve builder/manager based on real learnings.
+
+**Rationale:** Phase 4 will show which retrieval problems are real. Phase 5 answers them properly with the right corpus scope and architecture (see [BACKLOG.md](./BACKLOG.md) § BL-002 for design decisions).
+
+| Theme | Backlog / intent |
+|-------|------------------|
+| **Workspace-file RAG** | BL-002 — hash + LLM summary per file + FTS5; `workspace_search` MCP tool |
+| **Delegation search at scale** | BL-002 — `core/rag/` delegation FTS5 already shipped; extend or revise based on Phase 4 use |
+| **Decision log / session memory** | BL-002 — structured exit notes → FTS (Phase 5+ if Phase 4 shows distillation gap) |
+| **Context builder improvements** | Tune file-picker prompts, tier decisions, and janitor based on Phase 4 evidence |
+| **Embeddings** | P3-002b — only if FTS5 recall proves insufficient |
+
+**Success:** Planner retrieves relevant files + past delegation outcomes in pre-delegate call without manual spec hints; delegation search used and validated in practice.
+
+---
+
+### Phase 6+: Long-running workflows & product surface
 
 **Goal:** How humans and hosts live in the system for hours/days — not core compiler features.
 
@@ -605,10 +626,11 @@ Phase 1 uses only the executor (via Aider). Phase 2+ adds the context-builder **
 
 | ID | Theme | Typical phase |
 |----|--------|----------------|
-| BL-160 | Interactive sessions | 5+ |
+| BL-160 | Interactive sessions | 6+ |
 | BL-161 | Multi-agent inside MCP | 4 |
-| BL-162 | Multi-model routing | 3 optional / 4 |
-| BL-315 / P2-315 | MCP progress notifications | 3 optional / 4 |
+| BL-162 | Multi-model routing | 4 |
+| BL-002 | RAG / cross-session memory | 5 |
+| BL-315 / P2-315 | MCP progress notifications | 4 |
 
 ---
 
@@ -635,10 +657,13 @@ Phase 2 (shipped):
          → Aider → [optional] proxy → LLM
 
 Phase 3+:
-  + workspace tracker + attempt archive + RAG lite
+  + workspace tracker + attempt archive + delegation RAG (core/rag/ shipped)
 
 Phase 4+:
-  + smart context builder / janitor / verify / internal multi-agent
+  + smart context builder / file picker / janitor / verify / internal pipeline
+
+Phase 5+:
+  + workspace-file RAG + improve context builder from Phase 4 learnings
 ```
 
 Both projects can be developed in parallel. Phase 1 does not require the proxy or any LLM inside `mcp-coder`.

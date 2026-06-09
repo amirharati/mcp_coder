@@ -150,15 +150,15 @@ Task specs: `docs/tasks/P3-*.md` (gitignored; created per worker session).
 |-----------|---------|--------|------------|---------|
 | Spec versioning convention + rules | P3-320 | `done` | BL-320, D-P3-6 (revised) | Rules v9 + workspace-history v3; versioned from start; audit pair by name |
 
-### Wave 3 — Cross-session memory ✓ **code complete** (usage → Phase 4-A)
+### Wave 3 — Cross-session memory ✓ **code complete** (usage → Phase 5)
 
 **Goal:** BL-002 — workspace-file RAG + delegation history query.  
 **Code status:** `core/rag/` shipped (delegation FTS5, `rag_search` MCP + CLI, 431 pytest). Enabled by default; opt-out via config.  
-**Scope decision (2026-06-09):** Delegation RAG is implemented. Workspace-file RAG (primary corpus per BL-002 design) and usage decisions deferred to Phase 4-A RAG master session.
+**Scope decision (2026-06-09):** Delegation RAG is implemented. Workspace-file RAG (primary corpus per BL-002 design) and usage decisions deferred to Phase 5 (after Phase 4 context builder reveals real retrieval needs).
 
 | Milestone | Task ID | Status | Implements | Summary |
 |-----------|---------|--------|------------|---------|
-| RAG lite (delegation FTS) | P3-002-lite | `done` | BL-002 | `core/rag/` shipped; delegation FTS5; 431 pytest (+17); **usage + scope decided in Phase 4-A RAG session** |
+| RAG lite (delegation FTS) | P3-002-lite | `done` | BL-002 | `core/rag/` shipped; delegation FTS5; 431 pytest (+17); **usage + scope → Phase 5 RAG session (after Phase 4 context builder)** |
 | RAG embeddings | P3-002b | `optional` | BL-002 | After Phase 4 FTS proves value |
 
 ### Wave 4 — Contract hardening + gates
@@ -200,7 +200,7 @@ Status: `todo` | `in_progress` | `done` | `blocked` | `optional`
 
 ## Open questions (PM track)
 
-All Q1–Q5 locked (D-P3-2/5/6/7/8). Q3 shipped as `delegation_rag.db`; workspace-file RAG + usage scope → Phase 4-A (BL-002).
+All Q1–Q5 locked (D-P3-2/5/6/7/8). Q3 shipped as `delegation_rag.db`; workspace-file RAG + usage scope → Phase 5 (BL-002); Phase 4 = context builder first.
 
 | # | Question | **Locked answer** | D-P3 |
 |---|----------|-------------------|------|
@@ -222,7 +222,7 @@ All Q1–Q5 locked (D-P3-2/5/6/7/8). Q3 shipped as `delegation_rag.db`; workspac
 - [x] MCP returns `delegation_diff` on implement (P3-322d)
 - [x] Wave 1 dogfood sign-off (P3-401) — tip-calc step 2; 5 retries; inspect tools ✓; step 3 retry loop ✓
 - [x] Spec read-deps auto-merged when `spec_path` set (P3-311)
-- [x] RAG lite code shipped — `core/rag/`; delegation FTS5; `rag_search` MCP + CLI (P3-002-lite); workspace-file RAG + usage decisions → Phase 4-A
+- [x] RAG lite code shipped — `core/rag/`; delegation FTS5; `rag_search` MCP + CLI (P3-002-lite); workspace-file RAG + usage decisions → Phase 5
 - [ ] **Spec versioning dogfood (P3-499):** run a multi-attempt step in e2e using `v1/v2` naming; confirm old spec+report pair preserved; retry spec passes; host didn't need to rename anything
 - [ ] Phase 3 exit review (P3-499)
 
@@ -233,7 +233,8 @@ All Q1–Q5 locked (D-P3-2/5/6/7/8). Q3 shipped as `delegation_rag.db`; workspac
 1. **P3-499 exit** — spec versioning dogfood (run a `v1/v2` retry cycle in e2e), then Phase 3 exit review.
 2. **P3-151** — pre-delegation gatekeeper (Wave 4, optional before exit).
 3. **P3-ISS-005** — inspect-tool adoption; non-blocking.
-4. **Phase 4-A** — RAG design session first (corpus: workspace files + delegation history; architecture: hash + LLM summary + FTS5); implement after design sign-off.
+4. **Phase 4** — context builder + manager (BL-001, BL-161, BL-003; smart file picker, janitor, verify loop).
+5. **Phase 5** — RAG master session after Phase 4 reveals real retrieval needs; workspace-file summaries + extend/revise delegation search.
 
 ---
 
@@ -257,4 +258,4 @@ All Q1–Q5 locked (D-P3-2/5/6/7/8). Q3 shipped as `delegation_rag.db`; workspac
 | 2026-06-09 | **P3-311 done** — auto-merge read-deps (D-P3-7); P3-ISS-003 closed; 412 pytest (+14) |
 | 2026-06-09 | **P3-320 done** — spec versioning from start (`v1/v2`); rules v9 + workspace-history v3; no MCP code |
 | 2026-06-09 | **P3-002-lite spec ready** — Q3 locked (`delegation_rag.db` + FTS5); dispatch Wave 3 |
-| 2026-06-09 | **P3-002-lite done** — `core/rag/`; delegation FTS5; `rag_search` MCP + CLI; 431 pytest (+17); BL-002 corpus decisions; workspace-file RAG → Phase 4-A |
+| 2026-06-09 | **P3-002-lite done** — `core/rag/`; delegation FTS5; `rag_search` MCP + CLI; 431 pytest (+17); BL-002 corpus decisions; workspace-file RAG → Phase 5 |
