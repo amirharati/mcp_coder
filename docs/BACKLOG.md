@@ -94,7 +94,7 @@ Phase 1 deferred executor conversation carry-over to here (BL-155); see P1-130 `
 | ID | Item | Notes | Related |
 |----|------|-------|---------|
 | BL-161 | **Multi-agent inside MCP** (planner → executor) | Single MCP tool call from Cursor still triggers an **internal pipeline**: architect/planner pass (steps, file plan, risks) **then** executor (Aider). Cursor stays thin; mcp-coder owns substeps, logs each phase. | BL-006 (janitor/critic) is adjacent; BL-503 grades output — this is **upstream planning** |
-| BL-162 | **Multi-model routing** | Different models per role: cheap for context build / cleanup / topic ID; expensive for execution. Likely **needed early** for Phase 2 owned context — track explicitly even if first ship is one cheap + one executor model. | BL-007 ensemble (Phase 4+); env already has `AIDER_MODEL` / OpenRouter |
+| BL-162 | **Multi-model routing** | Different models per role: cheap for context build / cleanup / topic ID; expensive for execution. **Stage 1 (Phase 4, D-P4-8):** one configurable model per role (executor/review/context builder), each audited with cost. **Stage 2+:** multiple models within a role — tiered escalation (BL-321), critic redo (BL-006), failed-attempt-aware upgrade (P4-008 data), swarm/ensemble (BL-007). See [notes/multi-model-roles.md](./notes/multi-model-roles.md). | BL-007 ensemble; BL-321 escalation; BL-006 critic; env has `AIDER_MODEL` / OpenRouter |
 | BL-329 | **Pre-delegate spec validation + clarifying loop** | Builder reads host transcript, checks spec coherence vs session context before delegating; returns `clarification_needed: [...]` if ambiguous. | P4-009 (Wave 4 optional); pairs with BL-161 (pre+post Aider pipeline) and BL-324 (post-delegation judgment loop) |
 
 ### Interactive sessions (BL-160) — options to try later
@@ -115,7 +115,7 @@ Phase 1 deferred executor conversation carry-over to here (BL-155); see P1-130 `
 **Notes (2026-06 planning):**
 
 - **BL-161** is not “multiple MCP servers” — one server, multiple **internal** agent steps before/after Aider (could be rules-only v0, LLM planner v1).
-- **BL-162** may land partly in Phase 2 (context-builder model ≠ executor model); full ensemble voting stays later (BL-007).
+- **BL-162** may land partly in Phase 2 (context-builder model ≠ executor model); full ensemble voting stays later (BL-007). **Stage 1 = one model per role (D-P4-8); Stage 2 = escalation/critic; Stage 3 = swarm.** Full staging in [notes/multi-model-roles.md](./notes/multi-model-roles.md).
 
 ---
 
@@ -764,6 +764,7 @@ Until then: add rows to bundled `model_rates.yaml` when switching models; unknow
 
 | Date | Change |
 |------|--------|
+| 2026-06-09 | BL-162 staged (Stage 1 per-role D-P4-8 → escalation → swarm); notes/multi-model-roles.md |
 | 2026-06-09 | BL-330 inspect-tool server log audit (P4-ISS-002); PHASE4_ISSUES created |
 | 2026-06-09 | BL-329 added — pre-delegate spec validation + clarifying loop (Phase 4 master session; P4-009 optional Wave 4) |
 | 2026-06-09 | **P3-499 exit** — BL-324–328 from frozen PHASE3_ISSUES; BL-321 deferred Phase 4 |

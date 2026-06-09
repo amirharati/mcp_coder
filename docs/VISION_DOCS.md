@@ -27,6 +27,7 @@ Use this page so **main vision** ([IDEA.md](./IDEA.md)) is not lost when editing
 | **3 — Direction notes** | [notes/spec-based-development.md](./notes/spec-based-development.md) | Spec-as-contract — **shipped experiment** (P1-151) | Update when workflow changes |
 | **3 — Direction notes** | [notes/spec-review-loop.md](./notes/spec-review-loop.md) | Review vs implement modes | Same |
 | **3 — Direction notes** | [notes/phase2-owned-context.md](./notes/phase2-owned-context.md) | Context compiler design — locked P1-199 | Update as Phase 2 decisions land |
+| **3 — Direction notes** | [notes/multi-model-roles.md](./notes/multi-model-roles.md) | Per-role models (D-P4-8) + future escalation/critic/swarm | Update as multi-model decisions land |
 | **3 — Handoff** | [notes/phase3-master-session-bootstrap.md](./notes/phase3-master-session-bootstrap.md) | Phase 3 master session prompt + summary | Frozen at P3-499 |
 || **3 — Handoff** | [notes/phase4-master-session-bootstrap.md](./notes/phase4-master-session-bootstrap.md) | Phase 4 master session prompt + summary | Planning session |
 | **3 — Exit** | [notes/phase2-exit-validation.md](./notes/phase2-exit-validation.md) | P2-499 dogfood sign-off | Frozen at exit |
@@ -68,6 +69,7 @@ Use this page so **main vision** ([IDEA.md](./IDEA.md)) is not lost when editing
 
 | Date | Change |
 |------|--------|
+| 2026-06-09 | multi-model-roles direction note added (D-P4-8 + future stages) |
 | 2026-06-09 | PHASE4_ISSUES added; Wave 1 dogfood gaps tracked |
 | 2026-06-09 | Phase 4 docs created (PHASE4_MVP, phase4-master-session-bootstrap); Phase 3 PM + bootstrap marked frozen; doc map updated |
 || 2026-06-09 | Phase 3 closed (P3-499); PHASE3_ISSUES frozen; Phase 4 active; BL-324–328 |

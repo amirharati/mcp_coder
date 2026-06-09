@@ -82,6 +82,7 @@ Parallel:       planner UX fixes (spec path, inspect tools, error messages)
 | D-P4-5 | Builder opt-out rule: P4-001a (rules-based file picker) ships **opt-out** from day one; P4-001b (cheap-LLM assembly) ships **opt-in**, flips to opt-out after Phase 4 dogfood confirms stability. Config key: `context_builder: false` to disable. Matches `rag_enabled` pattern. | P4-001 |
 | D-P4-6 | P4-001a is rules-based (spec edit paths + ripgrep) — no LLM. When P4-001b needs a model: `CONTEXT_BUILDER_MODEL` env or `context_builder_model:` in config.yaml; **Gemini Flash default** (largest context window, cheapest). Same pattern as `AIDER_MODEL`. | P4-001b |
 | D-P4-7 | Verify loop scope: configurable `test_command` (e.g. `pytest -x`); default = full suite when `auto_verify: true`. Spec-targeted test discovery deferred (fragile heuristic; false negatives worse than full suite). | P4-010 |
+| D-P4-8 | **Per-role models (start simple).** Each LLM role (executor, review, context builder, future critic) resolves its own model via the same precedence (`<role>_model` env + config.yaml; documented default) and logs its own `model` / `tokens` / `cost_est_usd` / `duration_ms` block in delegation JSONL. One model per role for now. Resolvers live in `core/config/` (backend-neutral). Future multi-model-per-role (escalation, critic redo, swarm/ensemble) is **deferred** — see [notes/multi-model-roles.md](./notes/multi-model-roles.md), BL-162. | P4-001b; review/executor shipped |
 
 ---
 
@@ -192,6 +193,7 @@ Builder token usage logged separately from executor under `context_builder` bloc
 
 | Date | Change |
 |------|--------|
+| 2026-06-09 | D-P4-8 locked — per-role models (Stage 1 simple); future escalation/critic/swarm → notes/multi-model-roles.md |
 | 2026-06-09 | PHASE4_ISSUES created; Wave 1 dogfood partial (tip-calc CLI); open P4-ISS-001–007 |
 | 2026-06-09 | **Wave 1 impl complete** — P4-005–008 done (452 pytest) |
 | 2026-06-09 | **P4-008 done** — BL-327; `prior_failed_attempts`, use-mcp-coder v12, workspace-history v6 |
