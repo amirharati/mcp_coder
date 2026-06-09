@@ -95,6 +95,7 @@ Phase 1 deferred executor conversation carry-over to here (BL-155); see P1-130 `
 |----|------|-------|---------|
 | BL-161 | **Multi-agent inside MCP** (planner → executor) | Single MCP tool call from Cursor still triggers an **internal pipeline**: architect/planner pass (steps, file plan, risks) **then** executor (Aider). Cursor stays thin; mcp-coder owns substeps, logs each phase. | BL-006 (janitor/critic) is adjacent; BL-503 grades output — this is **upstream planning** |
 | BL-162 | **Multi-model routing** | Different models per role: cheap for context build / cleanup / topic ID; expensive for execution. Likely **needed early** for Phase 2 owned context — track explicitly even if first ship is one cheap + one executor model. | BL-007 ensemble (Phase 4+); env already has `AIDER_MODEL` / OpenRouter |
+| BL-329 | **Pre-delegate spec validation + clarifying loop** | Builder reads host transcript, checks spec coherence vs session context before delegating; returns `clarification_needed: [...]` if ambiguous. | P4-009 (Wave 4 optional); pairs with BL-161 (pre+post Aider pipeline) and BL-324 (post-delegation judgment loop) |
 
 ### Interactive sessions (BL-160) — options to try later
 
@@ -115,6 +116,35 @@ Phase 1 deferred executor conversation carry-over to here (BL-155); see P1-130 `
 
 - **BL-161** is not “multiple MCP servers” — one server, multiple **internal** agent steps before/after Aider (could be rules-only v0, LLM planner v1).
 - **BL-162** may land partly in Phase 2 (context-builder model ≠ executor model); full ensemble voting stays later (BL-007).
+
+---
+
+### BL-329: Pre-delegate spec validation + clarifying loop
+
+**Status:** `idea` — Phase 4 master session 2026-06-09.  
+**Target:** Phase 4 Wave 4 optional (P4-009); may defer to Phase 5 if Wave 2 builder proves sufficient.
+
+**Goal:** Before delegating, the context builder reads the host session transcript and checks whether the spec is well-aligned with the current conversation. If ambiguous or contradictory, return a `clarification_needed` list to Cursor instead of delegating — forcing the host to answer before retrying.
+
+**Mechanism:**
+
+| Step | Detail |
+|------|--------|
+| Builder reads `host_transcript` | Uses existing P1-140 infra; same transcript already available for context |
+| Cheap-LLM coherence check | Same model as P4-001b; checks spec task + constraints against recent conversation decisions |
+| `clarification_needed: [...]` response | New MCP response field; non-empty = delegation withheld; Cursor answers + retries |
+| Normal path | Coherence check passes → transparent, no user-visible latency change |
+
+**New MCP response field:** `clarification_needed: list[str] | null`
+
+**Rules addition:** When `clarification_needed` is non-empty, host must answer each item before re-calling `delegate_to_agent` (same enforcement pattern as judgment loop).
+
+**Relation to existing items:**
+- **P4-001b** — same builder call; validation is an additional check before finalizing the brief
+- **BL-161 / P4-020** — P4-009 is pre-Aider validation; BL-161 is post-validation architect pass — they compose
+- **BL-324** — judgment loop is post-delegation; this is pre-delegation; together they close both ends
+
+**Open design question (decide at P4-009 spec time):** Always-on (adds latency to every call) vs opt-in via `validate_spec: true` in config.
 
 ---
 
@@ -725,6 +755,7 @@ Until then: add rows to bundled `model_rates.yaml` when switching models; unknow
 
 | Date | Change |
 |------|--------|
+| 2026-06-09 | BL-329 added — pre-delegate spec validation + clarifying loop (Phase 4 master session; P4-009 optional Wave 4) |
 | 2026-06-09 | **P3-499 exit** — BL-324–328 from frozen PHASE3_ISSUES; BL-321 deferred Phase 4 |
 | 2026-06-09 | BL-002 design decisions locked — corpus scope, architecture; RAG → Phase 5 (Phase 4 = context builder first); P3-002-lite delegation RAG shipped |
 | 2026-06-08 | BL-322a–f done; BL-322g/h deferred (restore + fork/sandbox); BL-502 cross-link |

@@ -108,9 +108,21 @@ Task specs: `docs/tasks/P4-*.md` (gitignored; created per worker session).
 | Milestone | Task ID | Status | Implements | Summary |
 |-----------|---------|--------|------------|---------|
 | File picker (rules + grep) | P4-001a | `todo` | BL-001 | Cheap rules-based file selection: spec edit paths + ripgrep for symbols |
-| Cheap LLM assembly | P4-001b | `todo` | BL-001, BL-162 | Optional LLM summarizes workspace context before delegate |
+| Cheap LLM assembly | P4-001b | `todo` | BL-001, BL-162, BL-329 | LLM produces context brief from spec, file scan, session-aligned history, and mode-aware weighting |
 | Topic detection | P4-002 | `optional` | BL-153 | Task-type / topic boundaries for file picker |
 | Skills injection | P4-003 | `optional` | BL-008 | Inject skill packs by topic |
+
+**P4-001b builder inputs (explicit):**
+
+| Input | Source | Notes |
+|-------|--------|-------|
+| Spec edit/read paths + task description | P4-001a output | Primary contract |
+| Ripgrep symbol scan | P4-001a | Which files reference spec symbols |
+| Session-aligned delegation history | `workspace_history.db` | Last N outcomes for same spec + recent project-wide progress across sessions |
+| Mode-aware history weighting | `mode` param | `implement` → prior APIs/contracts; `review` → spec-vs-diff delta; new subsystem → existing interfaces to integrate with |
+| Host session summary (optional) | `host_transcript` (P1-140 infra) | Recent conversation decisions and constraints; used when `host_transcript` available |
+
+Builder token usage logged separately from executor under `context_builder` block in delegation JSONL (see PHASES.md § Phase 2+ token tracking).
 
 ### Wave 3 — Verify loop
 
@@ -123,12 +135,13 @@ Task specs: `docs/tasks/P4-*.md` (gitignored; created per worker session).
 
 ### Wave 4 — Internal pipeline (optional)
 
-**Goal:** BL-161 — architect pass → executor inside one MCP call.  
+**Goal:** BL-161 — architect pass → executor inside one MCP call. Pre-delegate spec validation (BL-329).  
 **Design before impl:** Needs explicit user decision on scope.
 
 | Milestone | Task ID | Status | Implements | Summary |
 |-----------|---------|--------|------------|---------|
 | Internal pipeline design | P4-020 | `optional` | BL-161 | Architect/planner step inside `delegate_to_agent` before Aider |
+| Pre-delegate spec validation | P4-009 | `optional` | BL-329 | Builder reads host transcript, checks spec coherence vs session context; returns `clarification_needed: [...]` to Cursor if ambiguous — blocks delegation until answered |
 
 ---
 
@@ -157,9 +170,9 @@ Task specs: `docs/tasks/P4-*.md` (gitignored; created per worker session).
 
 ## Next action
 
-1. **Wave 1 now** — draft P4-005 (spec path) + P4-006 (judgment loop rules) specs; dispatch as rules-only workers.
-2. **Confirm Q1/Q2** (builder opt-in? model?) before writing P4-001 spec.
-3. **Wave 2** after Q1/Q2 locked.
+1. **Wave 1 now** — draft P4-005 (spec path) + P4-006 (judgment loop rules) specs; dispatch as parallel workers (disjoint files).
+2. **Wave 2** after Wave 1 green — Q1–Q4 already locked (D-P4-5/6/7).
+3. **Wave 4 (P4-009/P4-020)** — design decision required before impl; revisit after Wave 2 dogfood.
 
 ---
 
@@ -178,5 +191,6 @@ Task specs: `docs/tasks/P4-*.md` (gitignored; created per worker session).
 
 | Date | Change |
 |------|--------|
+| 2026-06-09 | P4-001b builder inputs explicit: session-aligned history, mode-aware weighting, host transcript; P4-009 pre-delegate spec validation added (Wave 4 optional, BL-329) |
 | 2026-06-09 | D-P4-5/6/7 locked (Q1–Q4 resolved): builder opt-out rule, Gemini Flash default + configurable, full-suite verify default; D-P4-3 hard-reject confirmed; status → Active |
 | 2026-06-09 | Phase 4 PM doc created at Phase 3 exit (P3-499) |
