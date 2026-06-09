@@ -47,6 +47,7 @@ This document is the **delivery plan**: what to build, in what order, and how we
 | **2** | **Context compiler** — what goes *in* the prompt per delegate | [PHASE2_MVP.md](./PHASE2_MVP.md) (frozen); [phase2-owned-context.md](./notes/phase2-owned-context.md) |
 | **3** | **Workspace truth** + planner history + delegation RAG shipped (scope → Phase 5) | [PHASE3_MVP.md](./PHASE3_MVP.md); [WORKSPACE_HISTORY.md](./OTEHR_RELATED_IDEAS/WORKSPACE_HISTORY.md) |
 | **4** | **Context builder + manager** — smart assembly, cheap LLM file picker, janitor, verify, internal pipeline | [PHASE4_MVP.md](./PHASE4_MVP.md) **complete** 2026-06-09; carried gaps → BACKLOG § Phase 4 exit |
+| **4.5** | **Stack literacy gate** — deep dogfood, tutorials, inspect tooling, gap analysis; no new product phase number | [PHASE4.5_MVP.md](./PHASE4.5_MVP.md) **active** |
 | **5** | **RAG** (workspace-file summaries + delegation search) + **improve** builder/manager from Phase 4 learnings | [BACKLOG.md](./BACKLOG.md) BL-002 |
 | **5+** | **Reasoning trace reuse** + backend prompt control — capture, escalate, transfer intelligence, training flywheel *(placeholder; after Phase 5)* | BL-333, BL-334; [REASONING_TRACE_REUSE.md](./OTEHR_RELATED_IDEAS/REASONING_TRACE_REUSE.md) |
 | **6+** | Interactive/long-running sessions, multi-host, product UX, ensemble | BL-160, BL-201/202, BL-007, BL-152, BL-340 |
@@ -593,6 +594,26 @@ Phase 1 uses only the executor (via Aider). Phase 2+ adds the context-builder **
 
 ---
 
+### Phase 4.5: Stack literacy gate *(active)*
+
+**Goal:** Deep dogfood, inspection, tutorials, and gap analysis of the Phase 4 stack — before committing Phase 5 corpus design. No new product phase number; no renumbering of 5+.
+
+**Rationale:** Phase 4 shipped a layered pipeline (rules picker → compiler → builder LLM → optional validation / architect / verify). Operator understanding is still thin. Phase 5's RAG scope should be grounded in evidence from real usage, not theory.
+
+| Track | Deliverable |
+|-------|-------------|
+| **Tutorials** | End-to-end walkthrough: spec → `inspect-context` → delegate → read JSONL; how each pipeline phase looks in practice |
+| **Architecture doc** | Annotated diagram: picker / compiler tiers / builder LLM / architect pass / verify — what each layer owns; extend `notes/phase2-owned-context.md` |
+| **Experiments** | Flag matrix: `context_builder_llm`, `spec_validation`, `architect_pass`, `auto_verify` — observe changes in `delegation_pipeline`, brief, tokens |
+| **Gap analysis** | Structured findings: observability (BL-335), executor quality (BL-338), inspect blind spots → inform Phase 5 RAG scope |
+| **Tool fixes** | Small improvements to `inspect-context` or log scripts where gaps found; minor issue fixes allowed if clear |
+
+**PM board:** [PHASE4.5_MVP.md](./PHASE4.5_MVP.md) · **Issues:** [PHASE4.5_ISSUES.md](./PHASE4.5_ISSUES.md)  
+**Does not change:** Phase 5 scope, PHASES.md arc numbers, IDEA.md.  
+**Success:** Written gap analysis + walkthrough docs + any small fixes shipped → use findings to finalize Phase 5 RAG corpus decision.
+
+---
+
 ### Phase 5: RAG + context builder/manager improvements
 
 **Goal:** Now that Phase 4 reveals what retrieval the context builder actually needs, build the right RAG layer and improve builder/manager based on real learnings.
@@ -715,4 +736,5 @@ Both projects can be developed in parallel. Phase 1 does not require the proxy o
 - [x] Phase 3 — **P3-311** read-deps auto-merge (D-P3-7); 412 pytest.
 - [x] Phase 3 exit — **P3-499** (2026-06-09); [PHASE3_MVP.md](./PHASE3_MVP.md) closed.
 - [x] Phase 4 complete — context builder + manager + pipeline (P4-499 exit 2026-06-09); [PHASE4_MVP.md](./PHASE4_MVP.md).
-- [ ] **Active:** Phase 5 — RAG (BL-002) + builder improvements; review BACKLOG § Phase 4 exit for BL-335/338 pull-ins.
+- [ ] **Active:** Phase 4.5 — stack literacy gate; tutorials, inspect, gap analysis; [PHASE4.5_MVP.md](./PHASE4.5_MVP.md).
+- [ ] Phase 5 — RAG (BL-002) + builder improvements; after Phase 4.5 gap analysis lands.

@@ -18,8 +18,10 @@ Use this page so **main vision** ([IDEA.md](./IDEA.md)) is not lost when editing
 | **2 — Phase 1 PM** | [PHASE1_MVP.md](./PHASE1_MVP.md) | Tasks, status, acceptance — **closed/frozen P1-199** | Historical only; do not add new rows |
 | **2 — Phase 2 PM** | [PHASE2_MVP.md](./PHASE2_MVP.md) | Phase 2 milestones — **closed / frozen P2-499** | Historical; new work → PHASE3_MVP |
 | **2 — Phase 3 PM** | [PHASE3_MVP.md](./PHASE3_MVP.md) | Phase 3 milestones — **closed / frozen P3-499** | Historical; new work → PHASE4_MVP |
-| **2 — Phase 4 PM** | [PHASE4_MVP.md](./PHASE4_MVP.md) | Phase 4 milestones — **closed / frozen P4 exit** | Historical; new work → Phase 5 / BACKLOG |
+| **2 — Phase 4 PM** | [PHASE4_MVP.md](./PHASE4_MVP.md) | Phase 4 milestones — **closed / frozen P4 exit** | Historical; new work → Phase 4.5 / BACKLOG |
 | **2 — P4 gaps** | [PHASE4_ISSUES.md](./PHASE4_ISSUES.md) | Issues from Phase 4 — **frozen at P4 exit** | Read-only; carried → BACKLOG § Phase 4 exit |
+| **2 — Phase 4.5 PM** | [PHASE4.5_MVP.md](./PHASE4.5_MVP.md) | Stack literacy gate — tutorials, inspect, gap analysis | **Active**; planning / master session |
+| **2 — P4.5 gaps** | [PHASE4.5_ISSUES.md](./PHASE4.5_ISSUES.md) | Issues from Phase 4.5 inspection sessions | Active; populated as sessions run |
 | **2 — Deferred** | [BACKLOG.md](./BACKLOG.md) | BL-* items, priorities, post–P1/P2 focus | Add/defer with user; do not delete rows silently |
 | **2 — P1 gaps** | [PHASE1_ISSUES.md](./PHASE1_ISSUES.md) | Issues from P1 — **frozen / historical at P1-199** | Read-only; new gaps → BACKLOG |
 | **2 — P2 gaps** | [PHASE2_ISSUES.md](./PHASE2_ISSUES.md) | Issues from Phase 2 — **frozen at P2-499** | Read-only; carried → PHASE3_ISSUES |
@@ -62,7 +64,8 @@ Use this page so **main vision** ([IDEA.md](./IDEA.md)) is not lost when editing
 - **Phase 2:** Owned context compiler — **exit complete** [PHASE2_MVP.md](./PHASE2_MVP.md), [phase2-exit-validation.md](./notes/phase2-exit-validation.md).
 - **Phase 3 (closed P3-499):** [PHASE3_MVP.md](./PHASE3_MVP.md) — workspace tracker, versioned specs, delegation RAG shipped; issues frozen → [PHASE3_ISSUES.md](./PHASE3_ISSUES.md) / BL-324–328.
 - **Phase 4 (closed P4 exit):** Context builder + manager + verify + pipeline — [PHASE4_MVP.md](./PHASE4_MVP.md); gaps → [BACKLOG.md](./BACKLOG.md) § Phase 4 exit (BL-335–339).
-- **Phase 5 (active):** RAG (BL-002) + builder improvements — see [PHASES.md](./PHASES.md) § Phase 5.
+- **Phase 4.5 (active):** Stack literacy gate — tutorials, inspect tooling, gap analysis — [PHASE4.5_MVP.md](./PHASE4.5_MVP.md). Feeds Phase 5 corpus design.
+- **Phase 5 (next):** RAG (BL-002) + builder improvements — after Phase 4.5 gap analysis.
 - **Phase 5+ / 6+:** Reasoning traces (BL-333), Cursor SDK backend (BL-340), interactive sessions (BL-160), multi-host, ensemble (BL-007).
 - **Executor:** Aider-first; OpenCode/other hosts very low priority.
 
@@ -70,7 +73,8 @@ Use this page so **main vision** ([IDEA.md](./IDEA.md)) is not lost when editing
 
 | Date | Change |
 |------|--------|
-| 2026-06-09 | Phase 4 closed (P4 exit); PHASE4_MVP + PHASE4_ISSUES frozen; Phase 5 active; REASONING_TRACE_REUSE.md |
+| 2026-06-09 | Phase 4.5 created — PHASE4.5_MVP + PHASE4.5_ISSUES; stack literacy gate before Phase 5 |
+| 2026-06-09 | Phase 4 closed (P4 exit); PHASE4_MVP + PHASE4_ISSUES frozen; Phase 5 next; REASONING_TRACE_REUSE.md |
 | 2026-06-09 | multi-model-roles direction note added (D-P4-8 + future stages) |
 | 2026-06-09 | PHASE4_ISSUES added; Wave 1 dogfood gaps tracked |
 | 2026-06-09 | Phase 4 docs created (PHASE4_MVP, phase4-master-session-bootstrap); Phase 3 PM + bootstrap marked frozen; doc map updated |
