@@ -200,23 +200,43 @@ print(workspace_history_db_path(Path('$WS').expanduser()))
 | mcp_coder pytest | 397+ passed |
 | e2e pytest | 4 passed |
 | Final delegate `delegation_id` | `594b627e-a3c3-48f7-a7d6-455c38ab4b13` |
-| Attempts on step 2 | 6 (all MCP `success: true`; planner retried) |
-| Phases 1–4 pass | Phase 1 ✓; 2–4 verify below |
+| Attempts on step 2 | 5 implement (+1 empty-file probe `941e81fe` earlier in session) |
+| Phases 1–4 pass | **all ✓** |
 | Phase 5–6 | skipped |
 | P3-ISS-001 | manifest attribution in live run (no git) |
-| Pull 322g/h? | defer; **pull P3-320** stronger after 6-attempt step |
-| Cursor rules history tools | `workspace-history.mdc` v1 (composed with policy rule) |
+| Pull 322g/h? | defer |
+| Pull P3-320? | **yes** — 5× `success` retries; `list_delegations` helped but report wall is noisy |
+| Cursor rules | `workspace-history.mdc` v1 + strict v8; host used inspect tools |
+
+### Step 2 attempt table (tip-calc-02-cli)
+
+| # | `delegation_id` | Δ | What happened |
+|---|-----------------|---|---------------|
+| 1 | `eff99d12…` | ~2 | Nested `tip_calc/tip_calc/__main__.py`, `tip_calc/tests/test_cli.py` |
+| 2 | `1e0b8e19…` | +2 ~2 | Delete/recreate — still wrong tree |
+| 3 | `97103e20…` | +1 ~1 | Filled `tip_calc/__main__.py`; test still under `tip_calc/tests/` |
+| 4 | `d64e4675…` | ~1 | Moved test toward repo-root `tests/test_cli.py` |
+| 5 | `594b627e…` | ~2 | **Final** — `tests/test_cli.py` + `__init__.py` import tweak |
+
+**Verification:** 4 pytest pass; `python -m tip_calc 25.00 18` → tip 4.50 / total 29.50. Step 2 + epic **done** — no retry.
 
 ### Phase log
 
 | Phase | Pass? | Notes |
 |-------|-------|-------|
-| 1 delegate step 2 | ✓ | 6 delegations; final `594b627e`; CLI + 4 pytest |
-| 2 CLI history | ✓ | 6 rows in `history list`; `show --latest` has summary + report path |
-| 3 MCP inspect | user | `list_delegations`, `get_checkpoint_detail`, `get_file_history` |
-| 4 JSONL audit | ✓ | All 6 runs in report Run log; `checkpoint` + `workspace_snapshot` from run 2+ |
-| 5 file timeline | partial | `history file tip_calc/__main__.py` shows 1 modify; nested paths separate |
+| 1 delegate step 2 | ✓ | 5 correction passes; Aider empty-file + path nesting |
+| 2 CLI history | ✓ | `history list/show` — 5+ rows, checkpoint summaries |
+| 3 MCP inspect | ✓ | Host used `list_delegations` + checkpoint detail; retry table from DB |
+| 4 JSONL audit | ✓ | `checkpoint` + `workspace_snapshot`; report Run log has all attempts |
+| 5 file timeline | partial | Nested paths visible via `files_changed` / diffs per attempt |
 | 6 strict gateway | skip | |
+
+### Lessons (future step specs — planner writes)
+
+1. **Explicit repo-root paths** — e.g. `tests/test_cli.py` not `tip_calc/tests/`; forbid `tip_calc/tip_calc/`.
+2. **Placeholders** for new empty files before delegate (`# CLI entry point`) — reduces Aider empty SEARCH/REPLACE.
+3. **`__init__.py`** — only if needed for `python -m`; do not re-export `main` (RuntimeWarning).
+4. **Between retries** — `list_delegations(spec_path=…)` + check `files_unexpected` / diffs before re-delegate.
 
 ---
 

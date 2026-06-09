@@ -122,7 +122,7 @@ Task specs: `docs/tasks/P3-*.md` (gitignored; created per worker session).
 
 **Goal:** Close P3-ISS-001; foundation for revert, gates, and planner-visible diffs.  
 **Design:** [WORKSPACE_HISTORY.md](./OTEHR_RELATED_IDEAS/WORKSPACE_HISTORY.md)  
-**Validation:** [phase3-wave1-exit-validation.md](./notes/phase3-wave1-exit-validation.md) (P3-401)
+**Validation:** [phase3-wave1-exit-validation.md](./notes/phase3-wave1-exit-validation.md) — P3-401 **signed off** 2026-06-09
 
 | Milestone | Task ID | Status | Implements | Summary |
 |-----------|---------|--------|------------|---------|
@@ -139,7 +139,7 @@ Task specs: `docs/tasks/P3-*.md` (gitignored; created per worker session).
 
 **Deferred:** P3-320 attempt archive → **end of Phase 3** (needs design: avoid dirtying specs tree; brainstorm before spec).
 
-**Next:** P3-401 dogfood — [phase3-wave1-exit-validation.md](./notes/phase3-wave1-exit-validation.md).
+**Next:** Wave 3 **P3-002-lite** RAG or Wave 4 **P3-311**; P3-320 design elevated after dogfood retry pain.
 
 ### Wave 2 — Planner-visible history (**deferred — end of Phase 3**)
 
@@ -220,7 +220,7 @@ All Q1–Q5 resolved (2026-06-08). Locked as D-P3-2/6/7/8 and Q3 deferred.
 - [x] Content snapshot + `revert_to_before` API (P3-322b)
 - [x] Strict gateway auto-reverts violations (P3-322c)
 - [x] MCP returns `delegation_diff` on implement (P3-322d)
-- [ ] Wave 1 dogfood sign-off (P3-401)
+- [x] Wave 1 dogfood sign-off (P3-401) — tip-calc step 2; 5 retries; inspect tools ✓
 - [ ] RAG lite retrieves prior delegation summary for same project (P3-002-lite)
 - [ ] Phase 3 exit review (P3-499)
 
@@ -228,10 +228,10 @@ All Q1–Q5 resolved (2026-06-08). Locked as D-P3-2/6/7/8 and Q3 deferred.
 
 ## Next action
 
-1. **P3-401** — Run [phase3-wave1-exit-validation.md](./notes/phase3-wave1-exit-validation.md) in `mcp_coder_phase1_e2e`.
-2. **P3-320** — attempt archive design + implement before Phase 3 exit (P3-499).
-3. **P3-322g / 322h** — restore or fork/sandbox if dogfood bisect workflow needs it (BL-322g/h).
-4. Revisit P3-311 priority at end of Wave 2; **Exit:** P3-499 when waves 1–4 checklist green.
+1. **P3-002-lite** or **P3-311** — pick next wave per board priority.
+2. **P3-320** — attempt archive (dogfood: 5× success retries on one step — planner used `list_delegations` but report wall noisy).
+3. **P3-322g / 322h** — defer unless bisect needs restore/fork.
+4. **Exit:** P3-499 when waves 1–4 checklist green.
 
 ---
 
@@ -244,6 +244,7 @@ All Q1–Q5 resolved (2026-06-08). Locked as D-P3-2/6/7/8 and Q3 deferred.
 | 2026-06-08 | **P3-322a done** — `core/workspace/`; tracker-primary; P3-ISS-001 closed; 355 pytest |
 | 2026-06-08 | **P3-322b done** — blobs + diffs + revert; 364 pytest (+9) |
 | 2026-06-08 | **P3-322e done** — checkpoint metadata on snapshots; 388 pytest (+6) |
+| 2026-06-09 | **P3-401 signed off** — tip-calc step 2; checkpoint inspect + composed cursor rules |
 | 2026-06-08 | **P3-322f done** — history inspect MCP + CLI; 397 pytest (+9); Wave 1 extras complete |
 | 2026-06-08 | **P3-322f added** — MCP `list_delegations` + CLI inspect after 322e |
 | 2026-06-08 | **P3-322e active** — checkpoint metadata before dogfood; **P3-320 deferred** end of Phase 3 |
