@@ -8,7 +8,7 @@
 
 # Phase 3 MVP — Product manager doc
 
-**Status:** **Wave 1 complete** · **P3-311 done** (2026-06-09) — **next:** design P3-002-lite (RAG) + P3-320 (attempt archive); then dispatch
+**Status:** **Wave 1 complete** · **P3-311 + P3-320 + P3-002-lite done** — **active: P3-499 exit** (spec versioning dogfood + phase exit)
 **Host:** Cursor (Aider backend; other hosts deferred)
 **Technical reference:** [PHASES.md](./PHASES.md) § Phase 3 · [WORKSPACE_HISTORY.md](./OTEHR_RELATED_IDEAS/WORKSPACE_HISTORY.md)
 **Vision:** [IDEA.md](./IDEA.md) · [VISION_DOCS.md](./VISION_DOCS.md)
@@ -64,7 +64,7 @@ Later:            RAG index from delegation summaries + diffs
 | D-P3-3 | Main report = current status; failures → attempt archive (BL-320) | P3-320 |
 | D-P3-4 | Strict scope can revert violations when content snapshot exists | P3-322b/c |
 | D-P3-5 | RAG v1 keyword + recency before embeddings | P3-002-lite |
-| D-P3-6 | Attempt archive: `on_failure_only` **default ON**; user disables via `attempt_archive: off` in workspace `config.yaml` | P3-320 |
+| D-P3-6 | Attempt archive: host versioned specs (`v1`/`v2`) from start — rules-only; no MCP rename | P3-320 |
 | D-P3-7 | `auto_merge_spec_read` **default ON** in L2 compiler when `spec_path` set — merges spec `Files: read` into `ContextPackage` at read tier; opt-out `auto_merge_spec_read: false` in config | P3-311 |
 | D-P3-8 | P3-322d ships `delegation_diff` in MCP response only; `approve_delegation` MCP tool deferred to P3-151 / BL-151 | P3-322d, P3-151 |
 | D-P3-9 | **Delegation checkpoint labels** in `workspace_history.db` — see § below; **not** user git | P3-322e `done` |
@@ -137,7 +137,7 @@ Task specs: `docs/tasks/P3-*.md` (gitignored; created per worker session).
 
 **Wave 1 extras:** P3-322e + P3-322f `done` — **Wave 1 code + inspect complete**.
 
-**Deferred:** P3-320 attempt archive → **end of Phase 3** (needs design brainstorm — see Wave 2).
+**Wave 2:** P3-320 spec versioning rules — **done** 2026-06-09.
 
 **Closed:** 2026-06-09 — 398 pytest; checkpoint inspect + `workspace-history` v2 rules; **P3-ISS-005** open (inspect-tool adoption — non-blocking).
 
@@ -150,16 +150,16 @@ Task specs: `docs/tasks/P3-*.md` (gitignored; created per worker session).
 |-----------|---------|--------|------------|---------|
 | Spec versioning convention + rules | P3-320 | `done` | BL-320, D-P3-6 (revised) | Rules v9 + workspace-history v3; versioned from start; audit pair by name |
 
-### Wave 3 — Cross-session memory (**design before implement**)
+### Wave 3 — Cross-session memory ✓ **code complete** (usage → Phase 4-A)
 
-**Goal:** BL-002 lite — “have we done this before?”  
-**Depends on:** honest file lists from Wave 1 for stored summaries.  
-**Status:** `todo` — **Q3** (RAG store location) to lock in worker spec before dispatch.
+**Goal:** BL-002 — workspace-file RAG + delegation history query.  
+**Code status:** `core/rag/` shipped (delegation FTS5, `rag_search` MCP + CLI, 431 pytest). Enabled by default; opt-out via config.  
+**Scope decision (2026-06-09):** Delegation RAG is implemented. Workspace-file RAG (primary corpus per BL-002 design) and usage decisions deferred to Phase 4-A RAG master session.
 
 | Milestone | Task ID | Status | Implements | Summary |
 |-----------|---------|--------|------------|---------|
-| RAG lite | P3-002-lite | `todo` | BL-002 | SQLite + FTS; post-delegate summary index; pre-delegate retrieval |
-| RAG embeddings | P3-002b | `optional` | BL-002 | Embeddings when lite proves value |
+| RAG lite (delegation FTS) | P3-002-lite | `done` | BL-002 | `core/rag/` shipped; delegation FTS5; 431 pytest (+17); **usage + scope decided in Phase 4-A RAG session** |
+| RAG embeddings | P3-002b | `optional` | BL-002 | After Phase 4 FTS proves value |
 
 ### Wave 4 — Contract hardening + gates
 
@@ -177,7 +177,7 @@ Task specs: `docs/tasks/P3-*.md` (gitignored; created per worker session).
 | P3-322f history inspect (MCP list + CLI show/latest) | **Done** — 397 pytest (+9); list/file_history/checkpoint_detail |
 | P3-322g checkpoint checkout/restore | **Deferred** — BL-322g; after dogfood if bisect hurts |
 | P3-322h checkpoint fork / sandbox | **Deferred** — BL-322h; non-destructive try; or BL-502 for git |
-| P3-320 attempt archive | **Deferred end of Phase 3** — brainstorm storage layout (keep specs clean) before worker spec |
+| P3-320 attempt archive | **Done** — rules-only versioned specs (`v1`/`v2`); exit dogfood in P3-499 |
 | P2-315 MCP progress notifications | BACKLOG BL-106 |
 | P2-400/405/410 intelligence wave | BACKLOG BL-153, BL-008, BL-003 |
 | P2-ISS-005 upstream_5xx live | BACKLOG BL-309 accepted risk |
@@ -200,13 +200,13 @@ Status: `todo` | `in_progress` | `done` | `blocked` | `optional`
 
 ## Open questions (PM track)
 
-All Q1–Q5 resolved (2026-06-08). Locked as D-P3-2/6/7/8 and Q3 deferred.
+All Q1–Q5 locked (D-P3-2/5/6/7/8). Q3 shipped as `delegation_rag.db`; workspace-file RAG + usage scope → Phase 4-A (BL-002).
 
 | # | Question | **Locked answer** | D-P3 |
 |---|----------|-------------------|------|
 | Q1 | Git vs manifest attribution | Tracker-primary — manifest always | D-P3-2 |
-| Q2 | Attempt archive default | `on_failure_only` default ON; `off` to disable | D-P3-6 |
-| Q3 | RAG store location | Decide at P3-002-lite (not a blocker for Waves 1–2) | — |
+| Q2 | Attempt archive default | Host versioned specs (`v1`/`v2`) from start — rules-only (P3-320) | D-P3-6 (revised) |
+| Q3 | RAG store location | `~/.mcp-coder/projects/<project_key>/delegation_rag.db` (FTS5 sibling to `workspace_history.db`) | D-P3-5 |
 | Q4 | auto-merge spec read default | ON in L2 compiler when `spec_path` set | D-P3-7 |
 | Q5 | `approve_delegation` in 322d? | No — `delegation_diff` only; approve → P3-151 | D-P3-8 |
 
@@ -222,7 +222,7 @@ All Q1–Q5 resolved (2026-06-08). Locked as D-P3-2/6/7/8 and Q3 deferred.
 - [x] MCP returns `delegation_diff` on implement (P3-322d)
 - [x] Wave 1 dogfood sign-off (P3-401) — tip-calc step 2; 5 retries; inspect tools ✓; step 3 retry loop ✓
 - [x] Spec read-deps auto-merged when `spec_path` set (P3-311)
-- [ ] RAG lite retrieves prior delegation summary for same project (P3-002-lite)
+- [x] RAG lite code shipped — `core/rag/`; delegation FTS5; `rag_search` MCP + CLI (P3-002-lite); workspace-file RAG + usage decisions → Phase 4-A
 - [ ] **Spec versioning dogfood (P3-499):** run a multi-attempt step in e2e using `v1/v2` naming; confirm old spec+report pair preserved; retry spec passes; host didn't need to rename anything
 - [ ] Phase 3 exit review (P3-499)
 
@@ -230,10 +230,10 @@ All Q1–Q5 resolved (2026-06-08). Locked as D-P3-2/6/7/8 and Q3 deferred.
 
 ## Next action
 
-1. **P3-002-lite** — lock RAG store (Q3 decision), then dispatch worker.
+1. **P3-499 exit** — spec versioning dogfood (run a `v1/v2` retry cycle in e2e), then Phase 3 exit review.
 2. **P3-151** — pre-delegation gatekeeper (Wave 4, optional before exit).
 3. **P3-ISS-005** — inspect-tool adoption; non-blocking.
-4. **Exit:** P3-499 when waves 1–4 checklist green.
+4. **Phase 4-A** — RAG design session first (corpus: workspace files + delegation history; architecture: hash + LLM summary + FTS5); implement after design sign-off.
 
 ---
 
@@ -256,3 +256,5 @@ All Q1–Q5 resolved (2026-06-08). Locked as D-P3-2/6/7/8 and Q3 deferred.
 | 2026-06-09 | **Wave 1 closed** — step 3 dogfood; P3-ISS-005 opened; Wave 2/3 design deferred |
 | 2026-06-09 | **P3-311 done** — auto-merge read-deps (D-P3-7); P3-ISS-003 closed; 412 pytest (+14) |
 | 2026-06-09 | **P3-320 done** — spec versioning from start (`v1/v2`); rules v9 + workspace-history v3; no MCP code |
+| 2026-06-09 | **P3-002-lite spec ready** — Q3 locked (`delegation_rag.db` + FTS5); dispatch Wave 3 |
+| 2026-06-09 | **P3-002-lite done** — `core/rag/`; delegation FTS5; `rag_search` MCP + CLI; 431 pytest (+17); BL-002 corpus decisions; workspace-file RAG → Phase 4-A |

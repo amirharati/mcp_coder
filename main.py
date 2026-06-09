@@ -76,6 +76,16 @@ def main() -> None:
         help="history subcommand: list | diff | revert",
     )
 
+    rag_p = sub.add_parser(
+        "rag",
+        help="Delegation RAG search and index (SQLite FTS5)",
+    )
+    rag_p.add_argument(
+        "rag_args",
+        nargs=argparse.REMAINDER,
+        help="rag subcommand: search | index | stats",
+    )
+
     parser.add_argument(
         "--mcp",
         action="store_true",
@@ -107,6 +117,15 @@ def main() -> None:
         if history_argv and history_argv[0] == "--":
             history_argv = history_argv[1:]
         raise SystemExit(main_history(history_argv))
+
+    if args.command == "rag":
+        from core.cli.rag import main_rag
+
+        rag_argv = args.rag_args or []
+        if rag_argv and rag_argv[0] == "--":
+            rag_argv = rag_argv[1:]
+        raise SystemExit(main_rag(rag_argv))
+
     from core.config import apply_provider_env, load_env_files
     from core.server.singleton import enforce_single_stdio_server
     from server.mcp_server import run_stdio

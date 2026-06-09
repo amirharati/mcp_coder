@@ -212,9 +212,12 @@ Overlap is OK: e.g. Phase 3 master drafts BL-322a worker spec while Phase 2 chat
 
 1. ~~Wave 1 (P3-322a–f, P3-401)~~ — **complete** 2026-06-09.
 2. ~~**P3-311** read-deps auto-merge~~ — **done** 2026-06-09; 412 pytest (+14).
-3. **Design before code:** P3-002-lite (RAG store, Q3) and P3-320 (attempt archive layout) — brainstorm → worker specs.
-4. P3-ISS-005 — inspect-tool adoption; defer with rules/MCP tweaks.
-5. P3-322g/h — defer unless bisect hurts.
+3. ~~**P3-320** spec versioning rules~~ — **done** 2026-06-09.
+4. ~~**P3-002-lite** delegation RAG~~ — **done** 2026-06-09; `core/rag/`; 431 pytest (+17); workspace-file RAG + usage → Phase 4-A.
+5. **P3-499 exit** — spec versioning dogfood (`v1`/`v2` retry in e2e), then Phase 3 exit review.
+6. P3-151 gatekeeper — optional before exit.
+7. P3-ISS-005 — inspect-tool adoption; non-blocking.
+8. P3-322g/h — defer unless bisect hurts.
 
 ---
 
@@ -228,3 +231,5 @@ Overlap is OK: e.g. Phase 3 master drafts BL-322a worker spec while Phase 2 chat
 | 2026-06-08 | Q1–Q5 fully resolved; D-P3-6/7/8 locked; bootstrap first-actions updated |
 | 2026-06-09 | Wave 1 closed; P3-311 active; RAG + attempt-archive design queued |
 | 2026-06-09 | **P3-311 done**; P3-ISS-003 closed; design queue next |
+| 2026-06-09 | **P3-002-lite spec ready**; Q3 locked; dispatch Wave 3 |
+| 2026-06-09 | **P3-002-lite done**; RAG corpus decisions in BL-002; **active: P3-499 exit** |

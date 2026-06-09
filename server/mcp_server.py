@@ -733,6 +733,27 @@ def delegate_to_agent(
             )
             checkpoint_block = {"summary": summary, "outcome": outcome}
 
+    _checkpoint_summary_for_rag: str | None = None
+    if checkpoint_block:
+        raw_summary = checkpoint_block.get("summary")
+        if isinstance(raw_summary, str):
+            _checkpoint_summary_for_rag = raw_summary
+
+    from core.rag.index import index_delegation_after_delegate
+
+    index_delegation_after_delegate(
+        workspace=ws,
+        delegation_id=delegation_id,
+        timestamp_end=timestamp_end,
+        task=task,
+        delegate_mode=delegate_mode,
+        outcome=outcome,
+        files_changed=files_changed,
+        spec_path=spec_rel_path,
+        spec_report_path=spec_report_rel_path,
+        checkpoint_summary=_checkpoint_summary_for_rag,
+    )
+
     delegation_diff_payload: dict[str, Any] | None = None
     if delegate_mode == DELEGATE_MODE_IMPLEMENT and workspace_snapshot is not None:
         from core.workspace.history_query import safe_delegation_diff_dict
@@ -980,6 +1001,36 @@ def get_delegation_diff(
         delegation_id,
         latest=latest,
         file_path=file_path,
+    )
+    return json.dumps(result, ensure_ascii=False)
+
+
+@mcp.tool(
+    name="rag_search",
+    description=(
+        "Keyword search over indexed past delegations (checkpoint summaries, tasks, "
+        "spec paths, outcomes). Returns ranked hits with delegation_id — pair with "
+        "get_delegation_diff or list_delegations for full detail."
+    ),
+)
+def rag_search_tool(
+    query: str,
+    limit: int = 5,
+    workspace_path: str | None = None,
+    spec_path_prefix: str | None = None,
+    outcome: str | None = None,
+) -> str:
+    """Search delegation RAG index (read-only)."""
+    from core.logging.delegation_log import workspace_path as default_workspace
+    from core.rag.search import rag_search_for_mcp
+
+    ws = workspace_path or default_workspace()
+    result = rag_search_for_mcp(
+        ws,
+        query,
+        limit=limit,
+        spec_path_prefix=spec_path_prefix,
+        outcome=outcome,
     )
     return json.dumps(result, ensure_ascii=False)
 

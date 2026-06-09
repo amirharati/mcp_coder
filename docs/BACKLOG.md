@@ -19,7 +19,7 @@ Status: `idea` | `deferred` | `blocked` | `done`
 | ID | Item | Target | Notes |
 |----|------|--------|-------|
 | BL-001 | Owned context pipeline (summarize, rank, trim) | Phase 2 | Phase 1 is pass-through only |
-| BL-002 | RAG / cross-session memory (`rag_search`, SQLite) | Phase 3 | See [IDEA.md](./IDEA.md) data models |
+| BL-002 | RAG / cross-session memory (`rag_search`, SQLite) | **Phase 4-A** | Delegation RAG shipped (P3-002-lite); workspace-file RAG + decisions → Phase 4-A; see § BL-002 |
 | BL-003 | Router / janitor LLM inside mcp-coder | Phase 2+ | Cheap orchestrator pattern |
 | BL-005 | Dual-mode CLI (`mcp-coder run …`) | Phase 2+ | Same core as MCP; after context system useful |
 | BL-006 | Context janitor, critic, test-writer sub-agents | Phase 4 | Composable one-shots |
@@ -347,9 +347,49 @@ By design today: `project_key` = SHA-256(resolved path).
 
 ---
 
+### BL-002: RAG / cross-session memory
+
+**Status:** `partial` — **delegation RAG shipped** (P3-002-lite, 2026-06-09); workspace-file RAG + usage decisions → **Phase 4-A**.  
+**Code in place:** `core/rag/` (db.py, index.py, search.py, models.py), `core/config/rag.py`, `core/cli/rag.py`; 431 pytest. Enabled by default; opt-out via `rag_enabled: false`.  
+**Phase 4-A:** RAG master session decides — keep delegation RAG as-is, add workspace-file corpus, unify, or scope down.
+
+#### Corpus decisions
+
+| Corpus | Phase | Approach | Rationale |
+|--------|-------|----------|-----------|
+| **Workspace source files** | **4 — primary** | Hash (SHA-256) + LLM-generated summary per file + FTS5 | Core use case: planner asks "what does this file do?" / "which files are relevant?" before delegating. Hash-based staleness = re-index only on change. File-level granularity is enough for planning; sub-file chunking is overkill. |
+| **Delegation records** | 4+ | Wave 1 inspect tools now; FTS5 when scale hurts | `list_delegations` + `get_checkpoint_detail` sufficient at <200 rows. Add keyword search when pain is felt. |
+| **Decision log** | 5 | Structured exit notes → FTS5 | Session-end host writes 3–5 key decisions + deferred items. Higher signal than raw chat. |
+| **Spec files** | Skip | Grep / direct read | Too small to index (~5–50 files). |
+| **Chat transcripts** | Skip | N/A | Rejected ideas and accepted ideas indistinguishable without outcome labels. Good decisions already land in specs/docs. If distillation shows a gap, revisit then — not proactively. |
+| **Cursor rules / config** | Skip | Direct read | Planner reads these directly; no search needed. |
+
+#### Architecture (locked for Phase 4)
+
+```
+Index:   workspace source files only (Phase 4 start)
+Entry:   (path, sha256, llm_summary, symbol_list, indexed_at)
+Update:  on workspace_snapshot or post-delegation hook
+         if sha256(file) != stored_hash → re-summarize
+Search:  FTS5 on summary + symbols → ranked file list
+Tool:    workspace_search(query) → [(path, summary, symbols)]
+Storage: ~/.mcp-coder/projects/<key>/workspace_rag.db
+```
+
+#### What we explicitly don't do (Phase 4)
+- No sub-file chunking (file-level is enough for planning context)
+- No vector embeddings (FTS5 BM25 sufficient for code symbol/summary search; add later if recall proves insufficient)
+- No delegation history in same DB (different lifecycle and access pattern)
+- No raw chat transcript indexing
+
+#### Phase 4-A plan
+Phase 4-A = short design session to finalize: indexing trigger (snapshot hook vs on-demand), summary prompt, symbol extraction strategy, DB schema, MCP tool signature. Then implement as first Phase 4 milestone.
+
+---
+
 ### BL-320: Failed-delegate attempt archive (spec-adjacent)
 
-**Status:** `scheduled` — Phase 3 Wave 2 ([PHASE3_MVP.md](./PHASE3_MVP.md)); P3-ISS-002.
+**Status:** `done` — Phase 3 Wave 2 rules-only ([PHASE3_MVP.md](./PHASE3_MVP.md) P3-320); P3-ISS-002 closed.
 
 **Problem:** Planner-facing `specs/reports/*.md` tracks **current** step status; failed retries are either buried in Run log (truncated) or only in JSONL. No first-class “attempt history” per step.
 
@@ -623,6 +663,7 @@ Until then: add rows to bundled `model_rates.yaml` when switching models; unknow
 
 | Date | Change |
 |------|--------|
+| 2026-06-09 | BL-002 design decisions locked — corpus scope, architecture, Phase 4-A plan; P3-002-lite delegation RAG shipped |
 | 2026-06-08 | BL-322a–f done; BL-322g/h deferred (restore + fork/sandbox); BL-502 cross-link |
 | 2026-06-08 | Phase 3 start — BL-320/322 `scheduled`; BL-323 budget override; BL-322a storage aligned to WORKSPACE_HISTORY |
 | 2026-06-07 | Wild test done — BL-320 failed-attempt archive; BL-321 tiered model selection (P2-ISS-007/008) |

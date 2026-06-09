@@ -27,5 +27,8 @@ session_policy: always_new
 # Auto-merge spec Files: Read into effective target_files on implement (default: on)
 # auto_merge_spec_read: false
 
+# Delegation keyword search index (rag_search MCP + post-delegate upsert; default: on)
+# rag_enabled: false
+
 # Review model for mode=review (overrides MCP_CODER_REVIEW_MODEL when both set)
 # review_model: openrouter/anthropic/claude-sonnet-4

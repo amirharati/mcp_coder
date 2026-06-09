@@ -38,6 +38,11 @@ def workspace_history_db_path(workspace: str | Path) -> Path:
     return project_dir(workspace) / "workspace_history.db"
 
 
+def delegation_rag_db_path(workspace: str | Path) -> Path:
+    """Per-project delegation FTS5 index (D-P3-5 — sibling to workspace_history.db)."""
+    return project_dir(workspace) / "delegation_rag.db"
+
+
 def project_json_path(workspace: str | Path) -> Path:
     return project_dir(workspace) / "project.json"
 
