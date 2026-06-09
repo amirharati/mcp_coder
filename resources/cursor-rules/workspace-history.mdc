@@ -1,0 +1,53 @@
+---
+description: mcp-coder workspace checkpoints — verify delegations and debug retries (synced by MCP)
+mcp_coder_managed: true
+mcp_coder_rule_id: workspace-history
+mcp_coder_rule_version: "1"
+globs:
+alwaysApply: true
+---
+
+# Workspace history (checkpoints)
+
+Use these **read-only** mcp-coder MCP tools after `delegate_to_agent` (**implement**) to verify disk changes, debug retries, and decide whether to update the **task spec** or re-delegate.
+
+- **Do not** edit `specs/reports/` — MCP-owned audit. Use `spec_report_path` from tool responses to **read** Run log / Worker feedback.
+- **Do** update **task specs** and **epics** when refining scope, Files lists, or placeholders before a retry.
+
+## When to use
+
+| Situation | Tool |
+|-----------|------|
+| Just finished delegate | `delegation_diff` on the response first |
+| Lost `delegation_id` / new chat | `get_delegation_diff(latest=true)` or `list_delegations` |
+| Same step, multiple attempts | `list_delegations(spec_path=…)` — see every checkpoint for this task |
+| Wrong or duplicate paths | `get_delegation_diff` + `get_file_history(file_path=…)` |
+| Metadata only (no diff bodies) | `get_checkpoint_detail(latest=true)` |
+
+## MCP tools
+
+| Tool | Purpose |
+|------|---------|
+| **list_delegations** | Browse checkpoints (`limit`, optional `spec_path`, `file_path`) |
+| **get_checkpoint_detail** | Summary, spec/report pointers, file lists — lightweight |
+| **get_delegation_diff** | Unified diffs; pass `delegation_id` or `latest=true`; optional `file_path` |
+| **get_file_history** | Per-file timeline across delegations |
+
+`success: true` does **not** mean done-when passed — always verify tests / CLI locally.
+
+## After implement — verification loop
+
+1. Summarize: `success`, `outcome`, `delegate_mode`, `delegation_id`, `spec_report_path`, `files_changed`, `files_unexpected`, and whether `delegation_diff` shows unexpected paths.
+2. Run **pytest** / CLI checks from the task spec **Done when**.
+3. If not done: **list_delegations** for this `spec_path` → inspect attempts → update **task spec** (Files, placeholders for new empty files, `revision++`) → re-delegate.
+4. If done: set task `status: done`, checkboxes, epic Steps table.
+
+## CLI (same data, terminal)
+
+```bash
+mcp-coder history list|show|latest|diff|file
+```
+
+Use when MCP history tools are unavailable.
+
+Synced from mcp-coder (all policies). Do not edit by hand.

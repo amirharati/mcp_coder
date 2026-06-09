@@ -234,7 +234,7 @@ def sync_workspace_cursor_rules(workspace: str | Path) -> dict[str, Any]:
     """
     Sync bundled Cursor rules for the resolved policy into .cursor/rules/.
 
-    Exactly one managed rule file (use-mcp-coder.mdc); content depends on policy.
+    Managed rules from manifest: policy-specific use-mcp-coder.mdc + shared workspace-history.mdc.
     Change policy in config, restart MCP.
     """
     ws = Path(workspace).resolve()

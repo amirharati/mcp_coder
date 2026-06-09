@@ -7,7 +7,11 @@ policies:
     rules:
       - dest: use-mcp-coder.mdc
         src: use-mcp-coder.default.mdc
+      - dest: workspace-history.mdc
+        src: workspace-history.mdc
   strict:
     rules:
       - dest: use-mcp-coder.mdc
         src: use-mcp-coder.strict.mdc
+      - dest: workspace-history.mdc
+        src: workspace-history.mdc

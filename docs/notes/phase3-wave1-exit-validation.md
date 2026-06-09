@@ -31,7 +31,7 @@ pytest -q           # expect 3 passed (step 1 core)
 Workspace state (2026-06-08):
 
 - **No git** — manifest attribution (P3-ISS-001 / D-P3-2)
-- **tip_calc** step 1 code present; step 2 spec pre-created at `.mcp-coder/specs/tasks/tip-calc-02-cli.md`
+- **tip_calc** step 1 code present; **planner writes** epic + step specs (master does not pre-create task specs in e2e)
 - MCP: `.cursor/mcp.json` → `mcp_coder` venv + `.env`
 
 ### Server env (`mcp_coder/.env`)
@@ -51,18 +51,19 @@ export PATH="$HOME/Dropbox/CodingProjects/personal_tools/mcp_coder/scripts:$PATH
 ### MCP
 
 1. Open **`mcp_coder_phase1_e2e`** in Cursor (not the `mcp_coder` repo).
-2. **Restart MCP** after any `.env` change.
-3. **New Composer chat** for Phase 1 delegate below.
+2. **Restart MCP** after any `.env` change or mcp-coder upgrade (syncs Cursor rules).
+3. Confirm **two** managed rules in `.cursor/rules/`: `use-mcp-coder.mdc` + `workspace-history.mdc`.
+4. **New Composer chat** for Phase 1 delegate below.
 
 ---
 
 ## Phase 1 — Delegate step 2 (creates checkpoint)
 
-**Spec:** `.mcp-coder/specs/tasks/tip-calc-02-cli.md` (pre-created)
+**Spec:** planner-authored `.mcp-coder/specs/tasks/tip-calc-02-cli.md` (or equivalent step 2 task)
 
 **Cursor prompt** (natural — do not mention P3 or dogfood):
 
-> Step 1 of the tip calculator is done (`calculate_tip` + tests pass). Please implement **step 2** using the task spec `.mcp-coder/specs/tasks/tip-calc-02-cli.md` — delegate to mcp-coder, don't write code yourself. Include read-deps in `target_files`. After delegate, run `pytest` and confirm `python -m tip_calc 25.00 18` works.
+> Step 1 of the tip calculator is done (`calculate_tip` + tests pass). Plan and implement **step 2** (CLI) — epic + step spec under `.mcp-coder/specs/`, delegate to mcp-coder, don't write code yourself. Include read-deps in `target_files`. After delegate, run `pytest` and confirm `python -m tip_calc 25.00 18` works.
 
 **Pass:**
 
@@ -195,25 +196,27 @@ print(workspace_history_db_path(Path('$WS').expanduser()))
 
 | Field | Value |
 |-------|-------|
-| Date | |
+| Date | 2026-06-09 |
 | mcp_coder pytest | 397+ passed |
-| e2e pytest | |
-| Phase 1 delegate `delegation_id` | |
-| Phases 1–4 pass | |
-| Phase 5–6 | skipped / pass |
-| P3-ISS-001 | closed (manifest in live delegate) |
-| Pull 322g/h? | yes / no / defer |
+| e2e pytest | 4 passed |
+| Final delegate `delegation_id` | `594b627e-a3c3-48f7-a7d6-455c38ab4b13` |
+| Attempts on step 2 | 6 (all MCP `success: true`; planner retried) |
+| Phases 1–4 pass | Phase 1 ✓; 2–4 verify below |
+| Phase 5–6 | skipped |
+| P3-ISS-001 | manifest attribution in live run (no git) |
+| Pull 322g/h? | defer; **pull P3-320** stronger after 6-attempt step |
+| Cursor rules history tools | `workspace-history.mdc` v1 (composed with policy rule) |
 
 ### Phase log
 
 | Phase | Pass? | Notes |
 |-------|-------|-------|
-| 1 delegate step 2 | | |
-| 2 CLI history | | |
-| 3 MCP inspect | | |
-| 4 JSONL audit | | |
-| 5 file timeline | | |
-| 6 strict gateway | | |
+| 1 delegate step 2 | ✓ | 6 delegations; final `594b627e`; CLI + 4 pytest |
+| 2 CLI history | ✓ | 6 rows in `history list`; `show --latest` has summary + report path |
+| 3 MCP inspect | user | `list_delegations`, `get_checkpoint_detail`, `get_file_history` |
+| 4 JSONL audit | ✓ | All 6 runs in report Run log; `checkpoint` + `workspace_snapshot` from run 2+ |
+| 5 file timeline | partial | `history file tip_calc/__main__.py` shows 1 modify; nested paths separate |
+| 6 strict gateway | skip | |
 
 ---
 

@@ -3,7 +3,7 @@ description: mcp-coder delegate_to_agent (default policy; synced by MCP)
 mcp_coder_managed: true
 mcp_coder_rule_id: use-mcp-coder
 mcp_coder_rules_policy: default
-mcp_coder_rule_version: "7"
+mcp_coder_rule_version: "8"
 globs:
 alwaysApply: true
 ---
@@ -24,6 +24,8 @@ Same step spec across review + implement. Bump `revision` when you change the sp
 
 **Read-deps:** put files to **edit** and files to **read** (imports, prior-step code) in the spec **Files** section and in `target_files`. Review mode does not load code — you still pass read paths on implement.
 
-Do not brainstorm in implement mode. You mark task `done` after verification; MCP owns reports.
+Do not brainstorm in implement mode. MCP owns reports.
+
+After implement: verify per **workspace-history** rule (checkpoint MCP tools + pytest); then mark task `done`.
 
 Synced from mcp-coder (`cursor_rules_policy: default`). Do not edit by hand.

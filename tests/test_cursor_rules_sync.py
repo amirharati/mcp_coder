@@ -24,11 +24,13 @@ def test_default_policy_syncs_one_rule(tmp_path, monkeypatch):
 
     assert result["skipped"] is False
     assert result["policy"] == "default"
-    assert len(result["rules"]) == 1
+    assert len(result["rules"]) == 2
     rules_dir = workspace_cursor_rules_dir(ws)
     assert (rules_dir / "use-mcp-coder.mdc").is_file()
+    assert (rules_dir / "workspace-history.mdc").is_file()
     assert not (rules_dir / "mcp-coder-delegate.mdc").exists()
     assert "mcp_coder_rules_policy: default" in (rules_dir / "use-mcp-coder.mdc").read_text()
+    assert "list_delegations" in (rules_dir / "workspace-history.mdc").read_text()
 
 
 def test_strict_replaces_use_mcp_coder_content(tmp_path, monkeypatch):
@@ -40,6 +42,7 @@ def test_strict_replaces_use_mcp_coder_content(tmp_path, monkeypatch):
     sync_workspace_cursor_rules(ws)
     rules_dir = workspace_cursor_rules_dir(ws)
     assert (rules_dir / "use-mcp-coder.mdc").is_file()
+    assert (rules_dir / "workspace-history.mdc").is_file()
     assert not (rules_dir / "use-mcp-coder-strict.mdc").exists()
     assert not (rules_dir / "mcp-coder-delegate.mdc").exists()
     assert "mcp_coder_rules_policy: strict" in (rules_dir / "use-mcp-coder.mdc").read_text()
@@ -153,6 +156,8 @@ def test_delegate_wrapper_returns_rule_result(tmp_path, monkeypatch):
 def test_rule_entries_use_dest_src_mapping():
     default = rule_entries_for_policy("default")
     strict = rule_entries_for_policy("strict")
-    assert len(default) == len(strict) == 1
+    assert len(default) == len(strict) == 2
     assert default[0].dest == strict[0].dest == "use-mcp-coder.mdc"
     assert default[0].src != strict[0].src
+    assert default[1].dest == strict[1].dest == "workspace-history.mdc"
+    assert default[1].src == strict[1].src == "workspace-history.mdc"

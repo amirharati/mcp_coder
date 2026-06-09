@@ -3,7 +3,7 @@ description: mcp-coder delegate_to_agent only (strict policy; synced by MCP)
 mcp_coder_managed: true
 mcp_coder_rule_id: use-mcp-coder
 mcp_coder_rules_policy: strict
-mcp_coder_rule_version: "7"
+mcp_coder_rule_version: "8"
 globs:
 alwaysApply: true
 ---
@@ -24,9 +24,9 @@ alwaysApply: true
 - **Never** delegate planning (writing epic/step specs).
 - **Do not** use implement mode to brainstorm — use **review** or Cursor chat.
 - **Do not** edit `specs/reports/` (MCP-owned).
-- After implement: verify tests; set task `status: done` + checkboxes; update epic Steps table.
+- After implement: follow **workspace-history** rule (MCP inspect tools + local tests); then set task `status: done` + checkboxes; update epic Steps table.
 
-After each tool call: summarize `success`, `outcome`, `delegate_mode`, `spec_report_path`, `files_changed`, `files_unexpected`.
+After each `delegate_to_agent` call: summarize `success`, `outcome`, `delegate_mode`, `delegation_id`, `spec_report_path`, `files_changed`, `files_unexpected`.
 
 ## Read-deps (implement mode)
 
