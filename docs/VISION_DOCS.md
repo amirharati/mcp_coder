@@ -17,15 +17,17 @@ Use this page so **main vision** ([IDEA.md](./IDEA.md)) is not lost when editing
 | **1 — How we ship** | [PHASES.md](./PHASES.md) | Multi-phase delivery, boundaries, validation. Must stay **consistent with IDEA**. | Planning / master session; not workers |
 | **2 — Phase 1 PM** | [PHASE1_MVP.md](./PHASE1_MVP.md) | Tasks, status, acceptance — **closed/frozen P1-199** | Historical only; do not add new rows |
 | **2 — Phase 2 PM** | [PHASE2_MVP.md](./PHASE2_MVP.md) | Phase 2 milestones — **closed / frozen P2-499** | Historical; new work → PHASE3_MVP |
-| **2 — Phase 3 PM** | [PHASE3_MVP.md](./PHASE3_MVP.md) | Phase 3 milestones, waves, decisions | Planning / master session updates status |
+| **2 — Phase 3 PM** | [PHASE3_MVP.md](./PHASE3_MVP.md) | Phase 3 milestones — **closed / frozen P3-499** | Historical; new work → PHASE4_MVP |
+|| **2 — Phase 4 PM** | [PHASE4_MVP.md](./PHASE4_MVP.md) | Phase 4 milestones, waves, decisions | Planning / master session updates status |
 | **2 — Deferred** | [BACKLOG.md](./BACKLOG.md) | BL-* items, priorities, post–P1/P2 focus | Add/defer with user; do not delete rows silently |
 | **2 — P1 gaps** | [PHASE1_ISSUES.md](./PHASE1_ISSUES.md) | Issues from P1 — **frozen / historical at P1-199** | Read-only; new gaps → BACKLOG |
 | **2 — P2 gaps** | [PHASE2_ISSUES.md](./PHASE2_ISSUES.md) | Issues from Phase 2 — **frozen at P2-499** | Read-only; carried → PHASE3_ISSUES |
-| **2 — P3 gaps** | [PHASE3_ISSUES.md](./PHASE3_ISSUES.md) | Issues during Phase 3 | Planning session; link to BL-* when deferring |
+| **2 — P3 gaps** | [PHASE3_ISSUES.md](./PHASE3_ISSUES.md) | Issues from Phase 3 — **frozen at P3-499** | Read-only; carried → BL-324–328 |
 | **3 — Direction notes** | [notes/spec-based-development.md](./notes/spec-based-development.md) | Spec-as-contract — **shipped experiment** (P1-151) | Update when workflow changes |
 | **3 — Direction notes** | [notes/spec-review-loop.md](./notes/spec-review-loop.md) | Review vs implement modes | Same |
 | **3 — Direction notes** | [notes/phase2-owned-context.md](./notes/phase2-owned-context.md) | Context compiler design — locked P1-199 | Update as Phase 2 decisions land |
-| **3 — Handoff** | [notes/phase3-master-session-bootstrap.md](./notes/phase3-master-session-bootstrap.md) | Phase 3 master session prompt + summary | Planning session |
+| **3 — Handoff** | [notes/phase3-master-session-bootstrap.md](./notes/phase3-master-session-bootstrap.md) | Phase 3 master session prompt + summary | Frozen at P3-499 |
+|| **3 — Handoff** | [notes/phase4-master-session-bootstrap.md](./notes/phase4-master-session-bootstrap.md) | Phase 4 master session prompt + summary | Planning session |
 | **3 — Exit** | [notes/phase2-exit-validation.md](./notes/phase2-exit-validation.md) | P2-499 dogfood sign-off | Frozen at exit |
 | **3 — Related ideas** | [OTEHR_RELATED_IDEAS/](./OTEHR_RELATED_IDEAS/) | Gatekeeper, experiments — **not** canonical vision | Optional; may inform backlog only |
 
@@ -39,6 +41,7 @@ Use this page so **main vision** ([IDEA.md](./IDEA.md)) is not lost when editing
 | `docs/tasks/P1-*.md` | **Gitignored** Phase 1 worker specs |
 | `docs/tasks/P2-*.md` | **Gitignored** Phase 2 worker specs |
 | `docs/tasks/P3-*.md` | **Gitignored** Phase 3 worker specs |
+| `docs/tasks/P4-*.md` | **Gitignored** Phase 4 worker specs |
 | [README.md](./README.md) (this folder) | Workflow index |
 
 ## Rules for agents
@@ -64,7 +67,8 @@ Use this page so **main vision** ([IDEA.md](./IDEA.md)) is not lost when editing
 
 | Date | Change |
 |------|--------|
-| 2026-06-09 | Phase 3 closed (P3-499); PHASE3_ISSUES frozen; Phase 4 active; BL-324–328 |
+| 2026-06-09 | Phase 4 docs created (PHASE4_MVP, phase4-master-session-bootstrap); Phase 3 PM + bootstrap marked frozen; doc map updated |
+|| 2026-06-09 | Phase 3 closed (P3-499); PHASE3_ISSUES frozen; Phase 4 active; BL-324–328 |
 | 2026-06-08 | Phase arc in PHASES (3–5); Phase 2 frozen; PHASE3_MVP + PHASE3_ISSUES; tracker-primary D-P3-2; phase2-exit + phase3-bootstrap |
 | 2026-06-06 | PHASE2_MVP + PHASE2_ISSUES created; PHASE1_ISSUES frozen; phase2-owned-context note added; doc map updated |
 | 2026-06-05 | Initial vision-doc map + stewardship tiers (with IDEA audit) |
