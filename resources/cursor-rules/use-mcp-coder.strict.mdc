@@ -3,7 +3,7 @@ description: mcp-coder delegate_to_agent only (strict policy; synced by MCP)
 mcp_coder_managed: true
 mcp_coder_rule_id: use-mcp-coder
 mcp_coder_rules_policy: strict
-mcp_coder_rule_version: "12"
+mcp_coder_rule_version: "13"
 globs:
 alwaysApply: true
 ---
@@ -28,19 +28,6 @@ alwaysApply: true
 - After implement: follow **workspace-history** judgment loop **in order** (diff → compare → pytest → done); then set task `status: done` + checkboxes; update epic Steps table.
 
 After each `delegate_to_agent` (**implement**): run the **workspace-history** judgment loop — quote **`judgment_checklist`** or inline `delegation_diff` path lists **before** pytest. Do **not** verify implementation by reading source files when `delegation_diff` / `judgment_checklist` is on the delegate response.
-
-## Session / step summary (required)
-
-- When reporting progress to the user, list **every** `delegate_to_agent` attempt for the current step — **including failures** — with `delegation_id`, `success`, and error/outcome.
-- If the response includes **`prior_failed_attempts`**, quote it explicitly before describing the latest success.
-- On step completion after a retry, summary order: **failed attempts first**, then latest outcome.
-- Use `list_delegations(spec_path=…)` when unsure about attempt count.
-
-## Spec location (required)
-
-- **Never** create `specs/` at the **repo root** (no `specs/tasks/`, `specs/epics/`, `specs/reports/` next to `src/` or project files).
-- All planner specs live under **`.mcp-coder/specs/`** only (gitignored MCP workspace metadata).
-- When calling `delegate_to_agent`, `spec_path` must be under `.mcp-coder/specs/tasks/` — use shorthand `tasks/foo.md` **or** full `.mcp-coder/specs/tasks/foo.md` (both accepted by MCP).
 
 ## Spec versioning
 
@@ -67,5 +54,9 @@ Step specs are versioned from first creation: `<epic>-<step>-v1.md`, `<epic>-<st
 - Pass edit paths in `target_files`; read paths in the spec `### Read` section are **auto-merged** into executor context when `spec_path` is set (D-P3-7) — no manual listing required, but still declare them in the spec for clarity.
 - Step N+1 implement: list step N deliverables under `### Read`.
 - `mode=review` does **not** load files — `target_files=[]` required.
+
+**Context builder (default on):** When `spec_path` is set, the file picker discovers read-deps automatically — you may pass only edit paths in `target_files`. If the response includes `suggested_edit_paths`, review them; they are audit-only candidates not added without your approval.
+
+<!-- @include use-mcp-coder.shared.md -->
 
 Synced from mcp-coder (`cursor_rules_policy: strict`). Do not edit by hand.

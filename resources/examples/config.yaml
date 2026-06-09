@@ -32,3 +32,12 @@ session_policy: always_new
 
 # Review model for mode=review (overrides MCP_CODER_REVIEW_MODEL when both set)
 # review_model: openrouter/anthropic/claude-sonnet-4
+
+# Context builder: rules-based file picker + repo map before implement delegations
+# (default: on; env MCP_CODER_CONTEXT_BUILDER_ENABLED=0 also disables)
+# context_builder: false
+
+# Cheap-LLM context brief on top of the picker (default: on after Phase 4 dogfood;
+# requires context_builder on; env MCP_CODER_CONTEXT_BUILDER_LLM=0 also disables).
+# Model via context_builder_model / MCP_CODER_CONTEXT_BUILDER_MODEL (set in server .env).
+# context_builder_llm: false   # uncomment to disable

@@ -11,6 +11,7 @@ from core.context.excerpts import (
     read_full_max_bytes,
     write_excerpt_file,
 )
+from core.context.file_picker import CandidateFilesResult
 from core.context.package import (
     COMPILER_VERSION,
     TIER_EDIT_FULL,
@@ -19,6 +20,7 @@ from core.context.package import (
     ContextPackage,
     PathEntry,
 )
+from core.context.repo_map import build_repo_map_entries
 from core.context.summary import estimate_tokens
 from core.engine.git_diff import normalize_repo_path
 from core.specs.delegation_policies import DelegationPolicies, load_delegation_policies
@@ -123,8 +125,16 @@ def assemble_context(
     task: str,
     context_summary: str | None,
     policies: DelegationPolicies | None,
+    picker_result: CandidateFilesResult | None = None,
+    include_repo_map: bool = False,
 ) -> ContextPackage:
-    """Build a ContextPackage from workspace, optional spec, and MCP hints."""
+    """Build a ContextPackage from workspace, optional spec, and MCP hints.
+
+    When picker_result is set (P4-001a), discovered read paths join the
+    materialized contract (read tiers only — D-P4-10), repo-map entries are
+    appended when include_repo_map=True, and candidate_files audit metadata
+    is added. When None, behavior is identical to the pre-picker pipeline.
+    """
     ws = workspace.resolve()
     hint_paths = _normalize_path_list(target_files)
     max_full_bytes = read_full_max_bytes()
@@ -163,6 +173,14 @@ def assemble_context(
         for path in contract_paths:
             tier_map[path] = TIER_READ_FULL
         metadata_hint_paths = hint_paths
+
+    if picker_result is not None and picker_result.discovered_read:
+        # Discovered paths are read context only — never edit-full (D-P4-10).
+        extra = [p for p in picker_result.discovered_read if p not in tier_map]
+        for path in extra:
+            tier_map[path] = TIER_READ_FULL
+        contract_paths = sorted(set(contract_paths) | set(extra))
+        metadata_hint_paths = sorted(set(metadata_hint_paths) - set(extra))
 
     entries: list[PathEntry] = []
     missing_paths: list[str] = []
@@ -230,6 +248,13 @@ def assemble_context(
             if tracked is False:
                 untracked_paths.append(path)
 
+    repo_map_entries: list[PathEntry] = []
+    if picker_result is not None and include_repo_map:
+        exclude = set(picker_result.ranked_paths) | {e.path for e in entries}
+        repo_map_entries = build_repo_map_entries(ws, exclude_paths=exclude)
+
+    # Brief lists contract/read entries only; map-only entries are rendered
+    # by the adapter (translate_context_package) as a compact repo-map block.
     brief = _build_brief(
         task=task,
         context_summary=context_summary,
@@ -237,6 +262,13 @@ def assemble_context(
         constraints=constraints,
         entries=entries,
     )
+    entries.extend(repo_map_entries)
+
+    if picker_result is not None and picker_result.suggested_edit_paths:
+        suggested = ", ".join(f"`{p}`" for p in picker_result.suggested_edit_paths)
+        brief = brief.rstrip() + (
+            f"\n\nSuggested edit paths (not in spec contract): {suggested}"
+        )
 
     payload_text = "".join(e.payload or "" for e in entries)
     token_estimate = estimate_tokens(brief + payload_text)
@@ -251,6 +283,10 @@ def assemble_context(
         "token_estimate_preflight": token_estimate,
         "compiler_version": COMPILER_VERSION,
     }
+    if picker_result is not None:
+        metadata["candidate_files"] = picker_result.to_audit_dict()
+        metadata["repo_map_count"] = len(repo_map_entries)
+        metadata["context_builder_enabled"] = True
 
     return ContextPackage(
         brief=brief,

@@ -9,8 +9,20 @@ from typing import Any
 from mcp.server.fastmcp import FastMCP
 
 from core.config.auto_merge import auto_merge_spec_read_enabled
+from core.config.context_builder import (
+    context_builder_enabled,
+    context_builder_llm_enabled,
+)
 from core.config.models import resolve_model_name
+from core.config.role_models import (
+    ROLE_CONTEXT_BUILDER,
+    ROLE_EXECUTOR,
+    ROLE_REVIEW,
+    resolve_role_budget_tokens,
+    resolve_role_model_name,
+)
 from core.context.assemble import assemble_context
+from core.context.file_picker import CandidateFilesResult, pick_candidate_files
 from core.context.budget import apply_context_budget, resolve_context_budget_tokens
 from core.context.capability_adjust import apply_backend_capabilities
 from core.context.inspect import inspect_context_package
@@ -74,6 +86,7 @@ from core.usage import (
     format_usage_run_log_line,
     resolve_usage_report_enabled,
 )
+from core.usage.role_audit import build_role_usage_record, merge_model_roles
 
 OUTPUT_MAX_CHARS = 16_000
 
@@ -98,6 +111,127 @@ def _truncate_output(text: str, max_chars: int = OUTPUT_MAX_CHARS) -> str:
     if len(text) <= max_chars:
         return text
     return text[: max_chars - 20] + "\n…[truncated]"
+
+
+_BUILDER_BRIEF_HEADER = "## Builder brief"
+
+
+def _merge_brief(mechanical_brief: str, llm_brief: str) -> str:
+    """Prepend LLM narrative; keep mechanical brief (incl. accurate ## Paths) below.
+
+    Chosen merge strategy (P4-001b §5): the LLM output is additive guidance, so
+    the assembler-produced brief — including the ## Paths section with real tiers
+    — is preserved verbatim beneath it. Entries/tiers/policies are never touched.
+    """
+    return (
+        f"{_BUILDER_BRIEF_HEADER}\n\n"
+        f"{llm_brief.strip()}\n\n"
+        "---\n\n"
+        f"{mechanical_brief.strip()}"
+    )
+
+
+def _apply_builder_llm(
+    *,
+    context_package: "ContextPackage",
+    picker_result: "CandidateFilesResult | None",
+    workspace: str,
+    task: str,
+    context_summary: str,
+    spec_rel_path: str | None,
+    host_transcript: str | None,
+    timing: dict[str, int | float],
+    delegation_id: str,
+) -> tuple["ContextPackage", bool, str | None, dict[str, Any] | None]:
+    """Run the cheap-LLM brief pass; fall back to the mechanical brief on failure.
+
+    Returns (package, builder_brief_applied, builder_llm_error, builder_record).
+    Only ContextPackage.brief is ever mutated (D-P4-10).
+    """
+    from core.context.builder_history import gather_builder_history
+    from core.context.builder_prompt import build_builder_llm_prompt
+    from core.engine.context_builder_llm import run_context_builder_llm
+
+    mechanical_brief = context_package.brief
+    t_builder = time.perf_counter()
+
+    history = gather_builder_history(Path(workspace), spec_path=spec_rel_path)
+    budget_tokens = resolve_role_budget_tokens(ROLE_CONTEXT_BUILDER, workspace)
+    prompt = build_builder_llm_prompt(
+        mechanical_brief=mechanical_brief,
+        picker_result=picker_result,
+        package_metadata=context_package.metadata,
+        history=history,
+        host_transcript=host_transcript,
+        context_summary=context_summary,
+        task=task,
+        budget_tokens=budget_tokens,
+    )
+
+    llm_result = run_context_builder_llm(prompt, workspace_path=workspace)
+    timing["context_builder_llm_ms"] = int((time.perf_counter() - t_builder) * 1000)
+
+    builder_record = build_role_usage_record(
+        role=ROLE_CONTEXT_BUILDER,
+        model=llm_result.model,
+        input_tokens=llm_result.tokens.get("input"),
+        output_tokens=llm_result.tokens.get("output"),
+        total_tokens=llm_result.tokens.get("total"),
+        duration_ms=llm_result.duration_ms,
+        source=str(llm_result.tokens.get("source") or "context_builder_llm"),
+    )
+
+    if llm_result.success:
+        context_package.brief = _merge_brief(mechanical_brief, llm_result.brief)
+        return context_package, True, None, builder_record
+
+    server_log_emit(
+        "context_builder_llm_failed",
+        level="warn",
+        delegation_id=delegation_id,
+        model=llm_result.model,
+        error=llm_result.error,
+    )
+    return context_package, False, llm_result.error, builder_record
+
+
+def _build_model_roles_payload(
+    *,
+    delegate_mode: str,
+    resolved_model: str,
+    tokens: dict[str, Any],
+    timing: dict[str, int | float],
+    workspace: str,
+    builder_record: dict[str, Any] | None = None,
+) -> dict[str, Any] | None:
+    """Per-role audit block for JSONL + MCP response (D-P4-8 Stage 1)."""
+    engine_ms = timing.get("engine_run_ms")
+    duration_ms = int(engine_ms) if engine_ms is not None else None
+
+    if delegate_mode == DELEGATE_MODE_REVIEW:
+        return merge_model_roles(
+            build_role_usage_record(
+                role=ROLE_REVIEW,
+                model=resolved_model,
+                input_tokens=tokens.get("input"),
+                output_tokens=tokens.get("output"),
+                total_tokens=tokens.get("total"),
+                duration_ms=duration_ms,
+                source=str(tokens.get("source") or "unavailable"),
+            )
+        )
+
+    if delegate_mode == DELEGATE_MODE_IMPLEMENT:
+        return merge_model_roles(
+            build_role_usage_record(
+                role=ROLE_EXECUTOR,
+                model=resolve_role_model_name(ROLE_EXECUTOR, workspace),
+                source="executor",
+            ),
+            builder_record,
+        )
+
+    return None
 
 
 def _response_payload(
@@ -140,6 +274,10 @@ def _response_payload(
     prior_failed_attempts_reminder: str | None = None,
     auto_merged_read_paths: list[str] | None = None,
     auto_merge_spec_read: bool | None = None,
+    model_roles: dict[str, Any] | None = None,
+    suggested_edit_paths: list[str] | None = None,
+    context_builder_llm_enabled: bool | None = None,
+    builder_brief_applied: bool | None = None,
 ) -> dict[str, Any]:
     payload: dict[str, Any] = {
         "success": success,
@@ -210,6 +348,14 @@ def _response_payload(
         payload["auto_merged_read_paths"] = auto_merged_read_paths
     if auto_merge_spec_read is not None:
         payload["auto_merge_spec_read"] = auto_merge_spec_read
+    if model_roles:
+        payload["model_roles"] = model_roles
+    if suggested_edit_paths:
+        payload["suggested_edit_paths"] = suggested_edit_paths
+    if context_builder_llm_enabled is not None:
+        payload["context_builder_llm_enabled"] = context_builder_llm_enabled
+    if builder_brief_applied is not None:
+        payload["builder_brief_applied"] = builder_brief_applied
     return payload
 
 
@@ -454,6 +600,11 @@ def delegate_to_agent(
 
     caps = None
     cap_warnings: list[str] = []
+    picker_result: CandidateFilesResult | None = None
+    builder_llm_enabled = False
+    builder_brief_applied = False
+    builder_llm_error: str | None = None
+    builder_record: dict[str, Any] | None = None
 
     if spec_invalid_reason:
         success = False
@@ -469,6 +620,15 @@ def delegate_to_agent(
             if delegate_mode == DELEGATE_MODE_REVIEW:
                 result = run_spec_review(prompt, workspace_path=ws)
             elif _use_pkg:
+                builder_on = context_builder_enabled(ws)
+                if builder_on and delegation_policies is not None:
+                    picker_result = pick_candidate_files(
+                        workspace=Path(ws),
+                        task=task,
+                        spec_text=spec_read.raw_text if spec_read else None,
+                        policies=delegation_policies,
+                        target_files=effective_target_files,
+                    )
                 context_package = assemble_context(
                     workspace=Path(ws),
                     spec_path=spec_rel_path,
@@ -476,7 +636,31 @@ def delegate_to_agent(
                     task=task,
                     context_summary=context_summary,
                     policies=delegation_policies,
+                    picker_result=picker_result,
+                    include_repo_map=picker_result is not None,
                 )
+                builder_llm_enabled = (
+                    builder_on
+                    and picker_result is not None
+                    and context_builder_llm_enabled(ws)
+                )
+                if builder_llm_enabled:
+                    (
+                        context_package,
+                        builder_brief_applied,
+                        builder_llm_error,
+                        builder_record,
+                    ) = _apply_builder_llm(
+                        context_package=context_package,
+                        picker_result=picker_result,
+                        workspace=ws,
+                        task=task,
+                        context_summary=context_summary,
+                        spec_rel_path=spec_rel_path,
+                        host_transcript=host_transcript_text,
+                        timing=timing,
+                        delegation_id=delegation_id,
+                    )
                 engine = get_engine(backend)
                 model = engine.model_name
                 try:
@@ -572,6 +756,20 @@ def delegate_to_agent(
             if e.tier in (TIER_READ_FULL, TIER_READ_EXCERPT) and e.payload is not None
         ]
         context_block["context_package"] = summarize_context_package(context_package)
+        pkg_meta = context_package.metadata
+        if pkg_meta.get("context_builder_enabled"):
+            candidate_files = pkg_meta.get("candidate_files") or {}
+            context_block["context_builder_enabled"] = True
+            context_block["candidate_files"] = candidate_files
+            context_block["suggested_edit_paths"] = candidate_files.get(
+                "suggested_edit_paths", []
+            )
+            context_block["repo_map_count"] = pkg_meta.get("repo_map_count", 0)
+            context_block["context_builder_llm_enabled"] = builder_llm_enabled
+            if builder_llm_enabled:
+                context_block["builder_brief_applied"] = builder_brief_applied
+                if builder_llm_error:
+                    context_block["builder_llm_error"] = builder_llm_error
         context_block["adapter_in"] = {
             "fnames": sorted(
                 e.path for e in context_package.entries if e.tier == TIER_EDIT_FULL
@@ -792,6 +990,19 @@ def delegate_to_agent(
         PRIOR_FAILED_ATTEMPTS_REMINDER if prior_failed_attempts_payload else None
     )
 
+    model_roles_payload = _build_model_roles_payload(
+        delegate_mode=delegate_mode,
+        resolved_model=resolved_model,
+        tokens=tokens,
+        timing=timing,
+        workspace=ws,
+        builder_record=builder_record,
+    )
+
+    suggested_edit_paths_payload: list[str] | None = (
+        picker_result.suggested_edit_paths or None if picker_result is not None else None
+    )
+
     response = _response_payload(
         success=success,
         output=output,
@@ -831,6 +1042,10 @@ def delegate_to_agent(
         prior_failed_attempts_reminder=prior_failed_reminder,
         auto_merged_read_paths=auto_merged_read_paths or None,
         auto_merge_spec_read=auto_merge_spec_read,
+        model_roles=model_roles_payload,
+        suggested_edit_paths=suggested_edit_paths_payload,
+        context_builder_llm_enabled=builder_llm_enabled if picker_result is not None else None,
+        builder_brief_applied=builder_brief_applied if builder_llm_enabled else None,
     )
     if auto_merged_read_paths:
         mcp_request["auto_merged_read_paths"] = auto_merged_read_paths
@@ -894,6 +1109,7 @@ def delegate_to_agent(
         checkpoint=checkpoint_block,
         auto_merged_read_paths=auto_merged_read_paths or None,
         auto_merge_spec_read=auto_merge_spec_read,
+        model_roles=model_roles_payload,
     )
     log_path = append_delegation_record(record, ws=ws)
     log_delegation_sent(

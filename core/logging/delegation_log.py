@@ -151,6 +151,7 @@ def build_delegation_record(
     checkpoint: dict[str, Any] | None = None,
     auto_merged_read_paths: list[str] | None = None,
     auto_merge_spec_read: bool | None = None,
+    model_roles: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     session_dir_str = str(Path(session_dir).resolve())
     log_path_str = str(Path(log_path).resolve())
@@ -233,6 +234,8 @@ def build_delegation_record(
         record["auto_merged_read_paths"] = auto_merged_read_paths
     if auto_merge_spec_read is not None:
         record["auto_merge_spec_read"] = auto_merge_spec_read
+    if model_roles:
+        record["model_roles"] = model_roles
     return record
 
 

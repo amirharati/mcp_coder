@@ -3,7 +3,10 @@
 from pathlib import Path
 
 from core.host.cursor_rules import (
+    _resolve_includes,
+    bundled_cursor_rules_dir,
     bundled_use_mcp_coder_default_path,
+    include_only_filenames,
     is_mcp_coder_source_root,
     rule_entries_for_policy,
     rule_filenames_for_policy,
@@ -164,3 +167,83 @@ def test_rule_entries_use_dest_src_mapping():
     assert default[0].src != strict[0].src
     assert default[1].dest == strict[1].dest == "workspace-history.mdc"
     assert default[1].src == strict[1].src == "workspace-history.mdc"
+
+
+# --- include resolution ---
+
+
+def test_resolve_includes_inlines_file(tmp_path):
+    (tmp_path / "part.md").write_text("## Shared\nContent here.\n", encoding="utf-8")
+    src = "# Main\n\n<!-- @include part.md -->\n\nFooter.\n"
+    result = _resolve_includes(src, tmp_path)
+    assert "## Shared" in result
+    assert "Content here." in result
+    assert "<!-- @include" not in result
+    assert "# Main" in result
+    assert "Footer." in result
+
+
+def test_resolve_includes_strips_shared_comment(tmp_path):
+    (tmp_path / "shared.md").write_text(
+        "<!-- @shared: marker -->\n## Shared section\nbody\n", encoding="utf-8"
+    )
+    result = _resolve_includes("<!-- @include shared.md -->\n", tmp_path)
+    assert "<!-- @shared" not in result
+    assert "## Shared section" in result
+
+
+def test_resolve_includes_missing_file_becomes_empty(tmp_path):
+    src = "before\n<!-- @include nonexistent.md -->\nafter\n"
+    result = _resolve_includes(src, tmp_path)
+    assert "<!-- @include" not in result
+    assert "before" in result
+    assert "after" in result
+
+
+def test_resolve_includes_no_directives_unchanged(tmp_path):
+    src = "# Normal rule\nNo directives here.\n"
+    assert _resolve_includes(src, tmp_path) == src
+
+
+def test_include_only_filenames_from_manifest():
+    names = include_only_filenames()
+    assert "use-mcp-coder.shared.md" in names
+
+
+def test_shared_file_not_synced_to_workspace(tmp_path, monkeypatch):
+    ws = tmp_path / "app"
+    ws.mkdir()
+    monkeypatch.delenv("MCP_CODER_SYNC_CURSOR_RULE", raising=False)
+
+    sync_workspace_cursor_rules(ws)
+
+    rules_dir = workspace_cursor_rules_dir(ws)
+    assert not (rules_dir / "use-mcp-coder.shared.md").exists()
+
+
+def test_compiled_rule_contains_shared_sections(tmp_path, monkeypatch):
+    """Synced workspace file must have the shared sections inlined (no @include marker)."""
+    ws = tmp_path / "app"
+    ws.mkdir()
+    monkeypatch.delenv("MCP_CODER_SYNC_CURSOR_RULE", raising=False)
+
+    sync_workspace_cursor_rules(ws)
+
+    compiled = (workspace_cursor_rules_dir(ws) / "use-mcp-coder.mdc").read_text()
+    assert "## Spec location" in compiled
+    assert "## Session / step summary" in compiled
+    assert "<!-- @include" not in compiled
+
+
+def test_strict_compiled_rule_contains_shared_sections(tmp_path, monkeypatch):
+    ws = tmp_path / "app"
+    ws.mkdir()
+    monkeypatch.delenv("MCP_CODER_SYNC_CURSOR_RULE", raising=False)
+    monkeypatch.setenv("MCP_CODER_CURSOR_RULES_POLICY", "strict")
+
+    sync_workspace_cursor_rules(ws)
+
+    compiled = (workspace_cursor_rules_dir(ws) / "use-mcp-coder.mdc").read_text()
+    assert "## Spec location" in compiled
+    assert "## Session / step summary" in compiled
+    assert "<!-- @include" not in compiled

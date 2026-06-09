@@ -2,11 +2,9 @@
 
 from __future__ import annotations
 
-import os
 from pathlib import Path
 
-from core.config.models import resolve_model_name
-from core.storage.workspace_config import load_workspace_config
+from core.config.role_models import ROLE_REVIEW, resolve_role_model_name
 
 
 def resolve_review_model_name(workspace: str | Path) -> str:
@@ -18,14 +16,4 @@ def resolve_review_model_name(workspace: str | Path) -> str:
       2. MCP_CODER_REVIEW_MODEL env (if non-empty)
       3. workspace .mcp-coder/config.yaml review_model (if non-empty string)
     """
-    resolved = resolve_model_name()
-
-    env_raw = os.environ.get("MCP_CODER_REVIEW_MODEL", "").strip()
-    if env_raw:
-        resolved = env_raw
-
-    ws_value = load_workspace_config(workspace).get("review_model")
-    if isinstance(ws_value, str) and ws_value.strip():
-        resolved = ws_value.strip()
-
-    return resolved
+    return resolve_role_model_name(ROLE_REVIEW, workspace)

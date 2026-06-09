@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import os
 from pathlib import Path
 from typing import Any
 
@@ -17,7 +18,12 @@ from core.context.package import (
 )
 from core.context.summary import estimate_tokens, sha256_hex
 from core.config.auto_merge import auto_merge_spec_read_enabled
+from core.config.context_builder import (
+    context_builder_enabled,
+    context_builder_llm_enabled,
+)
 from core.config.models import resolve_model_name
+from core.context.file_picker import CandidateFilesResult, pick_candidate_files
 from core.engine.aider_engine import translate_context_package
 from core.specs.delegation_policies import (
     DelegationPolicies,
@@ -147,6 +153,22 @@ def inspect_context_package(
         effective_target_files = merge_result.effective_target_files
         auto_merged_read_paths = merge_result.auto_merged_read_paths
 
+    # Same picker path as delegate (dry-run parity, P4-001a)
+    picker_result: CandidateFilesResult | None = None
+    if delegation_policies is not None and context_builder_enabled(ws):
+        spec_text: str | None = None
+        if spec_rel_path is not None:
+            spec_abs = resolve_spec_path(str(ws), spec_rel_path)
+            if spec_abs.is_file():
+                spec_text = read_task_spec(spec_abs, workspace=ws).raw_text
+        picker_result = pick_candidate_files(
+            workspace=ws,
+            task=task,
+            spec_text=spec_text,
+            policies=delegation_policies,
+            target_files=effective_target_files,
+        )
+
     package = assemble_context(
         workspace=ws,
         spec_path=spec_rel_path,
@@ -154,7 +176,43 @@ def inspect_context_package(
         task=task,
         context_summary=context_summary,
         policies=delegation_policies,
+        picker_result=picker_result,
+        include_repo_map=picker_result is not None,
     )
+
+    # Builder LLM is skipped in dry-run by default to avoid surprise API calls
+    # from the inspect CLI. Opt in with MCP_CODER_INSPECT_RUN_BUILDER_LLM=1.
+    if (
+        picker_result is not None
+        and context_builder_llm_enabled(ws)
+        and os.environ.get("MCP_CODER_INSPECT_RUN_BUILDER_LLM", "").strip() in (
+            "1", "true", "yes", "on"
+        )
+    ):
+        from core.context.builder_history import gather_builder_history
+        from core.context.builder_prompt import build_builder_llm_prompt
+        from core.engine.context_builder_llm import run_context_builder_llm
+
+        history = gather_builder_history(ws, spec_path=spec_rel_path)
+        prompt = build_builder_llm_prompt(
+            mechanical_brief=package.brief,
+            picker_result=picker_result,
+            package_metadata=package.metadata,
+            history=history,
+            host_transcript=host_transcript,
+            context_summary=context_summary or "",
+            task=task,
+        )
+        llm_result = run_context_builder_llm(prompt, workspace_path=str(ws))
+        if llm_result.success:
+            package.brief = (
+                "## Builder brief\n\n"
+                f"{llm_result.brief.strip()}\n\n---\n\n{package.brief.strip()}"
+            )
+            package.metadata["builder_brief_applied"] = True
+        else:
+            package.metadata["builder_brief_applied"] = False
+            package.metadata["builder_llm_error"] = llm_result.error
 
     # Apply budget pass (mirrors delegate pipeline for dry-run parity)
     budget_model = resolve_model_name()

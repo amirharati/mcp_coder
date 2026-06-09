@@ -8,7 +8,7 @@ from pathlib import Path
 from unittest.mock import patch
 
 from core.engine.base import ExecutionResult
-from core.host.cursor_rules import bundled_cursor_rules_dir
+from core.host.cursor_rules import _resolve_includes, bundled_cursor_rules_dir
 from core.session.store import SessionAcquireResult, SessionStore
 from core.storage.session_paths import prepare_delegation_storage
 from core.workspace.history_db import WorkspaceHistoryDB
@@ -213,8 +213,9 @@ def test_bundled_rules_prior_failed_attempts_v12() -> None:
         rules_dir / "use-mcp-coder.default.mdc",
         rules_dir / "use-mcp-coder.strict.mdc",
     ):
-        text = path.read_text(encoding="utf-8")
-        assert 'mcp_coder_rule_version: "12"' in text
+        raw = path.read_text(encoding="utf-8")
+        text = _resolve_includes(raw, rules_dir)  # compiled = what workspaces receive
+        assert 'mcp_coder_rule_version: "13"' in text
         assert "prior_failed_attempts" in text
         assert "including failures" in text
 

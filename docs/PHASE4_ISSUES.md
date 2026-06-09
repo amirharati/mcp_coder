@@ -8,7 +8,7 @@
 
 # Phase 4 issue tracker
 
-**Status:** **Active** — Wave 1 impl complete (P4-005–008, 2026-06-09); Wave 1 dogfood partial  
+**Status:** **Active** — Wave 2 complete + dogfooded; D-P4-5 done (`context_builder_llm` default on); P4-ISS-012/013/017 fixed; open: P4-ISS-014/015/016/018  
 **Purpose:** Gaps, limitations, and follow-ups discovered during Phase 4 work.  
 **Milestone board:** [PHASE4_MVP.md](./PHASE4_MVP.md)  
 **Phase 3 issues (frozen):** [PHASE3_ISSUES.md](./PHASE3_ISSUES.md)  
@@ -27,7 +27,7 @@ Status: `open` | `scheduled` | `done` | `wontfix-p4` | `carried`
 
 | ID | Status | Priority | Title | Target | Notes |
 |----|--------|----------|-------|--------|-------|
-| P4-ISS-001 | `open` | medium | `prior_failed_attempts` not validated in dogfood | P4 exit dogfood | Happy path only; BL-327 code shipped, failure→retry scenario untested |
+| P4-ISS-001 | `done` | medium | `prior_failed_attempts` not validated in dogfood | Wave 2 add-on dogfood | v2 `70b2a7c2` response included prior `7c57aab8` edit_format failure |
 | P4-ISS-002 | `open` | low | Inspect-tool calls not auditable in `server.jsonl` | BL-330 | Carried P3-ISS-005; rules improved but no `get_delegation_diff` events in server log |
 | P4-ISS-003 | `open` | low | `judgment_checklist` nested only under `response_to_cursor` in JSONL | P4+ observability | Top-level grep misses it; MCP response OK |
 | P4-ISS-004 | `open` | medium | Pre-dogfood `delegation_timeout` storms | BL-309e | Four timeouts 17:24–17:34 before successful run 17:47 |
@@ -37,6 +37,48 @@ Status: `open` | `scheduled` | `done` | `wontfix-p4` | `carried`
 | P4-ISS-008 | `done` | high | Repo-root `specs/` tree | P4-005 / BL-325 | Dogfood: all specs under `.mcp-coder/specs/tasks/` |
 | P4-ISS-009 | `done` | high | Read-deps `(none` garbage path | P4-007 / BL-326 | v3 `auto_merged_read_paths: ['tip_calc/calculator.py']` — clean |
 | P4-ISS-010 | `done` | high | `judgment_checklist` absent from delegate response | P4-006 / BL-324 | **Present** in `response_to_cursor`; host summary quoted paths + pytest |
+| P4-ISS-011 | `done` | high | Wave 2 builder not dogfooded (picker + LLM) | Wave 2 dogfood | Dogfooded 2026-06-09 session `9ecf1307`; picker + Flash LLM fired on 8/9 delegations |
+| P4-ISS-012 | `done` | medium | Cursor rules: minimal `target_files` when picker on | 2026-06-09 master | Added **Context builder** para to `use-mcp-coder.default.mdc`; `context_builder_llm` default flipped on |
+| P4-ISS-013 | `done` | high | Builder LLM returns reasoning preamble instead of brief (Gemini Flash leak) | hotfix 2026-06-09 | `_strip_reasoning_preamble()` in `context_builder_llm.py`; prompt now requires `## Builder brief` as first line; 512 pytest |
+| P4-ISS-014 | `open` | medium | Builder LLM token counts always `None` for Gemini Flash | P4+ observability | `simple_send_with_retries` doesn't surface token usage; `cost_est_usd` absent; executor gap is separate (`aider_output_parse` works) |
+| P4-ISS-015 | `open` | low | `model_roles.executor` tokens always `None` (real counts in `usage.actual`) | P4+ observability | Should copy `usage.actual` into `model_roles.executor.tokens`; cosmetic audit gap |
+| P4-ISS-016 | `open` | low | `edit_format` errors on gpt-4o-mini → `needs_input` outcome | model quality | v1 `7c57aab8` merged `validate_ledger` into `load_ledger`; malformed SEARCH/REPLACE |
+| P4-ISS-017 | `done` | medium | Builder brief with embedded code → `context_builder_llm_failed` false reject | 2026-06-09 | `_finalize_builder_brief` strips fences; markers scoped to narrative only; prompt forbids code; 515 pytest |
+| P4-ISS-018 | `open` | medium | v2 retry timeout (217s) on full-file replace delegate | BL-309e | `MCP_CODER_DELEGATION_TIMEOUT_S=200`; engine_run_ms=217230; no files_changed |
+
+---
+
+## Wave 2 dogfood checklist (master — not a worker spec)
+
+**Workspace:** `mcp_coder_phase1_e2e` (or fresh greenfield repo).  
+**Config:** `.mcp-coder/config.yaml` (optional — LLM brief is **default on** since 2026-06-09):
+
+```yaml
+# context_builder_llm: false   # opt out if needed
+# context_builder_model: openrouter/google/gemini-2.5-flash
+```
+
+**Prereq:** OpenRouter (or provider) key for builder model; snapshot enabled (default).
+
+**Scenario:** 2–3 step greenfield CLI (e.g. expense-splitter or tip-calc follow-on). Planner passes **minimal** `target_files` (edit paths only or empty when spec lists Files).
+
+| # | Check | Pass criteria |
+|---|--------|----------------|
+| W2-1 | Picker on | JSONL `context_block.candidate_files` populated; `discovered_read` or spec paths present without planner listing every read dep |
+| W2-2 | Repo map | `repo_map_count` > 0; executor prompt includes repo-map block (not 150-row brief bloat) |
+| W2-3 | LLM brief | `builder_brief_applied: true`; `## Builder brief` in package; mechanical `## Paths` unchanged |
+| W2-4 | Role audit | `model_roles.context_builder` with `model`, `duration_ms`, `cost_est_usd` (or `unknown_model` if rates missing) |
+| W2-5 | MCP payload | Top-level `suggested_edit_paths`, `context_builder_llm_enabled` present when picker ran |
+| W2-6 | LLM fallback | (optional) break builder key once → delegation succeeds with mechanical brief; `builder_llm_error` in JSONL |
+| W2-7 | Wave 1 carry | Include one failed attempt → `prior_failed_attempts` (closes P4-ISS-001) |
+
+**After pass:** ~~PM decision to flip `context_builder_llm` default on (D-P4-5)~~ **done** 2026-06-09. Next: draft **P4-010** verify loop.
+
+**Result (2026-06-09 session `9ecf1307`):** W2-1 ✅ W2-2 ✅ W2-3 ✅ (8/9; P4-ISS-013 hotfixed) W2-4 ⚠️ W2-5 ✅ W2-6 — W2-7 ❌.
+
+**Add-on (2026-06-09 session `cfa31ab4`, validate/export):** W2-1 ✅ W2-3 ⚠️ v2 false reject (P4-ISS-017, now fixed); W2-7 ✅ `prior_failed_attempts` on v2.
+
+**P4-ISS-017 retry (2026-06-09 session `130f62db`, --help):** W2-1 ✅ W2-2 ✅ (`repo_map_count: 8`) W2-3 ✅ **`builder_brief_applied: True` on both delegates** W2-4 ⚠️ (tokens still None — P4-ISS-014) W2-5 ✅. **P4-ISS-017 fix confirmed clean.** Gemini Flash no longer false-rejects when appending code fences.
 
 ---
 
@@ -138,4 +180,8 @@ Status: `open` | `scheduled` | `done` | `wontfix-p4` | `carried`
 
 | Date | Change |
 |------|--------|
+| 2026-06-09 | D-P4-5 done — `context_builder_llm` default on; rules v13 + `@include` shared; P4-ISS-012 done; BL-332 deferred |
+| 2026-06-09 | P4-ISS-017 done (code-fence false reject; narrative-scoped markers; 515 pytest) |
+| 2026-06-09 | P4-ISS-013 hotfixed (reasoning preamble strip + prompt fix; 512 pytest); P4-ISS-014/015/016 logged; W2 dogfood scored |
+| 2026-06-09 | Wave 2 dogfood checklist + P4-ISS-011/012; Wave 2 core impl complete |
 | 2026-06-09 | Created at Wave 1 dogfood; P4-ISS-008–010 closed; open gaps for exit dogfood + observability |

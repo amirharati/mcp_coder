@@ -1,6 +1,11 @@
 # One managed rule in the workspace per policy (dest filename always use-mcp-coder.mdc).
-version: 1
+# Source files may use <!-- @include filename --> directives; compiled at sync time.
+# Files listed under `includes` are source-only and are never synced to workspaces.
+version: 2
 default_policy: default
+
+includes:
+  - use-mcp-coder.shared.md
 
 policies:
   default:

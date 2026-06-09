@@ -157,6 +157,41 @@ Phase 1 deferred executor conversation carry-over to here (BL-155); see P1-130 `
 | BL-203 | ~~Read Cursor agent-transcripts~~ | **done** — P1-120 metadata + P1-140 opt-in dump |
 | BL-204 | Proxy intercept: save latest Cursor prompt from `context_optimizer_proxy` | Personal workflow |
 | BL-205 | Cursor rule / skill snippet for routing to `delegate_to_agent` | Improve auto-routing |
+| BL-332 | **Host-agnostic planner rules sync** | Cursor-coupled today; compile engine is reusable — see § BL-332 |
+
+### BL-332: Host-agnostic planner rules sync
+
+**Status:** `deferred` — **keep Cursor-only for now** (2026-06-09). Revisit when a second host (BL-201 Claude Desktop, BL-202 other IDE) is prioritized.
+
+**Problem:** Managed planner guidance is **Cursor-specific** end-to-end, even though MCP may run under other hosts:
+
+| Layer | Today | Coupling |
+|-------|-------|----------|
+| **Call site** | `main.py` always calls `sync_workspace_cursor_rules(ws)` on stdio startup | Unconditional — not gated on `MCP_CODER_HOST` or host provider |
+| **Destination** | `.cursor/rules/*.mdc` | Cursor-only path + frontmatter (`alwaysApply`, `mcp_coder_managed`, …) |
+| **Module naming** | `core/host/cursor_rules.py`, `cursor_rules_policy.py` | Implies Cursor even though logic is mostly generic file sync |
+| **Host abstraction** | `HostProvider` covers session + transcript (`cursor.py`, `null.py`) | **No** `sync_rules()` / `planner_guidance()` hook — rules live outside the provider |
+
+**What is already host-neutral (2026-06-09):**
+
+- Rule **content** is plain markdown guidance (delegate flow, spec paths, judgment loop, context builder notes).
+- **Compile-at-sync:** `<!-- @include use-mcp-coder.shared.md -->` in bundled sources → `_resolve_includes()` inlines shared sections into one file before write. Workspaces never see include markers.
+- **`manifest.yaml`** maps `src` → `dest` per policy (`default` / `strict`); `includes:` marks source-only fragments (not synced standalone).
+
+**Why not fix now:** Cursor is the only supported host in practice; BL-201/202 are low priority. Premature abstraction risks wrong dest formats before a second host is dogfooded.
+
+**Possible solutions (pick when revisiting):**
+
+| Option | Sketch | Pros | Cons |
+|--------|--------|------|------|
+| **A — Gate + skip** | If `host_provider != cursor`, skip sync (like `is_mcp_coder_source_root`) | Minimal change; honest about support matrix | Other hosts get no managed guidance |
+| **B — Host hook** | Add `HostProvider.sync_planner_rules(ws) -> dict`; Cursor impl writes `.mdc`; `NullHost` no-op | Clean seam; `main.py` stops importing Cursor module directly | Still one adapter per host |
+| **C — Manifest per host** | Extend `manifest.yaml`: `hosts: { cursor: { rules: [...] }, claude: { rules: [{ dest: AGENTS.md, … }] } }` | Reuse compile engine + shared content; one content tree | Need to learn each host's instruction format and load semantics |
+| **D — Compiled markdown only** | Sync host-neutral `use-mcp-coder.md` (no `.mdc` frontmatter); host adapters wrap or copy | Content fully portable | Each host may need different wrapping (always-on vs file-scoped) |
+
+**Recommendation (tentative):** **B + C** — host hook that reads a host section from manifest; Cursor stays default; second host adds a row + thin writer. Keep `_resolve_includes()` and `use-mcp-coder.shared.md` as the single content source.
+
+**Related:** BL-205 (routing snippet), BL-324 (judgment loop in rules), BL-325 (spec paths in rules), P4-ISS-012 (context builder / `target_files` guidance — shipped in rules v13).
 
 ---
 
@@ -784,6 +819,7 @@ Until then: add rows to bundled `model_rates.yaml` when switching models; unknow
 
 | Date | Change |
 |------|--------|
+| 2026-06-09 | BL-332 added — host-agnostic planner rules sync (deferred; Cursor-coupled today, compile engine reusable) |
 | 2026-06-09 | BL-331 added — symbol-scoped/chunked edit files (Phase 5+, executor format change) |
 | 2026-06-09 | BL-162 staged (Stage 1 per-role D-P4-8 → escalation → swarm); notes/multi-model-roles.md |
 | 2026-06-09 | BL-330 inspect-tool server log audit (P4-ISS-002); PHASE4_ISSUES created |

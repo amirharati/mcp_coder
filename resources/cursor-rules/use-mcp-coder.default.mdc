@@ -3,7 +3,7 @@ description: mcp-coder delegate_to_agent (default policy; synced by MCP)
 mcp_coder_managed: true
 mcp_coder_rule_id: use-mcp-coder
 mcp_coder_rules_policy: default
-mcp_coder_rule_version: "12"
+mcp_coder_rule_version: "13"
 globs:
 alwaysApply: true
 ---
@@ -25,20 +25,12 @@ Use **mcp-coder** for disk edits. Pass decisions in `context_summary` or a step 
 
 **Read-deps:** list files to edit in `### Edit` and files to read (imports, prior-step code) in `### Read`. Edit paths go in `target_files`; read paths are auto-merged from spec when `spec_path` is set.
 
+**Context builder (default on):** When `spec_path` is set, the file picker discovers read-deps automatically — you may pass only edit paths in `target_files`. If the response includes `suggested_edit_paths`, review them; they are audit-only candidates not added without your approval.
+
 Bump `revision` in spec frontmatter when refining before first implement. Do not brainstorm in implement mode. MCP owns reports.
-
-## Spec location (required)
-
-- **Never** create `specs/` at the **repo root** (no `specs/tasks/`, `specs/epics/`, `specs/reports/` next to `src/` or project files).
-- All planner specs live under **`.mcp-coder/specs/`** only (gitignored MCP workspace metadata).
-- When calling `delegate_to_agent`, `spec_path` must be under `.mcp-coder/specs/tasks/` — use shorthand `tasks/foo.md` **or** full `.mcp-coder/specs/tasks/foo.md` (both accepted by MCP).
 
 After implement: follow **workspace-history** judgment loop **in order** (diff → compare → pytest → done). Quote **`judgment_checklist`** or inline `delegation_diff` path lists before pytest — do **not** verify by reading source files when those fields are on the response.
 
-## Session / step summary (required)
-
-- List **every** delegate attempt for the step — **including failures** — with `delegation_id`, `success`, and error/outcome.
-- Quote **`prior_failed_attempts`** when present before describing the latest success.
-- After a retry: **failed attempts first**, then latest outcome. Use `list_delegations(spec_path=…)` when unsure.
+<!-- @include use-mcp-coder.shared.md -->
 
 Synced from mcp-coder (`cursor_rules_policy: default`). Do not edit by hand.

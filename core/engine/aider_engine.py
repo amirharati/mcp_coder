@@ -35,6 +35,10 @@ _READ_CONTEXT_HEADER = (
     "\n\n---\n\n## Read context (read-only — do not edit unless spec allows)\n"
 )
 
+_REPO_MAP_HEADER = (
+    "\n\n---\n\n## Repo map (symbols only — do not edit unless spec allows)\n"
+)
+
 
 def translate_context_package(
     package: "ContextPackage",
@@ -47,7 +51,12 @@ def translate_context_package(
     read-full / read-excerpt payloads are injected as a fenced read context block.
     """
     # Local imports avoid circular dependency (core.engine.__init__ ← aider_engine ← core.context)
-    from core.context.package import TIER_EDIT_FULL, TIER_READ_EXCERPT, TIER_READ_FULL
+    from core.context.package import (
+        TIER_EDIT_FULL,
+        TIER_MAP_ONLY,
+        TIER_READ_EXCERPT,
+        TIER_READ_FULL,
+    )
     from core.context.summary import assemble_prompt
 
     read_entries = [
@@ -63,6 +72,16 @@ def translate_context_package(
             parts.append(f"\n### `{entry.path}` ({entry.tier})\n```python\n{entry.payload}\n```")
         read_block = "".join(parts)
 
+    map_entries = [
+        e for e in package.entries if e.tier == TIER_MAP_ONLY and e.payload is not None
+    ]
+    map_block = ""
+    if map_entries:
+        parts = [_REPO_MAP_HEADER]
+        for entry in map_entries:
+            parts.append(f"\n### `{entry.path}` (map-only)\n{entry.payload}\n")
+        map_block = "".join(parts)
+
     if host_transcript and host_transcript.strip():
         base = assemble_prompt(
             "",
@@ -73,7 +92,7 @@ def translate_context_package(
     else:
         base = package.brief
 
-    prompt = base + read_block
+    prompt = base + read_block + map_block
 
     fnames = sorted(e.path for e in package.entries if e.tier == TIER_EDIT_FULL)
 

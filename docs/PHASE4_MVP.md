@@ -8,7 +8,7 @@
 
 # Phase 4 MVP — Product manager doc
 
-**Status:** **Active** — Wave 1 impl done; partial dogfood (2026-06-09); gaps → [PHASE4_ISSUES.md](./PHASE4_ISSUES.md)  
+**Status:** **Active** — Wave 1–2 impl + dogfood done (2026-06-09); `context_builder_llm` default on; gaps → [PHASE4_ISSUES.md](./PHASE4_ISSUES.md)  
 **Host:** Cursor (Aider backend; other hosts deferred)  
 **Technical reference:** [PHASES.md](./PHASES.md) § Phase 4  
 **Vision:** [IDEA.md](./IDEA.md) · [VISION_DOCS.md](./VISION_DOCS.md)  
@@ -79,7 +79,7 @@ Parallel:       planner UX fixes (spec path, inspect tools, error messages)
 | D-P4-2 | Verify loop is opt-in via config (`auto_verify: true`); not blocking by default | P4-010 |
 | D-P4-3 | Spec paths **hard-reject** if not under `.mcp-coder/specs/tasks/`; error includes exact correct path + "move and retry" hint | P4-005 |
 | D-P4-4 | Judgment loop: `delegation_diff` summary surfaced prominently in response; rules require cite before done | P4-005/P4-006 |
-| D-P4-5 | Builder opt-out rule: P4-001a (rules-based file picker) ships **opt-out** from day one; P4-001b (cheap-LLM assembly) ships **opt-in**, flips to opt-out after Phase 4 dogfood confirms stability. Config key: `context_builder: false` to disable. Matches `rag_enabled` pattern. | P4-001 |
+| D-P4-5 | Builder opt-out: picker (P4-001a) opt-out from day 1. LLM brief (P4-001b) shipped opt-in; **flipped to opt-out (default on) 2026-06-09** after dogfood confirms stability. Disable via `context_builder_llm: false` / `MCP_CODER_CONTEXT_BUILDER_LLM=0`. | P4-001, done |
 | D-P4-6 | P4-001a is rules-based (spec edit paths + ripgrep) — no LLM. When P4-001b needs a model: `CONTEXT_BUILDER_MODEL` env or `context_builder_model:` in config.yaml; **Gemini Flash default** (largest context window, cheapest). Same pattern as `AIDER_MODEL`. | P4-001b |
 | D-P4-7 | Verify loop scope: configurable `test_command` (e.g. `pytest -x`); default = full suite when `auto_verify: true`. Spec-targeted test discovery deferred (fragile heuristic; false negatives worse than full suite). | P4-010 |
 | D-P4-8 | **Per-role models (start simple).** Each LLM role (executor, review, context builder, future critic) resolves its own model via the same precedence (`<role>_model` env + config.yaml; documented default) and logs its own `model` / `tokens` / `cost_est_usd` / `duration_ms` block in delegation JSONL. One model per role for now. Resolvers live in `core/config/` (backend-neutral). Future multi-model-per-role (escalation, critic redo, swarm/ensemble) is **deferred** — see [notes/multi-model-roles.md](./notes/multi-model-roles.md), BL-162. | P4-004; review/executor shipped |
@@ -106,18 +106,18 @@ Task specs: `docs/tasks/P4-*.md` (gitignored; created per worker session).
 | Read-deps `(none` parse fix | P4-007 | `done` 2026-06-09 | BL-326 | `_is_placeholder_path` em-dash variants; merge filter; 448 pytest |
 | Failed delegation surface in response | P4-008 | `done` 2026-06-09 | BL-327 | `prior_failed_attempts` + reminder; use-mcp-coder v12, workspace-history v6; 452 pytest |
 
-### Wave 2 — Context builder (cheap LLM + per-role model infra)
+### Wave 2 — Context builder ✓ **complete** (dogfooded 2026-06-09; LLM brief default on)
 
 **Goal:** BL-001 + D-P4-8 — mcp-coder picks relevant files, assembles a context brief before delegating, and does so through a clean per-role model layer that every future LLM role (critic, escalation, swarm) reuses.
 
 **Depends on:** Wave 1 complete.  
-**Ship order:** P4-004 + P4-001a in parallel (disjoint code) → P4-001b consumes both.
+**Ship order:** P4-004 + P4-001a in parallel → P4-001b → **Wave 2 dogfood** → flip `context_builder_llm` default (D-P4-5).
 
 | Milestone | Task ID | Status | Implements | Summary |
 |-----------|---------|--------|------------|---------|
-| Per-role model registry + audit | P4-004 | `todo` | D-P4-8, BL-162 | `resolve_role_model_name(role, ws)`; `model_roles` audit block in JSONL; per-role budget stub; executor/review unchanged |
-| File picker (rules + ripgrep) | P4-001a | `todo` | BL-001, D-P4-5 | Spec edit/read paths + ripgrep symbol scan → ranked candidate files; opt-out; no LLM |
-| Cheap LLM brief | P4-001b | `todo` | BL-001, BL-162, BL-329 | Builder LLM assembles context brief; uses P4-004 resolver + audit; opt-in until dogfood; session history + mode-aware |
+| Per-role model registry + audit | P4-004 | `done` 2026-06-09 | D-P4-8, BL-162 | `role_models.py`, `role_audit.py`, `model_roles` on JSONL + MCP; review + executor summary; 463 pytest (+24 role suite) |
+| File picker (rules + ripgrep) | P4-001a | `done` 2026-06-09 | BL-001, D-P4-5 | `file_picker.py`, `repo_map.py`, `context_builder_enabled()`; picker + map-only; 488 pytest (+25) |
+| Cheap LLM brief | P4-001b | `done` 2026-06-09 | BL-001, BL-162 | `builder_llm` default on (D-P4-5); `model_roles.context_builder`; merge_brief; rules v13; 528 pytest |
 | Topic detection | P4-002 | `optional` | BL-153 | Task-type / topic boundaries for file picker |
 | Skills injection | P4-003 | `optional` | BL-008 | Inject skill packs by topic |
 
@@ -192,17 +192,18 @@ Builder token usage logged via P4-004 role audit block (`model_roles.context_bui
 - [x] Judgment loop rules + `judgment_checklist` on implement responses (P4-006); behavioral dogfood re-run TBD
 - [x] `auto_merged_read_paths: ['(none']` fixed (P4-007)
 - [x] `prior_failed_attempts` on delegate response + rules (P4-008); behavioral dogfood TBD
-- [ ] Context builder selects relevant files before delegate without full file list from planner (P4-001)
+- [x] Context builder shipped + dogfooded — picker (001a) + LLM brief (001b, default on); P4-ISS-013/017 fixed ([PHASE4_ISSUES.md](./PHASE4_ISSUES.md) Wave 2 checklist)
+- [x] Cursor rules v13 — context builder guidance; composable `@include` shared sections at sync
 - [ ] Optional pytest hook fires post-delegate; `partial` outcome when tests fail (P4-010)
-- [ ] Phase 4 dogfood: greenfield multi-step project; host never lists all files; builder picks correctly
+- [x] Phase 4 dogfood: greenfield multi-step (expense-splitter); picker + LLM brief exercised; minimal `target_files` works
 
 ---
 
 ## Next action
 
-1. **Wave 1 dogfood** — partial pass ([PHASE4_ISSUES.md](./PHASE4_ISSUES.md)); optional re-run for P4-ISS-001 (`prior_failed_attempts`) before or during Wave 2.
-2. **Wave 2 alignment** — confirm P4-001a scope + ship order (001a before 001b); then draft **P4-001a**.
-3. **Wave 4 (P4-009/P4-020)** — design decision after Wave 2 dogfood.
+1. **P4-010 worker** — Wave 3 verify loop (post-delegate pytest hook, opt-in); ready to draft.
+2. **P4-ISS-014/015** — `model_roles` token tracking (observability; not blocking).
+3. **BL-332** — host-agnostic rules sync (deferred; Cursor-only for now).
 
 ---
 
@@ -221,6 +222,11 @@ Builder token usage logged via P4-004 role audit block (`model_roles.context_bui
 
 | Date | Change |
 |------|--------|
+| 2026-06-09 | **Wave 2 complete** — dogfood + D-P4-5 (`context_builder_llm` default on); rules v13 + `@include` shared; 528 pytest; BL-332 deferred |
+| 2026-06-09 | **Wave 2 core complete** — P4-004 + P4-001a + P4-001b; 502 pytest; LLM brief opt-in |
+| 2026-06-09 | **P4-001b done** — `context_builder_llm`; `model_roles.context_builder`; merge_brief |
+| 2026-06-09 | **P4-001a done** — rules picker + repo map; `context_builder_enabled` default on; 488 pytest |
+| 2026-06-09 | **P4-004 done** — per-role model registry + `model_roles` audit; 463 pytest |
 | 2026-06-09 | D-P4-9–12 locked (picker output, edit-full correctness, backend-neutral repo map, discover default) |
 | 2026-06-09 | Wave 2 fully aligned: P4-004 (per-role model infra) added; P4-001a/b ship order + inputs locked |
 | 2026-06-09 | D-P4-8 locked — per-role models (Stage 1 simple); future escalation/critic/swarm → notes/multi-model-roles.md |

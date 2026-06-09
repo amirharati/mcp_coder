@@ -3,13 +3,15 @@
 from __future__ import annotations
 
 import hashlib
-import shutil
+import re
 from dataclasses import dataclass
 from functools import lru_cache
 from pathlib import Path
 from typing import Any
 
 import yaml
+
+_INCLUDE_RE = re.compile(r"^[ \t]*<!--\s*@include\s+(\S+)\s*-->[ \t]*$", re.MULTILINE)
 
 from core.resources_paths import resources_dir
 from core.host.cursor_rules_policy import (
@@ -35,6 +37,29 @@ class RuleSyncEntry:
 
 def bundled_cursor_rules_dir() -> Path:
     return resources_dir() / "cursor-rules"
+
+
+def _resolve_includes(text: str, rules_dir: Path) -> str:
+    """Replace <!-- @include filename --> directives with the referenced file's content.
+
+    - Only files inside rules_dir are resolved (no path traversal).
+    - Files whose name starts with '_' or has no recognised text extension are skipped.
+    - Missing includes are replaced with an empty string and do not raise.
+    - The leading HTML-comment marker line in the included file (<!-- @shared: … -->)
+      is stripped so the compiled output is clean markdown.
+    """
+
+    def _sub(m: re.Match) -> str:
+        target = Path(m.group(1)).name  # strip any path component
+        include_path = rules_dir / target
+        if not include_path.is_file():
+            return ""
+        content = include_path.read_text(encoding="utf-8")
+        # Strip the self-identifying comment at the top of shared files
+        content = re.sub(r"^[ \t]*<!--[^>]*@shared[^>]*-->[ \t]*\n?", "", content)
+        return content.strip()
+
+    return _INCLUDE_RE.sub(_sub, text)
 
 
 def bundled_use_mcp_coder_default_path() -> Path:
@@ -123,7 +148,17 @@ def rule_filenames_for_policy(policy: str) -> list[str]:
     return [e.dest for e in rule_entries_for_policy(policy)]
 
 
+def include_only_filenames() -> frozenset[str]:
+    """Source files listed under manifest `includes:` — never synced as standalone rules."""
+    manifest = _load_manifest()
+    raw = manifest.get("includes", [])
+    if not isinstance(raw, list):
+        return frozenset()
+    return frozenset(str(f) for f in raw if isinstance(f, str))
+
+
 def all_bundled_src_filenames() -> list[str]:
+    """Sync-able source filenames (excludes include-only files)."""
     manifest = _load_manifest()
     seen: set[str] = set()
     ordered: list[str] = []
@@ -172,19 +207,21 @@ def _sync_one_rule(workspace: Path, entry: RuleSyncEntry) -> dict[str, Any]:
         }
 
     bundled_text = bundled.read_text(encoding="utf-8")
-    bundled_hash = _sha256_text(bundled_text)
+    # Resolve <!-- @include filename --> directives: workspace gets one compiled file.
+    compiled_text = _resolve_includes(bundled_text, bundled.parent)
+    compiled_hash = _sha256_text(compiled_text)
     existed = dest.is_file()
 
     if existed:
         dest_text = dest.read_text(encoding="utf-8")
-        if _sha256_text(dest_text) == bundled_hash:
+        if _sha256_text(dest_text) == compiled_hash:
             return {
                 "filename": entry.dest,
                 "src": entry.src,
                 "updated": False,
                 "created": False,
                 "rule_path": str(dest.resolve()),
-                "rule_sha256": bundled_hash,
+                "rule_sha256": compiled_hash,
             }
         fm = _read_frontmatter(dest_text)
         if not fm.get(MANAGED_MARKER):
@@ -197,14 +234,14 @@ def _sync_one_rule(workspace: Path, entry: RuleSyncEntry) -> dict[str, Any]:
             }
 
     dest.parent.mkdir(parents=True, exist_ok=True)
-    shutil.copy2(bundled, dest)
+    dest.write_text(compiled_text, encoding="utf-8")
     return {
         "filename": entry.dest,
         "src": entry.src,
         "updated": existed,
         "created": not existed,
         "rule_path": str(dest.resolve()),
-        "rule_sha256": bundled_hash,
+        "rule_sha256": compiled_hash,
     }
 
 

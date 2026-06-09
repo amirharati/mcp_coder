@@ -164,7 +164,7 @@ def test_bundled_rules_judgment_loop_versions() -> None:
         rules_dir / "use-mcp-coder.strict.mdc",
     ):
         text = path.read_text(encoding="utf-8")
-        assert 'mcp_coder_rule_version: "12"' in text
+        assert 'mcp_coder_rule_version: "13"' in text
         assert "judgment_checklist" in text
         assert "reading source files" in text.lower() or "reading source" in text.lower()
 
