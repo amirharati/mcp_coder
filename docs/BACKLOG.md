@@ -370,7 +370,7 @@ By design today: `project_key` = SHA-256(resolved path).
 
 ### BL-322: Workspace history — delegation-granularity version control
 
-**Status:** `scheduled` — Phase 3 Wave 1 entry ([PHASE3_MVP.md](./PHASE3_MVP.md)); P3-ISS-001. Designed 2026-06-07 (chat [Phase 2 tail review](d44a5b15-2ed4-4834-bc91-91f776e5dd02)).  
+**Status:** `partial` — **Wave 1 shipped** (BL-322a–f, P3-322a–322f); restore/fork sub-items deferred ([PHASE3_MVP.md](./PHASE3_MVP.md)). Designed 2026-06-07 (chat [Phase 2 tail review](d44a5b15-2ed4-4834-bc91-91f776e5dd02)).  
 **Full design:** [docs/OTEHR_RELATED_IDEAS/WORKSPACE_HISTORY.md](./OTEHR_RELATED_IDEAS/WORKSPACE_HISTORY.md)
 
 **Problem addressed:** P2-ISS-002 (`files_changed` misses new files without git); strict scope enforcement that reports violations but leaves workspace dirty; inability to time-travel to any MCP call boundary across a project lifecycle.
@@ -390,7 +390,13 @@ By design today: `project_key` = SHA-256(resolved path).
 | **BL-322a** | **Workspace hash snapshot** (manifest) | Before delegation: SHA-256 walk → in-memory manifest; persist delegation row + file deltas in `~/.mcp-coder/projects/<key>/workspace_history.db` (see [WORKSPACE_HISTORY.md](./OTEHR_RELATED_IDEAS/WORKSPACE_HISTORY.md)). After delegation: diff manifests → `created` / `modified` / `deleted`. Replaces fragile mtime fallback. Git-primary when git works; manifest when `used_git=False` or env override. |
 | **BL-322b** | **Content snapshot for contract files** | Store full content of `files_edit` + `files_read` files (not hashes) before delegation. Enables **revert** of violation files to pre-delegation state. Other files: hash-only. |
 | **BL-322c** | **Post-delegation gateway** (diff vs policy) | After diff computed, check against spec `files_edit` / `files_read`. `strict`: revert violation files using BL-322b content + block. `discover`: report only (current P2-305 behavior). New `gateway` mode: surface diff to human or pass to reviewer model (see BL-322d). |
-| **BL-322d** | **Diff in MCP response + human-in-loop approval** | Return `delegation_diff` in MCP response: `{created, modified, deleted, violations}`. Planner (Cursor) sees exact changes between calls. Optional config: require human `approve_delegation` call before accepting result on violation. Pairs with BL-151 pre-gate for full cycle. |
+| **BL-322d** | **Diff in MCP response + CLI history** | `delegation_diff` on delegate response; MCP `get_delegation_diff`; CLI `history list\|diff\|revert`. Pairs with BL-151 pre-gate for full cycle. **`done`** P3-322d. |
+| **BL-322e** | **Checkpoint metadata (dataset labels)** | `checkpoint_summary`, telemetry, `spec_path` on `snapshots` rows; JSONL `checkpoint` block; D-P3-9. **`done`** P3-322e. |
+| **BL-322f** | **History inspect (browse DB)** | MCP `list_delegations`, `get_checkpoint_detail`, `get_file_history`; CLI `show\|latest\|file`; `spec_report_path` pointer. **`done`** P3-322f. |
+| **BL-322g** | **Restore to checkpoint** (`restore_to_checkpoint`) | Write **post-delegation** file content from `content_hash` blobs to disk (opposite of `revert_to_before`). Read-only `file_at(delegation_id, path)` for MCP. CLI `history checkout <id> [--paths …]`. **`deferred`** — P3-322g; trigger after P3-401 dogfood if bisect hurts. |
+| **BL-322h** | **Checkpoint fork / sandbox try** | Non-destructive: materialize checkpoint state in a **copy dir** or ephemeral overlay so user can run tests without mutating live workspace. Optional MCP `fork_checkpoint`. **`deferred`** — design after BL-322g; pairs with **BL-502** (git worktree) for git-native teams. |
+
+**Shipped undo (not restore):** `revert_to_before` + CLI `history revert` (BL-322b) undoes **one delegation** on selected paths — distinct from BL-322g “go back to known-good state.”
 
 ---
 
@@ -437,7 +443,7 @@ scope_violations = snapshot_delta.all_changes ∩ (not in files_edit)
 | **P2-ISS-002** | Closed by BL-322a (non-git attribution) |
 | **BL-314** | BL-322a completes the "honest file reporting" story |
 | **BL-151** (gatekeeper MCP) | BL-322c is the post-run gate; BL-151 is the pre-run gate — together form full enforcement cycle |
-| **BL-502** (git worktree / diff return) | BL-322 is the simpler, non-git version of the same idea; BL-502 (git-native) remains for teams that want git-managed task branches |
+| **BL-502** (git worktree / diff return) | BL-322 is the simpler, non-git version; BL-322h (sandbox fork) is the non-git “try without touching live tree”; BL-502 remains git-native task branches |
 | **P2-305** (scope expansion report) | BL-322c replaces soft reporting with hard enforcement when configured |
 
 ---
@@ -473,7 +479,7 @@ Result: workspace has ONLY the contract-allowed changes
 
 ---
 
-**Target:** Phase 3 entry point. BL-322a (snapshot + attribution) ships first; BL-322b/c/d (content + gate + revert) follow in order.
+**Target:** BL-322a–f **done** (397 pytest). Next: **BL-322g** restore/checkout if dogfood needs it; **BL-322h** fork/sandbox; or **BL-502** git worktree for teams with git.
 
 ---
 
@@ -591,7 +597,7 @@ Until then: add rows to bundled `model_rates.yaml` when switching models; unknow
 | ID | Item |
 |----|------|
 | BL-501 | Job ID + async delegation (poll / MCP notification) for long Aider runs |
-| BL-502 | Git worktree / task-branch per delegation — git-native audit trail + rollback (pairs with BL-322 non-git approach) |
+| BL-502 | Git worktree / task-branch per delegation — git-native audit trail + rollback (pairs with BL-322; alternative to BL-322h fork for git repos) |
 | BL-503 | Grade executor output with cheap model before returning to Cursor |
 | BL-504 | Global `~/.mcp-coder/config.yaml` defaults | Per-repo `config.yaml` shipped P1-130 |
 | BL-506 | Generic `transcript.md` watch folder (non-Cursor hosts) |
@@ -609,6 +615,7 @@ Until then: add rows to bundled `model_rates.yaml` when switching models; unknow
 | BL-305 | Server log scope | 2026-06-05 — P1-125 |
 | BL-101 | Transcript tail cap | 2026-06-05 — P1-140 |
 | BL-203 | Cursor agent-transcripts | 2026-06-05 — P1-120 + P1-140 |
+| BL-322 (partial) | Workspace history Wave 1 (322a–322f) | 2026-06-08 — manifest, blobs/revert, gateway, diff/CLI, metadata, inspect; P3-ISS-001 closed; 397 pytest |
 
 ---
 
@@ -616,6 +623,7 @@ Until then: add rows to bundled `model_rates.yaml` when switching models; unknow
 
 | Date | Change |
 |------|--------|
+| 2026-06-08 | BL-322a–f done; BL-322g/h deferred (restore + fork/sandbox); BL-502 cross-link |
 | 2026-06-08 | Phase 3 start — BL-320/322 `scheduled`; BL-323 budget override; BL-322a storage aligned to WORKSPACE_HISTORY |
 | 2026-06-07 | Wild test done — BL-320 failed-attempt archive; BL-321 tiered model selection (P2-ISS-007/008) |
 | 2026-06-07 | BL-322 workspace hash snapshot + post-delegation gateway — Phase 3 design (chat [Phase 2 tail review](d44a5b15-2ed4-4834-bc91-91f776e5dd02)) |

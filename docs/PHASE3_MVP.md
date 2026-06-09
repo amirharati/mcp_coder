@@ -132,7 +132,8 @@ Task specs: `docs/tasks/P3-*.md` (gitignored; created per worker session).
 | MCP diff + CLI history | P3-322d | `done` | BL-322d | `delegation_diff` + `get_delegation_diff` + CLI history; 385 pytest (+11) |
 | Checkpoint metadata (dataset) | P3-322e | `done` | D-P3-9 | `checkpoint_summary` + telemetry on `snapshots` rows; `history list`; 388 pytest (+6) |
 | History inspect (browse DB) | P3-322f | `done` | BL-322e | MCP list/file_history/checkpoint_detail; CLI show/file/latest; `spec_report_path`; 397 pytest (+9) |
-| Checkpoint checkout/restore | P3-322g | `deferred` | BL-322 | `restore_to_checkpoint` / `file_at`; revert-to-before shipped (322b CLI) |
+| Checkpoint checkout/restore | P3-322g | `deferred` | BL-322g | `restore_to_checkpoint` / `file_at`; revert shipped (322b CLI) |
+| Checkpoint fork / sandbox | P3-322h | `deferred` | BL-322h | Non-destructive try dir; pairs with BL-502 git worktree |
 
 **Wave 1 extras:** P3-322e + P3-322f `done` — **Wave 1 code + inspect complete**.
 
@@ -174,7 +175,8 @@ Task specs: `docs/tasks/P3-*.md` (gitignored; created per worker session).
 |------|-------------|
 | P3-322e checkpoint metadata (D-P3-9) | **Done** — 388 pytest (+6); JSONL `checkpoint` block |
 | P3-322f history inspect (MCP list + CLI show/latest) | **Done** — 397 pytest (+9); list/file_history/checkpoint_detail |
-| P3-322g checkpoint checkout/restore | **Deferred** — `restore_to_checkpoint` + `file_at`; undo exists via `history revert` (322b) |
+| P3-322g checkpoint checkout/restore | **Deferred** — BL-322g; after dogfood if bisect hurts |
+| P3-322h checkpoint fork / sandbox | **Deferred** — BL-322h; non-destructive try; or BL-502 for git |
 | P3-320 attempt archive | **Deferred end of Phase 3** — brainstorm storage layout (keep specs clean) before worker spec |
 | P2-315 MCP progress notifications | BACKLOG BL-106 |
 | P2-400/405/410 intelligence wave | BACKLOG BL-153, BL-008, BL-003 |
@@ -228,7 +230,7 @@ All Q1–Q5 resolved (2026-06-08). Locked as D-P3-2/6/7/8 and Q3 deferred.
 
 1. **P3-401** — Wave 1 dogfood runbook + sign-off in e2e workspace.
 2. **P3-320** — attempt archive design + implement before Phase 3 exit (P3-499).
-3. **P3-322g** — checkout/restore if dogfood bisect workflow needs it.
+3. **P3-322g / 322h** — restore or fork/sandbox if dogfood bisect workflow needs it (BL-322g/h).
 4. Revisit P3-311 priority at end of Wave 2; **Exit:** P3-499 when waves 1–4 checklist green.
 
 ---
