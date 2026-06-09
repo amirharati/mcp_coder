@@ -31,13 +31,23 @@ _SNAPSHOT_CHECKPOINT_COLUMNS: tuple[tuple[str, str], ...] = (
     ("delta_created", "INTEGER"),
     ("delta_modified", "INTEGER"),
     ("delta_deleted", "INTEGER"),
+    ("spec_report_path", "TEXT"),
 )
 
-_SNAPSHOT_SELECT = """
+_SNAPSHOT_COLUMNS = """
     delegation_id, mcp_session_id, timestamp_start, timestamp_end, spec_path,
     workspace_path, checkpoint_summary, delegate_mode, outcome, model,
     duration_ms, tokens_total, error_class, delta_created, delta_modified,
-    delta_deleted
+    delta_deleted, spec_report_path
+"""
+
+_SNAPSHOT_SELECT = _SNAPSHOT_COLUMNS
+
+_SNAPSHOT_SELECT_S = """
+    s.delegation_id, s.mcp_session_id, s.timestamp_start, s.timestamp_end, s.spec_path,
+    s.workspace_path, s.checkpoint_summary, s.delegate_mode, s.outcome, s.model,
+    s.duration_ms, s.tokens_total, s.error_class, s.delta_created, s.delta_modified,
+    s.delta_deleted, s.spec_report_path
 """
 
 
@@ -339,6 +349,7 @@ class WorkspaceHistoryDB:
         delta_created: int,
         delta_modified: int,
         delta_deleted: int,
+        spec_report_path: str | None = None,
     ) -> None:
         if not self.db_path.is_file():
             return
@@ -355,7 +366,8 @@ class WorkspaceHistoryDB:
                     error_class = ?,
                     delta_created = ?,
                     delta_modified = ?,
-                    delta_deleted = ?
+                    delta_deleted = ?,
+                    spec_report_path = ?
                 WHERE delegation_id = ?
                 """,
                 (
@@ -369,6 +381,7 @@ class WorkspaceHistoryDB:
                     delta_created,
                     delta_modified,
                     delta_deleted,
+                    spec_report_path,
                     delegation_id,
                 ),
             )
@@ -376,18 +389,38 @@ class WorkspaceHistoryDB:
             if cur.rowcount == 0:
                 return
 
+    def get_latest_delegation_id(self) -> str | None:
+        rows = self.list_snapshots(limit=1)
+        if not rows:
+            return None
+        return str(rows[0]["delegation_id"])
+
     def list_snapshots(
         self,
         *,
         limit: int = 20,
         spec_path: str | None = None,
+        file_path: str | None = None,
     ) -> list[dict[str, object]]:
         if not self.db_path.is_file():
             return []
         limit = max(1, min(limit, 500))
         with self._connect() as conn:
             conn.row_factory = sqlite3.Row
-            if spec_path:
+            if file_path:
+                rel = normalize_repo_path(file_path)
+                rows = conn.execute(
+                    f"""
+                    SELECT DISTINCT {_SNAPSHOT_SELECT_S}
+                    FROM snapshots s
+                    INNER JOIN file_deltas fd ON fd.delegation_id = s.delegation_id
+                    WHERE fd.path = ?
+                    ORDER BY s.timestamp_end DESC, s.timestamp_start DESC
+                    LIMIT ?
+                    """,
+                    (rel, limit),
+                ).fetchall()
+            elif spec_path:
                 rows = conn.execute(
                     f"""
                     SELECT {_SNAPSHOT_SELECT}
@@ -408,4 +441,37 @@ class WorkspaceHistoryDB:
                     """,
                     (limit,),
                 ).fetchall()
+        return [dict(row) for row in rows]
+
+    def get_file_history_rows(
+        self,
+        file_path: str,
+        *,
+        limit: int = 20,
+    ) -> list[dict[str, object]]:
+        if not self.db_path.is_file():
+            return []
+        rel = normalize_repo_path(file_path)
+        limit = max(1, min(limit, 500))
+        with self._connect() as conn:
+            conn.row_factory = sqlite3.Row
+            rows = conn.execute(
+                """
+                SELECT
+                    s.delegation_id,
+                    s.checkpoint_summary,
+                    s.spec_path,
+                    s.spec_report_path,
+                    s.timestamp_end,
+                    fd.change_type,
+                    fd.diff,
+                    fd.is_binary
+                FROM file_deltas fd
+                INNER JOIN snapshots s ON s.delegation_id = fd.delegation_id
+                WHERE fd.path = ?
+                ORDER BY s.timestamp_end DESC, s.timestamp_start DESC
+                LIMIT ?
+                """,
+                (rel, limit),
+            ).fetchall()
         return [dict(row) for row in rows]

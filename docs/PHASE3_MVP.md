@@ -131,13 +131,14 @@ Task specs: `docs/tasks/P3-*.md` (gitignored; created per worker session).
 | Post-delegation gateway | P3-322c | `done` | BL-322c, D-P3-4 | `gateway.py`; strict auto-revert; 374 pytest (+10) |
 | MCP diff + CLI history | P3-322d | `done` | BL-322d | `delegation_diff` + `get_delegation_diff` + CLI history; 385 pytest (+11) |
 | Checkpoint metadata (dataset) | P3-322e | `done` | D-P3-9 | `checkpoint_summary` + telemetry on `snapshots` rows; `history list`; 388 pytest (+6) |
-| History inspect (browse DB) | P3-322f | `todo` | BL-322e | MCP `list_delegations` + `get_checkpoint_detail`; CLI `show`/`latest`; `diff --latest`; `list --file` |
+| History inspect (browse DB) | P3-322f | `done` | BL-322e | MCP list/file_history/checkpoint_detail; CLI show/file/latest; `spec_report_path`; 397 pytest (+9) |
+| Checkpoint checkout/restore | P3-322g | `deferred` | BL-322 | `restore_to_checkpoint` / `file_at`; revert-to-before shipped (322b CLI) |
 
-**Wave 1 extras (before dogfood):** P3-322e `done` → **P3-322f** next.
+**Wave 1 extras:** P3-322e + P3-322f `done` — **Wave 1 code + inspect complete**.
 
 **Deferred:** P3-320 attempt archive → **end of Phase 3** (needs design: avoid dirtying specs tree; brainstorm before spec).
 
-**Next after 322f:** P3-401 Wave 1 dogfood runbook.
+**Next:** P3-401 Wave 1 dogfood runbook.
 
 ### Wave 2 — Planner-visible history (**deferred — end of Phase 3**)
 
@@ -172,7 +173,8 @@ Task specs: `docs/tasks/P3-*.md` (gitignored; created per worker session).
 | Item | Disposition |
 |------|-------------|
 | P3-322e checkpoint metadata (D-P3-9) | **Done** — 388 pytest (+6); JSONL `checkpoint` block |
-| P3-322f history inspect (MCP list + CLI show/latest) | **Active** — after 322e, before dogfood |
+| P3-322f history inspect (MCP list + CLI show/latest) | **Done** — 397 pytest (+9); list/file_history/checkpoint_detail |
+| P3-322g checkpoint checkout/restore | **Deferred** — `restore_to_checkpoint` + `file_at`; undo exists via `history revert` (322b) |
 | P3-320 attempt archive | **Deferred end of Phase 3** — brainstorm storage layout (keep specs clean) before worker spec |
 | P2-315 MCP progress notifications | BACKLOG BL-106 |
 | P2-400/405/410 intelligence wave | BACKLOG BL-153, BL-008, BL-003 |
@@ -224,9 +226,9 @@ All Q1–Q5 resolved (2026-06-08). Locked as D-P3-2/6/7/8 and Q3 deferred.
 
 ## Next action
 
-1. **Dispatch P3-322f** — MCP browse + CLI `show`/`latest`/`diff --latest`.
-2. **P3-401** — Wave 1 dogfood after 322f.
-3. **P3-320** — attempt archive design + implement before Phase 3 exit (P3-499).
+1. **P3-401** — Wave 1 dogfood runbook + sign-off in e2e workspace.
+2. **P3-320** — attempt archive design + implement before Phase 3 exit (P3-499).
+3. **P3-322g** — checkout/restore if dogfood bisect workflow needs it.
 4. Revisit P3-311 priority at end of Wave 2; **Exit:** P3-499 when waves 1–4 checklist green.
 
 ---
@@ -240,6 +242,7 @@ All Q1–Q5 resolved (2026-06-08). Locked as D-P3-2/6/7/8 and Q3 deferred.
 | 2026-06-08 | **P3-322a done** — `core/workspace/`; tracker-primary; P3-ISS-001 closed; 355 pytest |
 | 2026-06-08 | **P3-322b done** — blobs + diffs + revert; 364 pytest (+9) |
 | 2026-06-08 | **P3-322e done** — checkpoint metadata on snapshots; 388 pytest (+6) |
+| 2026-06-08 | **P3-322f done** — history inspect MCP + CLI; 397 pytest (+9); Wave 1 extras complete |
 | 2026-06-08 | **P3-322f added** — MCP `list_delegations` + CLI inspect after 322e |
 | 2026-06-08 | **P3-322e active** — checkpoint metadata before dogfood; **P3-320 deferred** end of Phase 3 |
 | 2026-06-08 | **D-P3-9 / P3-322e** — checkpoint metadata § added |

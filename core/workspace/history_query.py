@@ -5,6 +5,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
+from core.engine.git_diff import normalize_repo_path
 from core.workspace.history_db import WorkspaceHistoryDB
 from core.workspace.snapshot import is_snapshot_enabled
 
@@ -58,6 +59,122 @@ def apply_diff_truncation(
         total_used += len(text)
 
     return out, bool(truncated_paths), sorted(set(truncated_paths))
+
+
+def resolve_delegation_id(
+    workspace: str | Path,
+    *,
+    delegation_id: str | None = None,
+    latest: bool = False,
+) -> str | None:
+    """Resolve delegation_id from explicit id or latest snapshot row."""
+    if delegation_id:
+        return delegation_id
+    if latest:
+        return WorkspaceHistoryDB(workspace).get_latest_delegation_id()
+    return None
+
+
+@dataclass
+class CheckpointDetail:
+    delegation_id: str
+    checkpoint_summary: str | None = None
+    spec_path: str | None = None
+    spec_report_path: str | None = None
+    delegate_mode: str | None = None
+    outcome: str | None = None
+    model: str | None = None
+    duration_ms: int | None = None
+    tokens_total: int | None = None
+    error_class: str | None = None
+    timestamp_start: str | None = None
+    timestamp_end: str | None = None
+    created: list[str] = field(default_factory=list)
+    modified: list[str] = field(default_factory=list)
+    deleted: list[str] = field(default_factory=list)
+
+    def to_dict(self) -> dict[str, Any]:
+        return {
+            "delegation_id": self.delegation_id,
+            "checkpoint_summary": self.checkpoint_summary,
+            "spec_path": self.spec_path,
+            "spec_report_path": self.spec_report_path,
+            "delegate_mode": self.delegate_mode,
+            "outcome": self.outcome,
+            "model": self.model,
+            "duration_ms": self.duration_ms,
+            "tokens_total": self.tokens_total,
+            "error_class": self.error_class,
+            "timestamp_start": self.timestamp_start,
+            "timestamp_end": self.timestamp_end,
+            "created": self.created,
+            "modified": self.modified,
+            "deleted": self.deleted,
+        }
+
+
+def build_checkpoint_detail(
+    workspace: str | Path,
+    delegation_id: str,
+) -> CheckpointDetail | None:
+    """Lightweight checkpoint inspect — metadata + path lists, no diff bodies."""
+    db = WorkspaceHistoryDB(workspace)
+    snapshot = db.get_snapshot(delegation_id)
+    if snapshot is None:
+        return None
+
+    created: list[str] = []
+    modified: list[str] = []
+    deleted: list[str] = []
+    for row in db.get_file_deltas(delegation_id):
+        path = str(row["path"])
+        change_type = str(row["change_type"])
+        if change_type == "created":
+            created.append(path)
+        elif change_type == "modified":
+            modified.append(path)
+        elif change_type == "deleted":
+            deleted.append(path)
+
+    return CheckpointDetail(
+        delegation_id=delegation_id,
+        checkpoint_summary=(
+            str(snapshot["checkpoint_summary"])
+            if snapshot.get("checkpoint_summary")
+            else None
+        ),
+        spec_path=snapshot.get("spec_path"),
+        spec_report_path=snapshot.get("spec_report_path"),
+        delegate_mode=snapshot.get("delegate_mode"),
+        outcome=snapshot.get("outcome"),
+        model=snapshot.get("model"),
+        duration_ms=snapshot.get("duration_ms"),
+        tokens_total=snapshot.get("tokens_total"),
+        error_class=snapshot.get("error_class"),
+        timestamp_start=snapshot.get("timestamp_start"),
+        timestamp_end=snapshot.get("timestamp_end"),
+        created=sorted(created),
+        modified=sorted(modified),
+        deleted=sorted(deleted),
+    )
+
+
+def _filter_diff_by_file_path(diff: DelegationDiff, file_path: str) -> DelegationDiff:
+    rel = normalize_repo_path(file_path)
+    diffs = {rel: diff.diffs[rel]} if rel in diff.diffs else {}
+    return DelegationDiff(
+        delegation_id=diff.delegation_id,
+        created=[p for p in diff.created if p == rel],
+        modified=[p for p in diff.modified if p == rel],
+        deleted=[p for p in diff.deleted if p == rel],
+        diffs=diffs,
+        spec_path=diff.spec_path,
+        timestamp_start=diff.timestamp_start,
+        timestamp_end=diff.timestamp_end,
+        diff_truncated=diff.diff_truncated,
+        diff_truncated_paths=[p for p in diff.diff_truncated_paths if p == rel],
+        checkpoint_summary=diff.checkpoint_summary,
+    )
 
 
 @dataclass
@@ -148,10 +265,11 @@ def list_delegations(
     *,
     limit: int = 20,
     spec_path: str | None = None,
+    file_path: str | None = None,
 ) -> list[dict[str, Any]]:
     """List recent delegations with delta counts."""
     db = WorkspaceHistoryDB(workspace)
-    rows = db.list_snapshots(limit=limit, spec_path=spec_path)
+    rows = db.list_snapshots(limit=limit, spec_path=spec_path, file_path=file_path)
     out: list[dict[str, Any]] = []
     for row in rows:
         delegation_id = str(row["delegation_id"])
@@ -186,28 +304,139 @@ def list_delegations(
             "duration_ms": row.get("duration_ms"),
             "tokens_total": row.get("tokens_total"),
             "error_class": row.get("error_class"),
+            "spec_report_path": row.get("spec_report_path"),
         }
         out.append(item)
     return out
 
 
-def delegation_diff_for_mcp(
+def build_file_history(
     workspace: str | Path,
-    delegation_id: str,
-) -> dict[str, Any]:
-    """MCP-safe fetch: returns {found: true, delegation_diff: ...} or {found: false, error}."""
+    file_path: str,
+    *,
+    limit: int = 20,
+) -> list[dict[str, Any]]:
+    """Per-file timeline across delegations."""
+    db = WorkspaceHistoryDB(workspace)
+    rel = normalize_repo_path(file_path)
+    changes: list[dict[str, Any]] = []
+    for row in db.get_file_history_rows(rel, limit=limit):
+        change_type = str(row["change_type"])
+        item: dict[str, Any] = {
+            "delegation_id": row["delegation_id"],
+            "checkpoint_summary": row.get("checkpoint_summary"),
+            "spec_path": row.get("spec_path"),
+            "spec_report_path": row.get("spec_report_path"),
+            "timestamp_end": row.get("timestamp_end"),
+            "change_type": change_type,
+        }
+        if change_type == "modified" and row.get("diff") and not row.get("is_binary"):
+            raw_diffs = {rel: str(row["diff"])}
+            diffs, truncated, truncated_paths = apply_diff_truncation(raw_diffs)
+            if rel in diffs:
+                item["diff"] = diffs[rel]
+            if truncated:
+                item["diff_truncated"] = True
+                item["diff_truncated_paths"] = truncated_paths
+        changes.append(item)
+    return changes
+
+
+def _snapshot_unavailable(workspace: str | Path) -> dict[str, Any] | None:
     if not is_snapshot_enabled():
         return {"found": False, "error": "workspace snapshot disabled"}
-
     db_path = WorkspaceHistoryDB(workspace).db_path
     if not db_path.is_file():
         return {"found": False, "error": "workspace_history.db not found"}
+    return None
 
-    diff = build_delegation_diff(workspace, delegation_id)
+
+def delegation_diff_for_mcp(
+    workspace: str | Path,
+    delegation_id: str | None = None,
+    *,
+    latest: bool = False,
+    file_path: str | None = None,
+) -> dict[str, Any]:
+    """MCP-safe fetch: returns {found: true, delegation_diff: ...} or {found: false, error}."""
+    unavailable = _snapshot_unavailable(workspace)
+    if unavailable is not None:
+        return unavailable
+
+    resolved = resolve_delegation_id(
+        workspace, delegation_id=delegation_id, latest=latest
+    )
+    if not resolved:
+        return {
+            "found": False,
+            "error": "delegation_id required or set latest=true",
+        }
+
+    diff = build_delegation_diff(workspace, resolved)
     if diff is None:
-        return {"found": False, "error": f"delegation_id not found: {delegation_id}"}
+        return {"found": False, "error": f"delegation_id not found: {resolved}"}
+
+    if file_path:
+        diff = _filter_diff_by_file_path(diff, file_path)
 
     return {"found": True, "delegation_diff": diff.to_dict()}
+
+
+def list_delegations_for_mcp(
+    workspace: str | Path,
+    *,
+    limit: int = 20,
+    spec_path: str | None = None,
+    file_path: str | None = None,
+) -> dict[str, Any]:
+    unavailable = _snapshot_unavailable(workspace)
+    if unavailable is not None:
+        return unavailable
+    rows = list_delegations(
+        workspace, limit=limit, spec_path=spec_path, file_path=file_path
+    )
+    return {"found": True, "delegations": rows}
+
+
+def checkpoint_detail_for_mcp(
+    workspace: str | Path,
+    delegation_id: str | None = None,
+    *,
+    latest: bool = False,
+) -> dict[str, Any]:
+    unavailable = _snapshot_unavailable(workspace)
+    if unavailable is not None:
+        return unavailable
+
+    resolved = resolve_delegation_id(
+        workspace, delegation_id=delegation_id, latest=latest
+    )
+    if not resolved:
+        return {
+            "found": False,
+            "error": "delegation_id required or set latest=true",
+        }
+
+    detail = build_checkpoint_detail(workspace, resolved)
+    if detail is None:
+        return {"found": False, "error": f"delegation_id not found: {resolved}"}
+
+    return {"found": True, "checkpoint": detail.to_dict()}
+
+
+def file_history_for_mcp(
+    workspace: str | Path,
+    file_path: str,
+    *,
+    limit: int = 20,
+) -> dict[str, Any]:
+    unavailable = _snapshot_unavailable(workspace)
+    if unavailable is not None:
+        return unavailable
+
+    rel = normalize_repo_path(file_path)
+    changes = build_file_history(workspace, rel, limit=limit)
+    return {"found": True, "file_path": rel, "changes": changes}
 
 
 def safe_delegation_diff_dict(

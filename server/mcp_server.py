@@ -710,6 +710,7 @@ def delegate_to_agent(
                 delta_created=len(delta.get("created") or []),
                 delta_modified=len(delta.get("modified") or []),
                 delta_deleted=len(delta.get("deleted") or []),
+                spec_report_path=spec_report_rel_path,
             )
             checkpoint_block = {"summary": summary, "outcome": outcome}
 
@@ -860,15 +861,87 @@ def inspect_context(
 
 
 @mcp.tool(
+    name="list_delegations",
+    description=(
+        "List recent delegation checkpoints from workspace_history.db with "
+        "summary labels and delta counts. Optional filters: spec_path, file_path."
+    ),
+)
+def list_delegations_tool(
+    limit: int = 20,
+    spec_path: str | None = None,
+    file_path: str | None = None,
+    workspace_path: str | None = None,
+) -> str:
+    """Browse recent checkpoints (read-only)."""
+    from core.logging.delegation_log import workspace_path as default_workspace
+    from core.workspace.history_query import list_delegations_for_mcp
+
+    ws = workspace_path or default_workspace()
+    result = list_delegations_for_mcp(
+        ws, limit=limit, spec_path=spec_path, file_path=file_path
+    )
+    return json.dumps(result, ensure_ascii=False)
+
+
+@mcp.tool(
+    name="get_checkpoint_detail",
+    description=(
+        "Return checkpoint metadata and created/modified/deleted path lists "
+        "without unified diff bodies. Use delegation_id from delegate_to_agent "
+        "or latest=true for the most recent checkpoint."
+    ),
+)
+def get_checkpoint_detail(
+    delegation_id: str | None = None,
+    latest: bool = False,
+    workspace_path: str | None = None,
+) -> str:
+    """Lightweight checkpoint inspect (read-only)."""
+    from core.logging.delegation_log import workspace_path as default_workspace
+    from core.workspace.history_query import checkpoint_detail_for_mcp
+
+    ws = workspace_path or default_workspace()
+    result = checkpoint_detail_for_mcp(
+        ws, delegation_id, latest=latest
+    )
+    return json.dumps(result, ensure_ascii=False)
+
+
+@mcp.tool(
+    name="get_file_history",
+    description=(
+        "Per-file timeline: which delegations touched a path and what changed "
+        "each time. Includes unified diff for modified rows when stored."
+    ),
+)
+def get_file_history(
+    file_path: str,
+    limit: int = 20,
+    workspace_path: str | None = None,
+) -> str:
+    """File change timeline across checkpoints (read-only)."""
+    from core.logging.delegation_log import workspace_path as default_workspace
+    from core.workspace.history_query import file_history_for_mcp
+
+    ws = workspace_path or default_workspace()
+    result = file_history_for_mcp(ws, file_path, limit=limit)
+    return json.dumps(result, ensure_ascii=False)
+
+
+@mcp.tool(
     name="get_delegation_diff",
     description=(
-        "Return unified diffs and file delta summary for a past delegation_id "
-        "from workspace_history.db. Use after delegate_to_agent to inspect "
-        "what changed without re-running the executor."
+        "Return unified diffs and file delta summary for a delegation checkpoint "
+        "from workspace_history.db. Prefer delegation_id from delegate_to_agent; "
+        "use latest=true for the most recent checkpoint. Optional file_path "
+        "filters diffs to a single file."
     ),
 )
 def get_delegation_diff(
-    delegation_id: str,
+    delegation_id: str | None = None,
+    latest: bool = False,
+    file_path: str | None = None,
     workspace_path: str | None = None,
 ) -> str:
     """Fetch delegation_diff for a past delegation (read-only)."""
@@ -876,7 +949,12 @@ def get_delegation_diff(
     from core.workspace.history_query import delegation_diff_for_mcp
 
     ws = workspace_path or default_workspace()
-    result = delegation_diff_for_mcp(ws, delegation_id)
+    result = delegation_diff_for_mcp(
+        ws,
+        delegation_id,
+        latest=latest,
+        file_path=file_path,
+    )
     return json.dumps(result, ensure_ascii=False)
 
 

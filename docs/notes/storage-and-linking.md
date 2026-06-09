@@ -199,6 +199,39 @@ Canonical write is under `~/.mcp-coder/projects/.../sessions/.../delegations.jso
 | Repo | `<workspace>/.mcp-coder/session.json` (pointer) + `config.yaml` (settings) |
 | Cursor chat | `host_session_id` → sessions with matching field or `hosts/cursor/<id>/index.json` |
 | Delegation line | `log_path` / `session_dir` on the record |
+| Checkpoint browse | `workspace_history.db` → `list_delegations` / CLI `history list` |
+| Per-file timeline | `get_file_history` / CLI `history file <path>` |
+| Latest checkpoint | `get_delegation_diff(latest=true)` / CLI `history latest` |
+
+---
+
+## Workspace history inspect (P3-322f)
+
+**SQLite** (`projects/<project_key>/workspace_history.db`) is the browse surface; JSONL remains canonical audit.
+
+### MCP tools
+
+| Tool | Purpose |
+|------|---------|
+| `list_delegations` | Recent checkpoints with `checkpoint_summary`, counts; filter `spec_path`, `file_path` |
+| `get_checkpoint_detail` | Metadata + created/modified/deleted lists (no diff bodies); `latest=true` |
+| `get_delegation_diff` | Unified diffs for one checkpoint; `latest=true`, optional `file_path` |
+| `get_file_history` | Per-file timeline across delegations |
+
+`delegation_id` from the last `delegate_to_agent` response is preferred; `latest=true` when the UUID is unknown.
+
+`snapshots.spec_report_path` points at `.mcp-coder/specs/reports/<task>.md` (set at finalize). Full JSONL join → future P3-002-lite RAG.
+
+### CLI
+
+```bash
+mcp-coder history list [--file PATH] [--spec SPEC] [--limit N] [--json]
+mcp-coder history show [<delegation_id>] [--latest] [--json]
+mcp-coder history latest [--json]
+mcp-coder history diff [<delegation_id>] [--latest] [--path PATH] [--json]
+mcp-coder history file <path> [--limit N] [--json]
+mcp-coder history revert <delegation_id> [--paths …]   # undo one delegation (322d)
+```
 
 ---
 
@@ -206,6 +239,7 @@ Canonical write is under `~/.mcp-coder/projects/.../sessions/.../delegations.jso
 
 | Date | Note |
 |------|------|
+| 2026-06-08 | P3-322f: MCP `list_delegations`, `get_checkpoint_detail`, `get_file_history`; extend `get_delegation_diff` (`latest`, `file_path`); CLI `history show\|latest\|file`; `spec_report_path` on snapshots |
 | 2026-06-08 | P3-322d: MCP `get_delegation_diff`; `delegation_diff` on delegate response; CLI `history list\|diff\|revert` |
 | 2026-06-08 | P3-322b: `blobs` table + `file_deltas.diff`; contract content snapshot; `revert_to_before` API |
 | 2026-06-08 | P3-322a: `workspace_history.db` under `projects/<project_key>/`; JSONL `workspace_snapshot` block |
