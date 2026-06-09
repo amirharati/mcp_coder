@@ -30,7 +30,10 @@ def test_default_policy_syncs_one_rule(tmp_path, monkeypatch):
     assert (rules_dir / "workspace-history.mdc").is_file()
     assert not (rules_dir / "mcp-coder-delegate.mdc").exists()
     assert "mcp_coder_rules_policy: default" in (rules_dir / "use-mcp-coder.mdc").read_text()
-    assert "list_delegations" in (rules_dir / "workspace-history.mdc").read_text()
+    text = (rules_dir / "workspace-history.mdc").read_text()
+    assert "list_delegations" in text
+    assert "files_unexpected" in text
+    assert 'mcp_coder_rule_version: "2"' in text
 
 
 def test_strict_replaces_use_mcp_coder_content(tmp_path, monkeypatch):

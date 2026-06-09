@@ -206,7 +206,7 @@ print(workspace_history_db_path(Path('$WS').expanduser()))
 | P3-ISS-001 | manifest attribution in live run (no git) |
 | Pull 322g/h? | defer |
 | Pull P3-320? | **yes** — 5× `success` retries; `list_delegations` helped but report wall is noisy |
-| Cursor rules | `workspace-history.mdc` v1 + strict v8; host used inspect tools |
+| Cursor rules | `workspace-history.mdc` **v2** (diff judgment loop) + strict v8 |
 
 ### Step 2 attempt table (tip-calc-02-cli)
 

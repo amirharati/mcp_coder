@@ -1,53 +1,93 @@
 ---
-description: mcp-coder workspace checkpoints — verify delegations and debug retries (synced by MCP)
+description: mcp-coder workspace checkpoints — verify delegations, judge diffs, debug retries (synced by MCP)
 mcp_coder_managed: true
 mcp_coder_rule_id: workspace-history
-mcp_coder_rule_version: "1"
+mcp_coder_rule_version: "2"
 globs:
 alwaysApply: true
 ---
 
 # Workspace history (checkpoints)
 
-Use these **read-only** mcp-coder MCP tools after `delegate_to_agent` (**implement**) to verify disk changes, debug retries, and decide whether to update the **task spec** or re-delegate.
+Use mcp-coder **read-only** inspect tools after every `delegate_to_agent` (**implement**) to see **what changed on disk**, judge whether it matches the **task spec**, and decide: mark done, update spec + retry, or escalate to the human.
 
-- **Do not** edit `specs/reports/` — MCP-owned audit. Use `spec_report_path` from tool responses to **read** Run log / Worker feedback.
-- **Do** update **task specs** and **epics** when refining scope, Files lists, or placeholders before a retry.
+- **Do not** edit `specs/reports/` — MCP-owned. Read via `spec_report_path`.
+- **Do** update **task specs** / **epics** when refining Files lists, placeholders, or constraints before a retry.
 
-## When to use
+## What we track (no git required)
 
-| Situation | Tool |
-|-----------|------|
-| Just finished delegate | `delegation_diff` on the response first |
-| Lost `delegation_id` / new chat | `get_delegation_diff(latest=true)` or `list_delegations` |
-| Same step, multiple attempts | `list_delegations(spec_path=…)` — see every checkpoint for this task |
-| Wrong or duplicate paths | `get_delegation_diff` + `get_file_history(file_path=…)` |
-| Metadata only (no diff bodies) | `get_checkpoint_detail(latest=true)` |
+Our workspace tracker walks the repo before/after each delegation. It detects:
+
+| Change | In `delegation_diff` | Notes |
+|--------|----------------------|-------|
+| **New files** | `created: [...]` | Untracked / new paths — always listed |
+| **Modified files** | `modified: [...]` + `diffs: {path: "…"}` | Unified diff per modified text file |
+| **Deleted files** | `deleted: [...]` | Removed since before delegate |
+| **Out-of-contract** | `files_unexpected` on delegate **response** | Changed paths outside spec `files_edit` / contract |
+
+`success: true` and `outcome: success` do **not** mean Done-when passed — always run this judgment loop.
+
+## Judgment loop (required after implement)
+
+### 1. Get the diff
+
+- **First:** `delegation_diff` on the `delegate_to_agent` response (inline).
+- **Else:** `get_delegation_diff(delegation_id=…)` or `get_delegation_diff(latest=true)`.
+- **One file:** add `file_path=…` or use `get_file_history(file_path=…)` across attempts.
+
+### 2. Compare to the task spec
+
+Open the **task spec** (`spec_path`) → **Files → Edit** and **Done when**.
+
+| Check | How | If fail |
+|-------|-----|---------|
+| Only expected paths touched? | Every path in `created` + `modified` should be in **Files → Edit** (or documented Read-only) | **Not done** — wrong path or scope creep |
+| Unexpected paths? | `files_unexpected` non-empty on response | **Not done** — nested dirs (`pkg/pkg/`), `pkg/tests/` vs repo `tests/`, etc. |
+| New files where expected? | `created` includes paths you asked for (e.g. `tests/test_cli.py` at **repo root**) | **Not done** — worker put files under wrong prefix |
+| Right code change? | Read `diffs[path]` for each **modified** file — matches intent? | **Not done** — empty stub, wrong logic, placeholder left |
+| Deletes OK? | `deleted` — any surprise removals? | **Not done** if unintended |
+
+### 3. Local verification
+
+Run **pytest** / CLI / Done-when checks from the spec. Diffs + tests together decide done.
+
+### 4. Decide
+
+| Verdict | Action |
+|---------|--------|
+| **Done** | Spec `status: done`, checkboxes, epic step table |
+| **Not done** | `list_delegations(spec_path=…)` → see all attempts → update spec (explicit paths, placeholders for new files, `revision++`) → re-delegate |
+| **Stuck** | Summarize diff findings + `files_unexpected` for the human |
+
+### 5. Between retries (critical)
+
+Before re-delegating, **always**:
+
+1. `get_delegation_diff` on the **last** attempt — list every `created` / `modified` path.
+2. Flag paths **not** in spec Files → Edit.
+3. If wrong files exist on disk, say so in the **task** text (delete `tip_calc/tip_calc/…`, fix `tests/` location).
+4. Seed **non-empty placeholders** in new files before delegate (`# CLI entry point`) — avoids Aider empty-file failures.
 
 ## MCP tools
 
-| Tool | Purpose |
+| Tool | Use for |
 |------|---------|
-| **list_delegations** | Browse checkpoints (`limit`, optional `spec_path`, `file_path`) |
-| **get_checkpoint_detail** | Summary, spec/report pointers, file lists — lightweight |
-| **get_delegation_diff** | Unified diffs; pass `delegation_id` or `latest=true`; optional `file_path` |
-| **get_file_history** | Per-file timeline across delegations |
+| **list_delegations** | All attempts for a step (`spec_path=…`); retry count |
+| **get_checkpoint_detail** | Metadata + created/modified/deleted lists (no diff bodies) |
+| **get_delegation_diff** | Full judgment — `created` / `modified` / `deleted` + `diffs` |
+| **get_file_history** | One file’s timeline across delegations |
 
-`success: true` does **not** mean done-when passed — always verify tests / CLI locally.
+## Example issues diffs reveal
 
-## After implement — verification loop
+- **Wrong directory:** `created: ["tip_calc/tip_calc/__main__.py"]` but spec says `tip_calc/__main__.py`
+- **Wrong test location:** `created: ["tip_calc/tests/test_cli.py"]` but spec says `tests/test_cli.py`
+- **Empty stub:** `diffs` shows file still `# CLI entry point` only
+- **Scope creep:** `files_unexpected: ["config.yaml"]` not in Files → Edit
 
-1. Summarize: `success`, `outcome`, `delegate_mode`, `delegation_id`, `spec_report_path`, `files_changed`, `files_unexpected`, and whether `delegation_diff` shows unexpected paths.
-2. Run **pytest** / CLI checks from the task spec **Done when**.
-3. If not done: **list_delegations** for this `spec_path` → inspect attempts → update **task spec** (Files, placeholders for new empty files, `revision++`) → re-delegate.
-4. If done: set task `status: done`, checkboxes, epic Steps table.
-
-## CLI (same data, terminal)
+## CLI (same data)
 
 ```bash
 mcp-coder history list|show|latest|diff|file
 ```
-
-Use when MCP history tools are unavailable.
 
 Synced from mcp-coder (all policies). Do not edit by hand.

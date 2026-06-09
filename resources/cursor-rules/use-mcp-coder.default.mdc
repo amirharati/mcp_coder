@@ -26,6 +26,6 @@ Same step spec across review + implement. Bump `revision` when you change the sp
 
 Do not brainstorm in implement mode. MCP owns reports.
 
-After implement: verify per **workspace-history** rule (checkpoint MCP tools + pytest); then mark task `done`.
+After implement: **workspace-history** judgment loop (diff vs spec, `files_unexpected`, pytest); then mark task `done`.
 
 Synced from mcp-coder (`cursor_rules_policy: default`). Do not edit by hand.

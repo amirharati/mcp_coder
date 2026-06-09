@@ -26,7 +26,7 @@ alwaysApply: true
 - **Do not** edit `specs/reports/` (MCP-owned).
 - After implement: follow **workspace-history** rule (MCP inspect tools + local tests); then set task `status: done` + checkboxes; update epic Steps table.
 
-After each `delegate_to_agent` call: summarize `success`, `outcome`, `delegate_mode`, `delegation_id`, `spec_report_path`, `files_changed`, `files_unexpected`.
+After each `delegate_to_agent` call: run the **judgment loop** in **workspace-history** (diff vs spec Files → Edit, `files_unexpected`, then pytest). Summarize `delegation_id`, `created`/`modified`/`deleted` from `delegation_diff`, and any mismatches before marking done.
 
 ## Read-deps (implement mode)
 
