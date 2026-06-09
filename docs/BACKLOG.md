@@ -535,9 +535,71 @@ Result: workspace has ONLY the contract-allowed changes
 
 ---
 
+### Phase 3 exit — carried from [PHASE3_ISSUES.md](./PHASE3_ISSUES.md) (P3-499, 2026-06-09)
+
+| ID | Source | Phase | Summary |
+|----|--------|-------|---------|
+| BL-324 | P3-ISS-005 | 4 | Planner inspect-tool adoption (judgment loop) |
+| BL-325 | P3-ISS-006 | 4 | Spec paths only under `.mcp-coder/specs/` |
+| BL-326 | P3-ISS-007 | 4 | Read-deps `(none` parse fix |
+| BL-327 | P3-ISS-008 | 4 | Surface failed delegations in host summary |
+| BL-328 | P3-ISS-009 | 4+ | Dogfood spec `v2` retry workflow |
+
+#### BL-324: Planner inspect-tool adoption (judgment loop)
+
+**Status:** `deferred` — **P3-ISS-005** (`wontfix-p3` at P3-499 exit).
+
+**Problem:** `workspace-history.mdc` v3 requires `get_delegation_diff` / inline `delegation_diff` after implement; hosts use file `Read` + `pytest` instead.
+
+**Evidence:** P3-499 transcript `d43d06f7` — no inspect MCP calls; earlier step-3 dogfood `e7966a6c` — same pattern.
+
+**Candidate fixes:** Stricter rules; judgment checklist on MCP response; `server.jsonl` inspect-tool events; CLI UUID prefix for `history show`.
+
+**Target:** Phase 4 (rules + optional MCP UX).
+
+#### BL-325: Spec path convention — `.mcp-coder/specs/` only
+
+**Status:** `deferred` — **P3-ISS-006**.
+
+**Problem:** Host created `specs/epics/` and `specs/tasks/` at **repo root**; first delegate failed:
+
+```
+spec_path must be under .mcp-coder/specs/tasks/ (got 'specs/tasks/tip-calc-01-core-v1.md')
+```
+
+Delegation `58bb9846` failed; host recovered silently with duplicate spec tree.
+
+**Target:** Phase 4 — `use-mcp-coder.mdc` explicit ban on repo-root `specs/`; optional MCP error message improvement.
+
+#### BL-326: Read-deps `(none` parse glitch
+
+**Status:** `deferred` — **P3-ISS-007**.
+
+**Problem:** Spec Read `(none — greenfield)` → JSONL `auto_merged_read_paths: ["(none"]`.
+
+**Target:** Phase 4 — `core/specs/read_deps_merge.py` treats none-sentinel as empty list.
+
+#### BL-327: Surface failed delegations to host
+
+**Status:** `deferred` — **P3-ISS-008**.
+
+**Problem:** Failed attempt `58bb9846` absent from host final summary; visible only in JSONL/`server.jsonl`.
+
+**Target:** Phase 4 — rules + optional delegate response hint when chaining retries.
+
+#### BL-328: Spec `v2` retry workflow dogfood
+
+**Status:** `deferred` — **P3-ISS-009**.
+
+**Problem:** P3-499 happy path only — `v1` naming OK; no `v2` retry exercised.
+
+**Target:** Phase 4+ optional dogfood step or acceptance test.
+
+---
+
 ### BL-321: Progressive / tiered executor model selection
 
-**Status:** `scheduled` — Phase 3 optional ([PHASE3_MVP.md](./PHASE3_MVP.md) P3-321); P3-ISS-004.
+**Status:** `deferred` — Phase 4 optional; **P3-ISS-004** (`wontfix-p3` at P3-499 exit).
 
 **Problem:** Single global `AIDER_MODEL`; operator manually swaps `.env` and restarts MCP. Cursor can *suggest* upgrades but cannot *invoke* tiered retry without human.
 
@@ -663,6 +725,7 @@ Until then: add rows to bundled `model_rates.yaml` when switching models; unknow
 
 | Date | Change |
 |------|--------|
+| 2026-06-09 | **P3-499 exit** — BL-324–328 from frozen PHASE3_ISSUES; BL-321 deferred Phase 4 |
 | 2026-06-09 | BL-002 design decisions locked — corpus scope, architecture; RAG → Phase 5 (Phase 4 = context builder first); P3-002-lite delegation RAG shipped |
 | 2026-06-08 | BL-322a–f done; BL-322g/h deferred (restore + fork/sandbox); BL-502 cross-link |
 | 2026-06-08 | Phase 3 start — BL-320/322 `scheduled`; BL-323 budget override; BL-322a storage aligned to WORKSPACE_HISTORY |

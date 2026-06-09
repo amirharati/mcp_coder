@@ -10,7 +10,7 @@
 
 This document is the **delivery plan**: what to build, in what order, and how we validate each step. Vision and rationale live in [IDEA.md](./IDEA.md) · doc map: [VISION_DOCS.md](./VISION_DOCS.md). Implementation happens in focused coding sessions once a phase (or sub-step) is agreed.
 
-**Status:** Phase 1 **complete** (P1-199). Phase 2 **complete** (P2-499, 2026-06-08). **Active:** Phase 3 — [PHASE3_MVP.md](./PHASE3_MVP.md).
+**Status:** Phase 1 **complete** (P1-199). Phase 2 **complete** (P2-499). Phase 3 **complete** (P3-499, 2026-06-09). **Active:** Phase 4 — context builder + manager ([PHASES.md](./PHASES.md) § Phase 4).
 
 ---
 
@@ -562,9 +562,11 @@ Phase 1 uses only the executor (via Aider). Phase 2+ adds the context-builder **
 | Post/pre gates (322c, BL-151) | Multi-step internal pipeline (BL-161) |
 | `delegation_diff` in MCP (322d) | Live terminal / supervised mega-delegate (BL-160) |
 
-**Waves:** See [PHASE3_MVP.md](./PHASE3_MVP.md) — Waves 1–3 code complete (P3-322a–f, P3-311, P3-320, P3-002-lite); **active: P3-499 exit** (spec versioning dogfood).
+**Waves:** [PHASE3_MVP.md](./PHASE3_MVP.md) — **closed** 2026-06-09 (P3-499). Waves 1–3 shipped; Wave 4 gates → Phase 4 backlog.
 
-**Success:** Non-git sandboxes report all file touches; failed retries browsable without JSONL grep; basic “we did this before” retrieval works.
+**Success:** ✓ Non-git attribution; checkpoint inspect; delegation RAG shipped; versioned specs (`v1`). Residual planner UX → BL-324–328.
+
+**Issues (frozen):** [PHASE3_ISSUES.md](./PHASE3_ISSUES.md)
 
 ---
 
@@ -681,4 +683,5 @@ Both projects can be developed in parallel. Phase 1 does not require the proxy o
 - [x] Phase 2 complete — context compiler, audit loop, P2-499 exit ([PHASE2_MVP.md](./PHASE2_MVP.md)).
 - [x] Phase 3 Wave 1 — workspace tracker + inspect ([PHASE3_MVP.md](./PHASE3_MVP.md); P3-401 signed off 2026-06-09).
 - [x] Phase 3 — **P3-311** read-deps auto-merge (D-P3-7); 412 pytest.
-- [ ] **Active:** Phase 3 exit — P3-499 (spec versioning dogfood + exit review); optional P3-151 gatekeeper.
+- [x] Phase 3 exit — **P3-499** (2026-06-09); [PHASE3_MVP.md](./PHASE3_MVP.md) closed.
+- [ ] **Active:** Phase 4 — context builder + manager (BL-001, BL-161, BL-003); planner UX BL-324–325.

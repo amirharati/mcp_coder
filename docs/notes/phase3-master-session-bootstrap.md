@@ -214,10 +214,8 @@ Overlap is OK: e.g. Phase 3 master drafts BL-322a worker spec while Phase 2 chat
 2. ~~**P3-311** read-deps auto-merge~~ — **done** 2026-06-09; 412 pytest (+14).
 3. ~~**P3-320** spec versioning rules~~ — **done** 2026-06-09.
 4. ~~**P3-002-lite** delegation RAG~~ — **done** 2026-06-09; `core/rag/`; 431 pytest (+17); workspace-file RAG + usage → Phase 5 (Phase 4 = context builder first).
-5. **P3-499 exit** — spec versioning dogfood (`v1`/`v2` retry in e2e), then Phase 3 exit review.
-6. P3-151 gatekeeper — optional before exit.
-7. P3-ISS-005 — inspect-tool adoption; non-blocking.
-8. P3-322g/h — defer unless bisect hurts.
+5. ~~**P3-499 exit**~~ — **done** 2026-06-09; Phase 3 closed; issues → BACKLOG BL-324–328.
+6. **Phase 4** — context builder + manager; start from [PHASES.md](../PHASES.md) § Phase 4.
 
 ---
 
@@ -233,3 +231,4 @@ Overlap is OK: e.g. Phase 3 master drafts BL-322a worker spec while Phase 2 chat
 | 2026-06-09 | **P3-311 done**; P3-ISS-003 closed; design queue next |
 | 2026-06-09 | **P3-002-lite spec ready**; Q3 locked; dispatch Wave 3 |
 | 2026-06-09 | **P3-002-lite done**; RAG corpus decisions in BL-002; **active: P3-499 exit** |
+| 2026-06-09 | **P3-499 exit** — Phase 3 closed; PHASE3_ISSUES frozen; Phase 4 active |

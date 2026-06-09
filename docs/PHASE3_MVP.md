@@ -8,7 +8,8 @@
 
 # Phase 3 MVP — Product manager doc
 
-**Status:** **Wave 1 complete** · **P3-311 + P3-320 + P3-002-lite done** — **active: P3-499 exit** (spec versioning dogfood + phase exit)
+**Status:** **Closed** (P3-499 exit, 2026-06-09) — Waves 1–3 shipped; Wave 4 items → [BACKLOG.md](./BACKLOG.md) / Phase 4  
+**Exit dogfood:** greenfield tip-calc e2e; session `73b8af72`; issues → [PHASE3_ISSUES.md](./PHASE3_ISSUES.md) (frozen)
 **Host:** Cursor (Aider backend; other hosts deferred)
 **Technical reference:** [PHASES.md](./PHASES.md) § Phase 3 · [WORKSPACE_HISTORY.md](./OTEHR_RELATED_IDEAS/WORKSPACE_HISTORY.md)
 **Vision:** [IDEA.md](./IDEA.md) · [VISION_DOCS.md](./VISION_DOCS.md)
@@ -166,8 +167,8 @@ Task specs: `docs/tasks/P3-*.md` (gitignored; created per worker session).
 | Milestone | Task ID | Status | Implements | Summary |
 |-----------|---------|--------|------------|---------|
 | Read-deps auto-merge | P3-311 | `done` | BL-311b, P3-ISS-003, D-P3-7 | `read_deps_merge` + config; `auto_merged_read_paths`; edit-only warns; 412 pytest (+14) |
-| Pre-delegation gatekeeper | P3-151 | `todo` | BL-151 | Pairs with P3-322c post-gate |
-| Tiered executor models | P3-321 | `optional` | BL-321, P3-ISS-004 | Tier catalog; optional auto step-up |
+| Pre-delegation gatekeeper | P3-151 | `deferred` | BL-151 | Phase 4; pairs with P3-322c post-gate |
+| Tiered executor models | P3-321 | `deferred` | BL-321, P3-ISS-004 | Phase 4 optional |
 
 ### Carried / deferred features (not blocking main path)
 
@@ -223,18 +224,18 @@ All Q1–Q5 locked (D-P3-2/5/6/7/8). Q3 shipped as `delegation_rag.db`; workspac
 - [x] Wave 1 dogfood sign-off (P3-401) — tip-calc step 2; 5 retries; inspect tools ✓; step 3 retry loop ✓
 - [x] Spec read-deps auto-merged when `spec_path` set (P3-311)
 - [x] RAG lite code shipped — `core/rag/`; delegation FTS5; `rag_search` MCP + CLI (P3-002-lite); workspace-file RAG + usage decisions → Phase 5
-- [ ] **Spec versioning dogfood (P3-499):** run a multi-attempt step in e2e using `v1/v2` naming; confirm old spec+report pair preserved; retry spec passes; host didn't need to rename anything
-- [ ] Phase 3 exit review (P3-499)
+- [x] **Spec versioning dogfood (P3-499):** `v1` naming + report pairing validated (`tip-calc-01-core-v1`, `tip-calc-02-cli-v1`); `v2` retry not exercised (happy path) → **P3-ISS-009** / BL-328
+- [x] Phase 3 exit review (P3-499) — 2026-06-09; open issues → BL-324–328
 
 ---
 
 ## Next action
 
-1. **P3-499 exit** — spec versioning dogfood (run a `v1/v2` retry cycle in e2e), then Phase 3 exit review.
-2. **P3-151** — pre-delegation gatekeeper (Wave 4, optional before exit).
-3. **P3-ISS-005** — inspect-tool adoption; non-blocking.
-4. **Phase 4** — context builder + manager (BL-001, BL-161, BL-003; smart file picker, janitor, verify loop).
-5. **Phase 5** — RAG master session after Phase 4 reveals real retrieval needs; workspace-file summaries + extend/revise delegation search.
+**Phase 3 closed.** Start **Phase 4** — context builder + manager ([PHASES.md](./PHASES.md) § Phase 4).
+
+1. **Phase 4 planning** — BL-001, BL-161, BL-003; address planner UX debt BL-324–325 from P3-499.
+2. **P3-151** / **BL-151** — pre-delegation gatekeeper (optional).
+3. **Phase 5** — RAG after Phase 4 reveals retrieval needs (BL-002).
 
 ---
 
@@ -259,3 +260,17 @@ All Q1–Q5 locked (D-P3-2/5/6/7/8). Q3 shipped as `delegation_rag.db`; workspac
 | 2026-06-09 | **P3-320 done** — spec versioning from start (`v1/v2`); rules v9 + workspace-history v3; no MCP code |
 | 2026-06-09 | **P3-002-lite spec ready** — Q3 locked (`delegation_rag.db` + FTS5); dispatch Wave 3 |
 | 2026-06-09 | **P3-002-lite done** — `core/rag/`; delegation FTS5; `rag_search` MCP + CLI; 431 pytest (+17); BL-002 corpus decisions; workspace-file RAG → Phase 5 |
+| 2026-06-09 | **P3-499 exit** — greenfield e2e dogfood; Phase 3 **closed**; P3-ISS-004–009 → BACKLOG BL-321, BL-324–328 |
+
+---
+
+## P3-499 exit sign-off
+
+| Field | Value |
+|-------|-------|
+| Date | 2026-06-09 |
+| mcp_coder pytest | 431+ passed |
+| e2e outcome | Greenfield tip-calc; 2 successful delegates (`e7dfb7cf`, `29ab1276`); 5 pytest |
+| Versioning | `v1` specs + paired reports ✓; `v2` retry not exercised |
+| Issues filed | P3-ISS-006–009 new; 004–005 → `wontfix-p3` + BACKLOG |
+| Phase 4 entry | Context builder first; RAG → Phase 5 |

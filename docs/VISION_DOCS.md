@@ -55,8 +55,8 @@ Use this page so **main vision** ([IDEA.md](./IDEA.md)) is not lost when editing
 - **Two tiers:** Task-level (`mcp-coder`) + turn-level (`context_optimizer_proxy`) — separate repos.
 - **Phase 1:** Delegate + pass-through context + home storage + sessions + opt-in transcript — **no** owned RAG/router yet.
 - **Phase 2:** Owned context compiler — **exit complete** [PHASE2_MVP.md](./PHASE2_MVP.md), [phase2-exit-validation.md](./notes/phase2-exit-validation.md).
-- **Phase 3 (active):** [PHASE3_MVP.md](./PHASE3_MVP.md) — workspace tracker (BL-322), attempt archive (BL-320), RAG lite (BL-002), gates (BL-151). **Attribution:** manifest delta / tracker-primary — git-agnostic.
-- **Phase 4:** Smart context lifecycle — BL-001 builder LLM, janitor (BL-003), skills (BL-008), verify, Cursor workflow (BL-106/312), internal pipeline (BL-161). See [PHASES.md](./PHASES.md) § Phase 4.
+- **Phase 3 (closed P3-499):** [PHASE3_MVP.md](./PHASE3_MVP.md) — workspace tracker, versioned specs, delegation RAG shipped; issues frozen → [PHASE3_ISSUES.md](./PHASE3_ISSUES.md) / BL-324–328.
+- **Phase 4 (active):** Context builder + manager — BL-001, BL-161, BL-003; planner UX BL-324–325. See [PHASES.md](./PHASES.md) § Phase 4.
 - **Phase 5+:** Interactive sessions (BL-160), multi-host, product UX (BL-152), ensemble (BL-007) — not core compiler work.
 - **Executor:** Aider-first; OpenCode/other hosts very low priority.
 
@@ -64,6 +64,7 @@ Use this page so **main vision** ([IDEA.md](./IDEA.md)) is not lost when editing
 
 | Date | Change |
 |------|--------|
+| 2026-06-09 | Phase 3 closed (P3-499); PHASE3_ISSUES frozen; Phase 4 active; BL-324–328 |
 | 2026-06-08 | Phase arc in PHASES (3–5); Phase 2 frozen; PHASE3_MVP + PHASE3_ISSUES; tracker-primary D-P3-2; phase2-exit + phase3-bootstrap |
 | 2026-06-06 | PHASE2_MVP + PHASE2_ISSUES created; PHASE1_ISSUES frozen; phase2-owned-context note added; doc map updated |
 | 2026-06-05 | Initial vision-doc map + stewardship tiers (with IDEA audit) |

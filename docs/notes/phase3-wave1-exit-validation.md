@@ -245,4 +245,4 @@ print(workspace_history_db_path(Path('$WS').expanduser()))
 - ~~Master: mark P3-401 / Wave 1 done in [PHASE3_MVP.md](../PHASE3_MVP.md)~~ — **done** 2026-06-09.
 - **Extended dogfood (step 3):** `tip-calc-03-total` — 2 delegations (`602a1f73`, `65bdcdc1`); import miss caught by pytest; inspect tools used only on explicit prompt → **P3-ISS-005**.
 - If bisect/restore hurt: prioritize **P3-322g** / BL-322g.
-- **Done:** P3-311, P3-320, P3-002-lite (delegation RAG). **Active:** P3-499 exit (spec versioning dogfood).
+- **Done:** P3-311, P3-320, P3-002-lite, **P3-499** (2026-06-09). Phase 3 **closed** — see [PHASE3_MVP.md](../PHASE3_MVP.md) exit sign-off; issues [PHASE3_ISSUES.md](../PHASE3_ISSUES.md) → BL-324–328.

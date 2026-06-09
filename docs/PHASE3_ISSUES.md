@@ -8,10 +8,11 @@
 
 # Phase 3 issue tracker
 
-**Purpose:** Gaps, limitations, and follow-ups discovered during Phase 3 work (and carried from Phase 2 exit).
-**Milestone board:** [PHASE3_MVP.md](./PHASE3_MVP.md)
-**Phase 2 issues (frozen):** [PHASE2_ISSUES.md](./PHASE2_ISSUES.md)
-**Backlog:** [BACKLOG.md](./BACKLOG.md)
+**Status:** **Frozen** at Phase 3 exit (**P3-499**, 2026-06-09). Open items → [BACKLOG.md](./BACKLOG.md) (BL-324–328).  
+**Purpose:** Gaps, limitations, and follow-ups discovered during Phase 3 work (and carried from Phase 2 exit).  
+**Milestone board:** [PHASE3_MVP.md](./PHASE3_MVP.md) (closed)  
+**Phase 2 issues (frozen):** [PHASE2_ISSUES.md](./PHASE2_ISSUES.md)  
+**Exit dogfood:** P3-499 natural prompt, e2e workspace reset 2026-06-09; transcript `d43d06f7` · session `73b8af72`
 
 Status: `open` | `scheduled` | `done` | `wontfix-p3` | `carried`
 
@@ -29,8 +30,12 @@ Status: `open` | `scheduled` | `done` | `wontfix-p3` | `carried`
 | P3-ISS-001 | `done` | medium | `files_changed` misses new paths without git | P3-322a / BL-322a | Fixed 2026-06-08 — manifest tracker-primary |
 | P3-ISS-002 | `done` | medium | Failed-delegate audit trail weak vs JSONL | P3-320 / BL-320 | Fixed 2026-06-09 — versioned specs (`v1/v2`) + rules v9; report pairs by name |
 | P3-ISS-003 | `done` | medium | Planner can ignore `contract_warnings` | P3-311 / BL-311b | Fixed 2026-06-09 — auto-merge read + edit-only warns (D-P3-7) |
-| P3-ISS-004 | `scheduled` | low | Tiered executor model selection | P3-321 / BL-321 | From **P2-ISS-008** |
-| P3-ISS-005 | `open` | medium | Post-delegate judgment bypasses workspace inspect tools | TBD (rules + optional MCP) | Tip-calc step 3 e2e 2026-06-09; v2 rule partial pass |
+| P3-ISS-004 | `wontfix-p3` | low | Tiered executor model selection | BL-321 | Phase 4+ optional |
+| P3-ISS-005 | `wontfix-p3` | medium | Post-delegate judgment bypasses workspace inspect tools | BL-324 | P3-499 + step 3 dogfood; rules v3 insufficient |
+| P3-ISS-006 | `wontfix-p3` | medium | Planner uses repo-root `specs/` not `.mcp-coder/specs/` | BL-325 | P3-499; failed delegate `58bb9846` |
+| P3-ISS-007 | `wontfix-p3` | low | Read-deps merge parses `(none` as path | BL-326 | P3-499 JSONL `auto_merged_read_paths: ['(none']` |
+| P3-ISS-008 | `wontfix-p3` | medium | Failed delegation hidden from host summary | BL-327 | P3-499; host reported only `e7dfb7cf` |
+| P3-ISS-009 | `wontfix-p3` | low | Spec `v2` retry workflow not validated in exit dogfood | BL-328 | Happy path only; `v1` naming OK |
 
 ---
 
@@ -148,7 +153,7 @@ Status: `open` | `scheduled` | `done` | `wontfix-p3` | `carried`
 | **Observability** | `server.jsonl` events for read-only inspect tool calls (`tool_invoked` / `inspect_tool_completed`). |
 | **CLI** | Prefix UUID resolution for `history show` (parity with list’s `…` display). |
 
-No milestone row yet — schedule when prioritizing planner ergonomics vs Wave 2 (P3-311 / P3-002).
+**Disposition (P3-499):** Reconfirmed in greenfield dogfood — transcript `d43d06f7` has **zero** `get_delegation_diff` / `list_delegations` / `get_checkpoint_detail` calls; host used `Read` + `pytest` only. → **BL-324** (Phase 4).
 
 ### Acceptance
 
@@ -156,6 +161,90 @@ No milestone row yet — schedule when prioritizing planner ergonomics vs Wave 2
 - Host summary includes `delegation_id` + path list + explicit spec path match / `files_unexpected` check.
 - Optional: server log line per inspect-tool call in e2e session.
 - Optional: attempt with failing pytest does not record `outcome: success` without a separate “unverified” flag (product decision).
+
+---
+
+## P3-ISS-006: Planner uses repo-root `specs/` not `.mcp-coder/specs/`
+
+**Found:** P3-499 exit dogfood 2026-06-09 — greenfield tip calculator, transcript `d43d06f7`.
+
+**Problem:** Host created epic and tasks under **repo root** `specs/epics/tip-calculator.md` and `specs/tasks/tip-calc-01-core-v1.md`, then passed `spec_path: specs/tasks/tip-calc-01-core-v1.md` to MCP. MCP rejects paths outside `.mcp-coder/specs/tasks/`.
+
+**Example (failed delegation `58bb9846-…`):**
+
+```
+spec_path must be a step task under .mcp-coder/specs/tasks/
+(e.g. tasks/my-epic-01-core.md; got 'specs/tasks/tip-calc-01-core-v1.md')
+```
+
+**Observed layout after recovery:**
+
+| Path | Role |
+|------|------|
+| `.mcp-coder/specs/tasks/tip-calc-01-core-v1.md` | Canonical (MCP accepts) |
+| `specs/tasks/tip-calc-01-core-v1.md` | Duplicate copy at repo root |
+| `specs/epics/tip-calculator.md` | Epic at wrong root |
+
+Host recovered by copying specs into `.mcp-coder/specs/` and retrying (`e7dfb7cf`); duplicate tree left on disk.
+
+**Target:** **BL-325** — rules: all planner specs **only** under `.mcp-coder/specs/`; optional MCP clearer error hint; optional reject/warn on repo-root `specs/` tree.
+
+**Acceptance:** Greenfield prompt → host never creates `specs/` at repo root; first delegate succeeds without path error.
+
+---
+
+## P3-ISS-007: Read-deps merge parses `(none` as a path
+
+**Found:** P3-499 dogfood — step 1 delegation `e7dfb7cf` JSONL.
+
+**Problem:** When spec **Read** section says `(none — greenfield)`, `auto_merged_read_paths` records `['(none']` instead of `[]`.
+
+**Example (JSONL `mcp_request`):**
+
+```json
+"auto_merged_read_paths": ["(none"]
+```
+
+Harmless when there are no real read deps; noisy for audit and could confuse contract checks if literal path ever matched.
+
+**Target:** **BL-326** — `read_deps_merge` treats `(none`, `none`, `_(none)_` variants as empty read list.
+
+**Acceptance:** Greenfield spec with Read `(none)` → `auto_merged_read_paths` absent or `[]`.
+
+---
+
+## P3-ISS-008: Failed delegation hidden from host summary
+
+**Found:** P3-499 dogfood — same session as P3-ISS-006.
+
+**Problem:** First implement attempt (`58bb9846`) failed (invalid `spec_path`). Host final summary listed only successful `e7dfb7cf` and `29ab1276` — operator must read JSONL/server log to see the failure.
+
+**Example:**
+
+| Source | Shows |
+|--------|--------|
+| Host chat summary | 2 delegations, both success |
+| `delegations.jsonl` line 1 | `58bb9846`, `success: false`, spec path error |
+| `server.jsonl` | `delegation_failed` for `58bb9846` |
+
+**Target:** **BL-327** — rules: cite **all** delegation attempts in session summary; optional MCP tool response flag when prior attempt failed in same spec chain.
+
+**Acceptance:** After failed-then-success retry, host summary mentions failed `delegation_id` + reason before success id.
+
+---
+
+## P3-ISS-009: Spec `v2` retry workflow not validated in exit dogfood
+
+**Found:** P3-499 — both steps succeeded on first try after spec-path fix (no implement failure requiring retry).
+
+**Problem:** P3-320 rules (`v1` → `v2` on retry, preserve v1 pair) were **not** exercised. Only `v1` naming confirmed (`tip-calc-01-core-v1.md`, `tip-calc-02-cli-v1.md`).
+
+**What was validated:** `v1` suffix, report pairing under `.mcp-coder/specs/reports/`.  
+**Not validated:** create `v2` without editing `v1`; audit trail across failed attempt.
+
+**Target:** **BL-328** — optional Phase 4 dogfood or rule tweak; not blocking Phase 3 exit (happy-path product works).
+
+**Acceptance:** One forced-fail step → `v2` spec created, `v1` spec+report untouched, retry succeeds.
 
 ---
 
@@ -177,3 +266,4 @@ No milestone row yet — schedule when prioritizing planner ergonomics vs Wave 2
 | 2026-06-09 | **P3-ISS-005 open** — tip-calc step 3 e2e; workspace-history v2 partial pass (inspect tools bypassed) |
 | 2026-06-09 | **Wave 1 closed**; P3-311 active for P3-ISS-003 |
 | 2026-06-09 | **P3-ISS-003 done** — P3-311 auto-merge read-deps |
+| 2026-06-09 | **P3-499 exit** — tracker frozen; P3-ISS-004–009 → BL-321, BL-324–328 |
