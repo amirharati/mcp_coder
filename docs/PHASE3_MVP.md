@@ -8,7 +8,7 @@
 
 # Phase 3 MVP — Product manager doc
 
-**Status:** **Wave 1 in progress** (2026-06-08) — **P3-322a done**; next **P3-322b** (or P3-320 ∥)
+**Status:** **Wave 1 complete** · **P3-311 done** (2026-06-09) — **next:** design P3-002-lite (RAG) + P3-320 (attempt archive); then dispatch
 **Host:** Cursor (Aider backend; other hosts deferred)
 **Technical reference:** [PHASES.md](./PHASES.md) § Phase 3 · [WORKSPACE_HISTORY.md](./OTEHR_RELATED_IDEAS/WORKSPACE_HISTORY.md)
 **Vision:** [IDEA.md](./IDEA.md) · [VISION_DOCS.md](./VISION_DOCS.md)
@@ -118,11 +118,11 @@ Later:            RAG index from delegation summaries + diffs
 
 Task specs: `docs/tasks/P3-*.md` (gitignored; created per worker session).
 
-### Wave 1 — Workspace truth ✓ **code complete**
+### Wave 1 — Workspace truth ✓ **complete**
 
 **Goal:** Close P3-ISS-001; foundation for revert, gates, and planner-visible diffs.  
 **Design:** [WORKSPACE_HISTORY.md](./OTEHR_RELATED_IDEAS/WORKSPACE_HISTORY.md)  
-**Validation:** [phase3-wave1-exit-validation.md](./notes/phase3-wave1-exit-validation.md) — P3-401 **signed off** 2026-06-09
+**Validation:** [phase3-wave1-exit-validation.md](./notes/phase3-wave1-exit-validation.md) — P3-401 **signed off** 2026-06-09 (step 2); step 3 (`calculate_total`) extended dogfood 2026-06-09
 
 | Milestone | Task ID | Status | Implements | Summary |
 |-----------|---------|--------|------------|---------|
@@ -137,24 +137,24 @@ Task specs: `docs/tasks/P3-*.md` (gitignored; created per worker session).
 
 **Wave 1 extras:** P3-322e + P3-322f `done` — **Wave 1 code + inspect complete**.
 
-**Deferred:** P3-320 attempt archive → **end of Phase 3** (needs design: avoid dirtying specs tree; brainstorm before spec).
+**Deferred:** P3-320 attempt archive → **end of Phase 3** (needs design brainstorm — see Wave 2).
 
-**Next:** Wave 3 **P3-002-lite** RAG or Wave 4 **P3-311**; P3-320 design elevated after dogfood retry pain.
+**Closed:** 2026-06-09 — 398 pytest; checkpoint inspect + `workspace-history` v2 rules; **P3-ISS-005** open (inspect-tool adoption — non-blocking).
 
-### Wave 2 — Planner-visible history (**deferred — end of Phase 3**)
+### Wave 2 — Planner-visible history (**redesigned — rules-only**)
 
-**Goal:** Close P3-ISS-002; surface retry history without overwriting reports.  
-**Status:** Deferred past Wave 1 dogfood — needs design brainstorm (attempt storage without confusing/dirtying specs tree). Target: before **P3-499** exit.
+**Goal:** Close P3-ISS-002; surfaced retry history via versioned spec+report pairs (no MCP code changes).  
+**Design locked 2026-06-09:** specs versioned from first creation (`v1`, `v2`, …); MCP report naming already follows spec name — pairing automatic; no renaming needed.
 
 | Milestone | Task ID | Status | Implements | Summary |
 |-----------|---------|--------|------------|---------|
-| Attempt archive | P3-320a/b | `deferred` | BL-320a/b | `specs/attempts/<spec_id>/<delegation_id>.md` — location TBD |
-| Report links + list tool | P3-320c/d | `deferred` | BL-320c/d | Attempts section; MCP `list_delegation_attempts` |
+| Spec versioning convention + rules | P3-320 | `done` | BL-320, D-P3-6 (revised) | Rules v9 + workspace-history v3; versioned from start; audit pair by name |
 
-### Wave 3 — Cross-session memory
+### Wave 3 — Cross-session memory (**design before implement**)
 
 **Goal:** BL-002 lite — “have we done this before?”  
-**Depends on:** honest file lists from Wave 1 for stored summaries.
+**Depends on:** honest file lists from Wave 1 for stored summaries.  
+**Status:** `todo` — **Q3** (RAG store location) to lock in worker spec before dispatch.
 
 | Milestone | Task ID | Status | Implements | Summary |
 |-----------|---------|--------|------------|---------|
@@ -165,7 +165,7 @@ Task specs: `docs/tasks/P3-*.md` (gitignored; created per worker session).
 
 | Milestone | Task ID | Status | Implements | Summary |
 |-----------|---------|--------|------------|---------|
-| Read-deps auto-merge | P3-311 | `todo` | BL-311b, P3-ISS-003 | Merge spec Files read into context when `spec_path` set |
+| Read-deps auto-merge | P3-311 | `done` | BL-311b, P3-ISS-003, D-P3-7 | `read_deps_merge` + config; `auto_merged_read_paths`; edit-only warns; 412 pytest (+14) |
 | Pre-delegation gatekeeper | P3-151 | `todo` | BL-151 | Pairs with P3-322c post-gate |
 | Tiered executor models | P3-321 | `optional` | BL-321, P3-ISS-004 | Tier catalog; optional auto step-up |
 
@@ -216,21 +216,23 @@ All Q1–Q5 resolved (2026-06-08). Locked as D-P3-2/6/7/8 and Q3 deferred.
 
 - [x] Non-git workspace: `files_changed` lists all delegation touches (P3-322a)
 - [x] `workspace_history.db` records per-delegation delta; JSONL links `delegation_id`
-- [ ] Failed attempts archived when config on (P3-320)
+- [x] Retry history visible via versioned spec+report pairs (P3-320 rules-only, 2026-06-09)
 - [x] Content snapshot + `revert_to_before` API (P3-322b)
 - [x] Strict gateway auto-reverts violations (P3-322c)
 - [x] MCP returns `delegation_diff` on implement (P3-322d)
-- [x] Wave 1 dogfood sign-off (P3-401) — tip-calc step 2; 5 retries; inspect tools ✓
+- [x] Wave 1 dogfood sign-off (P3-401) — tip-calc step 2; 5 retries; inspect tools ✓; step 3 retry loop ✓
+- [x] Spec read-deps auto-merged when `spec_path` set (P3-311)
 - [ ] RAG lite retrieves prior delegation summary for same project (P3-002-lite)
+- [ ] **Spec versioning dogfood (P3-499):** run a multi-attempt step in e2e using `v1/v2` naming; confirm old spec+report pair preserved; retry spec passes; host didn't need to rename anything
 - [ ] Phase 3 exit review (P3-499)
 
 ---
 
 ## Next action
 
-1. **P3-002-lite** or **P3-311** — pick next wave per board priority.
-2. **P3-320** — attempt archive (dogfood: 5× success retries on one step — planner used `list_delegations` but report wall noisy).
-3. **P3-322g / 322h** — defer unless bisect needs restore/fork.
+1. **P3-002-lite** — lock RAG store (Q3 decision), then dispatch worker.
+2. **P3-151** — pre-delegation gatekeeper (Wave 4, optional before exit).
+3. **P3-ISS-005** — inspect-tool adoption; non-blocking.
 4. **Exit:** P3-499 when waves 1–4 checklist green.
 
 ---
@@ -251,3 +253,6 @@ All Q1–Q5 resolved (2026-06-08). Locked as D-P3-2/6/7/8 and Q3 deferred.
 | 2026-06-08 | **D-P3-9 / P3-322e** — checkpoint metadata § added |
 | 2026-06-08 | **P3-322c done** — post-delegation gateway; strict auto-revert; 374 pytest (+10) |
 | 2026-06-08 | **P3-322d done** — Wave 1 code complete; delegation_diff + CLI history; 385 pytest (+11) |
+| 2026-06-09 | **Wave 1 closed** — step 3 dogfood; P3-ISS-005 opened; Wave 2/3 design deferred |
+| 2026-06-09 | **P3-311 done** — auto-merge read-deps (D-P3-7); P3-ISS-003 closed; 412 pytest (+14) |
+| 2026-06-09 | **P3-320 done** — spec versioning from start (`v1/v2`); rules v9 + workspace-history v3; no MCP code |

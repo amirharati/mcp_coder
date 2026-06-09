@@ -118,6 +118,9 @@ def test_w1_1_read_dep_warn_delegation_still_runs(tmp_path, monkeypatch):
     """W1-1: spec lists a Read dep missing from target_files → contract_warnings non-empty,
     delegation still executes (engine called), success=True."""
     ws = _make_ws(tmp_path, "cli.md", _READ_DEP_SPEC)
+    cfg = ws / ".mcp-coder"
+    cfg.mkdir(exist_ok=True)
+    (cfg / "config.yaml").write_text("auto_merge_spec_read: false\n", encoding="utf-8")
     home = tmp_path / "home"
     monkeypatch.setenv("MCP_CODER_HOME", str(home))
     monkeypatch.setenv("MCP_CODER_USE_CONTEXT_PACKAGE", "0")

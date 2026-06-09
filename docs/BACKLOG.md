@@ -243,15 +243,15 @@ Re-run steps 3–4 with Qwen; expect `success: false` with short classified erro
 
 ### BL-311: Read-deps from spec Files section
 
-**Status:** `deferred` — **P1-ISS-014**.
+**Status:** BL-311a `done` (P2-110); **BL-311b `done`** (P3-311, 2026-06-09).
 
 **Goal:** Reduce cross-step API guessing when implement `target_files` omits files listed under task spec **Files** (read deps).
 
 | Sub | Item |
 |-----|------|
-| BL-311a | Warn in tool response when `mode=implement` and spec Files paths ⊄ `target_files` |
-| BL-311b | Auto-merge read-only paths into Aider context (no edit) from spec Files — **Phase 3** P3-311 / P3-ISS-003 |
-| BL-311c | Cursor rule generator: split Files into “edit” vs “read” in delegate call hints |
+| BL-311a | Warn in tool response when `mode=implement` and spec Files paths ⊄ `target_files` — **done** P2-110 |
+| BL-311b | Auto-merge read-only paths into delegate context from spec Files — **done** P3-311 |
+| BL-311c | Cursor rule generator: split Files into “edit” vs “read” in delegate call hints — deferred |
 
 **E2E:** Step 2 implement #1 without `splitter.py` → wrong `load_expenses` signature; fixed by planner delegates #2–3.
 

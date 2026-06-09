@@ -8,6 +8,7 @@ from typing import Any
 
 from mcp.server.fastmcp import FastMCP
 
+from core.config.auto_merge import auto_merge_spec_read_enabled
 from core.config.models import resolve_model_name
 from core.context.assemble import assemble_context
 from core.context.budget import apply_context_budget, resolve_context_budget_tokens
@@ -57,7 +58,7 @@ from core.specs.delegation_policies import (
     load_delegation_policies,
 )
 from core.workspace.gateway import apply_post_delegation_gateway
-from core.specs.files_contract import build_contract_warnings, paths_missing_from_target
+from core.specs.read_deps_merge import resolve_spec_read_deps
 from core.specs.modes import DELEGATE_MODE_IMPLEMENT, DELEGATE_MODE_REVIEW, normalize_delegate_mode
 from core.specs.outcome import (
     OUTCOME_INVALID_SPEC,
@@ -134,6 +135,8 @@ def _response_payload(
     capability_warnings: list[str] | None = None,
     preflight_token_estimate: int | None = None,
     delegation_diff: dict[str, Any] | None = None,
+    auto_merged_read_paths: list[str] | None = None,
+    auto_merge_spec_read: bool | None = None,
 ) -> dict[str, Any]:
     payload: dict[str, Any] = {
         "success": success,
@@ -194,6 +197,10 @@ def _response_payload(
         payload["preflight_token_estimate"] = preflight_token_estimate
     if delegation_diff is not None:
         payload["delegation_diff"] = delegation_diff
+    if auto_merged_read_paths:
+        payload["auto_merged_read_paths"] = auto_merged_read_paths
+    if auto_merge_spec_read is not None:
+        payload["auto_merge_spec_read"] = auto_merge_spec_read
     return payload
 
 
@@ -394,6 +401,10 @@ def delegate_to_agent(
     context_package: ContextPackage | None = None
     executor_prompt = prompt  # overridden if context package path is taken
 
+    planner_target_files = list(target_files)
+    effective_target_files = planner_target_files
+    auto_merged_read_paths: list[str] = []
+    auto_merge_spec_read: bool | None = None
     spec_files_missing: list[str] = []
     contract_warnings: list[str] = []
     if (
@@ -401,11 +412,19 @@ def delegate_to_agent(
         and delegation_policies is not None
         and not spec_invalid_reason
     ):
+        merge_enabled = bool(spec_path) and auto_merge_spec_read_enabled(ws)
+        if spec_path:
+            auto_merge_spec_read = merge_enabled
         if delegation_policies.all_paths:
-            spec_files_missing = paths_missing_from_target(
-                delegation_policies.all_paths, target_files
+            merge_result, spec_files_missing, contract_warnings = resolve_spec_read_deps(
+                files_edit=delegation_policies.files_edit,
+                files_read=delegation_policies.files_read,
+                all_paths=delegation_policies.all_paths,
+                target_files=planner_target_files,
+                auto_merge_enabled=merge_enabled,
             )
-            contract_warnings = build_contract_warnings(spec_files_missing)
+            effective_target_files = merge_result.effective_target_files
+            auto_merged_read_paths = merge_result.auto_merged_read_paths
             if contract_warnings:
                 server_log_emit(
                     "spec_files_contract_warn",
@@ -443,7 +462,7 @@ def delegate_to_agent(
                 context_package = assemble_context(
                     workspace=Path(ws),
                     spec_path=spec_rel_path,
-                    target_files=target_files,
+                    target_files=effective_target_files,
                     task=task,
                     context_summary=context_summary,
                     policies=delegation_policies,
@@ -487,7 +506,7 @@ def delegate_to_agent(
                     )
                 result = engine.run(
                     prompt,
-                    target_files,
+                    effective_target_files,
                     workspace_path=ws,
                     mcp_session_id=storage.mcp_session_id,
                     delegation_id=delegation_id,
@@ -754,7 +773,12 @@ def delegate_to_agent(
         capability_warnings=cap_warnings or None,
         preflight_token_estimate=preflight_token_estimate,
         delegation_diff=delegation_diff_payload,
+        auto_merged_read_paths=auto_merged_read_paths or None,
+        auto_merge_spec_read=auto_merge_spec_read,
     )
+    if auto_merged_read_paths:
+        mcp_request["auto_merged_read_paths"] = auto_merged_read_paths
+        mcp_request["effective_target_files"] = effective_target_files
     if spec_files_missing:
         mcp_request["spec_files_missing_from_target"] = spec_files_missing
     if contract_warnings:
@@ -775,7 +799,7 @@ def delegate_to_agent(
         success=success,
         error=error,
         response_to_cursor=response,
-        files_requested=list(target_files),
+        files_requested=list(planner_target_files),
         files_changed=files_changed,
         files_unexpected=files_unexpected,
         context_block=context_block,
@@ -812,6 +836,8 @@ def delegate_to_agent(
         workspace_snapshot=workspace_snapshot,
         post_gateway=post_gateway,
         checkpoint=checkpoint_block,
+        auto_merged_read_paths=auto_merged_read_paths or None,
+        auto_merge_spec_read=auto_merge_spec_read,
     )
     log_path = append_delegation_record(record, ws=ws)
     log_delegation_sent(

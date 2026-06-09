@@ -210,11 +210,11 @@ Overlap is OK: e.g. Phase 3 master drafts BL-322a worker spec while Phase 2 chat
 
 ## First actions for Phase 3 master
 
-1. ~~Confirm open questions **Q2–Q5**~~ — **all resolved** (2026-06-08). See locked table in [PHASE3_MVP.md](../PHASE3_MVP.md) § Open questions + D-P3-6/7/8.
-2. ~~Skim P3-322a attribution table~~ — **aligned** to D-P3-2 tracker-primary; spec fixed.
-3. **Dispatch P3-322a** worker (attach spec only).
-4. P3-320 spec: draft after P3-322a § Results — not before.
-5. P3-311 priority: revisit at end of Wave 2.
+1. ~~Wave 1 (P3-322a–f, P3-401)~~ — **complete** 2026-06-09.
+2. ~~**P3-311** read-deps auto-merge~~ — **done** 2026-06-09; 412 pytest (+14).
+3. **Design before code:** P3-002-lite (RAG store, Q3) and P3-320 (attempt archive layout) — brainstorm → worker specs.
+4. P3-ISS-005 — inspect-tool adoption; defer with rules/MCP tweaks.
+5. P3-322g/h — defer unless bisect hurts.
 
 ---
 
@@ -226,3 +226,5 @@ Overlap is OK: e.g. Phase 3 master drafts BL-322a worker spec while Phase 2 chat
 | 2026-06-08 | PHASE3_MVP + PHASE3_ISSUES created; PHASE2 frozen; issue triage complete |
 | 2026-06-08 | Full handoff prompt v2; D-P3-2 locked; P3-322a spec aligned to tracker-primary |
 | 2026-06-08 | Q1–Q5 fully resolved; D-P3-6/7/8 locked; bootstrap first-actions updated |
+| 2026-06-09 | Wave 1 closed; P3-311 active; RAG + attempt-archive design queued |
+| 2026-06-09 | **P3-311 done**; P3-ISS-003 closed; design queue next |

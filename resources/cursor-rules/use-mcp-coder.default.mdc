@@ -3,7 +3,7 @@ description: mcp-coder delegate_to_agent (default policy; synced by MCP)
 mcp_coder_managed: true
 mcp_coder_rule_id: use-mcp-coder
 mcp_coder_rules_policy: default
-mcp_coder_rule_version: "8"
+mcp_coder_rule_version: "9"
 globs:
 alwaysApply: true
 ---
@@ -16,15 +16,16 @@ Use **mcp-coder** for disk edits. Pass decisions in `context_summary` or a step 
 
 | Phase | You | MCP |
 |-------|-----|-----|
-| Epic + step spec | `specs/epics/…`, `specs/tasks/…` | — |
+| Epic + step spec | `specs/epics/…`, `specs/tasks/<epic>-<step>-v1.md` (**versioned from first attempt**) | — |
 | Optional **review** | `mode=review`, `target_files=[]` | Worker feedback in report |
-| **Implement** | `mode=implement`, `target_files` = edit **and** read deps | Code edits |
+| **Implement** | `mode=implement`, `spec_path=…`, `target_files` = edit paths | Code edits; report at `reports/<same-name>.md` |
+| **Retry** | New versioned spec `vN+1.md`; do **not** edit or overwrite vN | — |
 
-Same step spec across review + implement. Bump `revision` when you change the spec after review.
+**Spec versioning:** always create `<epic>-<step>-v1.md`; retry → `v2.md`, `v3.md`. MCP writes `reports/<same-name>.md` — pairing is automatic. Do not rename or delete old versions; they are the audit trail.
 
-**Read-deps:** put files to **edit** and files to **read** (imports, prior-step code) in the spec **Files** section and in `target_files`. Review mode does not load code — you still pass read paths on implement.
+**Read-deps:** list files to edit in `### Edit` and files to read (imports, prior-step code) in `### Read`. Edit paths go in `target_files`; read paths are auto-merged from spec when `spec_path` is set.
 
-Do not brainstorm in implement mode. MCP owns reports.
+Bump `revision` in spec frontmatter when refining before first implement. Do not brainstorm in implement mode. MCP owns reports.
 
 After implement: **workspace-history** judgment loop (diff vs spec, `files_unexpected`, pytest); then mark task `done`.
 

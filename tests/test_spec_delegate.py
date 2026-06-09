@@ -243,6 +243,9 @@ def test_delegate_warns_when_read_path_missing_from_target_files(tmp_path, monke
     task = ws / ".mcp-coder" / "specs" / "tasks" / "step-02-cli.md"
     task.parent.mkdir(parents=True)
     task.write_text(EDIT_READ_SPEC_BODY, encoding="utf-8")
+    cfg = ws / ".mcp-coder"
+    cfg.mkdir(exist_ok=True)
+    (cfg / "config.yaml").write_text("auto_merge_spec_read: false\n", encoding="utf-8")
 
     monkeypatch.setenv("MCP_CODER_HOME", str(home))
     monkeypatch.setenv("MCP_CODER_USE_CONTEXT_PACKAGE", "0")

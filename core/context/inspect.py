@@ -16,6 +16,7 @@ from core.context.package import (
     summarize_context_package,
 )
 from core.context.summary import estimate_tokens, sha256_hex
+from core.config.auto_merge import auto_merge_spec_read_enabled
 from core.config.models import resolve_model_name
 from core.engine.aider_engine import translate_context_package
 from core.specs.delegation_policies import (
@@ -23,7 +24,7 @@ from core.specs.delegation_policies import (
     PolicyValidationError,
     load_delegation_policies,
 )
-from core.specs.files_contract import build_contract_warnings, paths_missing_from_target
+from core.specs.read_deps_merge import resolve_spec_read_deps
 from core.specs.paths import normalize_spec_path_arg, resolve_spec_path
 from core.specs.read import read_task_spec
 
@@ -128,10 +129,28 @@ def inspect_context_package(
         if spec_error:
             return {"ok": False, "error": spec_error}
 
+    effective_target_files = list(target_files)
+    auto_merged_read_paths: list[str] = []
+    auto_merge_spec_read: bool | None = None
+    spec_files_missing: list[str] = []
+    contract_warnings: list[str] = []
+    if delegation_policies is not None and delegation_policies.all_paths:
+        merge_enabled = auto_merge_spec_read_enabled(ws)
+        auto_merge_spec_read = merge_enabled
+        merge_result, spec_files_missing, contract_warnings = resolve_spec_read_deps(
+            files_edit=delegation_policies.files_edit,
+            files_read=delegation_policies.files_read,
+            all_paths=delegation_policies.all_paths,
+            target_files=target_files,
+            auto_merge_enabled=merge_enabled,
+        )
+        effective_target_files = merge_result.effective_target_files
+        auto_merged_read_paths = merge_result.auto_merged_read_paths
+
     package = assemble_context(
         workspace=ws,
         spec_path=spec_rel_path,
-        target_files=target_files,
+        target_files=effective_target_files,
         task=task,
         context_summary=context_summary,
         policies=delegation_policies,
@@ -150,11 +169,10 @@ def inspect_context_package(
     }
 
     if delegation_policies is not None and delegation_policies.all_paths:
-        spec_files_missing = paths_missing_from_target(
-            delegation_policies.all_paths,
-            target_files,
-        )
-        contract_warnings = build_contract_warnings(spec_files_missing)
+        if auto_merged_read_paths:
+            result["auto_merged_read_paths"] = auto_merged_read_paths
+        if auto_merge_spec_read is not None:
+            result["auto_merge_spec_read"] = auto_merge_spec_read
         if spec_files_missing:
             result["spec_files_missing_from_target"] = spec_files_missing
         if contract_warnings:

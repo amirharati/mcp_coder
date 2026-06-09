@@ -67,8 +67,10 @@ def test_read_dep_omitted_from_target_files(tmp_path):
 
     assert result["ok"] is True
     assert result["compiler_version"] == "0.3.0"
-    assert result["spec_files_missing_from_target"] == ["expense_splitter/loader.py"]
-    assert any("loader.py" in w for w in result["contract_warnings"])
+    assert result["auto_merged_read_paths"] == ["expense_splitter/loader.py"]
+    assert result["auto_merge_spec_read"] is True
+    assert "contract_warnings" not in result
+    assert "spec_files_missing_from_target" not in result
 
     preview = result["adapter_preview"]
     assert "expense_splitter/models.py" in preview["fnames"]

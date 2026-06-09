@@ -24,5 +24,8 @@ session_policy: always_new
 # Echo usage block in delegate_to_agent response (JSONL always logs usage)
 # usage_report: true
 
+# Auto-merge spec Files: Read into effective target_files on implement (default: on)
+# auto_merge_spec_read: false
+
 # Review model for mode=review (overrides MCP_CODER_REVIEW_MODEL when both set)
 # review_model: openrouter/anthropic/claude-sonnet-4

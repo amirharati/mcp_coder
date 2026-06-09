@@ -561,7 +561,7 @@ Phase 1 uses only the executor (via Aider). Phase 2+ adds the context-builder **
 | Post/pre gates (322c, BL-151) | Multi-step internal pipeline (BL-161) |
 | `delegation_diff` in MCP (322d) | Live terminal / supervised mega-delegate (BL-160) |
 
-**Waves:** See [PHASE3_MVP.md](./PHASE3_MVP.md) — entry **P3-322a** (manifest + DB + honest attribution).
+**Waves:** See [PHASE3_MVP.md](./PHASE3_MVP.md) — Wave 1 complete; **P3-311 done** (read-deps auto-merge); **next:** design P3-002-lite (RAG) + P3-320 (attempt archive).
 
 **Success:** Non-git sandboxes report all file touches; failed retries browsable without JSONL grep; basic “we did this before” retrieval works.
 
@@ -654,4 +654,6 @@ Both projects can be developed in parallel. Phase 1 does not require the proxy o
 - [x] Spec-based delegate + review loop ([PHASE1_MVP.md](./PHASE1_MVP.md) P1-150/151; BL-150 done).
 - [x] Phase 1 exit review P1-199 — closed 2026-06-06; [PHASE1_ISSUES.md](./PHASE1_ISSUES.md) frozen.
 - [x] Phase 2 complete — context compiler, audit loop, P2-499 exit ([PHASE2_MVP.md](./PHASE2_MVP.md)).
-- [ ] **Active:** Phase 3 — P3-322a workspace tracker ([PHASE3_MVP.md](./PHASE3_MVP.md)).
+- [x] Phase 3 Wave 1 — workspace tracker + inspect ([PHASE3_MVP.md](./PHASE3_MVP.md); P3-401 signed off 2026-06-09).
+- [x] Phase 3 — **P3-311** read-deps auto-merge (D-P3-7); 412 pytest.
+- [ ] **Active:** Phase 3 design — RAG lite (P3-002-lite) + attempt archive (P3-320); then dispatch.

@@ -2,7 +2,7 @@
 description: mcp-coder workspace checkpoints — verify delegations, judge diffs, debug retries (synced by MCP)
 mcp_coder_managed: true
 mcp_coder_rule_id: workspace-history
-mcp_coder_rule_version: "2"
+mcp_coder_rule_version: "3"
 globs:
 alwaysApply: true
 ---
@@ -67,6 +67,13 @@ Before re-delegating, **always**:
 2. Flag paths **not** in spec Files → Edit.
 3. If wrong files exist on disk, say so in the **task** text (delete `tip_calc/tip_calc/…`, fix `tests/` location).
 4. Seed **non-empty placeholders** in new files before delegate (`# CLI entry point`) — avoids Aider empty-file failures.
+5. **Create a new versioned spec** — `<epic>-<step>-v2.md` (increment); do **not** edit the v1 spec. Copy relevant content, add a `### Retry note` section explaining what was wrong. The old spec+report pair is the audit trail.
+
+```
+# Retry spec naming
+specs/tasks/calc-02-cli-v1.md   ← original attempt; do not touch
+specs/tasks/calc-02-cli-v2.md   ← create this; delegate with spec_path pointing here
+```
 
 ## MCP tools
 

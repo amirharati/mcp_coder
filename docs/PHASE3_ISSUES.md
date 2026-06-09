@@ -27,9 +27,10 @@ Status: `open` | `scheduled` | `done` | `wontfix-p3` | `carried`
 | ID | Status | Priority | Title | Target | Notes |
 |----|--------|----------|-------|--------|-------|
 | P3-ISS-001 | `done` | medium | `files_changed` misses new paths without git | P3-322a / BL-322a | Fixed 2026-06-08 — manifest tracker-primary |
-| P3-ISS-002 | `carried` | medium | Failed-delegate audit trail weak vs JSONL | P3-320 / BL-320 (`deferred` end P3) | From **P2-ISS-007**; report Blockers overwrite |
-| P3-ISS-003 | `scheduled` | medium | Planner can ignore `contract_warnings` | P3-311 / BL-311b | From **P2-ISS-004**; auto-merge read paths when `spec_path` set |
+| P3-ISS-002 | `done` | medium | Failed-delegate audit trail weak vs JSONL | P3-320 / BL-320 | Fixed 2026-06-09 — versioned specs (`v1/v2`) + rules v9; report pairs by name |
+| P3-ISS-003 | `done` | medium | Planner can ignore `contract_warnings` | P3-311 / BL-311b | Fixed 2026-06-09 — auto-merge read + edit-only warns (D-P3-7) |
 | P3-ISS-004 | `scheduled` | low | Tiered executor model selection | P3-321 / BL-321 | From **P2-ISS-008** |
+| P3-ISS-005 | `open` | medium | Post-delegate judgment bypasses workspace inspect tools | TBD (rules + optional MCP) | Tip-calc step 3 e2e 2026-06-09; v2 rule partial pass |
 
 ---
 
@@ -65,9 +66,9 @@ Status: `open` | `scheduled` | `done` | `wontfix-p3` | `carried`
 
 **Mitigation today:** Cursor rules v7; compiler materializes spec Read paths when context package on — but `target_files` hint gaps still warn.
 
-**Target:** BL-311b — auto-merge spec Files read paths into delegate context when `spec_path` set (optional config); stronger MCP summary for planner.
+**Target:** P3-311 / BL-311b — shipped 2026-06-09.
 
-**Acceptance:** Read-dep omit dogfood either pre-blocked or auto-included; no stray nested tree on success path.
+**Acceptance:** ✓ Read paths auto-merged (`auto_merged_read_paths`); false read warnings gone when merge ON; edit omissions still warn; legacy + inspect parity; opt-out `auto_merge_spec_read: false`. **Residual:** planners may still ignore **edit** path warnings — warn-only by design; BL-311c optional hints.
 
 ---
 
@@ -80,6 +81,81 @@ Status: `open` | `scheduled` | `done` | `wontfix-p3` | `carried`
 **Target:** BL-321 / P3-321 — tier catalog, optional `model_tier` on delegate, config-gated auto step-up.
 
 **Acceptance:** Documented tiers; JSONL records tier resolution; optional one step-up on `timeout`.
+
+---
+
+## P3-ISS-005: Post-delegate judgment bypasses workspace inspect tools
+
+**Found:** 2026-06-09 — tip-calc **step 3** dogfood (`calculate_total`) in e2e workspace after `workspace-history.mdc` **v2** shipped. Master audit of MCP logs + Cursor transcript.
+
+**Workspace:** `~/Dropbox/CodingProjects/personal_tools/mcp_coder_phase1_e2e`  
+**Host transcript:** `~/.cursor/projects/Users-amir-Dropbox-CodingProjects-personal-tools-mcp-coder-phase1-e2e/agent-transcripts/e7966a6c-2b9e-44e8-9e7c-0ba3bddab132/e7966a6c-2b9e-44e8-9e7c-0ba3bddab132.jsonl`  
+**MCP session:** `e583a7fc-513e-4aeb-9d6a-e59f767aad0a`  
+**Delegations:** `602a1f73-230b-483d-b12d-605677ee39b5` (attempt 1), `65bdcdc1-6279-48cb-a143-c348d5972c1b` (attempt 2)  
+**Task spec:** `.mcp-coder/specs/tasks/tip-calc-03-total.md`  
+**Rules synced:** `use-mcp-coder.mdc` strict v8 + `workspace-history.mdc` v2 (`server.jsonl` `stdio_server_ready` 2026-06-09T01:43:36Z)
+
+### Problem (primary)
+
+`workspace-history` v2 requires a **judgment loop** after each implement: read `delegation_diff` (inline on `delegate_to_agent` response) or call `get_delegation_diff` / `list_delegations`; compare `created` / `modified` / `deleted` and `files_unexpected` to spec **Files → Edit**; then pytest.
+
+**Observed host behavior (step 3 chat):**
+
+1. Called `delegate_to_agent` (attempt 1) — OK.
+2. Post-delegate verification used **`Read` on source files + `Shell` pytest** — did **not** cite `delegation_diff` or call `get_delegation_diff`.
+3. Globbed `get_delegation_diff.json` tool schema early but **no MCP inspect call** until user sent an explicit follow-up prompt (`list_delegations` → `get_checkpoint_detail(latest=true)` → `get_delegation_diff(latest=true)`).
+4. Retry workflow was otherwise correct: pytest caught `NameError` (missing imports), spec `revision++` + retry note, second delegate fixed imports, pytest + CLI passed, task marked done.
+
+**MCP data layer was correct** — `workspace_history.db`, JSONL, and inline diffs (when fetched) matched ground truth. Gap is **planner adoption of inspect tools**, not snapshot/diff storage.
+
+### Problem (related — same dogfood)
+
+| Gap | Evidence |
+|-----|----------|
+| **`outcome: success` vs done-when** | Attempt 1 JSONL + DB row `outcome: success` while `pytest` failed (`NameError` — `calculate_total` used but not imported in `__main__.py` / `test_core.py`). Host judgment saved it; metadata did not. |
+| **Inspect tools not in server audit** | `~/.mcp-coder/server.jsonl` logs `delegation_received` / `delegation_completed` only — no events when host later called `list_delegations` / `get_delegation_diff` (cannot audit tool usage from server log today). |
+| **CLI UUID prefix** | `mcp-coder history show 602a1f73` → `delegation not found`; full UUID required for `show` ( `diff` with full UUID works). |
+
+### Replication
+
+1. E2E workspace open in Cursor; MCP restarted; rules v2 present.
+2. Paste step-3 prompt from [phase3-wave1-exit-validation.md](./notes/phase3-wave1-exit-validation.md) (or equivalent: `calculate_total` + explicit Files → Edit).
+3. In **new Composer chat**, do not mention inspect tools in the prompt.
+4. After host finishes, check transcript for `CallMcpTool` with `get_delegation_diff` / `list_delegations` **between** delegate and mark-done — expect **absent** on 2026-06-09 run.
+5. Verify storage independently:
+   ```bash
+   WS=~/Dropbox/CodingProjects/personal_tools/mcp_coder_phase1_e2e
+   MC=~/Dropbox/CodingProjects/personal_tools/mcp_coder
+   $MC/.venv/bin/python $MC/main.py history list --workspace "$WS"
+   $MC/.venv/bin/python $MC/main.py history diff 602a1f73-230b-483d-b12d-605677ee39b5 --workspace "$WS"
+   ```
+6. Attempt 1 diff shows logic + tests added; attempt 2 diff shows import-only changes — host could have seen missing imports in `diffs` without reading full files.
+
+### Impact
+
+- Inspect MCP surface (322d–322f) underused in real planner sessions; rules alone may be insufficient.
+- `success` / checkpoint `outcome` overstate delegate quality; planners must rely on pytest (works but duplicates diff signal).
+- Cannot prove rule compliance from `server.jsonl` alone.
+
+### Target (deferred — pick on return)
+
+| Slice | Candidate fix |
+|-------|----------------|
+| **Rules** | Stricter `workspace-history.mdc`: must quote `created`/`modified` from `delegation_diff` before pytest; forbid marking done without citing `delegation_id` + path lists. |
+| **Policy rule** | `use-mcp-coder.mdc` cross-ref: “do not `Read` implementation files for verify when `delegation_diff` available”. |
+| **MCP response** | Surface a short **judgment checklist** block on implement responses (paths + `files_unexpected` + reminder). |
+| **Outcome metadata** | Optional post-delegate test hook or planner-reported `verification_failed` → `outcome: partial` (larger product change; overlaps P3-ISS-002 narrative). |
+| **Observability** | `server.jsonl` events for read-only inspect tool calls (`tool_invoked` / `inspect_tool_completed`). |
+| **CLI** | Prefix UUID resolution for `history show` (parity with list’s `…` display). |
+
+No milestone row yet — schedule when prioritizing planner ergonomics vs Wave 2 (P3-311 / P3-002).
+
+### Acceptance
+
+- Re-run step 3 (or similar) prompt **without** naming inspect tools → host calls `get_delegation_diff` or cites inline `delegation_diff` with `created`/`modified` **before** pytest on attempt 1.
+- Host summary includes `delegation_id` + path list + explicit spec path match / `files_unexpected` check.
+- Optional: server log line per inspect-tool call in e2e session.
+- Optional: attempt with failing pytest does not record `outcome: success` without a separate “unverified” flag (product decision).
 
 ---
 
@@ -98,3 +174,6 @@ Status: `open` | `scheduled` | `done` | `wontfix-p3` | `carried`
 |------|--------|
 | 2026-06-08 | Tracker created at Phase 3 start; P3-ISS-001–004 carried from P2 exit |
 | 2026-06-08 | **P3-ISS-001 done** — P3-322a manifest attribution |
+| 2026-06-09 | **P3-ISS-005 open** — tip-calc step 3 e2e; workspace-history v2 partial pass (inspect tools bypassed) |
+| 2026-06-09 | **Wave 1 closed**; P3-311 active for P3-ISS-003 |
+| 2026-06-09 | **P3-ISS-003 done** — P3-311 auto-merge read-deps |
