@@ -77,7 +77,7 @@ Three subcommands:
 |---------|-------------|
 | *(no subcommand)* | Starts the MCP stdio server (used by Cursor `mcp.json`) |
 | `mcp-coder test-model` | Sends a one-line ping to the configured model; useful to check API keys |
-| `mcp-coder inspect-context` | Dry-run context compiler — builds the prompt without calling Aider |
+| `mcp-coder inspect-context` | Dry-run context compiler — builds the prompt without calling Aider (or other backends) |
 
 ### `server/mcp_server.py` — the hub (~1750 lines)
 

@@ -91,7 +91,7 @@ mcp-coder delegate_to_agent(mode=implement, spec_path=..., ...)
 
 All tutorial docs go under `docs/guide/tutorials/`. Architecture docs under `docs/guide/architecture/`. Gap analysis at `docs/guide/gap-analysis.md`. Index: [docs/guide/README.md](./guide/README.md).
 
-**Pre-tutorial (done):** [code-structure.md](./guide/code-structure.md) — module map, reading order.
+**Pre-tutorial (done):** [code-structure.md](./guide/code-structure.md) — module map, reading order. [how-it-works.md](./guide/how-it-works.md) — system mental model (actors, pipeline, memory, trust, invariants).
 
 | ID | Title | Scope | Status |
 |----|-------|-------|--------|
@@ -190,6 +190,7 @@ Interactive sessions (PM + assistant together) — not dispatched workers unless
 
 | Date | Change |
 |------|--------|
+| 2026-06-10 | `how-it-works.md` written — single-file system overview / mental model (verified against code: pipeline order, storage paths, flag defaults + yaml-wins precedence) |
 | 2026-06-10 | S-01 started: `docs/guide/` folder created; `code-structure.md` written (module map, reading order) |
 | 2026-06-09 | Scope broadened to Phases 1–4 full onboarding; tutorials T-01–T-07; architecture-overview; gap-analysis doc; divergence log |
 | 2026-06-09 | Phase 4.5 created; initial Phase-4-only scope |
