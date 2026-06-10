@@ -109,7 +109,7 @@ Copy the `mcpServers` block and paste it into the **global** Cursor `mcp.json`:
 }
 ```
 
-> **Why global, not per-project?** Setting it once in the global file means Cursor auto-launches the mcp-coder server for *every* project you open — with no per-project wiring. The server uses the workspace's `cwd` to determine which project it's serving, so each project gets its own isolated scaffolding and history. A per-project `.cursor/mcp.json` also works if you want more control, but the global config is the right default.
+> **Why global, not per-project?** Setting it once in the global file means Cursor auto-launches the mcp-coder server for *every* project you open — with no per-project wiring. The server uses the workspace's `cwd` to determine which project it's serving, so **each project gets its own isolated `.mcp-coder/` folder, specs, config, and history** — global install does not mean shared state. A per-project `.cursor/mcp.json` also works if you want to opt specific projects in/out.
 
 After editing, open **Cursor Settings → MCP** and restart the mcp-coder entry (or restart Cursor). You should see it listed as connected.
 
