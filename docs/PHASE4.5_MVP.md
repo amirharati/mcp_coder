@@ -190,6 +190,7 @@ Interactive sessions (PM + assistant together) — not dispatched workers unless
 
 | Date | Change |
 |------|--------|
+| 2026-06-10 | **P4.5-002 done**: `setup --local` / `setup --global` write mcp.json directly; no-flags adds action hint. ISS-005 closed. T-01 §3 updated. |
 | 2026-06-10 | **P4.5-001 done**: `mcp-coder setup` + `install.sh` + `test-model --all` (9 tests). ISS-002 partial, ISS-003 closed. T-01 fully rewritten to match. |
 | 2026-06-10 | T-01 corrected after review: `.mcp-coder/` layout + rules are auto-created on server **startup** (not manual copies); **planner authors the spec via rules — user does not hand-write specs** (core workflow point); single repo-root `.env` serves all workspaces; added a real **config + rules** section (default vs strict, `@include` compile). Filed P4.5-ISS-002/003/004 + BL-341/342. |
 | 2026-06-10 | how-it-works §1/§2 reground: value = right-sized model selection + auto-escalation (BL-162) **and** an imposed workflow (correctness/throughput), not "use a cheap model". Cursor/Aider reframed as the *only current instances* of the host/executor **roles** — explicit ground-truth note so downstream docs don't promote them to "the system". |
