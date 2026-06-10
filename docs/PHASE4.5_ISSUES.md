@@ -30,6 +30,7 @@ Status: `open` | `done` | `wontfix` | `carried`
 | P4.5-ISS-005 | **done** | med | **`mcp-coder setup` should write mcp.json directly** | **Shipped** (P4.5-002): `setup --local` and `setup --global` write/merge the entry. No-flags = print-only + action hint. → **BL-341** |
 | P4.5-ISS-006 | open | low | **Delegation log viewer: structured fields, not raw JSON** | `mcp-coder view delegations` / `delegation_viewer.html` lists cards but expanded detail still dumps full record as JSON. Should render known JSONL schema structurally: `outcome`, `delegation_pipeline` (phase table), `model_roles`, `context` audit metadata, `mcp_request`, spec paths, errors — raw JSON optional/collapsed. Surfaced dogfooding T-02. → **BL-343** |
 | P4.5-ISS-007 | open | low | **Configurable spec granularity — fine steps, big steps, or full-epic delegate** | Today: one step task per delegate (`tasks/…-vN.md`); epic is planner context only. **Later:** allow workspace config + explicit user input to choose granularity — many small step specs vs fewer large step specs vs (in some cases) **one task spec covering the whole epic** passed as `spec_path`. Motivation: stronger models can take bigger chunks; needs experimentation on context limits, gateway scope, judgment loop, and audit/report shape. **Do not implement in 4.5** — file for Phase 5+ after T-06/T-07 experiments. → **BL-344** |
+| P4.5-ISS-008 | open | med | **Mechanical spec lint — “not garbage” before implement** | Today: thin mechanical gate only (`invalid_spec` for bad path, missing file, invalid policy YAML). **Empty/template specs can still implement** — no required sections, no non-empty Goal/Files, no on-disk path check. **Later:** LLM-free lint (CLI + optional pre-delegate block): required `##` sections, placeholder detection, at least one Edit path, optional `revision`/`status` checks, warn/block if `prompt_block` would be empty. Distinct from **`mode=review`** (brainstorm) and **`spec_validation`** (chat coherence LLM). Config tiers: warn vs `spec_lint: strict` → `invalid_spec`. **Build later** (Phase 5+). → **BL-345** |
 
 ---
 
@@ -47,6 +48,7 @@ Status: `open` | `done` | `wontfix` | `carried`
 
 | Date | Change |
 |------|--------|
+| 2026-06-10 | P4.5-ISS-008 filed: mechanical spec lint (required sections, non-empty contract, optional strict block) — separate from review + spec_validation LLM; → BL-345. Surfaced T-03 Q&A. |
 | 2026-06-10 | Observation: `auto_merge_*` naming vs “auto-add read deps” guide vocabulary — align code/config/JSONL later. |
 | 2026-06-10 | P4.5-ISS-007 filed: configurable spec granularity (fine/big steps, optional full-epic single delegate) for stronger models — experiment later; → BL-344. Surfaced T-03 versioning review. |
 | 2026-06-10 | P4.5-ISS-006 filed: structured delegation log viewer (replace raw JSON expand); P4.5-ISS-001 row restored (was merged into ISS-005) |

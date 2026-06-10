@@ -163,6 +163,7 @@ Phase 1 deferred executor conversation carry-over to here (BL-155); see P1-130 `
 | BL-342 | **`test-model` list/select/all** | **Shipped** (P4.5-001): `test-model --all` pings each role sequentially, pass/fail table, exit 1 on failure. |
 | BL-343 | **Structured delegation log viewer** | `view delegations` / `delegation_viewer.html` — render JSONL schema fields (pipeline, model_roles, context audit, spec, errors) instead of raw JSON blob; full record collapsed/optional. From P4.5-ISS-006. |
 | BL-344 | **Configurable spec granularity (step size / full-epic delegate)** | Workspace config + user opt-in: fine-grained step specs vs larger “big step” specs vs single task covering whole epic (`spec_path` = epic-scale contract). Unlock higher-end models that can do more per delegate; requires experiments on context, scope gateway, reports, versioning. From P4.5-ISS-007 — **Phase 5+**, not 4.5. |
+| BL-345 | **Mechanical spec lint (pre-delegate, no LLM)** | `mcp-coder spec lint` + optional delegate gate: required sections, non-empty Goal/Files, placeholder detection, empty `prompt_block` → `invalid_spec`; optional on-disk path warnings. Tiers: warn vs `spec_lint: strict`. Complements `spec_validation` (chat LLM) and `mode=review` (brainstorm). From P4.5-ISS-008 — **Phase 5+**. |
 
 ### BL-332: Host-agnostic planner rules sync
 
