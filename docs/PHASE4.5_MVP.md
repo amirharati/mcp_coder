@@ -154,6 +154,7 @@ Small fixes found during inspection — not new features. Dispatch as workers if
 | Candidate | Found in | Status |
 |-----------|----------|--------|
 | Token extraction for LiteLLM roles (BL-335) | T-06 / Track 3 | pending |
+| `mcp-coder view delegations` browser | T-01 / T-02 | **done** (P4.5-003) |
 | `mcp-coder delegation show <id>` CLI | T-02 / T-07 | pending |
 | `inspect-context` parity: architect + validation phases | T-04 | pending |
 
@@ -190,6 +191,7 @@ Interactive sessions (PM + assistant together) — not dispatched workers unless
 
 | Date | Change |
 |------|--------|
+| 2026-06-10 | **P4.5-003 done**: `mcp-coder view delegations` — delegation log browser from cwd; `view` group for future UIs; 10 tests. |
 | 2026-06-10 | **T-02 done**: Sessions, storage, and logs tutorial written — `~/.mcp-coder` layout, project.json, session dirs, JSONL field reference, CLI commands, SQLite note, MCP tools for Cursor. |
 | 2026-06-10 | **P4.5-002 done**: `setup --local` / `setup --global` write mcp.json directly; no-flags adds action hint. ISS-005 closed. T-01 §3 updated. |
 | 2026-06-10 | **P4.5-001 done**: `mcp-coder setup` + `install.sh` + `test-model --all` (9 tests). ISS-002 partial, ISS-003 closed. T-01 fully rewritten to match. |

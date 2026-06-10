@@ -240,6 +240,15 @@ Phase statuses: `ok | skipped | error | blocked`. Opt-in stages that are off app
 
 All commands default to `cwd` as the workspace. Use `--workspace <path>` if needed.
 
+### Open the delegation browser UI
+
+```bash
+mcp-coder view delegations              # merged JSONL for cwd workspace
+mcp-coder view delegations --no-open    # serve at http://127.0.0.1:8765/ without opening a tab
+```
+
+Good when you want the full JSONL record expanded in a UI rather than `tail` + `python -m json.tool`.
+
 ### List recent delegations
 
 ```bash

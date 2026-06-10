@@ -388,15 +388,17 @@ Override via `MCP_CODER_AIDER_*` in `.env` (see `.env.example`). See [Aider scri
 
 Parse `delegations.jsonl` in a simple browser UI (newest first, filter, expand details, copy file paths).
 
-**Option A — point at a workspace (merges all session logs from home):**
+**Option A — from the project directory (merges all session logs from home):**
 
 ```bash
-.venv/bin/python scripts/view_delegations.py --workspace /path/to/mcp_coder_test_proj
+cd /path/to/mcp_coder_test_proj
+mcp-coder view delegations
 
-# or a single session log file
-.venv/bin/python scripts/view_delegations.py ~/.mcp-coder/projects/<project_key>/sessions/<id>/delegations.jsonl
+# explicit workspace or single session log file
+mcp-coder view delegations --workspace /path/to/mcp_coder_test_proj
+mcp-coder view delegations ~/.mcp-coder/projects/<project_key>/sessions/<id>/delegations.jsonl
 
-# shorthand
+# legacy script / make target still work
 make view-logs ARGS="--workspace /path/to/mcp_coder_test_proj"
 ```
 

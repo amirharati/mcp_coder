@@ -357,12 +357,19 @@ A `project.json` file there records the workspace path, so you can also just `ls
 
 ### Browser delegation viewer
 
-Open `tools/delegation_viewer.html` from the mcp-coder repo in any browser (no server needed — local file). It reads your `delegations.jsonl` files and shows a searchable table of delegations with pipeline, model roles, files changed, and outcome.
+From the project directory (merges all session logs from `~/.mcp-coder`):
 
 ```bash
-open /path/to/mcp_coder/tools/delegation_viewer.html
-# or on Linux: xdg-open ...
+mcp-coder view delegations
+# explicit workspace or single session file also work:
+mcp-coder view delegations --workspace /path/to/project
+mcp-coder view delegations ~/.mcp-coder/projects/<key>/sessions/<id>/delegations.jsonl
+mcp-coder view delegations --no-open   # serve only, don't open browser
 ```
+
+Opens http://127.0.0.1:8765/ with a searchable table: pipeline phases, model roles, files changed, outcome.
+
+**No server:** open `tools/delegation_viewer.html` from the mcp-coder repo and use **Choose file** to pick any `delegations.jsonl`.
 
 ### CLI history commands
 

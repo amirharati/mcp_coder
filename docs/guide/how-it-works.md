@@ -161,7 +161,7 @@ API keys and model ids live in `.env` (OpenRouter is the common provider for eve
 2. **Host and backend are adapters, not the architecture.** Cursor and Aider are the *current* implementations; both are swappable. Aider-specific anything lives only in `core/engine/aider_engine.py` + `core/config/aider_runtime.py`; host-specific anything in `core/host/`. The rest of `core/` is neutral by design.
 3. **LLM helpers can only annotate, never mutate the mechanical truth.** Brief layers stack; tiers/paths from the assembler are authoritative.
 4. **Optional stages fail open; validation blocks closed.** A builder-LLM error never kills a delegation; a real spec ambiguity stops it before money is spent.
-5. **Everything is audited.** If it isn't in `delegations.jsonl`, it didn't happen. Debugging always starts there (or `scripts/view_delegations.py` / `tools/delegation_viewer.html`).
+5. **Everything is audited.** If it isn't in `delegations.jsonl`, it didn't happen. Debugging always starts there (or `mcp-coder view delegations` / `tools/delegation_viewer.html`).
 6. **Discovery ≠ permission.** Picker-discovered files are read-only context; edit rights come only from the spec.
 7. **mcp-coder never writes user config.** `.mcp-coder/config.yaml` is yours; `session.json` and reports are the system's.
 

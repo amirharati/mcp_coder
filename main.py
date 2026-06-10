@@ -95,6 +95,28 @@ def main() -> None:
     )
     inspect_p.add_argument("--pretty", action="store_true", help="Pretty-print JSON")
 
+    view_p = sub.add_parser(
+        "view",
+        help="Open browser UIs for inspection (subcommands: delegations, …)",
+    )
+    view_sub = view_p.add_subparsers(dest="view_command", required=True)
+    deleg_view_p = view_sub.add_parser(
+        "delegations",
+        help="Delegation log browser (delegations.jsonl)",
+    )
+    deleg_view_p.add_argument(
+        "log_file",
+        nargs="?",
+        help="Path to delegations.jsonl (default: merged logs for cwd workspace)",
+    )
+    deleg_view_p.add_argument(
+        "--workspace",
+        "-w",
+        help="Project root (default: cwd when log_file omitted)",
+    )
+    deleg_view_p.add_argument("--port", "-p", type=int, default=8765)
+    deleg_view_p.add_argument("--no-open", action="store_true", help="Do not open browser")
+
     history_p = sub.add_parser(
         "history",
         help="Browse workspace_history.db (list, diff, revert)",
@@ -161,6 +183,21 @@ def main() -> None:
         from core.cli.inspect_context import main_inspect_context
 
         raise SystemExit(main_inspect_context(sys.argv[2:]))
+
+    if args.command == "view":
+        if args.view_command == "delegations":
+            from core.cli.view_delegations import run_view
+
+            if args.log_file and args.workspace:
+                parser.error("view delegations: provide log_file or --workspace, not both")
+            run_view(
+                log_file=args.log_file,
+                workspace=args.workspace,
+                port=args.port,
+                no_open=args.no_open,
+            )
+            raise SystemExit(0)
+        parser.error(f"unknown view subcommand: {args.view_command}")
 
     if args.command == "history":
         from core.cli.history import main_history

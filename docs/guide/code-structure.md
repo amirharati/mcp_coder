@@ -98,6 +98,7 @@ This is the largest file and the place everything connects. It:
 | `test_model.py` | `mcp-coder test-model` | Ping one model (or `--all` roles) using the same Aider/LiteLLM stack as delegations |
 | `inspect_context.py` | `mcp-coder inspect-context` | Dry-run the full context compiler without calling any backend |
 | `history.py` | `mcp-coder history` | Browse `workspace_history.db` (list, diff, revert) |
+| `view_delegations.py` | `mcp-coder view delegations` | Serve `tools/delegation_viewer.html` for cwd workspace or one JSONL file |
 | `rag.py` | `mcp-coder rag` | Search / index the delegation FTS5 RAG index |
 
 ---
@@ -271,7 +272,7 @@ The heart of the system. Builds the prompt Aider sees.
 
 | Script | Use |
 |--------|-----|
-| `view_delegations.py` | Print delegations.jsonl records for a project |
+| `view_delegations.py` (script) | Backward-compat wrapper → `core.cli.view_delegations` (prefer `mcp-coder view delegations`) |
 | `logs_last.py` | Tail recent delegation log entries |
 | `server_logs_last.py` | Tail server.jsonl |
 | `smoke_delegation.py` | Quick smoke test delegation (not pytest) |
