@@ -152,19 +152,50 @@ tail -1 <path/to/delegations.jsonl> | python3 -m json.tool | head -80
 }
 ```
 
-### `context` — what was assembled
+### `context` — audit metadata about the prompt (not the full context)
+
+**Important:** `context` is **not** the assembled context package. It records **provenance, sizes, hashes, and pipeline flags** — enough to audit and compare delegations without bloating every JSONL line with full file bodies.
+
+What it typically contains:
+
+| Sub-area | Example fields | What you learn |
+|----------|----------------|----------------|
+| Final prompt size | `prompt_chars`, `prompt_tokens_est`, `prompt_hash` | How big the executor prompt was; hash lets you compare runs |
+| Prompt slice | `prompt_preview` | First ~500 chars of the **final** executor prompt (truncated) |
+| Host transcript | `host_transcript_path`, `host_transcript_hash`, `host_transcript_bytes` | Which Cursor chat was injected and how much |
+| Context package summary | `context_package.entries` | Path + tier per file (`edit-full`, `read-excerpt`, …) — **no file payloads** |
+| Builder / architect flags | `context_builder_enabled`, `builder_brief_applied`, `architect_pass_enabled` | Which pipeline stages ran — config/audit, not the brief text |
+| Executor session | `executor_reused`, `executor_recreated` | Whether the Aider instance was reused |
+
+Example (abbreviated):
 
 ```json
 "context": {
-  "spec_path": "tasks/hello-01-v1.md",
+  "prompt_chars": 4820,
+  "prompt_tokens_est": 1205,
+  "prompt_hash": "a3f2…",
+  "prompt_preview": "## Cursor chat history\n\n[user]\n…",
+  "host_transcript_path": "/Users/you/.cursor/projects/…/agent-transcripts/…jsonl",
+  "host_transcript_hash": "cc6cd8…",
+  "host_transcript_bytes": 842,
   "context_builder_enabled": true,
-  "context_builder_llm_enabled": true,
   "builder_brief_applied": true,
-  "candidate_files_count": 3,
-  "context_package_entries": 5,
-  "context_package_tokens_est": 1240
+  "context_package": {
+    "compiler_version": "0.3.0",
+    "entries": [
+      {"path": "hello.py", "tier": "edit-full", "bytes": 240},
+      {"path": "README.md", "tier": "read-excerpt", "bytes": 80}
+    ]
+  }
 }
 ```
+
+**Where the actual assembled context lives:**
+
+- **`context.prompt_preview`** — quick peek at the start of what the executor saw
+- **`context.prompt_full`** — full executor prompt, only if `MCP_CODER_LOG_FULL_PROMPT=1` in `.env` (off by default; can be large)
+- **`mcp-coder inspect-context`** — dry-run the compiler and see the full brief + package (T-04)
+- **Spec report** — `.mcp-coder/specs/reports/<spec>-report.md` written after each spec-backed delegation
 
 ### `model_roles` — per-role model audit
 
@@ -276,8 +307,8 @@ After T-01's delegation, open your record and check:
 
 1. **`outcome`** — is it `success`? If `partial`, check `delegation_pipeline` for the failing phase.
 2. **`delegation_pipeline`** — which phase took the most time? `executor` almost always dominates.
-3. **`context.candidate_files_count`** — how many files did the picker find? For a trivial workspace this should be small.
-4. **`context.builder_brief_applied`** — was the builder LLM brief applied? If `true`, check `model_roles.context_builder` for the model used.
+3. **`context.context_package.entries`** — which files and tiers made it into the package? (paths only — not content)
+4. **`context.builder_brief_applied`** — did the builder LLM stage run? If `true`, check `model_roles.context_builder` for the model; use `prompt_preview` or T-04's `inspect-context` to see the actual brief text
 5. **`files_changed` vs `files_requested`** — do they match? If `files_changed` contains entries not in `files_requested`, the executor edited something outside the spec scope — the gateway should have flagged this.
 6. **`session_action`** — `new` or `reused`? New is expected on first run or with `always_new` policy.
 

@@ -6,6 +6,7 @@ import os
 import sys
 import time
 from dataclasses import dataclass, field
+from pathlib import Path
 from typing import Any, Literal
 
 from core.config import (
@@ -300,15 +301,95 @@ def print_test_result(result: ModelTestResult) -> None:
         print_test_result(extra)
 
 
+_ROLES_ALL = ("executor", "context_builder", "review")
+
+
+def run_test_model_all(
+    *,
+    prompt: str = "Reply with exactly: ok",
+    max_tokens: int = 16,
+    via: Via = "aider",
+    workspace: str | Path | None = None,
+) -> list[tuple[str, str, ModelTestResult, bool]]:
+    """
+    Ping each configured role's model sequentially.
+
+    Returns a list of (role, model_id, result, is_fallback_from_executor).
+    """
+    from core.config.role_models import (
+        ROLE_CONTEXT_BUILDER,
+        ROLE_EXECUTOR,
+        ROLE_REVIEW,
+        resolve_role_model_name,
+    )
+
+    load_env_files()
+    apply_provider_env()
+
+    ws = str(workspace) if workspace else str(Path.cwd().resolve())
+    executor_model = resolve_role_model_name(ROLE_EXECUTOR, ws)
+
+    rows: list[tuple[str, str, ModelTestResult, bool]] = []
+    for role in (ROLE_EXECUTOR, ROLE_CONTEXT_BUILDER, ROLE_REVIEW):
+        model = resolve_role_model_name(role, ws)
+        is_fallback = role != ROLE_EXECUTOR and model == executor_model
+        result = run_test_model(
+            model=model,
+            prompt=prompt,
+            max_tokens=max_tokens,
+            via=via,
+            print_resolution=False,
+        )
+        rows.append((role, model, result, is_fallback))
+
+    return rows
+
+
+def print_test_all_result(rows: list[tuple[str, str, ModelTestResult, bool]]) -> int:
+    """Print tabulated --all results. Returns 0 if all pass, 1 if any fail."""
+    role_width = max(len(role) for role, _, _, _ in rows)
+    model_width = max(len(model) for _, model, _, _ in rows)
+
+    print()
+    for role, model, result, is_fallback in rows:
+        status = "OK" if result.ok else "FAIL"
+        lat = f"latency={result.latency_ms}ms" if result.latency_ms is not None else ""
+        fallback_note = "  (fallback from executor)" if is_fallback else ""
+        line = f"{role.ljust(role_width)}  {model.ljust(model_width)}  {status}"
+        if lat:
+            line += f"  {lat}"
+        line += fallback_note
+        print(line)
+        if not result.ok:
+            print(f"  Error: {result.message}", file=sys.stderr)
+
+    print()
+    total = len(rows)
+    passed = sum(1 for _, _, r, _ in rows if r.ok)
+    all_ok = passed == total
+    if all_ok:
+        print(f"All {total} passed.")
+    else:
+        print(f"{passed}/{total} passed.", file=sys.stderr)
+
+    return 0 if all_ok else 1
+
+
 def main_test_model(argv: list[str] | None = None) -> int:
     import argparse
 
     parser = argparse.ArgumentParser(
         description="Test AIDER_MODEL via Aider Model (default) or raw LiteLLM",
     )
-    parser.add_argument(
+    group = parser.add_mutually_exclusive_group()
+    group.add_argument(
         "--model",
         help="Override model id (default: AIDER_MODEL → MCP_CODER_MODEL → built-in default)",
+    )
+    group.add_argument(
+        "--all",
+        action="store_true",
+        help="Test all configured role models (executor, context_builder, review) sequentially",
     )
     parser.add_argument(
         "--prompt",
@@ -323,6 +404,14 @@ def main_test_model(argv: list[str] | None = None) -> int:
         help="aider = Model.simple_send_with_retries (delegation stack); litellm = direct completion",
     )
     args = parser.parse_args(argv)
+
+    if args.all:
+        rows = run_test_model_all(
+            prompt=args.prompt,
+            max_tokens=args.max_tokens,
+            via=args.via,
+        )
+        return print_test_all_result(rows)
 
     result = run_test_model(
         model=args.model,

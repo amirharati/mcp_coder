@@ -12,11 +12,40 @@ def main() -> None:
     parser = argparse.ArgumentParser(description="mcp-coder MCP server and CLI")
     sub = parser.add_subparsers(dest="command")
 
+    setup_p = sub.add_parser(
+        "setup",
+        help="Print workspace info and the mcp.json block to paste into Cursor",
+    )
+    setup_target_group = setup_p.add_mutually_exclusive_group()
+    setup_target_group.add_argument(
+        "--global",
+        dest="setup_global",
+        action="store_true",
+        help="Merge mcp-coder entry into the system-wide Cursor mcp.json",
+    )
+    setup_target_group.add_argument(
+        "--local",
+        dest="setup_local",
+        action="store_true",
+        help="Merge mcp-coder entry into .cursor/mcp.json in the current directory",
+    )
+    setup_p.add_argument(
+        "--init-config",
+        action="store_true",
+        help="Create .mcp-coder/config.yaml from the bundled example if absent (never overwrites)",
+    )
+
     test_p = sub.add_parser(
         "test-model",
         help="Ping configured AIDER_MODEL via Aider Model (same stack as delegations)",
     )
-    test_p.add_argument("--model", help="Override model id")
+    test_model_group = test_p.add_mutually_exclusive_group()
+    test_model_group.add_argument("--model", help="Override model id")
+    test_model_group.add_argument(
+        "--all",
+        action="store_true",
+        help="Test all configured role models (executor, context_builder, review) sequentially",
+    )
     test_p.add_argument(
         "--prompt",
         default="Reply with exactly: ok",
@@ -93,8 +122,31 @@ def main() -> None:
     )
     args = parser.parse_args()
 
+    if args.command == "setup":
+        from core.cli.setup import run_setup
+
+        write_target = None
+        if args.setup_global:
+            write_target = "global"
+        elif args.setup_local:
+            write_target = "local"
+        raise SystemExit(run_setup(init_config=args.init_config, write_target=write_target))
+
     if args.command == "test-model":
-        from core.cli.test_model import print_test_result, run_test_model
+        from core.cli.test_model import (
+            print_test_all_result,
+            print_test_result,
+            run_test_model,
+            run_test_model_all,
+        )
+
+        if args.all:
+            rows = run_test_model_all(
+                prompt=args.prompt,
+                max_tokens=args.max_tokens,
+                via=args.via,
+            )
+            raise SystemExit(print_test_all_result(rows))
 
         result = run_test_model(
             model=args.model,
@@ -125,6 +177,18 @@ def main() -> None:
         if rag_argv and rag_argv[0] == "--":
             rag_argv = rag_argv[1:]
         raise SystemExit(main_rag(rag_argv))
+
+    # Bare invocation from an interactive terminal: the stdio server would just
+    # sit waiting for JSON-RPC on stdin (looks like a hang). Cursor runs us with
+    # pipes, so a TTY means a human — show help instead. --mcp forces the server.
+    if not args.mcp and sys.stdin.isatty():
+        parser.print_help()
+        print(
+            "\nNo subcommand given. The MCP stdio server only starts when run by an"
+            " MCP client (e.g. Cursor) or with --mcp.",
+            file=sys.stderr,
+        )
+        raise SystemExit(2)
 
     from core.config import apply_provider_env, load_env_files
     from core.server.singleton import enforce_single_stdio_server
