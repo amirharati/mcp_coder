@@ -8,25 +8,36 @@
 
 ## 1. What it is, in one paragraph
 
-mcp-coder is an MCP server that lets a **planner agent** (a Cursor chat session) delegate implementation work to a **cheaper executor** (Aider driving an LLM) — while mcp-coder itself owns everything in between: reading the task spec, compiling the context the executor sees, enforcing the file-edit contract, snapshotting the workspace, verifying the result, and writing an audit trail. The planner stays high-level and chatty; the executor gets a focused, self-contained prompt; mcp-coder is the disciplined middle layer that makes that split safe and observable.
+mcp-coder is an MCP server that lets a **planner agent** delegate implementation work to an **executor**, while mcp-coder itself owns everything in between: reading the task spec, compiling the context the executor sees, enforcing the file-edit contract, snapshotting the workspace, verifying the result, and writing an audit trail. The planner stays high-level; the executor gets a focused, self-contained prompt; mcp-coder is the disciplined middle layer that makes that split safe and observable.
+
+**Why this split is worth it — two payoffs, not "use a cheap model":**
+
+1. **Right-sized model selection, with escalation.** The executor model is *not* assumed to be cheap. The goal is for mcp-coder to help **pick the appropriate model per task** and **auto-escalate to a stronger tier when a delegation fails** — so easy work runs lean and hard work gets the firepower it needs, instead of paying top-tier prices for everything or under-powering a hard task. (Auto-selection/escalation is the target direction; today it's manual per-role config — see §6 and BL-162.)
+2. **An imposed workflow that improves execution.** Spec contract → compiled context → scope gateway → verification → audit is a discipline the raw model doesn't have on its own. It raises the odds a delegation lands correctly the first time and shortens the long retry/repair cycle. So the value is **both short-term economy *and* long-term correctness/throughput** — not merely a cheaper per-token rate.
+
+In short: mcp-coder is about *spending the right amount of capability at the right step*, with a workflow that makes each step more likely to succeed — not about always reaching for the cheapest model.
 
 ## 2. The three actors
 
+Three **roles**, each filled by a swappable implementation:
+
 ```
 ┌─────────────┐   MCP tools    ┌──────────────┐   compiled prompt   ┌──────────────┐
-│  Planner     │ ─────────────▶ │  mcp-coder   │ ──────────────────▶ │  Executor    │
-│  (Cursor     │                │  (this repo) │                     │  (Aider +    │
-│   session)   │ ◀───────────── │              │ ◀────────────────── │   LLM)       │
+│  Planner /   │ ─────────────▶ │  mcp-coder   │ ──────────────────▶ │  Executor /  │
+│  Host        │                │  (this repo) │                     │  Backend     │
+│              │ ◀───────────── │              │ ◀────────────────── │              │
 └─────────────┘  result + audit └──────────────┘   file edits        └──────────────┘
+  e.g. Cursor                                          e.g. Aider + an LLM provider
+  (only host today)                                    (only backend today)
 ```
 
-- **Planner / host** — *today* this is the Cursor agent you talk to. It writes specs, calls `delegate_to_agent`, and judges results. Guided by host rules that mcp-coder syncs into the workspace (`.cursor/rules/use-mcp-coder.mdc`). It never sees executor internals; it sees the response payload and the JSONL audit.
-- **mcp-coder** — stateless per call, stateful on disk. All logic in `core/`, all MCP wiring in `server/mcp_server.py`. Backend-neutral everywhere except `core/engine/aider_engine.py`.
-- **Executor** — *today* Aider's Python API running its own internal edit loop (search/replace blocks, reflection retries) against the configured model. It only knows what the compiled context package tells it.
+- **Planner / Host** — the agent that talks to the user, writes specs, calls `delegate_to_agent`, and judges results. It never sees executor internals; it sees the response payload and the JSONL audit. It sits behind the host adapter (`core/host/`, `HostContextProvider`). **The only host implemented today is Cursor** — guided by rules mcp-coder syncs into the workspace (`.cursor/rules/use-mcp-coder.mdc`) — but Cursor is *one instance of the host role*, not the role itself.
+- **mcp-coder** — the role-neutral middle layer. Stateless per call, stateful on disk. All logic in `core/`, all MCP wiring in `server/mcp_server.py`. This is the only part that is *not* an adapter — it's the system.
+- **Executor / Backend** — the role that actually edits files, running its own internal edit loop against a configured model. It only knows what the compiled context package tells it. It sits behind the engine adapter (`core/engine/`, `ExecutionEngine` + `factory.py`). **The only backend implemented today is Aider + an LLM provider** — but Aider is *one instance of the executor role*, not the role itself.
 
-Plus **helper LLMs** in supporting roles (see §6): spec validation, context-builder brief, architect plan, review. These are separate calls, distinct from the executor.
+Plus **helper LLMs** in supporting roles (see §6): spec validation, context-builder brief, architect plan, review. Separate calls, distinct from the executor.
 
-> **Not locked in (important).** Cursor (host) and Aider+provider (backend) are the *current* starting point, not the architecture. Both sit behind adapters — the host behind `core/host/` (`HostContextProvider`), the executor behind `core/engine/` (`ExecutionEngine` + `factory.py`). Everything in `core/` outside `core/engine/aider_engine.py` and `core/config/aider_runtime.py` is deliberately backend-neutral, and a non-Cursor host or a non-Aider backend (e.g. a Cursor-SDK executor, see BL-340) is expected to land later. When reading the code or this doc, treat "Cursor" and "Aider" as *the first implementation of an adapter*, not as the system.
+> **Read this carefully — it is the ground truth the rest of the docs build on.** "Cursor" and "Aider" are **the current and only supported implementations, and the main targets** — so it is fine for tutorials to use them concretely. But they are **instances of the host and executor *roles*, never the roles themselves.** The architecture is: planner role ↔ mcp-coder ↔ executor role, with hosts and backends plugged in via adapters (`core/host/`, `core/engine/`). Anything Aider-specific lives only in `core/engine/aider_engine.py` + `core/config/aider_runtime.py`; anything Cursor-specific only in `core/host/`. Additional hosts and backends (e.g. a Cursor-SDK executor, BL-340) are expected. **When writing any further doc, name Cursor/Aider as examples of a role — do not promote them to the definition of the system.**
 
 ## 3. The unit of work: a delegation
 
@@ -94,6 +105,8 @@ Every call is audited in the JSONL `model_roles` block with tokens/duration/cost
 
 So the durable idea is **"right model for each role,"** not "expensive plans, cheap edits." The split *enables* cost optimization (and lets a strong model think while a fast model types) but does not mandate any particular price direction. Today's defaults are a starting point, expected to change as BL-335 telemetry lands.
 
+**Where this is heading (target, not yet built):** the role registry is the foundation for **auto-selection** (mcp-coder picks the model tier from task signals) and **auto-escalation** (a failed/`partial` delegation retries on a stronger tier instead of failing or burning budget on every attempt). That's the §1 payoff #1 made concrete — see BL-162. Until then, model-per-role is manual config.
+
 ## 7. Memory: what persists where
 
 Two storage scopes — repo vs home — and the distinction matters:
@@ -138,7 +151,7 @@ Precedence is layered, later wins: **built-in default → env var → `.mcp-code
 | `spec_validation` | off | pre-delegate coherence check (can block) |
 | `architect_pass` | off | architect plan in brief |
 | `auto_verify` | off | post-delegate verify command |
-| `host_transcript` | off | dump Cursor transcript tail for helper LLMs |
+| `host_transcript` | off | dump host transcript tail for helper LLMs (Cursor today) |
 
 API keys and model ids live in `.env` (OpenRouter is the common provider for everything today).
 
