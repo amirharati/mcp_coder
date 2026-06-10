@@ -96,8 +96,8 @@ All tutorial docs go under `docs/guide/tutorials/`. Architecture docs under `doc
 | ID | Title | Scope | Status |
 |----|-------|-------|--------|
 | T-01 | **Setup & first delegation** — install, config, one delegate from scratch | Phase 1 | done |
-| T-02 | **Sessions, storage, and logs** — how `~/.mcp-coder` is laid out; read a JSONL record | Phase 1 | pending |
-| T-03 | **Specs: contract, paths, versioning** — write a spec, delegation policies, versioned retry | Phase 1–2 | pending |
+| T-02 | **Sessions, storage, and logs** — how `~/.mcp-coder` is laid out; read a JSONL record | Phase 1 | done |
+| T-03 | **Specs: contract, paths, versioning** — write a spec, delegation policies, versioned retry | Phase 1–2 | done |
 | T-04 | **Context compiler deep-dive** — `inspect-context` dry-run; tiers; what Aider actually sees | Phase 2 | pending |
 | T-05 | **Workspace history & the RAG stub** — `workspace_history.db`, `list_delegations`, `get_delegation_diff`; understand what `rag_search` code exists vs what's actually used | Phase 3 | pending |
 | T-06 | **The Phase 4 pipeline** — delegation_pipeline JSONL; builder LLM; flag matrix | Phase 4 | pending |
@@ -192,6 +192,7 @@ Interactive sessions (PM + assistant together) — not dispatched workers unless
 
 | Date | Change |
 |------|--------|
+| 2026-06-10 | **T-03 done**: Specs tutorial — `.mcp-coder/specs/` layout, `spec_path` rules, Files contract + delegation policies, review→implement workflow, gateway `edit_scope`, reports, planner-managed `revision` (no auto filename versioning). |
 | 2026-06-10 | **P4.5-003 done**: `mcp-coder view delegations` — delegation log browser from cwd; `view` group for future UIs; 10 tests. |
 | 2026-06-10 | **T-02 done**: Sessions, storage, and logs tutorial written — `~/.mcp-coder` layout, project.json, session dirs, JSONL field reference, CLI commands, SQLite note, MCP tools for Cursor. |
 | 2026-06-10 | **P4.5-002 done**: `setup --local` / `setup --global` write mcp.json directly; no-flags adds action hint. ISS-005 closed. T-01 §3 updated. |

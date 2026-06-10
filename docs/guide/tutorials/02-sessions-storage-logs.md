@@ -332,5 +332,5 @@ After T-01's delegation, open your record and check:
 
 ## Next
 
-- **T-03 (Specs):** understand the spec file contract — `## Files`, `## Goal`, `## Constraints`, `## Acceptance`, front-matter versioning, how the gateway enforces it
+- **T-03 (Specs):** understand the spec file contract — `## Files`, `## Goal`, `## Constraints`, `## Done when`, front-matter versioning, how the gateway enforces it
 - **T-04 (Context compiler):** run `mcp-coder inspect-context` to see exactly what brief the executor received
