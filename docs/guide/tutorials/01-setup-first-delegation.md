@@ -225,14 +225,31 @@ mcp-coder syncs **planner guidance** into `.cursor/rules/` so the Cursor agent k
 
 ## 6. Let the planner author the spec
 
-In a Cursor chat in the test workspace, describe the task:
+In a Cursor chat in the test workspace, describe the task. You normally **do not** write the spec file yourself — the planner does, guided by `use-mcp-coder.mdc`.
+
+**How much to say depends on policy and how explicit you want to be:**
+
+| Mode | Typical prompt | What to expect |
+|------|----------------|----------------|
+| **`default` (usual)** | Just the task — e.g. *"Add a one-line `hello.py` that prints exactly `hello from mcp-coder`. Stdlib only."* | Synced rules + MCP tools are enough for the host to route to `delegate_to_agent`, write a versioned spec, and delegate. You don't have to say "mcp-coder" every time. |
+| **`strict` or first run / teaching** | Be explicit — name the workflow step you want | Helps when you want spec-before-delegate spelled out, or the model might otherwise edit files directly. |
+
+Example (explicit — good for this tutorial so you see spec → delegate):
 
 ```
 Using mcp-coder, implement a one-line hello.py that prints exactly
 "hello from mcp-coder". Stdlib only. Write the spec first, then delegate.
 ```
 
-Guided by `use-mcp-coder.mdc`, the agent should:
+A relaxed equivalent with **`default`** policy often works the same:
+
+```
+Add hello.py that prints exactly "hello from mcp-coder". Stdlib only.
+```
+
+The rules exist so the host picks the right tool (`delegate_to_agent`) instead of patching files in chat. Mentioning mcp-coder in the prompt is optional once rules are synced — it just makes intent obvious on a first dogfood run.
+
+Guided by the rules, the agent should:
 1. Create a versioned step spec, e.g. `.mcp-coder/specs/tasks/hello-01-v1.md`
 2. Call `delegate_to_agent` with `spec_path`, `target_files`, `mode: implement`, and `context_summary`
 
