@@ -98,7 +98,7 @@ All tutorial docs go under `docs/guide/tutorials/`. Architecture docs under `doc
 | T-01 | **Setup & first delegation** — install, config, one delegate from scratch | Phase 1 | done |
 | T-02 | **Sessions, storage, and logs** — how `~/.mcp-coder` is laid out; read a JSONL record | Phase 1 | done |
 | T-03 | **Specs: contract, paths, versioning** — write a spec, delegation policies, versioned retry | Phase 1–2 | done |
-| T-04 | **Context compiler deep-dive** — `inspect-context` dry-run; tiers; what Aider actually sees | Phase 2 | pending |
+| T-04 | **Context compiler deep-dive** — `inspect-context` dry-run; tiers; what Aider actually sees | Phase 2 | done |
 | T-05 | **Workspace history & the RAG stub** — `workspace_history.db`, `list_delegations`, `get_delegation_diff`; understand what `rag_search` code exists vs what's actually used | Phase 3 | pending |
 | T-06 | **The Phase 4 pipeline** — delegation_pipeline JSONL; builder LLM; flag matrix | Phase 4 | pending |
 | T-07 | **Inspecting a delegation end-to-end** — pick a real delegation_id; trace it from JSONL → brief → Aider output | Phase 1–4 | pending |
@@ -192,6 +192,7 @@ Interactive sessions (PM + assistant together) — not dispatched workers unless
 
 | Date | Change |
 |------|--------|
+| 2026-06-10 | **T-04 done**: Context compiler tutorial — file picker (symbol scan, `discover` vs `strict`), tiers (edit-full / read-full / read-excerpt / pointer / map-only), budget 3-step degradation, builder LLM narrative layer, adapter translation → Aider `fnames` + read block, `inspect-context` CLI + all output fields. |
 | 2026-06-10 | **T-03 done**: Specs tutorial — `.mcp-coder/specs/` layout, `spec_path` rules, Files contract + delegation policies, review→implement workflow, gateway `edit_scope`, reports, planner-managed `revision` (no auto filename versioning). |
 | 2026-06-10 | **P4.5-003 done**: `mcp-coder view delegations` — delegation log browser from cwd; `view` group for future UIs; 10 tests. |
 | 2026-06-10 | **T-02 done**: Sessions, storage, and logs tutorial written — `~/.mcp-coder` layout, project.json, session dirs, JSONL field reference, CLI commands, SQLite note, MCP tools for Cursor. |
