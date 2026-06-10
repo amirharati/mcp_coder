@@ -23,6 +23,7 @@ Status: `open` | `done` | `wontfix` | `carried`
 
 | ID | Status | Priority | Title | Notes |
 |----|--------|----------|-------|-------|
+| P4.5-ISS-001 | open | low | **Code layout refactor — instance folders, file sizes** | `core/engine/` and `core/host/` contain both abstract base/factory code and concrete Cursor/Aider implementations in the same flat folder. As more backends and hosts land, the folder will get crowded. Propose: `core/engine/backends/aider/` and `core/host/hosts/cursor/`  (or similar sub-packaging) to clearly separate the role abstraction from each instance. Also audit any file over ~400 lines for split candidates (`server/mcp_server.py` at ~1750 lines is the main target, likely extractable into pipeline sub-modules). Should not change behaviour — pure structural refactor. **Carry to Phase 5 or a dedicated cleanup slot; do not block Phase 4.5 literacy work.** |
 
 ---
 
@@ -36,4 +37,5 @@ Status: `open` | `done` | `wontfix` | `carried`
 
 | Date | Change |
 |------|--------|
+| 2026-06-10 | P4.5-ISS-001 added: code layout refactor (instance sub-folders, file size audit, mcp_server.py split) |
 | 2026-06-09 | Created at Phase 4 exit; awaiting first inspection session |
