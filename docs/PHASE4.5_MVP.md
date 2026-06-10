@@ -11,7 +11,7 @@
 **Status:** **Active** (2026-06-09)  
 **Purpose:** Understand everything we built across Phases 1–4 from first principles — docs, tutorials, live inspection, gap analysis. Foundation for Phase 5+ planning grounded in real evidence, not theory.  
 **Not a product phase** — no new arc number; Phase 5 scope unchanged.  
-**PM board:** this file · **Issues:** [PHASE4.5_ISSUES.md](./PHASE4.5_ISSUES.md)  
+**PM board:** this file · **Issues:** [PHASE4.5_ISSUES.md](./PHASE4.5_ISSUES.md) · **Output folder:** [docs/guide/](./guide/README.md)  
 **Phases (closed):** [PHASE4_MVP.md](./PHASE4_MVP.md) · [PHASE3_MVP.md](./PHASE3_MVP.md)  
 **Phase 5 (next):** [PHASES.md](./PHASES.md) § Phase 5
 
@@ -88,6 +88,10 @@ mcp-coder delegate_to_agent(mode=implement, spec_path=..., ...)
 ### Track 1 — Tutorials (the main output)
 
 **Goal:** Written walkthroughs covering the whole stack — useful to the author now and to future users. Each tutorial is a standalone document under `docs/tutorials/`.
+
+All tutorial docs go under `docs/guide/tutorials/`. Architecture docs under `docs/guide/architecture/`. Gap analysis at `docs/guide/gap-analysis.md`. Index: [docs/guide/README.md](./guide/README.md).
+
+**Pre-tutorial (done):** [code-structure.md](./guide/code-structure.md) — module map, reading order.
 
 | ID | Title | Scope | Status |
 |----|-------|-------|--------|
@@ -186,5 +190,6 @@ Interactive sessions (PM + assistant together) — not dispatched workers unless
 
 | Date | Change |
 |------|--------|
+| 2026-06-10 | S-01 started: `docs/guide/` folder created; `code-structure.md` written (module map, reading order) |
 | 2026-06-09 | Scope broadened to Phases 1–4 full onboarding; tutorials T-01–T-07; architecture-overview; gap-analysis doc; divergence log |
 | 2026-06-09 | Phase 4.5 created; initial Phase-4-only scope |

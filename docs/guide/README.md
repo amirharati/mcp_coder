@@ -1,0 +1,43 @@
+# mcp-coder guide
+
+Onboarding, tutorials, and architecture reference for the mcp-coder stack (Phases 1–4).
+
+This folder is the output of **Phase 4.5** — written from actually running and reading the code, not from specs alone.
+
+## Start here
+
+| Document | What it covers |
+|----------|---------------|
+| [code-structure.md](./code-structure.md) | **Read first.** Every directory and module — what it does, where to look for specific things, suggested reading order |
+
+## Tutorials
+
+*(Written as sessions progress — see [PHASE4.5_MVP.md](../PHASE4.5_MVP.md))*
+
+| # | Title | Status |
+|---|-------|--------|
+| T-01 | [Setup & first delegation](./tutorials/01-setup-first-delegation.md) | pending |
+| T-02 | [Sessions, storage, and logs](./tutorials/02-sessions-storage-logs.md) | pending |
+| T-03 | [Specs: contract, paths, versioning](./tutorials/03-specs-contract-versioning.md) | pending |
+| T-04 | [Context compiler deep-dive](./tutorials/04-context-compiler.md) | pending |
+| T-05 | [Workspace history & the RAG stub](./tutorials/05-workspace-history-rag-stub.md) | pending |
+| T-06 | [The Phase 4 pipeline](./tutorials/06-phase4-pipeline.md) | pending |
+| T-07 | [Inspecting a delegation end-to-end](./tutorials/07-end-to-end-trace.md) | pending |
+
+## Architecture reference
+
+*(Written as sessions progress)*
+
+| Document | Topic |
+|----------|-------|
+| [architecture/overview.md](./architecture/overview.md) | Layer map — host / MCP / compiler / engine / storage |
+| [architecture/context-pipeline.md](./architecture/context-pipeline.md) | Picker → compiler tiers → builder LLM → Aider |
+| [architecture/storage-layout.md](./architecture/storage-layout.md) | `~/.mcp-coder`, `workspace_history.db`, JSONL schema |
+| [architecture/per-role-models.md](./architecture/per-role-models.md) | Model registry, role resolution, known gaps |
+| [architecture/reality-vs-spec.md](./architecture/reality-vs-spec.md) | Where the real code differs from how things were described |
+
+## Gap analysis
+
+| Document | Topic |
+|----------|-------|
+| [gap-analysis.md](./gap-analysis.md) | Findings → Phase 5 planning input |
