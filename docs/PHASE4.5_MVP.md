@@ -95,7 +95,7 @@ All tutorial docs go under `docs/guide/tutorials/`. Architecture docs under `doc
 
 | ID | Title | Scope | Status |
 |----|-------|-------|--------|
-| T-01 | **Setup & first delegation** — install, config, one delegate from scratch | Phase 1 | pending |
+| T-01 | **Setup & first delegation** — install, config, one delegate from scratch | Phase 1 | done |
 | T-02 | **Sessions, storage, and logs** — how `~/.mcp-coder` is laid out; read a JSONL record | Phase 1 | pending |
 | T-03 | **Specs: contract, paths, versioning** — write a spec, delegation policies, versioned retry | Phase 1–2 | pending |
 | T-04 | **Context compiler deep-dive** — `inspect-context` dry-run; tiers; what Aider actually sees | Phase 2 | pending |
