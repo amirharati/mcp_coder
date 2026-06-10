@@ -190,6 +190,7 @@ Interactive sessions (PM + assistant together) — not dispatched workers unless
 
 | Date | Change |
 |------|--------|
+| 2026-06-10 | T-01 corrected after review: `.mcp-coder/` layout + rules are auto-created on server **startup** (not manual copies); **planner authors the spec via rules — user does not hand-write specs** (core workflow point); single repo-root `.env` serves all workspaces; added a real **config + rules** section (default vs strict, `@include` compile). Filed P4.5-ISS-002/003/004 + BL-341/342. |
 | 2026-06-10 | how-it-works §1/§2 reground: value = right-sized model selection + auto-escalation (BL-162) **and** an imposed workflow (correctness/throughput), not "use a cheap model". Cursor/Aider reframed as the *only current instances* of the host/executor **roles** — explicit ground-truth note so downstream docs don't promote them to "the system". |
 | 2026-06-10 | `terminology.md` added (glossary). how-it-works clarified: host/backend are swappable adapters (not locked in); "helper LLM" not "cheap LLM" — model-per-role is a tuning decision, architect/verifier may warrant a stronger model (TBD) |
 | 2026-06-10 | `how-it-works.md` written — single-file system overview / mental model (verified against code: pipeline order, storage paths, flag defaults + yaml-wins precedence) |

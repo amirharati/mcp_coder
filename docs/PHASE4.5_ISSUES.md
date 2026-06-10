@@ -23,6 +23,9 @@ Status: `open` | `done` | `wontfix` | `carried`
 
 | ID | Status | Priority | Title | Notes |
 |----|--------|----------|-------|-------|
+| P4.5-ISS-002 | open | med | **`mcp-coder setup` + global env (onboarding gap)** | Today setup is manual: clone repo, make venv, hand-edit per-repo `.env`, hand-edit Cursor `mcp.json`. There is no `mcp-coder setup` command and no global env. Target: install mcp-coder globally (pipx), then `mcp-coder setup` run in any project creates/validates `.mcp-coder/` and prints the exact `mcp.json` block; env (API keys/models) resolves from a single global location, not per-workspace. Note: a partial path already exists — `load_env_files()` falls back to a `.env` at the mcp-coder repo root (`core/config/env.py`), so one `.env` can serve all workspaces, but it's undocumented and tied to the install dir. → **BL-341**. Surfaced writing T-01. |
+| P4.5-ISS-003 | open | low | **`test-model` should list/select or test-all models** | `mcp-coder test-model` only pings one model (`AIDER_MODEL` or `--model`). With per-role models (executor, context_builder, review) in `.env`, you can't easily verify they all work. Target: list configured models and let the user pick which to ping, or `--all` to ping each role's model and report a pass/fail table. → **BL-342**. Surfaced writing T-01. |
+| P4.5-ISS-004 | open | low | **No first-class "one step at a time" / always-review delegate mode** | The workflow is intentionally mostly-automatic (planner writes spec → delegates). For learning/inspection (and cautious users) a "pause between pipeline steps" or "always run `mode=review` before `implement`" switch would help. Not urgent — `inspect-context` (T-04) and `mode=review` already cover most of this manually. → track for later; possible small config flag. Surfaced writing T-01. |
 | P4.5-ISS-001 | open | low | **Code layout refactor — instance folders, file sizes** | `core/engine/` and `core/host/` contain both abstract base/factory code and concrete Cursor/Aider implementations in the same flat folder. As more backends and hosts land, the folder will get crowded. Propose: `core/engine/backends/aider/` and `core/host/hosts/cursor/`  (or similar sub-packaging) to clearly separate the role abstraction from each instance. Also audit any file over ~400 lines for split candidates (`server/mcp_server.py` at ~1750 lines is the main target, likely extractable into pipeline sub-modules). Should not change behaviour — pure structural refactor. **Carry to Phase 5 or a dedicated cleanup slot; do not block Phase 4.5 literacy work.** |
 
 ---
@@ -37,5 +40,6 @@ Status: `open` | `done` | `wontfix` | `carried`
 
 | Date | Change |
 |------|--------|
+| 2026-06-10 | P4.5-ISS-002/003/004 added from writing T-01: `mcp-coder setup` + global env; `test-model` list/select; one-step/always-review mode |
 | 2026-06-10 | P4.5-ISS-001 added: code layout refactor (instance sub-folders, file size audit, mcp_server.py split) |
 | 2026-06-09 | Created at Phase 4 exit; awaiting first inspection session |
