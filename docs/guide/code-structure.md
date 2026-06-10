@@ -19,7 +19,7 @@ mcp_coder/
     mcp_server.py         The MCP server — all MCP tool handlers live here (~1750 lines)
 
   core/                   All business logic — no Cursor/MCP transport here
-    cli/                  CLI-only entry points (not MCP tools)
+    cli/                  CLI-only entry points (not MCP tools): setup, test-model, inspect-context, history, rag
     config/               Feature flags, model resolution, runtime config
     context/              Context compiler: assemble + picker + builder LLM
     delegation/           Delegation-level errors
@@ -87,6 +87,18 @@ This is the largest file and the place everything connects. It:
 - Calls into `core/` for all the actual work
 
 **Reading tip:** the file is long but structured. Look for `@server.call_tool` decorators to find each tool handler. The `delegate_to_agent` handler is the one that does almost everything.
+
+---
+
+## `core/cli/` — CLI subcommand implementations
+
+| Module | Subcommand | What it does |
+|--------|-----------|-------------|
+| `setup.py` | `mcp-coder setup` | Print workspace info, model resolution, ready-to-paste `mcp.json` block; `--init-config` creates `config.yaml` |
+| `test_model.py` | `mcp-coder test-model` | Ping one model (or `--all` roles) using the same Aider/LiteLLM stack as delegations |
+| `inspect_context.py` | `mcp-coder inspect-context` | Dry-run the full context compiler without calling any backend |
+| `history.py` | `mcp-coder history` | Browse `workspace_history.db` (list, diff, revert) |
+| `rag.py` | `mcp-coder rag` | Search / index the delegation FTS5 RAG index |
 
 ---
 
@@ -265,6 +277,7 @@ The heart of the system. Builds the prompt Aider sees.
 | `smoke_delegation.py` | Quick smoke test delegation (not pytest) |
 | `mcp-coder` | Shell shim (used during dev before `pip install -e .`) |
 | `bootstrap.sh` | Initial environment setup |
+| `install.sh` | **One-command global install** — creates `.venv`, writes `/usr/local/bin/mcp-coder` wrapper; run once per machine |
 | `lock-deps.sh` | Repin requirements*.txt |
 
 ---

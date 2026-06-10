@@ -159,8 +159,8 @@ Phase 1 deferred executor conversation carry-over to here (BL-155); see P1-130 `
 | BL-204 | Proxy intercept: save latest Cursor prompt from `context_optimizer_proxy` | Personal workflow |
 | BL-205 | Cursor rule / skill snippet for routing to `delegate_to_agent` | Improve auto-routing |
 | BL-332 | **Host-agnostic planner rules sync** | Cursor-coupled today; compile engine is reusable — see § BL-332 |
-| BL-341 | **`mcp-coder setup` + global env (onboarding DX)** | Install globally (pipx); `mcp-coder setup` in any project validates/creates `.mcp-coder/`, prints the exact `mcp.json` block, and resolves API keys/models from a single global env instead of a per-workspace `.env`. Partial today: `load_env_files()` falls back to repo-root `.env` (`core/config/env.py`) so one file can serve all workspaces, but undocumented + tied to install dir. From P4.5-ISS-002. |
-| BL-342 | **`test-model` list/select/all** | Today pings one model (`AIDER_MODEL` / `--model`). Add: list models configured across roles (executor, context_builder, review) and let the user pick, or `--all` to ping each and print a pass/fail table. From P4.5-ISS-003. |
+| BL-341 | **`mcp-coder setup` + global env (onboarding DX)** | **CLI slice shipped** (P4.5-001): `setup` subcommand, `install.sh` global wrapper, repo-root `.env` documented. Remaining: pipx packaging, true machine-level config outside repo dir. |
+| BL-342 | **`test-model` list/select/all** | **Shipped** (P4.5-001): `test-model --all` pings each role sequentially, pass/fail table, exit 1 on failure. |
 
 ### BL-332: Host-agnostic planner rules sync
 

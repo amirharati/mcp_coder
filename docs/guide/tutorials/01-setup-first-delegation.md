@@ -4,125 +4,156 @@
 
 **The mental model for this tutorial (read first):**
 - **You** do setup once: install, configure credentials, wire it into Cursor.
-- After that, **the planner (Cursor agent) drives** — guided by the rules mcp-coder syncs into your workspace, it authors the spec and calls `delegate_to_agent`. You normally do **not** hand-write spec files; that's the whole point of the workflow. (See §5.)
+- After that, **the planner (Cursor agent) drives** — guided by rules mcp-coder syncs into your workspace, it authors the spec and calls `delegate_to_agent`. You normally do **not** hand-write spec files; that's the whole point of the workflow. (See §5.)
 - In this tutorial we deliberately slow down and **inspect** what the planner and mcp-coder produce, rather than just letting it run.
 
 **After this tutorial you will have:**
-- A working mcp-coder server in your Cursor `mcp.json`
+- `mcp-coder` available globally on your machine
 - A test workspace where mcp-coder has auto-created `.mcp-coder/` and synced its rules
 - One real delegation in `delegations.jsonl`, with a spec the *planner* wrote, that you can inspect
 
-**Estimated time:** 20–30 min on a first setup; 5 min if the repo is already installed.
+**Estimated time:** 10–15 min on a first install; 5 min for subsequent workspaces.
 
 **Prerequisites:** Python 3.10–3.12, an OpenRouter API key (or another LiteLLM-compatible provider). Cursor IDE.
-
-> **Heads-up on current rough edges (being tracked).** Setup today is manual and per-machine — there is **no `mcp-coder setup` command** and **no global config UI** yet. A single `.env` *can* serve every workspace (see §2), but you still wire `mcp.json` by hand. Tracked as **BL-341** (installer + global env) and **BL-342** (`test-model` multi-model). These will smooth out; for now the manual steps below are the real path.
 
 ---
 
 ## 1. Install
 
+Clone the repo, then run the install script:
+
 ```bash
-# Clone or open the repo (this is also the mcp-coder repo itself)
-cd /path/to/mcp_coder
-
-# Create a virtualenv and install
-python -m venv .venv
-source .venv/bin/activate
-pip install -e ".[dev]"
-
-# Verify
-python -c "import aider; print(aider.__version__)"  # should print e.g. 0.86.2
-mcp-coder --help                                     # should show subcommands
+git clone <repo-url> mcp_coder
+cd mcp_coder
+./install.sh
 ```
 
-The installed binary is `mcp-coder`. It has three subcommands:
-- *(no subcommand)* — starts the MCP stdio server (used by Cursor)
-- `mcp-coder test-model` — ping your configured model; quickest sanity check
-- `mcp-coder inspect-context` — dry-run the context compiler without calling Aider
+`install.sh` does three things:
+1. Creates `.venv/` and runs `pip install -e .` if the venv doesn't exist yet
+2. Writes a wrapper at `/usr/local/bin/mcp-coder` that points back to this repo's venv
+3. Prints a short "Try it" hint
+
+After it finishes, `mcp-coder` is available from any directory. Verify:
+
+```bash
+mcp-coder --help          # shows subcommands
+mcp-coder setup           # shows workspace + model info (see §3)
+```
+
+> **Running `mcp-coder` bare in the terminal** shows help and exits — the MCP stdio server only starts when launched by Cursor (piped stdin) or `mcp-coder --mcp`. This is intentional so a stray terminal invocation doesn't hang.
+
+**CLI subcommands at a glance:**
+
+| Subcommand | What it does |
+|-----------|-------------|
+| `mcp-coder setup` | Print workspace info + the exact `mcp.json` block to paste |
+| `mcp-coder test-model` | Ping one model; `--all` tests every configured role |
+| `mcp-coder inspect-context` | Dry-run the context compiler — no backend call |
+| `mcp-coder history` | Browse `workspace_history.db` |
+| `mcp-coder rag` | Search the delegation FTS5 index |
 
 ---
 
 ## 2. Configure environment (once, not per project)
 
-Credentials and model ids live in a `.env` file. **You do not need one per workspace.** mcp-coder's `load_env_files()` looks in this order:
+Credentials and model ids live in a `.env` file. **You only need one** — it lives in the mcp-coder repo root and serves every workspace. `load_env_files()` resolution order:
 
-1. `MCP_CODER_ENV_FILE` — an explicit path (what you'll point `mcp.json` at below)
+1. `MCP_CODER_ENV_FILE` — explicit path set in `mcp.json` env block (see §3)
 2. `.env` in the process working directory
-3. **`.env` in the mcp-coder repo root** (next to `pyproject.toml`)
-
-So the simplest setup is **one `.env` in the mcp-coder repo root** that serves every workspace. (A cleaner global-config story is coming — BL-341.)
+3. **`.env` in the mcp-coder repo root** ← this is the "global" env
 
 ```bash
 cd /path/to/mcp_coder
 cp .env.example .env
+# Fill in your keys
 ```
 
-Minimum block for OpenRouter:
+Minimum for OpenRouter:
 
 ```bash
-# .env — minimum for OpenRouter
 OPENROUTER_API_KEY=sk-or-v1-...
 OPENROUTER_API_BASE=https://openrouter.ai/api/v1
 AIDER_MODEL=openrouter/anthropic/claude-sonnet-4
 
-# Per-role model for context_builder / spec_validation / architect roles
-# (this is a separate role from the executor — see §6 of how-it-works.md)
+# Per-role model for context_builder / spec_validation / architect
 MCP_CODER_CONTEXT_BUILDER_MODEL=openrouter/google/gemini-2.5-flash
 ```
 
-> If you are **not** using OpenRouter, set `AIDER_MODEL` to any LiteLLM-compatible id (e.g. `anthropic/claude-sonnet-4` with `ANTHROPIC_API_KEY`) — the rest is provider-agnostic.
-
-Ping the executor model to confirm credentials:
-
-```bash
-source .venv/bin/activate
-mcp-coder test-model            # pings AIDER_MODEL
-mcp-coder test-model --model openrouter/google/gemini-2.5-flash   # check another role's model
-# Expected: "ok" or a short completion
-```
-
-> `test-model` currently pings **one** model per invocation. If you've set different models per role, ping each with `--model` for now. A list/select or `--all` table is tracked as **BL-342**.
-
-If this fails, the delegation will fail — fix the API key / model id before continuing.
+> For other providers (Anthropic direct, OpenAI, etc.) set `AIDER_MODEL` to any LiteLLM-compatible id and the matching `*_API_KEY` — everything else is provider-agnostic.
 
 ---
 
-## 3. Connect to Cursor (mcp.json)
+## 3. Connect to Cursor (`mcp.json`)
 
-Cursor reads `~/Library/Application Support/Cursor/User/globalStorage/cursor-dev.cursor-mcp/mcp.json` on macOS, or you can use the per-project `.cursor/mcp.json`.
+Run `mcp-coder setup` **in your test workspace directory** — it prints the exact block to paste:
 
-Add (or merge) this entry:
+```bash
+cd ~/scratch/hello-mcp    # or any project you want to try first
+mcp-coder setup
+```
 
-```json
+Output (example):
+
+```
+mcp-coder setup
+===============
+Workspace:   /Users/you/scratch/hello-mcp
+mcp-coder:   /usr/local/bin/mcp-coder
+Home:        ~/.mcp-coder
+
+Env file:    /path/to/mcp_coder/.env  (found)
+Models:
+  executor:         openrouter/anthropic/claude-sonnet-4  (from AIDER_MODEL)
+  context_builder:  openrouter/google/gemini-2.5-flash   (from MCP_CODER_CONTEXT_BUILDER_MODEL)
+  review:           (falls back to executor)
+
+Cursor mcp.json block — paste into ~/Library/.../mcp.json or .cursor/mcp.json:
+
 {
   "mcpServers": {
     "mcp-coder": {
-      "command": "/absolute/path/to/mcp_coder/.venv/bin/mcp-coder",
+      "command": "/usr/local/bin/mcp-coder",
       "env": {
-        "MCP_CODER_ENV_FILE": "/absolute/path/to/mcp_coder/.env"
+        "MCP_CODER_ENV_FILE": "/path/to/mcp_coder/.env"
       }
     }
   }
 }
+
+Workspace config:  .mcp-coder/config.yaml  (not found — run with --init-config to create)
 ```
 
-> Use absolute paths — Cursor may not inherit your shell `$PATH`.
+Copy the `mcpServers` block and paste it into one of:
+- **Global:** `~/Library/Application Support/Cursor/User/globalStorage/cursor-dev.cursor-mcp/mcp.json` (macOS)
+- **Per-project:** `.cursor/mcp.json` in the workspace root
 
-**After editing `mcp.json`:** open Cursor Settings → MCP and restart the mcp-coder server (or restart Cursor). You should see `mcp-coder` listed as connected with its tools.
-
-**What the server does on startup** (in `main.py`, every time Cursor launches it for a workspace):
-- Reads `.env` (via `MCP_CODER_ENV_FILE`, then cwd, then mcp-coder repo root)
-- Ensures `~/.mcp-coder/` exists (the home store)
-- **Auto-creates the workspace spec layout** — `.mcp-coder/specs/{tasks,epics,reports}/` + bundled templates (`ensure_workspace_spec_layout`). Never overwrites existing files.
-- **Auto-syncs the planner rules** into `.cursor/rules/` (`sync_workspace_cursor_rules`) — compiled from the bundled sources for the active policy (see §4.5)
-- Registers the MCP tools: `delegate_to_agent`, `inspect_context`, `list_delegations`, `get_delegation_diff`, `get_checkpoint_detail`, `get_file_history`, `rag_search`
-
-So you do **not** hand-create `.mcp-coder/` or copy templates — opening the workspace in Cursor (which launches the server) does it for you.
+After editing, open **Cursor Settings → MCP** and restart the mcp-coder entry. You should see it listed as connected.
 
 ---
 
-## 4. Open a test workspace (setup is automatic)
+## 4. Verify models
+
+Ping all configured role models to confirm credentials:
+
+```bash
+mcp-coder test-model --all
+```
+
+Expected output:
+
+```
+executor         openrouter/anthropic/claude-sonnet-4   OK  latency=1240ms
+context_builder  openrouter/google/gemini-2.5-flash     OK  latency=680ms
+review           openrouter/anthropic/claude-sonnet-4   OK  latency=1190ms  (fallback from executor)
+
+All 3 passed.
+```
+
+If any role fails, fix the API key / model id before continuing — a failing executor means every delegation fails; a failing `context_builder` means the builder brief is silently skipped.
+
+---
+
+## 5. Open a test workspace (setup is automatic)
 
 Use any small project you own, or create a scratch one:
 
@@ -133,72 +164,67 @@ echo "# Hello" > README.md
 git add . && git commit -m "init"
 ```
 
-Open this folder in Cursor (File → Open Folder). Cursor launches the mcp-coder server for it, and on startup the server **creates the scaffolding for you**. After opening, look:
+Open this folder in Cursor. When the server starts for this workspace it **auto-creates scaffolding**:
 
-```bash
-ls -R .mcp-coder
-# .mcp-coder/spec-template.md
-# .mcp-coder/specs/tasks/   .mcp-coder/specs/epics/   .mcp-coder/specs/reports/
-# (+ spec-epic / spec-report templates)
+```
+.mcp-coder/
+  spec-template.md          ← task spec template (copy to start a new task)
+  specs/tasks/              ← where versioned step specs live
+  specs/epics/              ← multi-step epic specs
+  specs/reports/            ← mcp-coder appends audit here after each delegation
 
-ls .cursor/rules
-# use-mcp-coder.mdc   workspace-history.mdc   ← synced planner rules
+.cursor/rules/
+  use-mcp-coder.mdc         ← planner guidance (synced from bundled rules, default policy)
+  workspace-history.mdc     ← post-delegate judgment loop
 ```
 
-You did not create any of that. The only file mcp-coder will **never** auto-create is `.mcp-coder/config.yaml` — it's **yours** (see §4.5). Defaults apply without it.
+You did none of that. The only file mcp-coder **never** auto-creates is `.mcp-coder/config.yaml` — it's yours to own.
+
+### Optionally create a workspace config
+
+```bash
+mcp-coder setup --init-config
+# Creates .mcp-coder/config.yaml from the bundled example (never overwrites)
+```
+
+The config is mostly commented out — defaults are sensible for a first run. The one thing worth knowing now: `cursor_rules_policy: default` (the default) vs `strict` (tighter mandatory workflow phrasing). See §5.1 for the full config/rules walkthrough.
 
 ---
 
-## 4.5. Understand config and rules (the important part)
-
-This is the part worth slowing down on — it's what makes the workflow tick.
+## 5.1 Config and rules (the important part)
 
 ### Config: `.mcp-coder/config.yaml`
 
-- **User-owned.** mcp-coder reads it but never writes it. Optional — sensible defaults apply if absent.
-- **Precedence for every flag: built-in default → env var → `config.yaml`** (yaml wins, so a repo can pin behavior regardless of your shell env).
-- Start from the annotated example to see every available key:
+- **User-owned.** mcp-coder reads it, never writes it (except `--init-config` creating it from template).
+- **Precedence: built-in default → env var → `config.yaml`** — yaml wins, so a repo can pin behaviour regardless of your shell environment.
 
-```bash
-cp /path/to/mcp_coder/resources/examples/config.yaml .mcp-coder/config.yaml
-```
+Key flags you'll encounter:
 
-The keys you'll care about first (all optional):
-
-| Key | Default | What it controls |
-|-----|---------|------------------|
-| `session_policy` | `always_new` | `always_new` vs `align_host` (reuse one mcp session per Cursor chat) |
-| `context_builder` | on | rules-based file picker + repo map |
-| `context_builder_llm` | on | the narrative builder brief (a helper-LLM call before the executor) |
-| `cursor_rules_policy` | `default` | **`default` vs `strict`** rule content (see below) |
-| `host_transcript` | `none` | `dump` to give helper LLMs a tail of the chat |
-| `spec_validation` / `architect_pass` / `auto_verify` | off | opt-in pipeline stages (later tutorials) |
-
-For the first run, **change nothing** — defaults are what we want to observe.
+| Key | Default | Effect |
+|-----|---------|--------|
+| `session_policy` | `always_new` | `align_host` reuses one session per Cursor chat |
+| `context_builder` | on | file picker + repo map before every delegation |
+| `context_builder_llm` | on | helper LLM narrative brief on top of picker output |
+| `cursor_rules_policy` | `default` | `default` vs `strict` rule content (see below) |
+| `host_transcript` | off | `dump` gives helper LLMs a tail of the chat |
+| `spec_validation` / `architect_pass` / `auto_verify` | off | opt-in pipeline stages |
 
 ### Rules: what gets synced and why
 
-mcp-coder syncs **planner guidance** into `.cursor/rules/` so the Cursor agent knows *how to use the MCP tools*. Two managed files:
+mcp-coder syncs **planner guidance** into `.cursor/rules/` so the Cursor agent knows how to use the tools:
 
-- **`use-mcp-coder.mdc`** — the main rule: when to call `delegate_to_agent`, how to split planner vs executor work, **how to author and version specs**, and the post-delegate judgment loop.
-- **`workspace-history.mdc`** — the judgment loop the planner must follow after an implement (diff → compare → pytest → done).
+- **`use-mcp-coder.mdc`** — when to delegate, how to write and version specs, what `target_files` to pass, post-delegate judgment loop.
+- **`workspace-history.mdc`** — the mandatory judgment loop the planner follows after an implement delegation.
 
-**Default vs strict policy** (`cursor_rules_policy`):
-- **`default`** — guidance + recommendations; the planner has latitude.
-- **`strict`** — same workflow, tighter mandatory phrasing (e.g. always version specs, don't verify by re-reading source when `judgment_checklist` is present). Use when you want the planner held closely to the workflow.
-- Switching policy = set `cursor_rules_policy: strict` in `config.yaml`, then **restart the MCP server** (rules sync on startup). The destination file is always `use-mcp-coder.mdc` — only its content swaps.
+**Default vs strict:** `strict` uses tighter mandatory phrasing (always version specs, don't verify by re-reading source when `judgment_checklist` is present). Switch by setting `cursor_rules_policy: strict` in `config.yaml`, then **restart the MCP server**.
 
-**How rules are compiled (good to know):** the bundled sources live in `resources/cursor-rules/` and share common text via `<!-- @include use-mcp-coder.shared.md -->` directives. At sync time `_resolve_includes()` inlines the shared fragment so the workspace receives **one self-contained file** — no include markers. A `manifest.yaml` maps which source file → which destination per policy. (This is Cursor-specific today; the compile engine is host-neutral — BL-332.)
-
-> Want to see the difference yourself: open `.cursor/rules/use-mcp-coder.mdc`, then set `cursor_rules_policy: strict`, restart the server, and re-open it. That diff is a good 2-minute experiment.
+**How rules are compiled:** bundled sources in `resources/cursor-rules/` share sections via `<!-- @include use-mcp-coder.shared.md -->`. At sync time `_resolve_includes()` inlines the shared fragment — the workspace receives one self-contained `.mdc` file. `manifest.yaml` controls which source maps to which destination per policy.
 
 ---
 
-## 5. Let the planner author the spec (don't hand-write it)
+## 6. Let the planner author the spec
 
-**This is the core of the workflow.** In normal use you do **not** create spec files by hand — you describe the task to the Cursor agent, and the agent (following the synced rules) writes the epic/step spec under `.mcp-coder/specs/tasks/` and then delegates. Hand-authoring specs would defeat the entire point of building this workflow layer.
-
-In a **Cursor chat** in your test workspace, say something like:
+In a Cursor chat in the test workspace, describe the task:
 
 ```
 Using mcp-coder, implement a one-line hello.py that prints exactly
@@ -206,41 +232,38 @@ Using mcp-coder, implement a one-line hello.py that prints exactly
 ```
 
 Guided by `use-mcp-coder.mdc`, the agent should:
-1. Create a versioned step spec, e.g. `.mcp-coder/specs/tasks/hello-01-v1.md`, with `## Goal / ## Files (Edit/Read) / ## Constraints / ## Acceptance`.
-2. Call `delegate_to_agent` with `spec_path: tasks/hello-01-v1.md`, `target_files: ["hello.py"]`, `mode: implement`, and a `context_summary`.
+1. Create a versioned step spec, e.g. `.mcp-coder/specs/tasks/hello-01-v1.md`
+2. Call `delegate_to_agent` with `spec_path`, `target_files`, `mode: implement`, and `context_summary`
 
-**Now inspect what it wrote — this is the learning moment.** Open the generated spec and read it critically:
-
-- Is the `## Goal` a single clear outcome?
-- Does `## Files → ### Edit` list exactly `hello.py`? Anything in `### Read`?
+**Inspect what the planner wrote before the delegation runs.** Open the generated spec and ask:
+- Is `## Goal` a single clear outcome?
+- Does `## Files → ### Edit` list exactly `hello.py`?
 - Are `## Constraints` (stdlib only) captured?
 - Is `## Acceptance` checkable (the exact printed string)?
 
-This is where your attention belongs in the workflow: **the quality of the spec the planner produces**, not typing it yourself. If the spec is vague, that's a planner-guidance (rules) observation worth noting — not something to fix by editing the file by hand.
-
-> **Want to go one step at a time?** Today the planner tends to author-and-delegate in one go. You can force a slower loop by telling it to **stop after writing the spec** so you can review, or by asking for `mode=review` first (questions only, no edits). A first-class "pause between steps / always review" switch isn't built yet — tracked as **P4.5-ISS-004**. For now, instruct the agent explicitly.
+**This inspection is the learning moment** — not typing the spec yourself. If the spec is vague, that's a planner-guidance (rules) observation, not something to fix by hand-editing. If you want to slow down and review before the delegation fires, tell the agent: *"stop after writing the spec, I'll tell you when to delegate."*
 
 ---
 
-## 6. What the delegation call looks like
+## 7. What the delegation call looks like
 
-When the planner delegates (from §5), under the hood it's one `delegate_to_agent` call, roughly:
+When the planner delegates, it's one `delegate_to_agent` call:
 
-- `task`: the goal, in the planner's words
+- `task`: goal in the planner's words
 - `target_files`: `["hello.py"]` (edit paths; read-deps are auto-merged from the spec)
-- `context_summary`: the planner's summary of the conversation — the executor can't see the chat
+- `context_summary`: planner's summary — the executor can't see the chat
 - `spec_path`: `tasks/hello-01-v1.md`
 - `mode`: `implement`
 
-You normally don't type this — the planner builds it from the spec and the rules. It's shown here so you recognize the arguments in the JSONL record (§7). If you ever want to drive it manually for an experiment, you can ask the agent to "call `delegate_to_agent` with exactly these arguments," but that's the exception, not the workflow.
+You normally don't type this — it's shown here so you recognise the arguments in the JSONL record (§8).
 
 ---
 
-## 7. Read the result
+## 8. Read the result
 
 ### Response payload
 
-You'll get back a JSON payload. Key fields:
+The response is a JSON object. Key fields:
 
 ```json
 {
@@ -250,52 +273,31 @@ You'll get back a JSON payload. Key fields:
   "judgment_checklist": [...],
   "delegation_id": "xxxxxxxx-...",
   "delegation_pipeline": [
-    {"phase": "spec_read", "status": "ok", "duration_ms": 3},
-    {"phase": "file_picker", "status": "ok", "duration_ms": 120},
-    ...
-    {"phase": "executor", "status": "ok", "duration_ms": 8240},
-    ...
+    {"phase": "spec_read",    "status": "ok", "duration_ms": 3},
+    {"phase": "file_picker",  "status": "ok", "duration_ms": 120},
+    {"phase": "builder_llm",  "status": "ok", "duration_ms": 980},
+    {"phase": "executor",     "status": "ok", "duration_ms": 8240},
+    {"phase": "post_gateway", "status": "ok", "duration_ms": 15}
   ]
 }
 ```
 
-Check:
-- `success: true` and `outcome: success` — delegation applied edits and passed all checks
-- `files_changed` includes `hello.py`
-- `delegation_pipeline` shows all phases with `status: ok`
+- `success: true` + `outcome: success` — edits applied, scope gateway passed
+- `files_changed` contains `hello.py`
+- `delegation_pipeline` shows every phase with timing
 
-If `outcome: needs_input`: the executor had format errors — check `output` field for what Aider said.
+If `outcome: needs_input`: the executor had format errors — check `output` field.
 
 ### The JSONL record
 
-Find the JSONL file:
+Find it:
 
 ```bash
-# The project key is sha256 of the workspace path
-python -c "
-from core.storage.paths import session_delegations_path, workspace_pointer_path
-import json, pathlib
-ptr = json.loads(pathlib.Path('.mcp-coder/session.json').read_text())
-print(session_delegations_path('.', ptr['mcp_session_id']))
-"
-# Or just find it:
 find ~/.mcp-coder -name delegations.jsonl | head -5
+# then: tail -1 <path> | python -m json.tool | head -60
 ```
 
-Open the file and look at the last line — it's one JSON object. Notable fields:
-
-```
-delegation_id      unique id for this delegation
-timestamp_start    when it started
-spec_path          which spec was used
-files_changed      what was actually written
-outcome            success / partial / needs_input / error
-context_block      what was assembled (tiers, file count, token estimate)
-model_roles        which model was used for each role + tokens
-delegation_pipeline phases + timing
-```
-
-This is the **canonical audit record** — everything visible in the response is derived from this.
+The last line is the full audit record for the delegation. Notable top-level fields: `delegation_id`, `timestamp_start`, `spec_path`, `files_changed`, `outcome`, `context_block` (what was assembled), `model_roles` (which model ran per role + tokens + cost), `delegation_pipeline`.
 
 ### Verify the edit
 
@@ -306,15 +308,15 @@ python hello.py
 
 ---
 
-## 8. What to notice
+## 9. What to notice
 
 Even on this trivial delegation:
 
-1. **`delegation_pipeline` tells you where time went** — usually `executor` dominates; `file_picker` is fast.
-2. **`context_block.context_builder_llm_enabled: true`** (if default) — a builder LLM call ran before Aider. `model_roles.context_builder` in JSONL shows the model used.
-3. **`model_roles.*.tokens` may be `null`** — this is a known gap (BL-335). The model ran; counting the tokens reliably is a pending fix.
-4. **The spec report** was written to `.mcp-coder/specs/reports/hello-01-v1.md` (same name as the spec) — open it to see the audit section appended by mcp-coder.
-5. **`.cursor/rules/use-mcp-coder.mdc`** was already in your workspace before the delegation — it's synced from `resources/cursor-rules/` on **server startup** (compiled from the `default`/`strict` sources, §4.5), and it's what told the planner to write the spec the way it did.
+1. **`delegation_pipeline` shows where time went.** `executor` typically dominates. `file_picker` and `context_assemble` are fast. `builder_llm` adds ~500–1500ms for the narrative brief.
+2. **`model_roles.context_builder`** in JSONL — the builder brief ran on a separate model role before the executor. This is configurable or can be disabled with `context_builder_llm: false`.
+3. **`model_roles.*.tokens` may be `null`** — known gap (BL-335). The model ran; token counting is a pending fix.
+4. **The spec report** at `.mcp-coder/specs/reports/hello-01-v1.md` — mcp-coder appended an audit section. Open it to see what was recorded.
+5. **`use-mcp-coder.mdc`** was in `.cursor/rules/` before the delegation ran — it was compiled and synced on server startup, and it's what told the planner how to write the spec.
 
 ---
 
@@ -322,17 +324,16 @@ Even on this trivial delegation:
 
 | Symptom | Likely cause | Fix |
 |---------|-------------|-----|
-| `ModuleNotFoundError: aider` | Wrong Python / venv not activated | Use absolute path to `.venv/bin/mcp-coder` in mcp.json |
-| `test-model` fails with auth error | Bad API key or wrong `AIDER_MODEL` id | Check `.env`; try `curl` to the provider directly |
-| `spec not found` error | spec path wrong in call | Path is relative to `.mcp-coder/specs/`; use `tasks/hello-01-v1.md` not the full path |
-| `outcome: needs_input`, output has SEARCH/REPLACE errors | Executor model format errors | Try a stronger `AIDER_MODEL`; known issue with smaller models (BL-338) |
-| No JSONL file found | Session not started yet | Run one delegation first; file is created on the first write |
+| `mcp-coder: command not found` | `install.sh` not run, or `/usr/local/bin` not in `PATH` | Re-run `./install.sh`; check `echo $PATH` |
+| `mcp-coder setup` shows `Env file: (not found)` | `.env` not found in repo root or cwd | Create `.mcp-coder/.env` in the repo or set `MCP_CODER_ENV_FILE` in `mcp.json` |
+| `test-model --all` shows `FAIL` on a role | Bad key or wrong model id | Fix in `.env`; run `mcp-coder setup` again to see resolved models |
+| `spec not found` error during delegation | Spec path wrong | Path is relative to `.mcp-coder/specs/`; planner should use `tasks/hello-01-v1.md` |
+| `outcome: needs_input`, SEARCH/REPLACE errors | Executor model format errors — common on smaller models | Try a stronger `AIDER_MODEL` (BL-338) |
+| No JSONL file | No delegation has run yet | Run a delegation first |
 
 ---
 
 ## Next
 
-Once you have a green delegation and a JSONL record in hand:
-
-- **T-02 (Sessions, storage, and logs):** understand the full `~/.mcp-coder` layout and what all the JSONL fields mean
-- **T-04 (inspect-context):** run `mcp-coder inspect-context` on this same spec to see exactly what brief Aider received — without spending tokens
+- **T-02 (Sessions, storage, and logs):** understand the full `~/.mcp-coder` layout and what every JSONL field means
+- **T-04 (inspect-context):** run `mcp-coder inspect-context` on this spec to see exactly what brief the executor received — without spending tokens
