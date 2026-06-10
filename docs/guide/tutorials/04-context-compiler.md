@@ -12,45 +12,87 @@
 
 ## 1. The fundamental distinction: prompt ≠ chat history
 
-When `delegate_to_agent` runs, the executor does **not** see:
+### Roles (general) vs today's stack (Cursor + Aider)
 
-- Your Cursor chat
-- Prior delegation outputs
-- Aider's own previous sessions (unless the same MCP session is reused, which gives Aider in-process memory only)
+mcp-coder sits between two **roles**:
 
-What it **does** see — in every delegation — is a compiled `ContextPackage`:
+| Role | Job today | Implementation today |
+|------|-----------|----------------------|
+| **Host / planner** | User chat, writes specs, calls `delegate_to_agent` | **Cursor** (via `.cursor/rules/` + MCP) |
+| **Executor / backend** | Edits files from a compiled prompt | **Aider** + an LLM provider |
+
+Cursor is **not** the executor. Aider is **not** the planner. The context compiler's job is to turn planner inputs (spec, `task`, `context_summary`, optional host transcript) into what the **executor** sees — regardless of which host/backend you plug in later.
+
+### What the executor does and does not see
+
+When `delegate_to_agent` runs, the executor (Aider today) does **not** automatically see:
+
+- The full host chat (unless you opt in — see below)
+- Prior delegation outputs (except Aider in-process state when the same MCP session reuses a `Coder` instance)
+- Helper-LLM internals (builder/architect prompts are separate calls; only their **output** may appear in `package.brief`)
+
+What it **always** gets (with a spec + `context_builder` on) is a compiled `ContextPackage`:
 
 ```
-brief                  ←  task + context_summary + spec Goal/Constraints + file paths list
+package.brief          ←  layered brief (see below)
 file payloads          ←  full text or excerpts, injected as fenced read context blocks
 repo map               ←  def/class outlines for files not otherwise included
 ```
 
-Plus optionally:
+**Brief layers** (bottom → top as they appear in `package.brief`):
+
 ```
-## Builder brief       ←  LLM narrative prepended above the brief (opt-in)
-## Architect plan      ←  LLM plan prepended above that (opt-in)
-host transcript tail   ←  recent chat injected by the Aider adapter (opt-in policy)
+## Task / ## Context / ## Goal / ## Constraints / ## Paths   ←  mechanical brief (always)
+---
+## Builder brief                                            ←  helper LLM narrative (default on; disable with context_builder_llm: false)
+---
+## Architect plan                                           ←  helper LLM plan (opt-in; default off; architect_pass: true)
 ```
 
-The `context_summary` field on every `delegate_to_agent` call is **your one guaranteed channel** — it is always included. It's the planner's voice to the executor.
+**Important:** `architect_pass` runs as a pipeline phase *before* `builder_llm`, but the architect plan is **merged last** — prepended above the builder + mechanical stack (`server/mcp_server.py`).
+
+**Host transcript** (separate from the brief stack):
+
+- Policy default: `host_transcript: none` — executor gets **no** chat dump.
+- With `host_transcript: dump`: mcp-coder loads the active **Cursor** chat JSONL (`core/host/cursor.py` → `load_cursor_transcript`) and:
+  1. Passes it into **helper LLM** prompts (builder, architect, spec validation) as context.
+  2. Prepends it to the **executor** prompt in the Aider adapter (`translate_context_package(..., host_transcript=...)`), *above* `package.brief`.
+
+So with dump enabled, Aider's final prompt order is:
+
+```
+[Cursor chat transcript]     ←  only when host_transcript: dump
+---
+package.brief                ←  architect? + builder? + mechanical
++ read context blocks
++ repo map block
+```
+
+The `context_summary` argument on every `delegate_to_agent` call is **always** included in the mechanical brief — it is the planner's guaranteed voice even when `host_transcript: none`.
 
 ---
 
-## 2. Pipeline: file_picker → assemble → budget → builder_llm
+## 2. Pipeline: picker → assemble → architect* → builder* → budget → executor
 
 For `mode=implement` with a valid spec and `context_builder` enabled (default on), phases run in this order:
 
 ```
 file_picker       rules-based: spec contract + planner hints + symbol scan → ranked candidates
 context_assemble  materialize candidates → PathEntry list with tiered payloads + mechanical brief
+architect_pass*   helper LLM produces ## Architect plan (stored; merged after builder)
+builder_llm*      helper LLM prepends ## Builder brief above mechanical brief
+[merge architect plan on top of package.brief if architect succeeded]
 budget            trim read-tier payloads until estimated tokens ≤ model budget
-builder_llm*      helper LLM adds ## Builder brief above mechanical brief
-───────────────── executor sees the assembled prompt ─────────────────
-architect_pass*   (runs in the full delegate pipeline, before builder_llm)
+executor          Aider adapter: optional Cursor transcript + package.brief + read/map blocks
 ```
 
-`*` = opt-in. The picker + assemble always run when `context_builder: true`. Budget always runs. Builder LLM runs when both `context_builder` and `context_builder_llm` are on (both default **true**).
+| Phase | Default | Toggle |
+|-------|---------|--------|
+| Picker + assemble | **on** | `context_builder: false` |
+| Builder LLM | **on** | `context_builder_llm: false` |
+| Architect pass | **off** | `architect_pass: true` |
+| Host transcript to executor | **off** | `host_transcript: dump` |
+| Budget | **on** | `MCP_CODER_CONTEXT_BUDGET_ENABLED=0` |
 
 Without a spec, the picker is **skipped** — only `target_files` go in.
 
@@ -227,7 +269,30 @@ Each truncation is logged in `context_package.metadata.truncations`:
 
 ---
 
-## 8. Builder LLM (optional narrative layer)
+## 8. Helper LLM layers on the brief (builder + architect)
+
+Two helper LLMs can annotate `package.brief`. Both are **non-fatal** on failure — delegation proceeds with whatever brief was already assembled.
+
+### 8a. Architect pass (opt-in, default off)
+
+`core/context/architect_prompt.py` + `core/engine/architect_pass_llm.py`
+
+When `architect_pass: true` (or `MCP_CODER_ARCHITECT_PASS=1`):
+
+1. Runs **after** `context_assemble`, **before** `builder_llm`.
+2. Prompt includes spec summary, mechanical brief paths, picker audit, `task`, `context_summary`, and host transcript (if `host_transcript: dump`).
+3. On success, returns a `## Architect plan` block.
+4. Plan is **not** merged immediately — it is prepended **after** builder_llm finishes:
+
+```python
+# server/mcp_server.py — final merge order
+context_package.brief = _merge_architect_plan(architect_plan, context_package.brief)
+# architect_plan sits above builder + mechanical brief
+```
+
+Use this for harder tasks where you want a structured plan layer before the executor runs. It is separate from `mode=review` (which skips the compile path entirely).
+
+### 8b. Builder LLM (on by default)
 
 `core/context/builder_prompt.py` + `core/engine/context_builder_llm.py`
 
@@ -240,7 +305,7 @@ When `context_builder: true` AND `context_builder_llm: true` (both default **on*
    - Picker audit (ranked paths, discovered reads, symbol queries, path sources)
    - Suggested edit paths (if any)
    - Prior delegation history
-   - Host transcript tail (if `host_transcript` policy on)
+   - Host transcript (if `host_transcript: dump` — loaded from Cursor chat JSONL)
    - Planner task + context summary
 3. Calls the `context_builder` role model (default: `MCP_CODER_CONTEXT_BUILDER_MODEL`).
 4. On success: prepends `## Builder brief\n\n<narrative>\n\n---\n\n` above the mechanical brief. **The mechanical brief is preserved verbatim after the separator.**
@@ -262,17 +327,25 @@ When `context_builder: true` AND `context_builder_llm: true` (both default **on*
 
 ---
 
-## 9. What Aider actually receives
+## 9. What the executor actually receives (Aider today)
 
-After all phases, `translate_context_package()` in `core/engine/aider_engine.py` converts the package:
+After all phases, the **Aider adapter** (`translate_context_package()` in `core/engine/aider_engine.py`) converts the package. Another backend would translate tiers differently; this is the current executor mapping.
 
 ```
-prompt = package.brief                  # mechanical brief (+ builder/architect on top)
+prompt = [host transcript]              # Cursor chat dump, only when host_transcript: dump
+       + package.brief                  # architect? + builder? + mechanical
        + read_block                     # fenced payloads for read-full / read-excerpt
        + map_block                      # def/class outlines for map-only entries
 
-fnames = [edit-full paths]              # files Aider opens for editing
+fnames = [edit-full paths]              # files Aider opens for editing (not read/map)
 ```
+
+**Cursor → mcp-coder → Aider flow (concrete):**
+
+1. Cursor planner calls `delegate_to_agent(task=..., context_summary=..., spec_path=...)`.
+2. mcp-coder compiles `ContextPackage` (picker, tiers, optional builder/architect).
+3. If `host_transcript: dump`, mcp-coder reads the active Cursor session JSONL and prepends it to the Aider prompt.
+4. Aider receives `prompt` + `fnames`; its internal LLM runs SEARCH/REPLACE on `fnames` only.
 
 The read context block looks like this in Aider's prompt:
 
@@ -450,6 +523,8 @@ Precedence everywhere: **default → env → `.mcp-coder/config.yaml`** (yaml wi
 | `MCP_CODER_CONTEXT_BUDGET_ENABLED` | **1** | Set to `0` to disable budget enforcement |
 | `MCP_CODER_CONTEXT_BUILDER_LLM` | `1` | Env toggle for builder LLM |
 | `MCP_CODER_INSPECT_RUN_BUILDER_LLM` | `0` | Enable builder LLM in inspect CLI |
+| `host_transcript` | **none** | `dump` → load Cursor chat JSONL into helper LLMs + executor prompt |
+| `architect_pass` | **off** | `true` → `## Architect plan` above builder + mechanical brief |
 
 Turn the context builder off to fall back to the Phase 1/2 path (only `target_files`, no picker, no map):
 
