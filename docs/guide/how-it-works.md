@@ -20,11 +20,13 @@ mcp-coder is an MCP server that lets a **planner agent** (a Cursor chat session)
 └─────────────┘  result + audit └──────────────┘   file edits        └──────────────┘
 ```
 
-- **Planner / host** — the Cursor agent you talk to. It writes specs, calls `delegate_to_agent`, and judges results. Guided by Cursor rules that mcp-coder syncs into the workspace (`.cursor/rules/use-mcp-coder.mdc`). It never sees executor internals; it sees the response payload and the JSONL audit.
+- **Planner / host** — *today* this is the Cursor agent you talk to. It writes specs, calls `delegate_to_agent`, and judges results. Guided by host rules that mcp-coder syncs into the workspace (`.cursor/rules/use-mcp-coder.mdc`). It never sees executor internals; it sees the response payload and the JSONL audit.
 - **mcp-coder** — stateless per call, stateful on disk. All logic in `core/`, all MCP wiring in `server/mcp_server.py`. Backend-neutral everywhere except `core/engine/aider_engine.py`.
-- **Executor** — Aider's Python API running its own internal edit loop (search/replace blocks, reflection retries) against the configured model. It only knows what the compiled context package tells it.
+- **Executor** — *today* Aider's Python API running its own internal edit loop (search/replace blocks, reflection retries) against the configured model. It only knows what the compiled context package tells it.
 
-Plus **cheap helper LLMs** in supporting roles (see §6): spec validation, context-builder brief, architect plan, review. These are separate, smaller calls — not the executor.
+Plus **helper LLMs** in supporting roles (see §6): spec validation, context-builder brief, architect plan, review. These are separate calls, distinct from the executor.
+
+> **Not locked in (important).** Cursor (host) and Aider+provider (backend) are the *current* starting point, not the architecture. Both sit behind adapters — the host behind `core/host/` (`HostContextProvider`), the executor behind `core/engine/` (`ExecutionEngine` + `factory.py`). Everything in `core/` outside `core/engine/aider_engine.py` and `core/config/aider_runtime.py` is deliberately backend-neutral, and a non-Cursor host or a non-Aider backend (e.g. a Cursor-SDK executor, see BL-340) is expected to land later. When reading the code or this doc, treat "Cursor" and "Aider" as *the first implementation of an adapter*, not as the system.
 
 ## 3. The unit of work: a delegation
 
@@ -46,11 +48,11 @@ For `mode=implement` with a valid spec, the phases run in this order. Each phase
 
 ```
 spec_read          parse spec front-matter, sections, Files contract
-spec_validation*   cheap LLM: does spec match the conversation? → can BLOCK
+spec_validation*   helper LLM: does spec match the conversation? → can BLOCK
 file_picker        rules-based: spec paths + rg symbol scan + repo map → candidates
 context_assemble   build ContextPackage: tiers, budget, mechanical brief
-architect_pass*    cheap LLM: prepend "## Architect plan" to the brief
-builder_llm*       cheap LLM: prepend narrative "## Builder brief" (mechanical brief stays verbatim)
+architect_pass*    helper LLM: prepend "## Architect plan" to the brief
+builder_llm*       helper LLM: prepend narrative "## Builder brief" (mechanical brief stays verbatim)
 executor           Aider runs; pre/post workspace snapshots taken around it
 post_gateway       diff snapshots → files_changed; check against spec Files contract
 spec_report        append audit section to specs/reports/<spec-name>.md
@@ -69,24 +71,28 @@ The executor's prompt is a **ContextPackage** (`core/context/package.py`), not r
 2. **Tiers control cost.** Files enter the package at different fidelity: full payload (edit targets) → read-only payload → excerpt → map-only (def/class outline from the repo map). A token budget trims from the bottom.
 3. **The picker discovers, the assembler materializes.** The file picker ranks candidates (spec paths, symbol hits via ripgrep, repo map); discovered files become *read* tiers only — discovery never grants edit rights (D-P4-10).
 4. **The brief is layered.** Bottom: the *mechanical brief* (authoritative paths/tiers, never rewritten by any LLM). On top, optionally: builder LLM narrative, then architect plan. LLMs annotate; they don't replace.
-5. **`context_summary` is the planner's voice.** Decisions from chat that the executor can't otherwise see. With `host_transcript: dump` enabled, a tail of the actual Cursor transcript is also available to the validation/builder LLMs.
+5. **`context_summary` is the planner's voice.** Decisions from chat that the executor can't otherwise see. With `host_transcript: dump` enabled, a tail of the actual host transcript is also available to the validation/builder LLMs.
 
 You can see exactly what would be sent — without spending executor tokens — via `mcp-coder inspect-context` or the `inspect_context` MCP tool.
 
 ## 6. Per-role models
 
-One delegation may involve up to five model calls, each independently configurable (env → `.mcp-coder/config.yaml` → default):
+One delegation may involve up to five model calls, each **independently configurable** (precedence: default → env → `.mcp-coder/config.yaml`). The point of the role split is that you pick the right model *per task* — not that any role is inherently cheap or expensive:
 
-| Role | Used by | Default |
-|------|--------|---------|
+| Role | Used by | Current default |
+|------|--------|-----------------|
 | `executor` | Aider edit loop | `AIDER_MODEL` / `resolve_model_name()` |
-| `context_builder` | builder brief, spec validation, architect pass | Gemini Flash (cheap) |
+| `context_builder` | builder brief, spec validation, architect pass | Gemini Flash today |
 | `review` | `mode=review` | falls back to executor model |
 | `critic` | reserved (stub) | falls back to executor model |
 
 Every call is audited in the JSONL `model_roles` block with tokens/duration/cost-estimate. (Known gap: token counts currently `None` for several paths — BL-335.)
 
-The economics this enables: **expensive model thinks once (planner / architect), cheap model types** (executor), with telemetry to confirm the split actually pays.
+**On "cheap" vs "expensive" — don't over-fit to the current defaults.** The architecture lets you route each role to a different model; whether that's cheaper or pricier than the executor is a tuning decision, not a property of the role. Examples:
+- A `spec_validation` pass that just checks a spec against the conversation can run on a small, cheap model.
+- An `architect_pass` that is really a *plan-improvement / brainstorm* step — possibly iterating with the host on an epic or a hard task — may justify a **stronger, more expensive** model than the executor. This is **TBD** and will be tuned with real telemetry.
+
+So the durable idea is **"right model for each role,"** not "expensive plans, cheap edits." The split *enables* cost optimization (and lets a strong model think while a fast model types) but does not mandate any particular price direction. Today's defaults are a starting point, expected to change as BL-335 telemetry lands.
 
 ## 7. Memory: what persists where
 
@@ -139,7 +145,7 @@ API keys and model ids live in `.env` (OpenRouter is the common provider for eve
 ## 10. Invariants worth memorizing
 
 1. **The spec is the contract.** No valid spec → degraded Phase-1-style delegation; edits are judged against the spec's Files section.
-2. **Backend-neutral core.** Aider-specific anything lives only in `core/engine/aider_engine.py` + `core/config/aider_runtime.py`.
+2. **Host and backend are adapters, not the architecture.** Cursor and Aider are the *current* implementations; both are swappable. Aider-specific anything lives only in `core/engine/aider_engine.py` + `core/config/aider_runtime.py`; host-specific anything in `core/host/`. The rest of `core/` is neutral by design.
 3. **LLM helpers can only annotate, never mutate the mechanical truth.** Brief layers stack; tiers/paths from the assembler are authoritative.
 4. **Optional stages fail open; validation blocks closed.** A builder-LLM error never kills a delegation; a real spec ambiguity stops it before money is spent.
 5. **Everything is audited.** If it isn't in `delegations.jsonl`, it didn't happen. Debugging always starts there (or `scripts/view_delegations.py` / `tools/delegation_viewer.html`).
@@ -150,6 +156,7 @@ API keys and model ids live in `.env` (OpenRouter is the common provider for eve
 
 | Want | Go to |
 |------|-------|
+| Definition of a term | [terminology.md](./terminology.md) |
 | Which module does X | [code-structure.md](./code-structure.md) |
 | Hands-on walkthroughs | [tutorials/](./tutorials/) (T-01…T-07) |
 | Subsystem internals | [architecture/](./architecture/) |

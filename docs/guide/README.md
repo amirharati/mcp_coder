@@ -9,6 +9,7 @@ This folder is the output of **Phase 4.5** — written from actually running and
 | Document | What it covers |
 |----------|---------------|
 | [how-it-works.md](./how-it-works.md) | **The mental model.** Actors, delegation pipeline, context compiling, memory, trust model, invariants — re-read once in a while |
+| [terminology.md](./terminology.md) | Glossary of terms used in docs, code, and JSONL logs |
 | [code-structure.md](./code-structure.md) | Every directory and module — what it does, where to look for specific things, suggested reading order |
 
 ## Tutorials

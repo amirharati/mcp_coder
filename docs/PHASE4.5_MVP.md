@@ -91,7 +91,7 @@ mcp-coder delegate_to_agent(mode=implement, spec_path=..., ...)
 
 All tutorial docs go under `docs/guide/tutorials/`. Architecture docs under `docs/guide/architecture/`. Gap analysis at `docs/guide/gap-analysis.md`. Index: [docs/guide/README.md](./guide/README.md).
 
-**Pre-tutorial (done):** [code-structure.md](./guide/code-structure.md) — module map, reading order. [how-it-works.md](./guide/how-it-works.md) — system mental model (actors, pipeline, memory, trust, invariants).
+**Pre-tutorial (done):** [code-structure.md](./guide/code-structure.md) — module map, reading order. [how-it-works.md](./guide/how-it-works.md) — system mental model (actors, pipeline, memory, trust, invariants). [terminology.md](./guide/terminology.md) — glossary.
 
 | ID | Title | Scope | Status |
 |----|-------|-------|--------|
@@ -190,6 +190,7 @@ Interactive sessions (PM + assistant together) — not dispatched workers unless
 
 | Date | Change |
 |------|--------|
+| 2026-06-10 | `terminology.md` added (glossary). how-it-works clarified: host/backend are swappable adapters (not locked in); "helper LLM" not "cheap LLM" — model-per-role is a tuning decision, architect/verifier may warrant a stronger model (TBD) |
 | 2026-06-10 | `how-it-works.md` written — single-file system overview / mental model (verified against code: pipeline order, storage paths, flag defaults + yaml-wins precedence) |
 | 2026-06-10 | S-01 started: `docs/guide/` folder created; `code-structure.md` written (module map, reading order) |
 | 2026-06-09 | Scope broadened to Phases 1–4 full onboarding; tutorials T-01–T-07; architecture-overview; gap-analysis doc; divergence log |
