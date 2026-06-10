@@ -19,7 +19,7 @@ This folder is the output of **Phase 4.5** — written from actually running and
 | # | Title | Status |
 |---|-------|--------|
 | T-01 | [Setup & first delegation](./tutorials/01-setup-first-delegation.md) | done |
-| T-02 | [Sessions, storage, and logs](./tutorials/02-sessions-storage-logs.md) | pending |
+| T-02 | [Sessions, storage, and logs](./tutorials/02-sessions-storage-logs.md) | done |
 | T-03 | [Specs: contract, paths, versioning](./tutorials/03-specs-contract-versioning.md) | pending |
 | T-04 | [Context compiler deep-dive](./tutorials/04-context-compiler.md) | pending |
 | T-05 | [Workspace history & the RAG stub](./tutorials/05-workspace-history-rag-stub.md) | pending |

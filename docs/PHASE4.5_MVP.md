@@ -190,6 +190,7 @@ Interactive sessions (PM + assistant together) — not dispatched workers unless
 
 | Date | Change |
 |------|--------|
+| 2026-06-10 | **T-02 done**: Sessions, storage, and logs tutorial written — `~/.mcp-coder` layout, project.json, session dirs, JSONL field reference, CLI commands, SQLite note, MCP tools for Cursor. |
 | 2026-06-10 | **P4.5-002 done**: `setup --local` / `setup --global` write mcp.json directly; no-flags adds action hint. ISS-005 closed. T-01 §3 updated. |
 | 2026-06-10 | **P4.5-001 done**: `mcp-coder setup` + `install.sh` + `test-model --all` (9 tests). ISS-002 partial, ISS-003 closed. T-01 fully rewritten to match. |
 | 2026-06-10 | T-01 corrected after review: `.mcp-coder/` layout + rules are auto-created on server **startup** (not manual copies); **planner authors the spec via rules — user does not hand-write specs** (core workflow point); single repo-root `.env` serves all workspaces; added a real **config + rules** section (default vs strict, `@include` compile). Filed P4.5-ISS-002/003/004 + BL-341/342. |
