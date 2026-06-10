@@ -152,7 +152,20 @@ echo "# Hello" > README.md
 git add . && git commit -m "init"
 ```
 
-Open this folder in Cursor. Because you've set up the global `mcp.json` (§3), the mcp-coder server starts automatically for this workspace and **creates the scaffolding on first startup**:
+How you wire this project depends on what you ran in §3:
+
+**If you used `setup --global`** — open the folder in Cursor. The server starts automatically for every project; no extra step in this directory.
+
+**If you used `setup --local` only (or skipped global on purpose)** — wire *this* project before opening it in Cursor:
+
+```bash
+cd ~/scratch/hello-mcp
+mcp-coder setup --local
+```
+
+Then open the folder in Cursor. mcp-coder runs only for projects that have `.cursor/mcp.json` (or wherever you pointed global config).
+
+Either way, once the server has started for this workspace it **creates the scaffolding on first startup**:
 
 ```
 .mcp-coder/
@@ -166,7 +179,7 @@ Open this folder in Cursor. Because you've set up the global `mcp.json` (§3), t
   workspace-history.mdc     ← post-delegate judgment loop
 ```
 
-You can verify in Cursor Settings → MCP that the server is connected. If it shows as disconnected, check the global `mcp.json` path and restart.
+Check **Cursor Settings → MCP** — mcp-coder should show as connected. If not: for global, restart Cursor after editing the system `mcp.json`; for local, confirm `.cursor/mcp.json` exists in this project and restart the MCP entry.
 
 ### Optionally create a workspace config
 
