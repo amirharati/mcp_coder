@@ -83,32 +83,20 @@ MCP_CODER_CONTEXT_BUILDER_MODEL=openrouter/google/gemini-2.5-flash
 
 ---
 
-## 3. Connect to Cursor (`mcp.json`)
+## 3. Connect to Cursor (`mcp.json`) — do this once, globally
 
-Run `mcp-coder setup` **in your test workspace directory** — it prints the exact block to paste:
+Run `mcp-coder setup` **from anywhere** — it prints the exact block to paste:
 
 ```bash
-cd ~/scratch/hello-mcp    # or any project you want to try first
 mcp-coder setup
 ```
 
-Output (example):
+Copy the `mcpServers` block and paste it into the **global** Cursor `mcp.json`:
 
-```
-mcp-coder setup
-===============
-Workspace:   /Users/you/scratch/hello-mcp
-mcp-coder:   /usr/local/bin/mcp-coder
-Home:        ~/.mcp-coder
+- **macOS:** `~/Library/Application Support/Cursor/User/globalStorage/cursor-dev.cursor-mcp/mcp.json`
+- **Linux:** `~/.config/Cursor/User/globalStorage/cursor-dev.cursor-mcp/mcp.json`
 
-Env file:    /path/to/mcp_coder/.env  (found)
-Models:
-  executor:         openrouter/anthropic/claude-sonnet-4  (from AIDER_MODEL)
-  context_builder:  openrouter/google/gemini-2.5-flash   (from MCP_CODER_CONTEXT_BUILDER_MODEL)
-  review:           (falls back to executor)
-
-Cursor mcp.json block — paste into ~/Library/.../mcp.json or .cursor/mcp.json:
-
+```json
 {
   "mcpServers": {
     "mcp-coder": {
@@ -119,15 +107,18 @@ Cursor mcp.json block — paste into ~/Library/.../mcp.json or .cursor/mcp.json:
     }
   }
 }
-
-Workspace config:  .mcp-coder/config.yaml  (not found — run with --init-config to create)
 ```
 
-Copy the `mcpServers` block and paste it into one of:
-- **Global:** `~/Library/Application Support/Cursor/User/globalStorage/cursor-dev.cursor-mcp/mcp.json` (macOS)
-- **Per-project:** `.cursor/mcp.json` in the workspace root
+> **Why global, not per-project?** Setting it once in the global file means Cursor auto-launches the mcp-coder server for *every* project you open — with no per-project wiring. The server uses the workspace's `cwd` to determine which project it's serving, so each project gets its own isolated scaffolding and history. A per-project `.cursor/mcp.json` also works if you want more control, but the global config is the right default.
 
-After editing, open **Cursor Settings → MCP** and restart the mcp-coder entry. You should see it listed as connected.
+After editing, open **Cursor Settings → MCP** and restart the mcp-coder entry (or restart Cursor). You should see it listed as connected.
+
+**What the server does on first startup for a new workspace** (because it's now global, this happens automatically when you open any project in Cursor):
+- Auto-creates `.mcp-coder/specs/{tasks,epics,reports}/` + bundled spec templates
+- Compiles and syncs `.cursor/rules/use-mcp-coder.mdc` + `workspace-history.mdc`
+- Registers the MCP tools for that workspace session
+
+So the scaffolding *does* appear automatically — but only after you've done this global `mcp.json` setup once.
 
 ---
 
@@ -153,7 +144,7 @@ If any role fails, fix the API key / model id before continuing — a failing ex
 
 ---
 
-## 5. Open a test workspace (setup is automatic)
+## 5. Open a test workspace (scaffolding is automatic)
 
 Use any small project you own, or create a scratch one:
 
@@ -164,21 +155,21 @@ echo "# Hello" > README.md
 git add . && git commit -m "init"
 ```
 
-Open this folder in Cursor. When the server starts for this workspace it **auto-creates scaffolding**:
+Open this folder in Cursor. Because you've set up the global `mcp.json` (§3), the mcp-coder server starts automatically for this workspace and **creates the scaffolding on first startup**:
 
 ```
 .mcp-coder/
-  spec-template.md          ← task spec template (copy to start a new task)
+  spec-template.md          ← task spec template
   specs/tasks/              ← where versioned step specs live
   specs/epics/              ← multi-step epic specs
   specs/reports/            ← mcp-coder appends audit here after each delegation
 
 .cursor/rules/
-  use-mcp-coder.mdc         ← planner guidance (synced from bundled rules, default policy)
+  use-mcp-coder.mdc         ← planner guidance (synced, default policy)
   workspace-history.mdc     ← post-delegate judgment loop
 ```
 
-You did none of that. The only file mcp-coder **never** auto-creates is `.mcp-coder/config.yaml` — it's yours to own.
+You can verify in Cursor Settings → MCP that the server is connected. If it shows as disconnected, check the global `mcp.json` path and restart.
 
 ### Optionally create a workspace config
 
