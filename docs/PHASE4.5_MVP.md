@@ -48,7 +48,9 @@ Phase 2  Context compiler
 
 Phase 3  Workspace truth + memory
          workspace_history.db; manifest walk (git-agnostic files_changed);
-         delegation RAG (FTS5); versioned specs; attempt archive; post-gateway
+         versioned specs; attempt archive; post-gateway;
+         delegation RAG code shipped (core/rag/ FTS5 + rag_search MCP) but
+         **usage deferred — not integrated into pipeline; scope → Phase 5**
 
 Phase 4  Active context builder + pipeline
          Rules file picker; cheap-LLM builder brief (Gemini Flash);
@@ -93,7 +95,7 @@ mcp-coder delegate_to_agent(mode=implement, spec_path=..., ...)
 | T-02 | **Sessions, storage, and logs** — how `~/.mcp-coder` is laid out; read a JSONL record | Phase 1 | pending |
 | T-03 | **Specs: contract, paths, versioning** — write a spec, delegation policies, versioned retry | Phase 1–2 | pending |
 | T-04 | **Context compiler deep-dive** — `inspect-context` dry-run; tiers; what Aider actually sees | Phase 2 | pending |
-| T-05 | **Workspace history & delegation RAG** — `workspace_history.db`, `list_delegations`, `get_delegation_diff`, `rag_search` | Phase 3 | pending |
+| T-05 | **Workspace history & the RAG stub** — `workspace_history.db`, `list_delegations`, `get_delegation_diff`; understand what `rag_search` code exists vs what's actually used | Phase 3 | pending |
 | T-06 | **The Phase 4 pipeline** — delegation_pipeline JSONL; builder LLM; flag matrix | Phase 4 | pending |
 | T-07 | **Inspecting a delegation end-to-end** — pick a real delegation_id; trace it from JSONL → brief → Aider output | Phase 1–4 | pending |
 
@@ -122,7 +124,7 @@ mcp-coder delegate_to_agent(mode=implement, spec_path=..., ...)
 | `auto_verify: true` | Delegate + manual test break | `outcome: partial` confirmation |
 | Token telemetry | Read `model_roles` in JSONL | Confirm which roles are null (BL-335); understand why |
 | Picker recall | Brownfield spec with undeclared read-deps | Does picker find them? What misses? |
-| Delegation RAG | `rag_search` on a past task | Quality of results; is it usable? |
+| Delegation RAG stub | Read `core/rag/` code; try `rag_search` manually | Understand what exists; confirm it's not wired into the pipeline; inform Phase 5 RAG design decision |
 
 ### Track 4 — Gap analysis
 
@@ -136,7 +138,7 @@ Known gaps going in (from Phase 4 exit):
 | BL-338 | gpt-4o-mini `edit_format` failures + constraint blindness | **High** — 3× retry loops on multi-file tasks | Model guidance or auto-escalation |
 | ? | Is the builder brief actually improving Aider output? | Unknown — no eval metric | If no signal, Phase 5 RAG inputs are premature |
 | ? | Does the picker miss relevant files in practice? | Unknown until T-07 experiments | Determines whether workspace-file RAG is needed |
-| ? | Is delegation RAG used by planners? | Unknown | If unused, Phase 5 RAG has adoption problem |
+| BL-002 | Delegation RAG code exists but unused | `core/rag/` FTS5 + `rag_search` MCP shipped in Phase 3 but not wired into pipeline; usage deferred to Phase 5 | Phase 5 design: integrate existing FTS5 or redesign from Phase 5 findings? |
 | ? | Are there Phase 1–3 gaps the Phase 4 pace covered over? | Unknown until T-01–T-05 | May surface unresolved issues |
 
 *Add rows as sessions run.*
