@@ -19,7 +19,7 @@ mcp_coder/
     mcp_server.py         The MCP server — all MCP tool handlers live here (~1750 lines)
 
   core/                   All business logic — no Cursor/MCP transport here
-    cli/                  CLI-only entry points (not MCP tools): setup, test-model, inspect-context, history, rag
+    cli/                  CLI-only entry points (not MCP tools): setup, test-model, inspect-context, view delegations, history, rag
     config/               Feature flags, model resolution, runtime config
     context/              Context compiler: assemble + picker + builder LLM
     delegation/           Delegation-level errors
@@ -71,13 +71,17 @@ mcp_coder/
 
 `mcp-coder` (installed by `pip install -e .`) calls `main:main()`.
 
-Three subcommands:
+CLI subcommands (see `core/cli/` table below for implementations):
 
 | Command | What it does |
 |---------|-------------|
-| *(no subcommand)* | Starts the MCP stdio server (used by Cursor `mcp.json`) |
-| `mcp-coder test-model` | Sends a one-line ping to the configured model; useful to check API keys |
-| `mcp-coder inspect-context` | Dry-run context compiler — builds the prompt without calling Aider (or other backends) |
+| *(no subcommand)* | Starts the MCP stdio server (used by Cursor `mcp.json`); bare TTY prints help |
+| `mcp-coder setup` | Workspace info, model resolution, `mcp.json` wiring (`--local` / `--global`) |
+| `mcp-coder test-model` | Ping configured model(s); `--all` tests every role |
+| `mcp-coder inspect-context` | Dry-run context compiler — builds the prompt without calling any backend |
+| `mcp-coder view delegations` | Delegation log browser UI (`delegations.jsonl`; default cwd workspace) |
+| `mcp-coder history` | Browse `workspace_history.db` (list, diff, revert) |
+| `mcp-coder rag` | Delegation FTS5 search / index |
 
 ### `server/mcp_server.py` — the hub (~1750 lines)
 
