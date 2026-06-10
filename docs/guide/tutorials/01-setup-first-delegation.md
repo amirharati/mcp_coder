@@ -338,6 +338,64 @@ Even on this trivial delegation:
 
 ---
 
+## 10. Tools you can use right now
+
+After a first delegation you have several ways to inspect and navigate what happened:
+
+### Find your project data
+
+All per-project state lives outside the repo under `~/.mcp-coder/projects/<sha256-of-workspace-path>/`. The key is the SHA-256 of the absolute workspace path. To find your project dir from cwd:
+
+```bash
+python -c "from core.storage.paths import project_dir; import os; print(project_dir(os.getcwd()))"
+# ~/.mcp-coder/projects/abc123.../
+```
+
+Inside: `workspace_history.db`, `delegation_rag.db`, `sessions/<id>/delegations.jsonl`.
+
+A `project.json` file there records the workspace path, so you can also just `ls ~/.mcp-coder/projects/` and open any `project.json` to see which workspace it belongs to.
+
+### Browser delegation viewer
+
+Open `tools/delegation_viewer.html` from the mcp-coder repo in any browser (no server needed — local file). It reads your `delegations.jsonl` files and shows a searchable table of delegations with pipeline, model roles, files changed, and outcome.
+
+```bash
+open /path/to/mcp_coder/tools/delegation_viewer.html
+# or on Linux: xdg-open ...
+```
+
+### CLI history commands
+
+From any project directory:
+
+```bash
+# List recent delegations for this workspace
+mcp-coder history list
+
+# Show the diff from the most recent delegation
+mcp-coder history diff --latest
+
+# Show the diff for a specific delegation_id (prefix is enough)
+mcp-coder history diff abc123
+
+# Filter to a specific file
+mcp-coder history diff --latest --path hello.py
+```
+
+### Ask the Cursor agent (via MCP tools)
+
+The planner has direct access to the same data through MCP tools. In Cursor chat:
+
+```
+What files changed in the last delegation?
+Show me the diff for delegation abc123.
+What delegations touched hello.py?
+```
+
+These call `list_delegations`, `get_delegation_diff`, and `get_file_history` respectively — the same data as the CLI, surfaced inline in chat. This is how you normally review history during active work without leaving Cursor.
+
+---
+
 ## Troubleshooting
 
 | Symptom | Likely cause | Fix |
