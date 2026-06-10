@@ -6,7 +6,10 @@
 
 - **Planner (Cursor agent)** authors **task specs** and **epic specs** under `.mcp-coder/specs/`. You normally do not hand-write these; synced rules tell the planner when and how. This tutorial explains the contract so you can *read* and *debug* what the planner produced.
 - **mcp-coder** owns **delegation reports** — one parallel file per task spec — and appends Run log entries after every `delegate_to_agent` call that uses `spec_path`.
-- **Versioning** is planner-managed: bump `revision` in front matter when scope changes; there is no automatic `-v2` filename or archive step in code today.
+- **Versioning is two-layered (planner-managed, not MCP-automated):**
+  - **Filename:** synced rules tell the planner to create `…-v1.md` from the first attempt; on **implement failure**, create `…-v2.md` (keep v1 + its report as audit). mcp-coder never renames or creates these files — it only pairs reports by matching filename.
+  - **Front matter `revision`:** bump on the **same** file when refining after `mode=review` (before first implement). Not used for v1→v2 file hops.
+  - **No `specs/attempts/` archive in code** (BL-320b deferred); audit trail = versioned spec+report pairs + JSONL.
 
 **Prerequisites:** T-01 (one delegation ran) and T-02 (you can read a JSONL record).
 
@@ -252,22 +255,49 @@ After each delegate, `apply_post_delegation_report_updates()` appends:
 
 ## 9. Versioning and retries
 
-What the code does **today**:
+There are **two planner conventions** (synced cursor rules v14 — `use-mcp-coder.default` / `.strict`). mcp-coder implements neither automatically; it only reads whatever `spec_path` you pass and writes the matching report.
 
-| Mechanism | Behavior |
+### A. Review refine (same file)
+
+After optional `mode=review`, the planner updates the **same** spec file:
+
+- Bump `revision` in front matter; set `status: ready`
+- Optional note in `## Revision log`
+- Then `mode=implement` with the same `spec_path`
+
+Locked since Phase 1 (D-SPEC-5): one task file for review + first implement.
+
+### B. Implement failure retry (new filename)
+
+After a failed implement (or judgment loop says retry), synced rules say:
+
+1. **Do not edit** the failed spec (e.g. `calc-02-cli-v1.md`) — it stays frozen as that attempt’s contract.
+2. **Create** `calc-02-cli-v2.md` with fixes (Files, constraints, `### Retry note`).
+3. Delegate with `spec_path` pointing at **v2**. mcp-coder creates `reports/calc-02-cli-v2.md` automatically (name pairing).
+
+```
+.mcp-coder/specs/tasks/calc-02-cli-v1.md    ← attempt 1 (planner: do not touch after delegate)
+.mcp-coder/specs/reports/calc-02-cli-v1.md ← attempt 1 audit (mcp-coder-owned)
+.mcp-coder/specs/tasks/calc-02-cli-v2.md    ← retry spec (planner creates)
+.mcp-coder/specs/reports/calc-02-cli-v2.md  ← retry audit
+```
+
+Shipped as **rules-only** in Phase 3 (P3-320 / D-P3-6) — no MCP rename step required because reports already mirror task filenames.
+
+### What mcp-coder code does
+
+| Mechanism | In code? |
 |-----------|----------|
-| `revision` | Planner bumps integer in front matter when scope changes; optional `## Revision log` section in the task spec for human notes |
-| `supersedes` | Optional front-matter pointer to a prior step; no automatic file moves |
-| Same `spec_path` retry | Failed implement calls reuse the **same file**; planner edits content and bumps `revision` |
-| `prior_failed_attempts` | MCP response may include recent failures for the same session/spec (from JSONL + `workspace_history.db`) so the host can cite them |
+| Read `revision` / `supersedes` from front matter | Yes (parse only; never bumps or enforces) |
+| Pair report path to task filename | Yes (`report_path_for_task_spec`) |
+| `prior_failed_attempts` on delegate response | Yes — recent failures for same session/spec (JSONL + `workspace_history.db`) |
+| Auto-create `…-v2.md` | **No** |
+| Write `specs/attempts/<id>/…` archive files | **No** (BL-320b still backlog) |
+| Enforce filename `-vN` pattern | **No** — convention lives in synced rules |
 
-What the code does **not** do today:
+`supersedes` in front matter is documentation for humans/planner; code does not move or archive files.
 
-- Auto-rename specs to `foo-v2.md`
-- Auto-archive superseded files
-- Enforce `revision` monotonicity or `status` transitions
-
-Epic **Steps** table (in `spec-epic-template.md`) is the planner’s map of which task file belongs to which step — one file per step, kept for audit.
+Use `list_delegations(spec_path=…)` (T-05) to see all attempts when filenames or sessions differ.
 
 ---
 
