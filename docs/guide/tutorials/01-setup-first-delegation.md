@@ -217,7 +217,7 @@ mcp-coder syncs **planner guidance** into `.cursor/rules/` so the Cursor agent k
 - **`use-mcp-coder.mdc`** — when to delegate, how to write and version specs, what `target_files` to pass, post-delegate judgment loop.
 - **`workspace-history.mdc`** — the mandatory judgment loop the planner follows after an implement delegation.
 
-**Default vs strict:** `strict` uses tighter mandatory phrasing (always version specs, don't verify by re-reading source when `judgment_checklist` is present). Switch by setting `cursor_rules_policy: strict` in `config.yaml`, then **restart the MCP server**.
+**Default vs strict:** `default` = guidance — the host can still choose how to implement (delegate or edit in chat). `strict` = mandatory workflow — **never implement on disk yourself**; the host is pushed toward spec + `delegate_to_agent`. Also: always version specs; don't verify by re-reading source when `judgment_checklist` is present. Switch with `cursor_rules_policy: strict` in `config.yaml`, then **restart the MCP server**.
 
 **How rules are compiled:** bundled sources in `resources/cursor-rules/` share sections via `<!-- @include use-mcp-coder.shared.md -->`. At sync time `_resolve_includes()` inlines the shared fragment — the workspace receives one self-contained `.mdc` file. `manifest.yaml` controls which source maps to which destination per policy.
 
@@ -227,27 +227,27 @@ mcp-coder syncs **planner guidance** into `.cursor/rules/` so the Cursor agent k
 
 In a Cursor chat in the test workspace, describe the task. You normally **do not** write the spec file yourself — the planner does, guided by `use-mcp-coder.mdc`.
 
-**How much to say depends on policy and how explicit you want to be:**
+**How much you need to say in chat depends on `cursor_rules_policy`:**
 
-| Mode | Typical prompt | What to expect |
-|------|----------------|----------------|
-| **`default` (usual)** | Just the task — e.g. *"Add a one-line `hello.py` that prints exactly `hello from mcp-coder`. Stdlib only."* | Synced rules + MCP tools are enough for the host to route to `delegate_to_agent`, write a versioned spec, and delegate. You don't have to say "mcp-coder" every time. |
-| **`strict` or first run / teaching** | Be explicit — name the workflow step you want | Helps when you want spec-before-delegate spelled out, or the model might otherwise edit files directly. |
+| Policy | Host behaviour | Typical prompt |
+|--------|----------------|----------------|
+| **`strict`** | Rules **require** delegation — e.g. *"Never implement on disk yourself."* The host is **more likely** to write a spec and call `delegate_to_agent` without you naming every step. | Often just the task: *"Add `hello.py` that prints exactly `hello from mcp-coder`. Stdlib only."* |
+| **`default`** | Guidance + recommendations — the host **has more options** (delegate, or sometimes patch files in chat, skip spec versioning, etc.). | Say the task; mention mcp-coder or *"delegate"* if you want to steer it toward the workflow. |
 
-Example (explicit — good for this tutorial so you see spec → delegate):
+Example for this tutorial (works in either policy; explicit on purpose so you see spec → delegate):
 
 ```
 Using mcp-coder, implement a one-line hello.py that prints exactly
 "hello from mcp-coder". Stdlib only. Write the spec first, then delegate.
 ```
 
-A relaxed equivalent with **`default`** policy often works the same:
+With **`strict`**, a shorter prompt is often enough — the rules do the steering:
 
 ```
 Add hello.py that prints exactly "hello from mcp-coder". Stdlib only.
 ```
 
-The rules exist so the host picks the right tool (`delegate_to_agent`) instead of patching files in chat. Mentioning mcp-coder in the prompt is optional once rules are synced — it just makes intent obvious on a first dogfood run.
+With **`default`**, the same short prompt *may* still delegate, but the host might take a shortcut. Naming the tool or workflow in the prompt reduces that ambiguity.
 
 Guided by the rules, the agent should:
 1. Create a versioned step spec, e.g. `.mcp-coder/specs/tasks/hello-01-v1.md`
