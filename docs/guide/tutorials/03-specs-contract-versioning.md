@@ -167,17 +167,36 @@ If `files_edit` or `files_read` in front matter is a **non-empty** list, that li
 
 ---
 
-## 5. `target_files` and auto-merge
+## 5. `target_files` and auto-adding read deps
 
-The planner passes `target_files` on every delegate. For **implement** + valid spec:
+> **Not git merge. Not an Aider feature.**  
+> The config flag is named `auto_merge_spec_read`, but mcp-coder only **unions two lists**: your `target_files` + spec **`files_read`** paths that were omitted. It does **not** merge branches, apply patches, or let the executor edit outside the spec contract.
 
-1. mcp-coder compares spec paths to `target_files`.
-2. If **`auto_merge_spec_read`** is enabled (default **true**; disable with `auto_merge_spec_read: false` in `.mcp-coder/config.yaml` or `MCP_CODER_AUTO_MERGE_SPEC_READ=0`), any `files_read` path missing from `target_files` is **auto-merged** into the effective list passed to the executor.
-3. If spec paths are still missing from what the planner sent, mcp-coder emits **contract warnings** (logged server-side; check JSONL / server logs).
+The planner passes `target_files` on every delegate. For **`mode=implement`** with a valid **`spec_path`** and a non-empty Files contract:
 
-**Rule of thumb for planners:** list every path under **Edit** and **Read** in `target_files`. Auto-merge is a safety net, not a substitute for an accurate call.
+| Step | What mcp-coder does |
+|------|---------------------|
+| 1 | Start from planner `target_files` → `effective_target_files` |
+| 2 | If **`auto_merge_spec_read`** is on (default **true**), append any spec **`files_read`** path not already in the list — recorded as `auto_merged_read_paths` in the response / JSONL |
+| 3 | **`files_edit` paths are never auto-added** — if an edit path is missing from `target_files`, you get a non-blocking **`contract_warnings`** entry (MCP response + JSONL + server log) |
+| 4 | Pass **`effective_target_files`** to the executor so Aider **opens** those files (read deps get full text in context) |
 
-Cross-step example (from the template): step 2 edits `cli.py` but must read `api.py` from step 1 → `target_files: ["src/cli.py", "src/api.py"]`.
+**When merge is off** (`auto_merge_spec_read: false` in `.mcp-coder/config.yaml` or `MCP_CODER_AUTO_MERGE_SPEC_READ=0`): no list union; warnings fire for **any** spec path (edit **or** read) missing from `target_files`.
+
+**Without `spec_path`:** this whole path is skipped — only what the planner sent is used.
+
+**Rule of thumb for planners:** still list every **Edit** and **Read** path in `target_files`. Auto-add is a safety net so step N+1 doesn’t fail when read-deps were declared in the spec but forgotten on the MCP call.
+
+**Example:** spec Read lists `src/api.py`; planner sends `target_files: ["src/cli.py"]` only.
+
+```
+planner target_files     →  ["src/cli.py"]
+auto_merged_read_paths   →  ["src/api.py"]        # added by mcp-coder
+effective_target_files   →  ["src/api.py", "src/cli.py"]   # passed to Aider
+mcp_request.target_files →  ["src/cli.py"]        # original call preserved in audit
+```
+
+Cross-step case (from the template): step 2 edits `cli.py` but must read `api.py` from step 1 — ideal call is `target_files: ["src/cli.py", "src/api.py"]`; if the planner omits `api.py`, auto-add covers it when enabled.
 
 Dry-run without a backend:
 
@@ -190,6 +209,18 @@ mcp-coder inspect-context \
 ```
 
 Inspect `effective_target_files` / adapter preview in the output.
+
+### Naming: guide vs code (align later)
+
+This guide says **auto-adding read deps** on purpose. The **code and config keys still say “merge”**, which reads like git/Aider merge:
+
+| What you read here | Identifier in code / config / JSONL |
+|--------------------|-------------------------------------|
+| auto-add read deps (on/off) | `auto_merge_spec_read` in `.mcp-coder/config.yaml`; env `MCP_CODER_AUTO_MERGE_SPEC_READ` |
+| paths mcp-coder appended | `auto_merged_read_paths` in delegate response + JSONL |
+| implementation | `core/config/auto_merge.py`, `core/specs/read_deps_merge.py` |
+
+Behavior is defined by the code above; the guide vocabulary is the intended mental model. Renaming config keys / JSONL fields for clarity is **not done yet** — track as naming cleanup when we touch config or a major doc pass (no behavior change required).
 
 ---
 
@@ -328,7 +359,8 @@ Open the record (T-02) or `mcp-coder view delegations`:
 | `spec_sha256` | Changes when the planner edits the task spec |
 | `delegation_policies` | Resolved edit/read lists and `edit_scope` |
 | `files_requested` vs `files_changed` | Planner intent vs executor result |
-| `auto_merged_read_paths` | Read deps added automatically |
+| `auto_merged_read_paths` | Spec **Read** paths mcp-coder appended to `effective_target_files` (not git merge) |
+| `contract_warnings` / `spec_files_missing_from_target` | Spec paths missing from planner `target_files` (edit paths always; read too if auto-add off) |
 | `scope_violations` / `files_unexpected` | Gateway findings |
 | `outcome` | See table in §6 |
 | `context.delegation_pipeline` | Phase timings (implement + valid spec only) |
@@ -361,7 +393,7 @@ Step N+1 **implement** should list step N deliverables under **Read** and includ
 | Read + prompt compile | `core/specs/read.py`, `sections.py` |
 | Files parsing | `core/specs/files_contract.py` |
 | Policies | `core/specs/delegation_policies.py` |
-| Read-deps merge | `core/specs/read_deps_merge.py` |
+| Read-deps list union (`auto_merge_spec_read`) | `core/specs/read_deps_merge.py` |
 | Report updates | `core/specs/write.py` |
 | Bootstrap | `core/specs/bootstrap.py` |
 | MCP wiring | `server/mcp_server.py` (`delegate_to_agent`) |

@@ -32,9 +32,11 @@ For the full mental model see [how-it-works.md](./how-it-works.md); for the modu
 
 | Term | Meaning |
 |------|---------|
-| **Spec / task spec** | A markdown file under `.mcp-coder/specs/tasks/` defining one step: front-matter + `## Goal / ## Files / ## Constraints / ## Acceptance`. The contract for a delegation. |
+| **Spec / task spec** | A markdown file under `.mcp-coder/specs/tasks/` defining one step: front-matter + `## Goal / ## Files / ## Constraints / ## Done when`. The contract for a delegation. |
 | **Epic** | A multi-step parent spec under `.mcp-coder/specs/epics/`; individual task specs link to it via `epic:` front-matter. |
 | **Files contract** | The `## Files` section (`files_edit` / `files_read`). Defines what *may* be edited; enforced after the fact by the gateway. |
+| **`auto_merge_spec_read`** | **Code/config name — misleading.** Means “append spec Read paths to the executor file list”, not git merge. Guide docs call this **auto-adding read deps**. JSONL field: `auto_merged_read_paths`. Rename in code/config deferred; see T-03 §5. |
+| **`effective_target_files`** | The file list actually passed to the executor after read-dep auto-add (if any). Planner's original list is preserved as `mcp_request.target_files` in JSONL. |
 | **Report** | Audit section mcp-coder appends to `.mcp-coder/specs/reports/<spec-name>.md` after a delegation. |
 
 ## Context compiling
@@ -49,7 +51,7 @@ For the full mental model see [how-it-works.md](./how-it-works.md); for the modu
 | **Builder brief** | Optional narrative prepended *above* the mechanical brief by the builder LLM. Annotates, doesn't replace. |
 | **Architect plan** | Optional `## Architect plan` prepended by the architect-pass LLM (plan/brainstorm step). |
 | **`context_summary`** | The planner's own words — chat decisions the executor can't otherwise see. A required `delegate_to_agent` arg. |
-| **`target_files`** | Repo-relative path hints from the planner on the delegate call. May be minimal/empty when the picker is on. |
+| **`target_files`** | Repo-relative paths the planner passes on `delegate_to_agent`. For implement + spec: should list edit paths; read paths should be listed too — or mcp-coder may auto-add reads when `auto_merge_spec_read` is on. |
 | **inspect-context** | Dry-run that builds the would-be prompt with no backend call. CLI (`mcp-coder inspect-context`) or `inspect_context` MCP tool. |
 
 ## Models & roles
@@ -94,6 +96,7 @@ Precedence everywhere: **default → env → `.mcp-coder/config.yaml`** (yaml wi
 | `spec_validation` | off | pre-delegate coherence check (can block) |
 | `architect_pass` | off | architect plan in brief |
 | `auto_verify` | off | post-delegate verify command |
+| `auto_merge_spec_read` | on | append spec Read paths to executor file list (list union — not git merge) |
 | `host_transcript` | off | dump host transcript tail for helper LLMs |
 
 ## Conventions in docs/code

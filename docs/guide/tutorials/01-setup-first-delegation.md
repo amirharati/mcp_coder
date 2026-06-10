@@ -271,7 +271,7 @@ Guided by the rules, the agent should:
 When the planner delegates, it's one `delegate_to_agent` call:
 
 - `task`: goal in the planner's words
-- `target_files`: `["hello.py"]` (edit paths; read-deps are auto-merged from the spec)
+- `target_files`: `["hello.py"]` (edit paths; if the spec lists Read deps, mcp-coder can auto-add them to the executor file list — see T-03 §5; not git merge)
 - `context_summary`: planner's summary — the executor can't see the chat
 - `spec_path`: `tasks/hello-01-v1.md`
 - `mode`: `implement`

@@ -29,6 +29,7 @@ Status: `open` | `done` | `wontfix` | `carried`
 | P4.5-ISS-001 | open | low | **Code layout refactor — instance folders, file sizes** | `core/engine/` and `core/host/` mix abstract factories with concrete Cursor/Aider code in flat folders. Propose `core/engine/backends/aider/`, `core/host/hosts/cursor/`; audit files > ~400 lines (`server/mcp_server.py` ~1750). Pure structural refactor — **carry to Phase 5; do not block literacy work.** |
 | P4.5-ISS-005 | **done** | med | **`mcp-coder setup` should write mcp.json directly** | **Shipped** (P4.5-002): `setup --local` and `setup --global` write/merge the entry. No-flags = print-only + action hint. → **BL-341** |
 | P4.5-ISS-006 | open | low | **Delegation log viewer: structured fields, not raw JSON** | `mcp-coder view delegations` / `delegation_viewer.html` lists cards but expanded detail still dumps full record as JSON. Should render known JSONL schema structurally: `outcome`, `delegation_pipeline` (phase table), `model_roles`, `context` audit metadata, `mcp_request`, spec paths, errors — raw JSON optional/collapsed. Surfaced dogfooding T-02. → **BL-343** |
+| P4.5-ISS-007 | open | low | **Configurable spec granularity — fine steps, big steps, or full-epic delegate** | Today: one step task per delegate (`tasks/…-vN.md`); epic is planner context only. **Later:** allow workspace config + explicit user input to choose granularity — many small step specs vs fewer large step specs vs (in some cases) **one task spec covering the whole epic** passed as `spec_path`. Motivation: stronger models can take bigger chunks; needs experimentation on context limits, gateway scope, judgment loop, and audit/report shape. **Do not implement in 4.5** — file for Phase 5+ after T-06/T-07 experiments. → **BL-344** |
 
 ---
 
@@ -36,12 +37,18 @@ Status: `open` | `done` | `wontfix` | `carried`
 
 *(Running log of things noticed during inspection, tutorials, or experiments that are not clearly bugs.)*
 
+| Date | Finding |
+|------|---------|
+| 2026-06-10 | **`auto_merge_spec_read` naming** — config/env/JSONL use “merge” (`auto_merge_spec_read`, `auto_merged_read_paths`, `read_deps_merge.py`) but behavior is list union / append read paths only. T-03 + terminology use “auto-adding read deps”. Align identifiers in a later pass (config alias + JSONL field deprecations) when convenient; no behavior change. |
+
 ---
 
 ## Changelog
 
 | Date | Change |
 |------|--------|
+| 2026-06-10 | Observation: `auto_merge_*` naming vs “auto-add read deps” guide vocabulary — align code/config/JSONL later. |
+| 2026-06-10 | P4.5-ISS-007 filed: configurable spec granularity (fine/big steps, optional full-epic single delegate) for stronger models — experiment later; → BL-344. Surfaced T-03 versioning review. |
 | 2026-06-10 | P4.5-ISS-006 filed: structured delegation log viewer (replace raw JSON expand); P4.5-ISS-001 row restored (was merged into ISS-005) |
 | 2026-06-10 | P4.5-ISS-002 → partial (setup CLI + install.sh shipped via P4.5-001); P4.5-ISS-003 → done (test-model --all shipped via P4.5-001) |
 | 2026-06-10 | P4.5-ISS-002/003/004 filed from T-01 review: `mcp-coder setup`, `test-model --all`, one-step/always-review mode |

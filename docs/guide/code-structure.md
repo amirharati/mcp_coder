@@ -184,7 +184,7 @@ The heart of the system. Builds the prompt Aider sees.
 | `outcome.py` | `OutcomeLabel` — `success`, `partial`, `needs_input`, `error`; `apply_verify_outcome()` |
 | `bootstrap.py` | Write new spec from template |
 | `write.py` | Write spec report |
-| `read_deps_merge.py` | Auto-merge spec `Files Read` into `auto_merged_read_paths` |
+| `read_deps_merge.py` | Append spec Read paths to `effective_target_files` (flag `auto_merge_spec_read` — name is historical; see T-03 §5) |
 
 ### `core/storage/` — home directory and workspace config
 
