@@ -85,13 +85,15 @@ MCP_CODER_CONTEXT_BUILDER_MODEL=openrouter/google/gemini-2.5-flash
 
 ## 3. Connect to Cursor (`mcp.json`)
 
-Run `mcp-coder setup` — it prints the exact block to paste:
+Run `mcp-coder setup` to see the block and your current model resolution:
 
 ```bash
 mcp-coder setup
 ```
 
-You have two options for where to put the block. Pick based on your situation:
+> **Coming soon (P4.5-002):** `setup --global` and `setup --project` will write the entry directly — no copy-pasting. For now, copy the printed `mcpServers` block and paste it into the target file manually.
+
+You have two options for where to put the block:
 
 ### Option A — Global (recommended for regular use)
 
@@ -100,31 +102,18 @@ Paste into the **global** Cursor `mcp.json` — Cursor then auto-starts mcp-code
 - **macOS:** `~/Library/Application Support/Cursor/User/globalStorage/cursor-dev.cursor-mcp/mcp.json`
 - **Linux:** `~/.config/Cursor/User/globalStorage/cursor-dev.cursor-mcp/mcp.json`
 
-```json
-{
-  "mcpServers": {
-    "mcp-coder": {
-      "command": "/usr/local/bin/mcp-coder",
-      "env": {
-        "MCP_CODER_ENV_FILE": "/path/to/mcp_coder/.env"
-      }
-    }
-  }
-}
-```
-
 ### Option B — Per-project (useful for dev / selective opt-in)
 
-Create `.cursor/mcp.json` in the project root — mcp-coder runs only for that project. Useful when developing mcp-coder itself (so your mcp_coder repo uses a different binary or config than other projects), or when you want to test a new version before enabling it everywhere.
+Create `.cursor/mcp.json` in the project root — mcp-coder runs only for that project. Useful when developing mcp-coder itself (so your `mcp_coder` repo uses a different binary or config than other projects), or when testing a new version before enabling it everywhere.
 
 ```bash
 mkdir -p .cursor
-# paste the mcp.json block above into .cursor/mcp.json
+# paste the mcp.json block into .cursor/mcp.json
 ```
 
-> **Both options behave identically once running.** Either way the server's `cwd` is the workspace root, so **each project is fully isolated** — its own `.mcp-coder/` specs/config/templates, its own `~/.mcp-coder/projects/<id>/` history and delegation logs. Global install does not mean shared state.
+> **Both options behave identically once running.** The server's `cwd` is the workspace root either way, so **each project is fully isolated** — its own `.mcp-coder/` specs/config/templates, its own `~/.mcp-coder/projects/<id>/` history and delegation logs. Global install does not mean shared state.
 
-After editing either file, open **Cursor Settings → MCP** and restart the mcp-coder entry (or restart Cursor). You should see it listed as connected.
+After editing either file, open **Cursor Settings → MCP** and restart the mcp-coder entry. You should see it listed as connected.
 
 **What the server does on first startup for a workspace:**
 - Auto-creates `.mcp-coder/specs/{tasks,epics,reports}/` + bundled spec templates
