@@ -165,6 +165,7 @@ What it typically contains:
 | Host transcript | `host_transcript_path`, `host_transcript_hash`, `host_transcript_bytes` | Which Cursor chat was injected and how much |
 | Context package summary | `context_package.entries` | Path + tier per file (`edit-full`, `read-excerpt`, …) — **no file payloads** |
 | Builder / architect flags | `context_builder_enabled`, `builder_brief_applied`, `architect_pass_enabled` | Which pipeline stages ran — config/audit, not the brief text |
+| Phase audit | `delegation_pipeline` | Per-phase status + `duration_ms` (implement+spec only; see below) |
 | Executor session | `executor_reused`, `executor_recreated` | Whether the Aider instance was reused |
 
 Example (abbreviated):
@@ -218,10 +219,15 @@ Example (abbreviated):
 
 > `tokens` are currently `null` for most paths — BL-335, a known gap. The models ran; counting is a pending fix.
 
-### `delegation_pipeline` — phase audit
+### `context.delegation_pipeline` — phase audit (JSONL)
+
+In **JSONL**, the phase list lives under **`context.delegation_pipeline`**, not at the top level. The **MCP response** to Cursor also exposes it as top-level `delegation_pipeline` for convenience.
+
+Present only when the delegation ran the implement+spec pipeline (`mode=implement`, valid spec, Phase 4+). Older or pass-through records may not have this key at all.
 
 ```json
-"delegation_pipeline": [
+"context": {
+  "delegation_pipeline": [
   {"phase": "spec_read",    "status": "ok", "duration_ms": 3},
   {"phase": "file_picker",  "status": "ok", "duration_ms": 118},
   {"phase": "context_assemble", "status": "ok", "duration_ms": 45},
@@ -229,10 +235,11 @@ Example (abbreviated):
   {"phase": "executor",     "status": "ok", "duration_ms": 8240},
   {"phase": "post_gateway", "status": "ok", "duration_ms": 12},
   {"phase": "spec_report",  "status": "ok", "duration_ms": 4}
-]
+  ]
+}
 ```
 
-Phase statuses: `ok | skipped | error | blocked`. Opt-in stages that are off appear as `skipped`.
+Phase statuses: `ok | skipped | error | blocked`. Opt-in stages that are off appear as `skipped`. Full pipeline tour: **T-06** (pending).
 
 ---
 
@@ -247,7 +254,7 @@ mcp-coder view delegations              # merged JSONL for cwd workspace
 mcp-coder view delegations --no-open    # serve at http://127.0.0.1:8765/ without opening a tab
 ```
 
-Good when you want the full JSONL record expanded in a UI rather than `tail` + `python -m json.tool`.
+Good for browsing many delegations without `tail` + `python -m json.tool`. Today the list view is structured; **expanded detail is still mostly raw JSON** — structured pipeline/model-role sections are planned (**P4.5-ISS-006** / **BL-343**). Until then, use `context.delegation_pipeline` and `model_roles` in the JSON block, or ask Cursor via MCP history tools (§7).
 
 ### List recent delegations
 
@@ -314,8 +321,8 @@ These call `list_delegations`, `get_delegation_diff`, `get_file_history`, `get_c
 
 After T-01's delegation, open your record and check:
 
-1. **`outcome`** — is it `success`? If `partial`, check `delegation_pipeline` for the failing phase.
-2. **`delegation_pipeline`** — which phase took the most time? `executor` almost always dominates.
+1. **`outcome`** — is it `success`? If `partial`, check `context.delegation_pipeline` for the failing phase (if present).
+2. **`context.delegation_pipeline`** — which phase took the most time? `executor` almost always dominates. Skip this if the key is missing (non-implement or pre–Phase 4 run).
 3. **`context.context_package.entries`** — which files and tiers made it into the package? (paths only — not content)
 4. **`context.builder_brief_applied`** — did the builder LLM stage run? If `true`, check `model_roles.context_builder` for the model; use `prompt_preview` or T-04's `inspect-context` to see the actual brief text
 5. **`files_changed` vs `files_requested`** — do they match? If `files_changed` contains entries not in `files_requested`, the executor edited something outside the spec scope — the gateway should have flagged this.

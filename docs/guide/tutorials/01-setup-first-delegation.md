@@ -46,9 +46,10 @@ mcp-coder setup           # shows workspace + model info (see §3)
 
 | Subcommand | What it does |
 |-----------|-------------|
-| `mcp-coder setup` | Print workspace info + the exact `mcp.json` block to paste |
+| `mcp-coder setup` | Workspace info + models; `--local` / `--global` write `mcp.json` (no flags = dry-run) |
 | `mcp-coder test-model` | Ping one model; `--all` tests every configured role |
 | `mcp-coder inspect-context` | Dry-run the context compiler — no backend call |
+| `mcp-coder view delegations` | Browser UI for `delegations.jsonl` (see T-02) |
 | `mcp-coder history` | Browse `workspace_history.db` |
 | `mcp-coder rag` | Search the delegation FTS5 index |
 
@@ -80,6 +81,8 @@ MCP_CODER_CONTEXT_BUILDER_MODEL=openrouter/google/gemini-2.5-flash
 ```
 
 > For other providers (Anthropic direct, OpenAI, etc.) set `AIDER_MODEL` to any LiteLLM-compatible id and the matching `*_API_KEY` — everything else is provider-agnostic.
+
+> **Later (not required for T-01):** pipx packaging and a machine-level config dir outside the repo are tracked as **BL-341** / P4.5-ISS-002 partial. Repo-root `.env` + `install.sh` is the supported path today.
 
 ---
 
@@ -279,7 +282,9 @@ You normally don't type this — it's shown here so you recognise the arguments 
 
 ## 8. Read the result
 
-### Response payload
+Two shapes to know: the **MCP response** (what Cursor sees right after the call) and the **JSONL record** (the permanent audit line under `~/.mcp-coder`). They overlap but are not identical — field names and nesting differ slightly.
+
+### MCP response (to Cursor)
 
 The response is a JSON object. Key fields:
 
@@ -302,11 +307,11 @@ The response is a JSON object. Key fields:
 
 - `success: true` + `outcome: success` — edits applied, scope gateway passed
 - `files_changed` contains `hello.py`
-- `delegation_pipeline` shows every phase with timing
+- Top-level `delegation_pipeline` shows every phase with timing (when the pipeline ran — see below)
 
 If `outcome: needs_input`: the executor had format errors — check `output` field.
 
-### The JSONL record
+### JSONL record (audit log)
 
 Find it:
 
@@ -315,7 +320,13 @@ find ~/.mcp-coder -name delegations.jsonl | head -5
 # then: tail -1 <path> | python -m json.tool | head -60
 ```
 
-The last line is the full audit record for the delegation. Notable top-level fields: `delegation_id`, `timestamp_start`, `spec_path`, `files_changed`, `outcome`, `context_block` (what was assembled), `model_roles` (which model ran per role + tokens + cost), `delegation_pipeline`.
+The last line is the full audit record. Notable **top-level** fields: `delegation_id`, `timestamp_start`, `spec_path`, `files_changed`, `outcome`, `model_roles`, `mcp_request`.
+
+Nested under **`context`** (audit metadata — not the full assembled package; see T-02):
+- `context.prompt_preview`, `context.context_package.entries`, builder/architect flags
+- **`context.delegation_pipeline`** — same phase list as the MCP response, but stored here in JSONL (not top-level)
+
+> **When is `delegation_pipeline` present?** Only for **`mode=implement` with a valid spec** (Phase 4+). Pass-through delegations, `mode=review`, invalid specs, or older runs may omit it entirely. If T-01 used a spec-backed implement call, you should see it under `context.delegation_pipeline`.
 
 ### Verify the edit
 
@@ -330,8 +341,8 @@ python hello.py
 
 Even on this trivial delegation:
 
-1. **`delegation_pipeline` shows where time went.** `executor` typically dominates. `file_picker` and `context_assemble` are fast. `builder_llm` adds ~500–1500ms for the narrative brief.
-2. **`model_roles.context_builder`** in JSONL — the builder brief ran on a separate model role before the executor. This is configurable or can be disabled with `context_builder_llm: false`.
+1. **`context.delegation_pipeline`** (JSONL) / top-level `delegation_pipeline` (MCP response) shows where time went. `executor` typically dominates. `file_picker` and `context_assemble` are fast. `builder_llm` adds ~500–1500ms for the narrative brief. *(Deeper pipeline walkthrough: T-06.)*
+2. **`model_roles`** (top-level in JSONL) — e.g. `model_roles.context_builder` if the builder brief ran on a separate model role. Configurable or disable with `context_builder_llm: false` in `config.yaml`.
 3. **`model_roles.*.tokens` may be `null`** — known gap (BL-335). The model ran; token counting is a pending fix.
 4. **The spec report** at `.mcp-coder/specs/reports/hello-01-v1.md` — mcp-coder appended an audit section. Open it to see what was recorded.
 5. **`use-mcp-coder.mdc`** was in `.cursor/rules/` before the delegation ran — it was compiled and synced on server startup, and it's what told the planner how to write the spec.
@@ -367,7 +378,7 @@ mcp-coder view delegations ~/.mcp-coder/projects/<key>/sessions/<id>/delegations
 mcp-coder view delegations --no-open   # serve only, don't open browser
 ```
 
-Opens http://127.0.0.1:8765/ with a searchable table: pipeline phases, model roles, files changed, outcome.
+Opens http://127.0.0.1:8765/ with a searchable list of delegations (task snippet, files, success/fail). Expanded detail is still mostly **raw JSON** today — structured sections for pipeline, model roles, etc. are tracked (**P4.5-ISS-006** / **BL-343**); a fuller viewer walkthrough will land when that ships.
 
 **No server:** open `tools/delegation_viewer.html` from the mcp-coder repo and use **Choose file** to pick any `delegations.jsonl`.
 

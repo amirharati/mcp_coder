@@ -155,6 +155,7 @@ Small fixes found during inspection — not new features. Dispatch as workers if
 |-----------|----------|--------|
 | Token extraction for LiteLLM roles (BL-335) | T-06 / Track 3 | pending |
 | `mcp-coder view delegations` browser | T-01 / T-02 | **done** (P4.5-003) |
+| Structured delegation viewer (no raw JSON expand) | T-02 / P4.5-ISS-006 | pending → **BL-343** |
 | `mcp-coder delegation show <id>` CLI | T-02 / T-07 | pending |
 | `inspect-context` parity: architect + validation phases | T-04 | pending |
 
