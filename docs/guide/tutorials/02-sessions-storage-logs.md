@@ -239,7 +239,7 @@ Present only when the delegation ran the implement+spec pipeline (`mode=implemen
 }
 ```
 
-Phase statuses: `ok | skipped | error | blocked`. Opt-in stages that are off appear as `skipped`. Full delegation-pipeline tour: **T-06** (pending).
+Phase statuses: `ok | skipped | error | blocked`. Opt-in stages that are off appear as `skipped`. Full delegation-pipeline tour: **T-06**.
 
 ---
 

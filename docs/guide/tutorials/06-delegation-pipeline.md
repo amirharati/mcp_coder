@@ -6,11 +6,34 @@
 
 **Prerequisites:** T-02 (JSONL records), T-03 (specs), T-04 (context compiler), T-05 (workspace history).
 
-**Estimated time:** 20 min (skim); 40 min (run examples against a real delegation).
+**Estimated time:** 20 min skim; +15 min if you run the **Try it** blocks in §5.
+
+**How to use this tutorial:** First pass — §1 diagram + §2 status values + §4 config matrix. Second pass — run §5 against a real `delegations.jsonl` from your machine. **T-07** will walk one `delegation_id` through every artifact (JSONL → history → spec report → `inspect-context`); T-06 stays focused on the pipeline map and quick CLI reads.
 
 ---
 
 ## 1. Ten phases, one delegate call
+
+```mermaid
+%%{init: {'flowchart': {'nodeSpacing': 6, 'rankSpacing': 14}}}%%
+flowchart TB
+    subgraph pre["Before executor"]
+        P1[1 spec_read]
+        P2[2 spec_validation*]
+        P3[3 file_picker]
+        P4[4 context_assemble]
+        P5[5 architect_pass*]
+        P6[6 builder_llm]
+    end
+  P1 --> P2 --> P3 --> P4 --> P5 --> P6 --> P7[7 executor]
+  P7 --> P8[8 post_gateway]
+  P8 --> P9[9 spec_report]
+  P9 --> P10[10 auto_verify*]
+```
+
+`*` = opt-in (defaults: `builder_llm` on; `spec_validation`, `architect_pass`, `auto_verify` off).
+
+ASCII equivalent:
 
 ```
 delegate_to_agent(mode=implement, spec_path=..., task=..., ...)
@@ -29,32 +52,58 @@ delegate_to_agent(mode=implement, spec_path=..., task=..., ...)
 * = opt-in (default off except builder_llm which is on by default)
 ```
 
-Phases 3–6 are covered in T-04. Phases 8, 9 touch T-05 history. This tutorial is the full picture and fills in 2, 7, 9, 10.
+Phases 3–6 are covered in T-04. Phases 8–9 touch T-05 history. This tutorial fills in 2, 7, 9, 10 and shows how to read timing for all of them.
+
+**When is `delegation_pipeline` present?** Only for **`mode=implement` with a valid spec** (Phase 4+). Pass-through delegations, `mode=review`, invalid specs, or older runs may omit it entirely (T-02 §4).
 
 ---
 
 ## 2. What `delegation_pipeline` looks like in JSONL
 
-Every phase emits a record:
+Every phase emits a record under **`context.delegation_pipeline`** in JSONL (top-level `delegation_pipeline` in the MCP response — same data, different nesting; T-02 §4).
 
 ```json
-"delegation_pipeline": [
-  {"phase": "spec_read",        "status": "ok",      "duration_ms": 12},
-  {"phase": "spec_validation",  "status": "skipped", "duration_ms": 0},
-  {"phase": "file_picker",      "status": "ok",      "duration_ms": 85},
-  {"phase": "context_assemble", "status": "ok",      "duration_ms": 140},
-  {"phase": "architect_pass",   "status": "skipped", "duration_ms": 0},
-  {"phase": "builder_llm",      "status": "ok",      "duration_ms": 820},
-  {"phase": "executor",         "status": "ok",      "duration_ms": 14200},
-  {"phase": "post_gateway",     "status": "ok",      "duration_ms": 55},
-  {"phase": "spec_report",      "status": "ok",      "duration_ms": 8},
-  {"phase": "auto_verify",      "status": "skipped", "duration_ms": 0}
-]
+"context": {
+  "delegation_pipeline": [
+    {"phase": "spec_read",        "status": "ok",      "duration_ms": 1},
+    {"phase": "spec_validation",  "status": "ok",      "duration_ms": 679},
+    {"phase": "file_picker",      "status": "ok",      "duration_ms": 5},
+    {"phase": "context_assemble", "status": "ok",      "duration_ms": 73},
+    {"phase": "architect_pass",   "status": "ok",      "duration_ms": 1277},
+    {"phase": "builder_llm",      "status": "ok",      "duration_ms": 2446},
+    {"phase": "executor",         "status": "error",   "duration_ms": 13066,
+     "detail": "To implement the changes…"},
+    {"phase": "post_gateway",     "status": "ok",      "duration_ms": 0},
+    {"phase": "spec_report",      "status": "ok",      "duration_ms": 8},
+    {"phase": "auto_verify",      "status": "skipped", "duration_ms": 0,
+     "detail": "disabled_or_not_applicable"}
+  ]
+}
 ```
 
-**Status values:** `ok` | `skipped` | `error` | `blocked`
+(Real record from a spec-backed implement run — executor failed mid-edit; post_gateway and spec_report still ran.)
 
-`skipped` = phase is disabled by config or not applicable (e.g. no spec → spec_validation skips). `blocked` = spec_validation returned `clarification_needed` and stopped the pipeline. `error` = non-fatal failure (execution continued with best-effort result).
+### Status values
+
+| Status | Meaning |
+|--------|---------|
+| `ok` | Phase ran and completed normally |
+| `skipped` | Disabled by config or not applicable (no spec → `spec_validation` skips) |
+| `error` | Phase failed non-fatally; pipeline often continues (executor error still runs post_gateway) |
+| `blocked` | `spec_validation` returned `clarification_needed` — **no executor, no file edits** |
+
+```mermaid
+%%{init: {'flowchart': {'nodeSpacing': 6, 'rankSpacing': 12}}}%%
+flowchart LR
+    S[phase starts] --> E{enabled?}
+    E -->|no| SK[skipped]
+    E -->|yes| R{result}
+    R -->|ok| OK[ok]
+    R -->|fail recoverable| ER[error]
+    R -->|spec_validation clarify| BL[blocked]
+```
+
+`detail` (optional string) — truncated error text or skip reason (e.g. `disabled_or_not_applicable` for `auto_verify`).
 
 ---
 
@@ -94,6 +143,17 @@ See **T-04** §4–§8 for full detail. Quick summary here:
 | `architect_pass` | `## Architect plan` layer above brief | Off by default; `architect_pass: true` |
 | `builder_llm` | `## Builder brief` narrative on top | On by default; `context_builder_llm: false` disables |
 
+**Dry-run phases 3–6 without a delegate** (no API call, no disk edits):
+
+```bash
+mcp-coder inspect-context \
+  --workspace /path/to/project \
+  --spec .mcp-coder/specs/tasks/my-step.md \
+  --task "Add CLI entrypoint"
+```
+
+Shows tiers, picker candidates, and the mechanical brief — the same inputs phases 3–4 use before helper LLMs run (T-04 §0 playground for a full walkthrough).
+
 ### 7 — `executor`
 
 Aider runs `coder.run(prompt)` with `fnames` (edit paths). This is where file edits happen on disk.
@@ -117,6 +177,12 @@ After the executor finishes:
 
 Writes `.mcp-coder/specs/reports/<spec-filename>.md` with a Run log entry: timestamp, outcome, `files_changed`, `files_unexpected`, planner notes. Appends on retry (versioned specs T-03). Skips when no `spec_path`.
 
+```bash
+# After a spec-backed delegate — audit trail in-repo
+ls .mcp-coder/specs/reports/
+tail -20 .mcp-coder/specs/reports/my-step-report.md
+```
+
 ### 10 — `auto_verify` (opt-in, off by default)
 
 Runs `pytest` (or configured verify command) after a successful delegate. Sets `outcome` to `success` (tests pass) or `partial` (tests fail). Result feeds into spec report and builder history for the next attempt.
@@ -128,6 +194,8 @@ Enable:
 auto_verify: true
 auto_verify_cmd: "pytest tests/ -q"
 ```
+
+When off or executor failed: `auto_verify` → `skipped`, `detail: disabled_or_not_applicable`.
 
 ---
 
@@ -147,26 +215,130 @@ auto_verify_cmd: "pytest tests/ -q"
 
 ---
 
-## 5. Reading a real `delegation_pipeline` record
+## 5. Try it — read pipeline timing from JSONL
 
-*(This section will be filled in with a live run — see T-07 for end-to-end trace.)*
+These commands inspect **phase timing and status** only. For a full walk (same `delegation_id` → history diff → spec report → context reconstruction), use **T-07** when it ships.
+
+### Find your JSONL
+
+From the project root (after T-01):
 
 ```bash
-# Get the pipeline block from the most recent delegation JSONL
-# (replace <session_id> with yours from ~/.mcp-coder/projects/<key>/sessions/)
-cat ~/.mcp-coder/projects/*/sessions/*/delegations.jsonl \
-  | jq -s 'sort_by(.timestamp_start) | last | .context.delegation_pipeline'
+# Option A — session pointer (T-02)
+SESSIONS=$(python3 -c "import json; print(json.load(open('.mcp-coder/session.json'))['sessions_root'])")
+ls "$SESSIONS"/*/delegations.jsonl
+
+# Option B — search all projects
+find ~/.mcp-coder -name delegations.jsonl | head -5
 ```
 
-Key things to check:
+Pick one session file, or merge all sessions for the latest record (Option C):
 
-| Field | What to look for |
-|-------|-----------------|
-| `builder_llm.duration_ms` | +500–1500 ms is normal; higher = slow model |
-| `executor.duration_ms` | Dominates; usually 10–60 s |
-| Any `status: error` | Which phase failed; delegate may have continued |
-| Any `status: blocked` | `spec_validation` caught something; check `clarification_needed` |
-| `post_gateway.duration_ms` | Includes manifest walk; proportional to workspace size |
+```bash
+# Option C — latest record across every session dir
+SESSIONS=$(python3 -c "import json; print(json.load(open('.mcp-coder/session.json'))['sessions_root'])")
+cat "$SESSIONS"/*/delegations.jsonl | jq -s 'sort_by(.timestamp_start) | last' > /tmp/latest-delegation.json
+
+# Or Option A/B — last line of one session file
+LOG="$SESSIONS/<mcp_session_id>/delegations.jsonl"
+tail -1 "$LOG" > /tmp/latest-delegation.json
+
+REC=/tmp/latest-delegation.json
+```
+
+### Extract the pipeline block
+
+```bash
+jq '.context.delegation_pipeline' "$REC"
+# or, for a single LOG file:  tail -1 "$LOG" | jq '.context.delegation_pipeline'
+```
+
+If the result is `null`, that record has no pipeline (review mode, no spec, or pre–Phase 4). Pick another line or run a new spec-backed `implement` delegate (T-01).
+
+### Sort phases by time (find the bottleneck)
+
+```bash
+jq -r '
+  .context.delegation_pipeline
+  | sort_by(-.duration_ms)
+  | .[]
+  | "\(.phase)\t\(.status)\t\(.duration_ms)ms"' "$REC"
+```
+
+**Example output** (same run as §2):
+
+```
+executor        error   13066ms
+builder_llm     ok      2446ms
+architect_pass  ok      1277ms
+spec_validation ok      679ms
+context_assemble ok     73ms
+spec_report     ok      8ms
+file_picker     ok      5ms
+spec_read       ok      1ms
+post_gateway    ok      0ms
+auto_verify     skipped 0ms
+```
+
+`executor` usually wins; helper LLMs (`builder_llm`, `architect_pass`) are next when enabled.
+
+### Phases that did not finish cleanly
+
+```bash
+jq '[.context.delegation_pipeline[] | select(.status != "ok")]' "$REC"
+```
+
+**Example:**
+
+```json
+[
+  {
+    "phase": "executor",
+    "status": "error",
+    "duration_ms": 13066,
+    "detail": "To implement the changes for the `stats` command…"
+  },
+  {
+    "phase": "auto_verify",
+    "status": "skipped",
+    "duration_ms": 0,
+    "detail": "disabled_or_not_applicable"
+  }
+]
+```
+
+`error` on `executor` + `skipped` on `auto_verify` is normal when the executor fails or verify is off. `blocked` on `spec_validation` means the planner should answer `clarification_needed` before retrying.
+
+### Correlate with `history` (phases 8–9)
+
+Pipeline JSONL tells you **how long** post_gateway took; `history` tells you **what changed**:
+
+```bash
+ID=$(jq -r .delegation_id "$REC")
+mcp-coder history show "$ID"
+mcp-coder history diff "$ID" --path src/api.py   # optional single file
+```
+
+`history show` does not repeat `delegation_pipeline` — use JSONL (or `mcp-coder view delegations`) for phase timing, and `history` for checkpoints and diffs (T-05 §4).
+
+### Browser UI (optional)
+
+```bash
+mcp-coder view delegations --workspace /path/to/project
+```
+
+List view is structured; expanded row is still mostly raw JSON today (**BL-343**). Until a structured pipeline panel ships, use the `jq` snippets above on `context.delegation_pipeline`.
+
+### What to look for
+
+| Signal | Likely cause |
+|--------|----------------|
+| `executor.duration_ms` ≫ everything else | Normal — dominates wall time |
+| `builder_llm` / `architect_pass` high with `ok` | Slow cheap model or large brief; check `context.prompt_chars` in same JSONL line |
+| `context_assemble` high | Large workspace or many spec read paths; budget may have degraded (T-04 §7) |
+| `post_gateway` high | Large manifest walk; many files in workspace |
+| `spec_validation` → `blocked` | Under-specified task; fix spec or answer clarification |
+| No `delegation_pipeline` key | Not implement+spec; see T-02 §4 |
 
 ---
 
@@ -187,7 +359,7 @@ The pipeline does **not** run the same way for every mode:
 | Concern | Location |
 |---------|----------|
 | Full pipeline orchestration | `server/mcp_server.py` — `delegate_to_agent` handler |
-| Pipeline recorder | `server/mcp_server.py` — `PipelineRecorder` class |
+| Pipeline recorder | `core/pipeline/phases.py` — `PipelineRecorder` |
 | Spec read | `core/specs/read.py` |
 | Spec validation LLM | `core/engine/spec_validation_llm.py` |
 | Context phases | `core/context/` — T-04 code map |
@@ -200,4 +372,4 @@ The pipeline does **not** run the same way for every mode:
 
 ## Next
 
-- **T-07 (End-to-end trace):** pick a real `delegation_id`; walk JSONL → `history show` → `history diff` → spec report → `inspect-context` reconstruction — using all the tools from T-01–T-06
+- **T-07 (End-to-end trace):** one real `delegation_id` — JSONL line → `history show` / `diff` → spec report → `inspect-context` reconstruction (all tools from T-01–T-06 in one narrative)
