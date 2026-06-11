@@ -106,11 +106,20 @@ The dashed line is the whole point: the executor never sees your chat unless mcp
 
 ### What the executor does and does not see
 
-When `delegate_to_agent` runs, the executor (Aider today) does **not** automatically see:
+**Each `delegate_to_agent` call builds a new prompt from scratch** — picker, assemble, budget, optional builder/architect, then `coder.run(prompt)`. The executor does not “continue” mcp-coder’s memory by itself; it only sees what this compile produced (plus one exception below).
 
-- The full host chat (unless you opt in — see below)
-- Prior delegation outputs (except Aider in-process state when the same MCP session reuses a `Coder` instance)
-- Helper-LLM internals (builder/architect prompts are separate calls; only their **output** may appear in `package.brief`)
+| Source | In executor prompt? | Notes |
+|--------|---------------------|--------|
+| **This call’s spec + `task` + `context_summary`** | Yes | Mechanical brief (always) |
+| **Compiled file payloads + repo map** | Yes | Tiers from this compile |
+| **Builder / architect narrative** | If enabled | Only their **output** text in `package.brief` — not their input prompts |
+| **Prior delegation summaries** | Often | `builder_history` from `workspace_history.db` (last N same-spec + project rows) — **summaries only**, not full diffs or Aider transcripts |
+| **Full Cursor host chat** | Only if `host_transcript: dump` | mcp-coder **reads** chat JSONL and **attaches** it — never a direct Cursor → Aider path |
+| **Prior delegate’s full output / unified diffs** | No | Use `history diff` / JSONL yourself; not auto-injected |
+| **Helper-LLM wire traffic** | No | Separate cheap-model calls; executor sees merged brief, not builder/architect prompts |
+| **Aider in-process LLM chat** | Maybe | If the **same** `Coder` object is reused (uncommon — see below) |
+
+**Delegate 1 → delegate 2 (same MCP session):** Call 2 still gets a **fully recompiled** package. Cross-delegate context you control is mainly **`builder_history`** (+ planner `context_summary`, optional `rag_search`). Step 1 → step 2 usually creates a **new** `Coder` because edit paths or the compiled package hash changed (`core/session/executor_cache.py`). When `executor_reused: true` in JSONL, Aider may also retain **its own** internal multi-turn chat from the previous `coder.run()` — that is a performance-cache side effect, **not** an intentional memory feature, and mcp-coder does not serialize it today.
 
 What it **always** gets (with a spec + `context_builder` on) is a compiled `ContextPackage`:
 

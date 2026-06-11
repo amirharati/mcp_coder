@@ -659,6 +659,7 @@ Phase 1 uses only the executor (via Aider). Phase 2+ adds the context-builder **
 
 | Theme | Backlog |
 |-------|---------|
+| **LLM boundary observability** (full pass-through logging — all roles, all turns) | **BL-353** (TBD; high ROI for gap-finding, RAG/context direction, eval; may share foundation with BL-335 in Phase 5) |
 | Interactive / supervised delegate | BL-160a–d |
 | Multi-host | BL-201/202 |
 | Git-native task branches | BL-502 (pairs with non-git BL-322) |

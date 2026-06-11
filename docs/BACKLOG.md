@@ -171,6 +171,7 @@ Phase 1 deferred executor conversation carry-over to here (BL-155); see P1-130 `
 | BL-350 | **Supervised executor loop — inspect mid-run, inject context, capture thinking** | Today: one `coder.run(prompt)` black box; context fixed at start; post-hoc gateway only. **Later:** three implementation routes (see § BL-350) — outer mcp-coder loop (preferred), stream-and-react early stop, or Aider `Coder` subclass / owned run loop (fragile). Enables dynamic context (file Z, RAG, BL-348/349), per-step audit in `delegation_pipeline`, and **reasoning/thinking token capture** (BL-333, BL-335). High ROI; composes BL-161/160a. **Phase 5+**. From P4.5-ISS-013. |
 | BL-351 | **Simulated interactive + escalate to host (Cursor human intervention)** | Today: `InputOutput(yes=True)` auto-approves all Aider prompts (blind); “add files to chat” → implement failure; no structured handoff back to Cursor mid-delegate. **Later:** supervisor answers executor prompts via **cheap LLM + rules** (add read / expand spec / continue) instead of blind yes; when uncertain → **pause delegation** and return `needs_input` / `clarification_needed` to **Cursor planner** for human decision, then resume (BL-350 outer loop or custom IO). High leverage for scope expansion + trust. **Phase 5+**. From P4.5-ISS-014. |
 | BL-352 | **Multi-language symbol scan + outlines (C/C++, Go, Rust, …)** | Today: symbol scan hardcoded to 9 extensions (`SCAN_EXTENSIONS` in `file_picker.py`); repo-map/excerpt regex is Python `def`/`class` only — C/C++/Go/Rust/Java/etc. work via **spec contract** but not **auto-discovery** or useful outlines. **Later:** expand/configurable scan globs; per-language outline heuristics (or tie to BL-348 index); goal = “works for money cases” on polyglot/monorepo repos without hand-listing every path. **Phase 5+**. From P4.5-ISS-015. |
+| BL-353 | **LLM boundary observability — full pass-through logging** | Backend-neutral tap on every LLM send/receive (all roles + executor multi-turn); correlate with compile + disk audit. **High ROI** for gap-finding, RAG/context direction, eval/training. **Phase 6 (TBD)** — see § BL-353; foundation tokens (**BL-335**) may start Phase 5. From T-04 tutorial pass (2026-06-11). |
 
 ### BL-350: Supervised executor loop (mid-run inspect + context inject)
 
@@ -242,6 +243,55 @@ Phase 1 deferred executor conversation carry-over to here (BL-155); see P1-130 `
 4. **Long-term:** BL-348 language-aware index subsumes regex outlines; BL-352 is the cheap path until then.
 
 **Related:** **BL-348** (proper index), **BL-347** (policy), T-04 §4 symbol scan.
+
+---
+
+### BL-353: LLM boundary observability — full pass-through logging
+
+**Status:** `idea` — 2026-06-11. Surfaced T-04 tutorial pass (context visibility, Aider black box, RAG/evidence planning).
+
+**Target phase:** **Phase 6 (TBD)** — umbrella observability milestone. **High ROI** for product direction: find real gaps in picker/builder/RAG, measure cost/quality, feed eval sets. Small pieces (**BL-335** per-role tokens, structured compile fields in JSONL) may land earlier in Phase 5 as prerequisites.
+
+**Problem:** Today we audit **intent** more than **reality**:
+
+| What we have | Gap |
+|--------------|-----|
+| `context.prompt_preview` / opt-in `prompt_full` | Initial executor prompt only — not each LLM turn inside `coder.run()` |
+| `delegation_pipeline` phase timings | No per-call request/response bodies |
+| `inspect-context` | Compile dry-run only — no wire traffic |
+| Helper LLMs (builder, architect, validation) | Outputs may appear in brief; **inputs** and raw completions not in JSONL |
+| Aider in-process chat on `Coder` reuse | Not serialized |
+| Reasoning / thinking tokens | Stripped by Aider before storage (**BL-333**) |
+
+Hard to answer “what exact context did each LLM call see?” or dogfood RAG/context changes without evidence.
+
+**Goal:** One **backend-neutral pass-through** at the LLM boundary — whatever the execution adapter (Aider today, Cursor SDK / other later), **every** completion crosses a shared hook that records send + receive (pass-through, no behavior change by default).
+
+**Recommended mechanism (primary):**
+
+| Piece | Approach |
+|-------|----------|
+| **Intercept** | `litellm.success_callback` (+ failure hook) registered at MCP startup; optional thin `completion()` wrapper all roles must use |
+| **Coverage** | Executor (all Aider turns), `context_builder`, `architect_pass`, `spec_validation`, `test-model` |
+| **Correlation** | `contextvars`: `delegation_id`, `role`, `pipeline_phase`, optional `step_index` |
+| **Compile side** | Structured bundle alongside wire log: mechanical vs builder vs architect brief hashes, `context_package` entry tiers (extends today’s audit metadata) |
+| **Disk side** | Still `post_gateway` / `workspace_history` — LLM log ≠ file edits |
+
+**Storage tiers (config):**
+
+1. **Metadata always** — model, role, tokens, latency, status, content hashes (feeds **BL-335**).
+2. **Truncated bodies** — default for JSONL / per-delegation trace file.
+3. **Full bodies opt-in** — `capture_llm_traces: full` or env; redact via `redact_secrets`; size caps.
+
+**Storage sketch:** append `llm_calls[]` on delegation record and/or `~/.mcp-coder/projects/<key>/sessions/<id>/traces/<delegation_id>.jsonl` (one line per LLM call). Viewer (**BL-343**) renders timeline: compile → LLM calls → gateway.
+
+**Explicit non-goals (v1):** HTTP proxy server (use LiteLLM hook unless a backend bypasses LiteLLM); replacing `delegations.jsonl` canonical row; indexing raw traces into RAG without curation (**BL-002** stays separate).
+
+**Composes / supersedes in spirit:** **BL-333** (reasoning capture), **BL-335** (token audit), **BL-350** (per-step outer loop — active control; BL-353 is passive tap first), **BL-343** (viewer), **BL-204** (sibling `context_optimizer_proxy` turn-level — complementary). Design refs: [AGENTIC_LOOP_LOGGING.md](./OTEHR_RELATED_IDEAS/AGENTIC_LOOP_LOGGING.md), [REASONING_TRACE_REUSE.md](./OTEHR_RELATED_IDEAS/REASONING_TRACE_REUSE.md) Route A.
+
+**Why Phase 6:** Phase 5 focuses RAG + context-memory bases; full wire logging is cross-cutting infrastructure that benefits every later phase (BL-350 supervised loop, BL-340 alternate backends, training flywheel) once core product paths stabilize. Sequencing TBD — may ship a **minimal callback + token counts** slice earlier if Phase 5 measurement blocks RAG experiments.
+
+**Open design:** retention/TTL; per-project opt-out; whether helper-LLM prompts are stored verbatim or hashed-only by default; export format for eval/training consent.
 
 ---
 
@@ -1031,7 +1081,8 @@ delegate_to_agent(backend=…)
 | BL-503 | Grade executor output with cheap model before returning to Cursor |
 | BL-504 | Global `~/.mcp-coder/config.yaml` defaults | Per-repo `config.yaml` shipped P1-130 |
 | BL-506 | Generic `transcript.md` watch folder (non-Cursor hosts) |
-| **BL-333** | **Reasoning trace capture + cross-delegation context feed** | See § BL-333 + [REASONING_TRACE_REUSE.md](./OTEHR_RELATED_IDEAS/REASONING_TRACE_REUSE.md) |
+| **BL-333** | **Reasoning trace capture + cross-delegation context feed** | See § BL-333 + [REASONING_TRACE_REUSE.md](./OTEHR_RELATED_IDEAS/REASONING_TRACE_REUSE.md); wire capture is part of umbrella **BL-353** |
+| **BL-353** | **LLM boundary observability — full pass-through logging** | See § BL-353 + [AGENTIC_LOOP_LOGGING.md](./OTEHR_RELATED_IDEAS/AGENTIC_LOOP_LOGGING.md); **Phase 6 (TBD)** |
 | **BL-334** | **Backend prompt customization** (system prefix + edit-format control) | See § BL-334 |
 | **BL-340** | **Cursor SDK execution backend** (beside Aider) | See § Execution backends — BL-340 |
 
@@ -1046,7 +1097,7 @@ delegate_to_agent(backend=…)
 
 **Storage:** `delegation_reasoning_summary` (truncated) in JSONL + in-memory session dict; optional `workspace_history.db` column for cross-session. Inject via `gather_builder_history()` (P4-001b) under existing token budget.
 
-**Related:** BL-162 (multi-model routing — this is the propagation mechanism), BL-321 (reasoning trace = escalation trigger), BL-334 (backend prompt control — both modify what we send/receive at the LLM boundary), P4-001b builder history (injection point), P4-ISS-014/015 (token tracking; reasoning tokens extend the same gap).
+**Related:** **BL-353** (umbrella wire logging — reasoning capture is one payload type), BL-162 (multi-model routing — this is the propagation mechanism), BL-321 (reasoning trace = escalation trigger), BL-334 (backend prompt control — both modify what we send/receive at the LLM boundary), P4-001b builder history (injection point), P4-ISS-014/015 (token tracking; reasoning tokens extend the same gap).
 
 ---
 
@@ -1099,6 +1150,7 @@ delegate_to_agent(backend=…)
 
 | Date | Change |
 |------|--------|
+| 2026-06-11 | BL-353 added — LLM boundary observability (full pass-through logging); Phase 6 TBD; high ROI for gap-finding and dev direction (T-04 pass) |
 | 2026-06-09 | BL-340 added — Cursor SDK execution backend (deferred, later phase — not Phase 5) |
 | 2026-06-09 | Phase 4 exit — P4-ISS-002–007/014–021 carried; BL-335–339 added; BL-309e/328/330 cross-linked |
 | 2026-06-09 | BL-329 done — P4-009 spec validation + clarifying loop |
