@@ -28,7 +28,12 @@ def load_env_files() -> list[Path]:
     if explicit:
         candidates.append(Path(explicit).expanduser())
 
-    candidates.append(Path.cwd() / ".env")
+    try:
+        cwd = Path.cwd()
+    except FileNotFoundError:
+        cwd = None
+    if cwd is not None:
+        candidates.append(cwd / ".env")
 
     repo_root = Path(__file__).resolve().parents[2]
     candidates.append(repo_root / ".env")

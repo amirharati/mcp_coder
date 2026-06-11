@@ -14,12 +14,13 @@
 
 ## 0. Scratch playground (for all "Try it" demos)
 
-Every demo below runs `inspect-context` against a throwaway workspace — dry-run only, zero API calls. Set it up once:
+Every demo below runs `inspect-context` against a throwaway workspace — dry-run only, zero API calls. Copy-paste the whole block once (safe to re-run — overwrites demo files, does **not** delete the folder). Remove when finished: `rm -rf /tmp/ctx-demo`.
 
 ```bash
 DEMO=/tmp/ctx-demo
-rm -rf "$DEMO" && mkdir -p "$DEMO/src" "$DEMO/.mcp-coder/specs/tasks"
-cd "$DEMO" && git init -q
+mkdir -p "$DEMO/src" "$DEMO/.mcp-coder/specs/tasks"
+cd "$DEMO"
+git init -q 2>/dev/null || true
 
 # Small read dependency (well under the 8 KB excerpt threshold)
 cat > src/api.py <<'EOF'
@@ -64,6 +65,8 @@ Add an argparse CLI entry point that calls `get_user`.
 EOF
 ```
 
+T-04 demos use **`mcp-coder inspect-context` only** — no `mcp-coder setup` and no MCP server. Bare `mcp-coder` with no subcommand prints a hint and exits (it is not an error).
+
 Baseline run (you'll repeat variants of this in later sections):
 
 ```bash
@@ -91,13 +94,15 @@ Cursor is **not** the executor. Aider is **not** the planner. The context compil
 ```mermaid
 %%{init: {'flowchart': {'nodeSpacing': 8, 'rankSpacing': 24}}}%%
 flowchart TB
-    P[Cursor planner] -->|task, spec, summary| C[mcp-coder compiler]
-    C -->|ContextPackage| E[Aider executor]
+    P[Cursor planner] -->|task, spec, summary| C[mcp-coder]
+    P -.->|dump: chat JSONL on disk| C
+    C -->|compiled prompt + fnames| E[Aider executor]
     E -->|spec report| P
-    P -.->|chat only if dump| E
 ```
 
-The dashed line is the whole point: the executor never sees your chat by default. Everything it knows arrives through the compiled package.
+**There is no Cursor → Aider shortcut.** Cursor only talks to mcp-coder (MCP). With `host_transcript: dump`, mcp-coder **reads** the active Cursor chat JSONL from disk (`core/host/cursor_transcript.py`) and **attaches** it — into helper LLM prompts (builder, architect, spec validation) and, if enabled, prepended on the executor prompt in the Aider adapter. Default policy is `none`: no chat load, no attach.
+
+The dashed line is the whole point: the executor never sees your chat unless mcp-coder loads and forwards it. Everything else arrives through the compiled `ContextPackage`.
 
 ### What the executor does and does not see
 
