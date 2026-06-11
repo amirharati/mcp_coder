@@ -89,21 +89,12 @@ mcp-coder sits between two **roles**:
 Cursor is **not** the executor. Aider is **not** the planner. The context compiler's job is to turn planner inputs (spec, `task`, `context_summary`, optional host transcript) into what the **executor** sees — regardless of which host/backend you plug in later.
 
 ```mermaid
-flowchart LR
-    subgraph HOST["Host / planner (Cursor)"]
-        U[User chat] --> P[Planner writes spec<br/>+ calls delegate_to_agent]
-    end
-    subgraph MC["mcp-coder"]
-        CC[Context compiler<br/>picker → assemble → budget]
-    end
-    subgraph EX["Executor (Aider + LLM)"]
-        A[Edits files from<br/>compiled prompt]
-    end
-    P -- "task, context_summary,<br/>target_files, spec_path" --> CC
-    CC -- "ContextPackage<br/>(brief + payloads + map)" --> A
-    A -- "files_changed, diff,<br/>spec report" --> P
-
-    U -.->|"chat is NOT forwarded<br/>(unless host_transcript: dump)"| A
+%%{init: {'flowchart': {'nodeSpacing': 8, 'rankSpacing': 24}}}%%
+flowchart TB
+    P[Cursor planner] -->|task, spec, summary| C[mcp-coder compiler]
+    C -->|ContextPackage| E[Aider executor]
+    E -->|spec report| P
+    P -.->|chat only if dump| E
 ```
 
 The dashed line is the whole point: the executor never sees your chat by default. Everything it knows arrives through the compiled package.
@@ -172,23 +163,17 @@ executor          Aider adapter: optional Cursor transcript + package.brief + re
 ```
 
 ```mermaid
-flowchart TD
-    IN["delegate_to_agent<br/>(task, context_summary, target_files, spec)"] --> PK
-
-    PK["file_picker — rules, no LLM<br/>spec contract + hints + symbol scan"] --> AS
-    AS["context_assemble<br/>tiers + payloads + mechanical brief"] --> AR
-
-    AR{"architect_pass?<br/>(default off)"} -- yes --> ARP["helper LLM:<br/>## Architect plan (stored)"]
-    AR -- no --> BL
-    ARP --> BL
-
-    BL{"builder_llm?<br/>(default on)"} -- yes --> BLP["helper LLM:<br/>## Builder brief prepended"]
-    BL -- no --> MG
-    BLP --> MG
-
-    MG["merge: architect plan<br/>placed on top (if any)"] --> BU
-    BU["budget — mechanical<br/>degrade read tiers until ≤ limit"] --> EXE
-    EXE["executor (Aider adapter)<br/>prompt + fnames"]
+%%{init: {'flowchart': {'nodeSpacing': 8, 'rankSpacing': 20}}}%%
+flowchart TB
+    IN[delegate] --> PK[picker]
+    PK --> AS[assemble]
+    AS --> AR{architect?}
+    AR -->|off| BL{builder?}
+    AR -->|on| ARP[architect LLM] --> BL
+    BL -->|off| MG[merge brief]
+    BL -->|on| BLP[builder LLM] --> MG
+    MG --> BU[budget]
+    BU --> EX[executor]
 
     style PK fill:#e8f4e8
     style AS fill:#e8f4e8
@@ -227,19 +212,18 @@ Every path in the package has a **tier** that determines how much text the execu
 How a path lands in a tier:
 
 ```mermaid
-flowchart TD
-    P[Path enters compile] --> Q1{In spec<br/>### Edit?}
-    Q1 -- yes --> EF["edit-full<br/>(full text, in fnames)"]
-    Q1 -- no --> Q2{"In spec ### Read<br/>or target_files hint?"}
-    Q2 -- yes --> Q3{"Size ≤ 8 KB?"}
-    Q3 -- yes --> RF["read-full<br/>(full text in prompt)"]
-    Q3 -- no --> RE["read-excerpt<br/>(symbol windows / head)"]
-    Q2 -- no --> Q4{Found by<br/>symbol scan?}
-    Q4 -- yes --> RF2["read-full / read-excerpt<br/>(never edit-full — D-P4-10)"]
-    Q4 -- no --> MO["map-only<br/>(def/class outline in repo map)"]
-
-    RF -. "budget pressure" .-> RE
-    RE -. "budget pressure" .-> PT["pointer<br/>(path name only)"]
+%%{init: {'flowchart': {'nodeSpacing': 8, 'rankSpacing': 18}}}%%
+flowchart TB
+    P[path] --> E{spec Edit?}
+    E -->|yes| EF[edit-full]
+    E -->|no| R{Read / hint?}
+    R -->|yes| S{≤8 KB?}
+    S -->|yes| RF[read-full]
+    S -->|no| RE[read-excerpt]
+    R -->|no| D{symbol scan?}
+    D -->|yes| RE
+    D -->|no| MO[map-only]
+    RF -.-> RE -.-> PT[pointer]
 
     style EF fill:#fde0e0
     style PT fill:#eeeeee
@@ -336,19 +320,15 @@ We do **not** today expose fine-grained “disable dynamic add/create” flags o
 ```mermaid
 sequenceDiagram
     participant M as mcp-coder
-    participant A as Aider (executor)
-    participant D as Workspace disk
-
-    M->>A: compile ContextPackage (one shot)<br/>prompt + fnames
-    Note over A: internal agentic loop —<br/>no callback to mcp-coder
-    loop until done
-        A->>A: LLM turn → SEARCH/REPLACE
-        A->>D: edit fnames files
-        A-->>D: may edit/create file Z<br/>(NOT in initial fnames)
+    participant A as Aider
+    participant D as disk
+    M->>A: prompt + fnames
+    loop agent loop
+        A->>A: LLM / edits
+        A->>D: may touch file Z
     end
-    A->>M: run finished
-    M->>D: manifest diff (post_gateway)
-    M->>M: files_changed, files_unexpected,<br/>scope_violations
+    A->>M: done
+    M->>D: post_gateway diff
 ```
 
 **Takeaway:** `inspect-context` shows **starting** conditions. After a delegate, always check `files_changed`, `files_unexpected`, and `scope_violations` in the JSONL response — that is the ground truth for what the loop actually did.
@@ -392,22 +372,14 @@ edit_paths (spec) → read_paths (spec) → hint_paths → discovered_read
 This is what goes to `assemble_context()`.
 
 ```mermaid
-flowchart LR
-    subgraph IN["Inputs"]
-        SE["spec ### Edit"]
-        SR["spec ### Read"]
-        TF["target_files<br/>(planner hints)"]
-        TK["task + spec text"]
-    end
-    SE --> RANK
-    SR --> RANK
-    TF --> RANK
-    TK --> SY["symbol queries<br/>(backticked ids, def/class names,<br/>max 20)"]
-    SY --> RG["rg -l --fixed-strings<br/>over 9 extensions"]
-    RG --> DR["discovered_read<br/>(max 30, discover mode only)"]
-    DR --> RANK["ranked candidates<br/>edit → read → hint → discovered"]
-    DR -.-> SUG["suggested_edit_paths<br/>(same dir as files_edit —<br/>audit only, never promoted)"]
-    RANK --> OUT["assemble_context()"]
+%%{init: {'flowchart': {'nodeSpacing': 8, 'rankSpacing': 20}}}%%
+flowchart TB
+    SE[spec Edit/Read] --> RANK[ranked paths]
+    TF[target_files] --> RANK
+    TK[task + spec] --> SY[symbols] --> RG[rg] --> DR[discovered]
+    DR --> RANK
+    DR -.-> SUG[suggested edits]
+    RANK --> AS[assemble]
 ```
 
 **Try it — watch the symbol scan work (playground from §0):**
@@ -544,21 +516,13 @@ A token estimate is computed as `len(brief + all_payloads) // 4` (rough ~4 chars
 **`edit-full` entries are never degraded.** You always see the full content of files you are editing.
 
 ```mermaid
-flowchart TD
-    EST["estimate = len(brief + payloads) // 4"] --> C1{"> budget?"}
-    C1 -- no --> OK["done — no truncation"]
-    C1 -- yes --> P1["Pass 1: read-full → read-excerpt"]
-    P1 --> C2{"still over?"}
-    C2 -- no --> OK
-    C2 -- yes --> P2["Pass 2: shrink excerpts<br/>to first 40 lines"]
-    P2 --> C3{"still over?"}
-    C3 -- no --> OK
-    C3 -- yes --> P3["Pass 3: read tiers → pointer<br/>(payload dropped)"]
-    P3 --> C4{"still over?"}
-    C4 -- no --> OK
-    C4 -- yes --> WARN["budget_warnings:<br/>still_over_limit<br/>(non-blocking)"]
-
-    EDIT["edit-full payloads"] -. "never touched<br/>by any pass" .-> OK
+%%{init: {'flowchart': {'nodeSpacing': 8, 'rankSpacing': 16}}}%%
+flowchart LR
+    EST[estimate] --> P1[① full→excerpt]
+    P1 --> P2[② shrink]
+    P2 --> P3[③ →pointer]
+    P3 --> OK[done]
+    EF[edit-full] -. never cut .-> OK
 ```
 
 If still over budget after all three passes: `metadata.budget_warnings: ["context_budget:still_over_limit"]` (non-blocking; delegation proceeds).
@@ -627,13 +591,9 @@ Two helper LLMs can annotate `package.brief`. Both are **non-fatal** on failure 
 The final brief is a stack — each optional layer sits **above** the one below, never replacing it:
 
 ```mermaid
-flowchart TD
-    subgraph BRIEF["package.brief (top → bottom)"]
-        AP["## Architect plan<br/><i>opt-in (architect_pass: true)<br/>runs before builder, merged last</i>"]
-        BB["## Builder brief<br/><i>default on (context_builder_llm)<br/>narrative bullets, ≤400 words</i>"]
-        MB["## Task / ## Context / ## Goal /<br/>## Constraints / ## Paths<br/><b>mechanical brief — always present,<br/>never rewritten</b>"]
-    end
-    AP --- BB --- MB
+%%{init: {'flowchart': {'nodeSpacing': 6, 'rankSpacing': 12}}}%%
+flowchart TB
+    AP[Architect plan] --> BB[Builder brief] --> MB[Mechanical brief]
 
     style AP fill:#fdf0e0
     style BB fill:#fdf0e0
