@@ -169,6 +169,7 @@ Phase 1 deferred executor conversation carry-over to here (BL-155); see P1-130 `
 | BL-348 | **Incremental workspace code-intel cache (high ROI context)** | Today: per-delegate regex `def`/`class` repo map + `rg` symbol scan + raw file payloads — **no** persisted API catalog, import/dep graph, or auto-generated module docs; no AST. **Later:** build + cache richer artifacts under `~/.mcp-coder/projects/<key>/` (or repo `.mcp-coder/`): per-file symbol/API index (signatures, docstrings, exports), import/call edges, optional LLM file summaries — **incrementally updated** when `workspace_history` / manifest hash changes (re-index stale paths only). Feed context picker/builder/compiler tiers instead of re-deriving every delegate. Complements **BL-002** (planner `workspace_search`) and **BL-347** (policy selection). **Phase 5+** — likely high ROI once basics exist. From P4.5-ISS-011. |
 | BL-349 | **Recently touched files — session + project, git + manifest fusion** | Today: per-delegation `files_changed` (manifest walk ± git dirty), `get_file_history` (one file → timeline), `list_delegations` — **no** aggregated “recently updated files” view, no MCP `recent_files` / picker hint, no merge of git mtime/status with `workspace_history` file deltas. **Later:** rank paths touched in current MCP session vs project-wide N delegations / time window; attach detail (checkpoint summary, diff snippet, BL-348 symbol summary) when relevant to task/RAG/symbol query; surface to planner MCP + context picker/builder as read hints (not auto edit). **Phase 5+**. From P4.5-ISS-012. |
 | BL-350 | **Supervised executor loop — inspect mid-run, inject context, capture thinking** | Today: one `coder.run(prompt)` black box; context fixed at start; post-hoc gateway only. **Later:** three implementation routes (see § BL-350) — outer mcp-coder loop (preferred), stream-and-react early stop, or Aider `Coder` subclass / owned run loop (fragile). Enables dynamic context (file Z, RAG, BL-348/349), per-step audit in `delegation_pipeline`, and **reasoning/thinking token capture** (BL-333, BL-335). High ROI; composes BL-161/160a. **Phase 5+**. From P4.5-ISS-013. |
+| BL-351 | **Simulated interactive + escalate to host (Cursor human intervention)** | Today: `InputOutput(yes=True)` auto-approves all Aider prompts (blind); “add files to chat” → implement failure; no structured handoff back to Cursor mid-delegate. **Later:** supervisor answers executor prompts via **cheap LLM + rules** (add read / expand spec / continue) instead of blind yes; when uncertain → **pause delegation** and return `needs_input` / `clarification_needed` to **Cursor planner** for human decision, then resume (BL-350 outer loop or custom IO). High leverage for scope expansion + trust. **Phase 5+**. From P4.5-ISS-014. |
 
 ### BL-350: Supervised executor loop (mid-run inspect + context inject)
 
@@ -186,9 +187,35 @@ Phase 1 deferred executor conversation carry-over to here (BL-155); see P1-130 `
 | **B — Stream-and-react** | Enable Aider stream/tee (**BL-160b**); parse output for “add file”, errors, stall; **stop early** → return `needs_input` or auto second pass with expanded context | Lighter than full outer loop; visibility without owning turns | Not true mid-loop inject; reactive not proactive |
 | **C — Aider `Coder` subclass / owned run** | Extend or wrap `Coder.run()` for per-LLM-turn hooks: inject messages, add `fnames`, capture `reasoning_content` before Aider strips it | Richest per-turn control; direct thinking-token hook if LiteLLM callback insufficient (**BL-333**) | **High maintenance** — Aider version coupling; violates “thin adapter” spirit; hard to port to **BL-340** Cursor SDK |
 
-**Related:** **BL-333** (reasoning trace — outer loop + LiteLLM callback are complementary capture points), **BL-335** (per-step token audit), **BL-161** (internal multi-agent pipeline), **BL-160a/b** (supervised + visibility), **BL-340** (turn-based backend may make route A natural without route C), **BL-347** (re-compile policy per step), **BL-349** (inject recent touches between steps).
+**Related:** **BL-333** (reasoning trace — outer loop + LiteLLM callback are complementary capture points), **BL-335** (per-step token audit), **BL-161** (internal multi-agent pipeline), **BL-160a/b** (supervised + visibility), **BL-340** (turn-based backend may make route A natural without route C), **BL-347** (re-compile policy per step), **BL-349** (inject recent touches between steps), **BL-351** (escalate to host when supervisor cannot auto-decide).
 
 **Open design:** Single `delegation_id` with sub-step records vs child ids; max steps; when to auto-expand context vs return to planner; strict-mode revert per step vs end-only.
+
+---
+
+### BL-351: Simulated interactive mode + host escalation (human intervention)
+
+**Status:** `idea` — 2026-06-10. Surfaced T-04 Q&A on `yes=True` vs intelligent supervision + Cursor handoff.
+
+**Problem:** Headless Aider uses `InputOutput(yes=True)` — every confirm (“add file?”, “run shell?”) is auto-approved without mcp-coder judgment. When the model asks for files in prose, we fail the delegation rather than help. There is no path for the **executor to route a decision back to the Cursor planner** for human intervention inside a supervised delegate.
+
+**Goal:** Replace blind `yes=True` with **simulated interactive** supervision:
+
+1. **Cheap supervisor** (helper LLM or rules, `context_builder`-class model) handles routine prompts: add path as read, widen context, continue step, deny out-of-contract edit.
+2. **Re-compile** context when supervisor approves expansion (BL-350, BL-347).
+3. **Escalate to host** when supervisor is uncertain or policy requires human OK → return structured `needs_input` / `clarification_needed` (same pattern as **BL-329** spec validation) so **Cursor** shows the question; planner answers; delegation resumes via retry / outer-loop step.
+
+**Implementation sketches (compose with BL-350):**
+
+| Sketch | Mechanism |
+|--------|-----------|
+| **D — Supervised `InputOutput`** | Subclass Aider `InputOutput`: `confirm_ask` / prompts → supervisor LLM instead of `yes=True`; escalate → abort run with host payload |
+| **Outer loop + host gate** | BL-350 route A: after each sub-run, supervisor inspects; auto-fix or return to Cursor before next step |
+| **Async / long-running** | If human latency exceeds MCP timeout, persist “awaiting_host” state + resume token (**BL-501** adjacency) |
+
+**Why powerful:** Combines automation (cheap model handles 80% of “add `foo.py` as read”) with **human judgment** for contract changes, risky shell, or ambiguous scope — without a real terminal REPL (**BL-160d**). Cursor stays the planner; mcp-coder owns the supervise → escalate → resume protocol.
+
+**Related:** **BL-350**, **BL-329** (`clarification_needed`), **BL-324** (judgment loop), **BL-160a** (supervised complex task), **P1-ISS-016** (add-files-to-chat failure today), **BL-332** (host = Cursor for escalation target).
 
 ---
 

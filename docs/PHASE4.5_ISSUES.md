@@ -36,6 +36,7 @@ Status: `open` | `done` | `wontfix` | `carried`
 | P4.5-ISS-011 | open | med | **Incremental code-intel cache for context (API / deps / docs)** | Today: no auto API catalog, dep map, or generated docs in the compile path — only regex outlines + file text. **Later:** persist + incrementally refresh workspace artifacts (symbol/API index, import graph, optional per-file summaries/docs) keyed off file hashes; invalidate/update on change only; inject into picker/builder/compiler. **High ROI** for executor context quality vs re-scanning raw sources every delegate. Complements BL-002 + BL-347. **Phase 5+**. → **BL-348**. Surfaced T-04 context-builder Q&A. |
 | P4.5-ISS-012 | open | med | **Recently touched files (session + project) for planner & context** | Building blocks exist (`files_changed` per delegate, manifest hash deltas, `snapshot_git_dirty`, `get_file_history`) but **no fused “what changed recently?”** list for session or project. **Later:** merge git + workspace_history signals; rank/filter by relevance (task text, RAG, symbol query); return path + why (delegation id, summary, optional diff/snippet); feed picker/builder as read hints. **Phase 5+**. → **BL-349**. |
 | P4.5-ISS-013 | open | med | **Supervised executor loop — mid-run inspect, context inject, thinking tokens** | Today: `coder.run(prompt)` is a black box; context fixed at compile time; scope enforced post-hoc only. **Later (BL-350):** (A) mcp-coder **outer loop** — re-compile + re-run between bounded steps (preferred; BL-161/160a); (B) **stream-and-react** — tee/parse Aider output, stop early, expand context (BL-160b); (C) **Aider Coder subclass** — per-turn hooks + reasoning capture (fragile, version coupling). High ROI for dynamic context (file Z, BL-348/349) and **thinking/reasoning tokens** (BL-333, BL-335). **Phase 5+**. |
+| P4.5-ISS-014 | open | med | **Simulated interactive + escalate to Cursor for human intervention** | Today: `yes=True` blind auto-approves Aider confirms; no intelligent supervisor; no structured route back to host mid-delegate. **Later (BL-351):** cheap LLM/rules answer routine executor prompts (add read, expand context); when stuck → `needs_input` / `clarification_needed` to **Cursor planner** for human OK, then resume (BL-350 outer loop or supervised `InputOutput`). Composes BL-329 pattern. **Phase 5+**. |
 
 ---
 
@@ -53,6 +54,7 @@ Status: `open` | `done` | `wontfix` | `carried`
 
 | Date | Change |
 |------|--------|
+| 2026-06-10 | P4.5-ISS-014 filed: simulated interactive supervisor + escalate to Cursor for human intervention → BL-351. T-04 yes=True / supervision Q&A. |
 | 2026-06-10 | P4.5-ISS-013 filed: supervised executor loop — outer loop / stream-react / Aider subclass; thinking tokens (BL-333/335) → BL-350. T-04 executor-loop Q&A. |
 | 2026-06-10 | P4.5-ISS-012 filed: recently touched files (session + project, git + manifest, RAG/symbol relevance) → BL-349. |
 | 2026-06-10 | P4.5-ISS-011 filed: incremental workspace code-intel cache (API/dep/docs, hash-incremental) for context compiler — high ROI; → BL-348. Surfaced T-04 Q&A. |
