@@ -100,7 +100,7 @@ All tutorial docs go under `docs/guide/tutorials/`. Architecture docs under `doc
 | T-03 | **Specs: contract, paths, versioning** — write a spec, delegation policies, versioned retry | Phase 1–2 | done |
 | T-04 | **Context compiler deep-dive** — `inspect-context` dry-run; tiers; what Aider actually sees | Phase 2 | done |
 | T-05 | **Workspace history** — why vs git; `workspace_history.db`; `mcp-coder history` CLI (list/show/diff/file/revert); MCP parity; policies/revert/trajectory metadata; builder history; delegation search deferred to Phase 5 | Phase 3 | done |
-| T-06 | **The delegation pipeline** — full `delegate_to_agent` flow; `delegation_pipeline` JSONL phase audit; config flag matrix (context compile detail defers to T-04) | Phase 4 orchestration | pending |
+| T-06 | **The delegation pipeline** — full `delegate_to_agent` flow; `delegation_pipeline` JSONL phase audit; config flag matrix (context compile detail defers to T-04) | Phase 4 orchestration | skeleton |
 | T-07 | **Inspecting a delegation end-to-end** — pick a real delegation_id; trace it from JSONL → brief → Aider output | Phase 1–4 | pending |
 
 ### Track 2 — Architecture documentation
