@@ -111,7 +111,9 @@ Every path in the package has a **tier** that determines how much text the execu
 | `map-only` | `def`/`class` outline only; in repo map block | Files discovered by picker, not in spec contract |
 | `hide` | Not included at all | (Not currently assigned in compile path) |
 
-**Critical invariant (D-P4-10):** discovered files from the symbol scan are **always** `read-full` or `map-only` — **never** `edit-full`. Only spec `files_edit` (or YAML `files_edit`) can be `edit-full`. Discovery never grants edit rights.
+**Critical invariant (D-P4-10, compile time):** discovered files from the symbol scan are **always** `read-full` or `map-only` — **never** `edit-full` in the `ContextPackage`. Only spec `files_edit` (or YAML `files_edit`) become `edit-full` at assemble time. Discovery never promotes a path to `fnames`.
+
+This is **not** a hard runtime lock — see §3.5.
 
 **How Aider translates tiers:**
 
@@ -122,7 +124,68 @@ prompt += read_block   # fenced payloads for read-full / read-excerpt entries
 prompt += map_block    # def/class outlines for map-only entries
 ```
 
-So `fnames` = what Aider treats as editable. Read payloads + repo map = injected into the prompt text.
+So `fnames` = what Aider **starts** with as editable files. Read payloads + repo map = injected into the prompt text.
+
+---
+
+## 3.5 Initial context only — the backend loop can go wider
+
+The `ContextPackage` is **initial context**: it is compiled once, then the executor phase runs. For Aider today that is a single `coder.run(prompt)` call — but **inside** that call Aider runs its own **multi-turn agentic loop** (LLM turns, SEARCH/REPLACE edits, etc.). mcp-coder does **not** re-compile or inject more context between those internal turns (see BL-350 for future supervised loops).
+
+### What “initial” means in practice
+
+| Moment | What is fixed | What can still change |
+|--------|----------------|------------------------|
+| **Before `executor`** | `package.brief`, read/map payloads, `fnames` | — |
+| **During Aider’s loop** | Same prompt text (no mcp-coder refresh) | **Disk** — Aider may edit or create paths **not** in `fnames` |
+| **After `executor`** | — | mcp-coder diffs workspace → `files_changed`, `files_unexpected`, `scope_violations` |
+
+So D-P4-10 controls **what we open and emphasize at start**, not “only these bytes may ever change on disk.”
+
+### Can Aider edit file Z mid-loop?
+
+**Often yes**, depending on backend behavior. Our Aider adapter declares:
+
+```python
+# core/engine/capabilities.py — AIDER_CAPABILITIES
+dynamic_add_files=True      # Aider may pull more files into its edit set
+dynamic_create_files=True   # Aider may create new files on disk
+shell_default=False         # shell commands off unless MCP_CODER_AIDER_SUGGEST_SHELL=1
+```
+
+Headless delegations use `InputOutput(yes=True)` — Aider will not block on interactive “add file to chat?” prompts, but the model can still apply edits Aider accepts. If it touches path Z:
+
+- Z appears in `files_changed` (manifest hash walk after the run)
+- If Z ∉ spec contract → `files_unexpected`
+- If Z ∉ `files_edit` and `edit_scope: strict` → `scope_violations` (optional auto-revert via post_gateway)
+- If `edit_scope: discover` (default) → edits stand; spec report lists unexpected paths for the planner
+
+### What we control today (partial)
+
+| Lever | Effect |
+|-------|--------|
+| **Spec `### Edit` / `files_edit`** | Only these paths get `edit-full` + `fnames` at start |
+| **`edit_scope: strict`** | Post-run revert of edits outside `files_edit` (when snapshots on) |
+| **`edit_scope: discover`** | Allow out-of-contract edits; audit only |
+| **`MCP_CODER_AIDER_SUGGEST_SHELL=0`** (default) | No shell-command tool path from Aider |
+| **Read context in prompt** | Other files visible as read-only text — model may still try to edit them |
+
+We do **not** today expose fine-grained “disable dynamic add/create” flags on the Aider adapter — capability fields are declared for the compiler (`core/engine/capabilities.py`) but runtime tool surface is mostly Aider’s defaults minus shell. Tighter per-tool limits would be backend-specific adapter work (or BL-350 outer loop with re-compile between steps).
+
+### Mental model (one delegation)
+
+```
+mcp-coder                         Aider (executor backend)
+─────────                         ──────────────────────────
+compile ContextPackage  ──────►  initial prompt + fnames
+(one shot)                        │
+                                  ├─ LLM turn → SEARCH/REPLACE
+                                  ├─ may edit/create file Z  ◄── not in initial fnames
+                                  └─ loop until done
+post_gateway ◄── manifest diff     (no callback to mcp-coder mid-loop)
+```
+
+**Takeaway:** `inspect-context` shows **starting** conditions. After a delegate, always check `files_changed`, `files_unexpected`, and `scope_violations` in the JSONL response — that is the ground truth for what the loop actually did.
 
 ---
 
@@ -547,7 +610,7 @@ These are locked in the code (not just conventions):
 
 | Invariant | Where | Meaning |
 |-----------|-------|---------|
-| **D-P4-10** | `file_picker.py`, `assemble.py` | Discovery never grants `edit-full`. Only spec `files_edit` → edit-full. |
+| **D-P4-10** | `file_picker.py`, `assemble.py` | At **compile time**, discovery never grants `edit-full`; only `files_edit` → `fnames`. Runtime edits outside that set are handled by post_gateway (§3.5). |
 | Mechanical brief is never rewritten | `builder_prompt.py` | Builder adds narrative **above** a separator; mechanical brief follows verbatim. |
 | Budget never degrades `edit-full` | `budget.py` | Edit target content is always delivered in full. |
 | Builder/architect failure is non-fatal | `mcp_server.py` | LLM errors in optional stages are logged but pipeline continues. |
@@ -563,7 +626,7 @@ These are locked in the code (not just conventions):
 mcp-coder inspect-context --spec tasks/my-spec.md --task "..." --target-files ...
 ```
 
-Check `adapter_preview.fnames` — that's the edit set. If an unexpected file is there, it's in spec `files_edit` or YAML `files_edit`. If the right file is missing, it's not in the spec contract and not in `target_files`.
+Check `adapter_preview.fnames` — that's the **initial** edit set. If an unexpected file was **changed on disk** after the run, it may have been touched mid-loop even though it wasn't in `fnames` (§3.5) — check `files_changed` / `files_unexpected` in JSONL. If an unexpected file is in `fnames` at inspect time, it's in spec `files_edit`. If the right file is missing from context, add it to spec `### Read` or `target_files`.
 
 **"The executor didn't know about a key API from step 1"**
 
@@ -571,7 +634,7 @@ Check `context_package.entries` for `src/api.py` — is it there? What tier? If 
 
 **"The executor keeps editing files outside the spec"**
 
-With `edit_scope: strict`, out-of-contract edits → `scope_violation`. Check `suggested_edit_paths` in inspect output — those are candidates for adding to spec `### Edit`.
+This can happen **mid-loop** even when `inspect-context` showed a tight `fnames` list (§3.5). With `edit_scope: strict`, out-of-contract edits → `scope_violations` and optional revert. With `discover`, edits stand but land in `files_unexpected` on the spec report. Fix: add paths to spec `### Edit`, or use strict + expand contract before re-delegate. Check `suggested_edit_paths` in inspect output for symbol-scan candidates.
 
 **"Token estimate is higher than expected"**
 
@@ -600,6 +663,8 @@ Check `context_package.brief` for the `## Builder brief` section.
 | Builder LLM prompt | `core/context/builder_prompt.py` |
 | Builder history (from workspace_history.db) | `core/context/builder_history.py` |
 | Adapter translation (fnames, read block) | `core/engine/aider_engine.py` → `translate_context_package()` |
+| Backend capabilities (dynamic add/create, shell) | `core/engine/capabilities.py` |
+| Post-run scope audit / revert | `core/workspace/gateway.py`, `core/workspace/snapshot.py` |
 | Dry-run inspect | `core/context/inspect.py` |
 | CLI entry point | `core/cli/inspect_context.py` |
 | Config flags | `core/config/context_builder.py`, `core/config/auto_merge.py` |

@@ -167,6 +167,30 @@ Phase 1 deferred executor conversation carry-over to here (BL-155); see P1-130 `
 | BL-346 | **Model-aware context budget defaults + cap enforcement** | Per-executor-model input budget defaults (window minus output/overhead reserve); clamp `MCP_CODER_CONTEXT_BUDGET_TOKENS` / yaml overrides to model max; maintain `context_budget_tokens` via provider/OpenRouter refresh or periodic update (today hand-edited `model_rates.yaml`). From P4.5-ISS-009 — **Phase 5+**. |
 | BL-347 | **Adaptive context-management policies** | Beyond single 3-step budget: task- and model-sensitive compile (tiers, excerpting, transcript, map depth); integrate with context builder; bust/reuse executor cache correctly on model change; auto-select policy per delegation with minimal user config (BL-162). From P4.5-ISS-010 — **Phase 5+**. |
 | BL-348 | **Incremental workspace code-intel cache (high ROI context)** | Today: per-delegate regex `def`/`class` repo map + `rg` symbol scan + raw file payloads — **no** persisted API catalog, import/dep graph, or auto-generated module docs; no AST. **Later:** build + cache richer artifacts under `~/.mcp-coder/projects/<key>/` (or repo `.mcp-coder/`): per-file symbol/API index (signatures, docstrings, exports), import/call edges, optional LLM file summaries — **incrementally updated** when `workspace_history` / manifest hash changes (re-index stale paths only). Feed context picker/builder/compiler tiers instead of re-deriving every delegate. Complements **BL-002** (planner `workspace_search`) and **BL-347** (policy selection). **Phase 5+** — likely high ROI once basics exist. From P4.5-ISS-011. |
+| BL-349 | **Recently touched files — session + project, git + manifest fusion** | Today: per-delegation `files_changed` (manifest walk ± git dirty), `get_file_history` (one file → timeline), `list_delegations` — **no** aggregated “recently updated files” view, no MCP `recent_files` / picker hint, no merge of git mtime/status with `workspace_history` file deltas. **Later:** rank paths touched in current MCP session vs project-wide N delegations / time window; attach detail (checkpoint summary, diff snippet, BL-348 symbol summary) when relevant to task/RAG/symbol query; surface to planner MCP + context picker/builder as read hints (not auto edit). **Phase 5+**. From P4.5-ISS-012. |
+| BL-350 | **Supervised executor loop — inspect mid-run, inject context, capture thinking** | Today: one `coder.run(prompt)` black box; context fixed at start; post-hoc gateway only. **Later:** three implementation routes (see § BL-350) — outer mcp-coder loop (preferred), stream-and-react early stop, or Aider `Coder` subclass / owned run loop (fragile). Enables dynamic context (file Z, RAG, BL-348/349), per-step audit in `delegation_pipeline`, and **reasoning/thinking token capture** (BL-333, BL-335). High ROI; composes BL-161/160a. **Phase 5+**. From P4.5-ISS-013. |
+
+### BL-350: Supervised executor loop (mid-run inspect + context inject)
+
+**Status:** `idea` — 2026-06-10. Surfaced T-04 Q&A on D-P4-10 vs runtime scope + executor agentic loop.
+
+**Problem:** `ContextPackage` is compiled once; Aider’s internal multi-turn loop is opaque. Executor may need file Z, more read context, or escalation mid-task — today we only detect after the loop (`files_unexpected`, `scope_violations`) or fail with “add files to chat”. No per-step observe → help → continue inside one MCP call.
+
+**Goal:** mcp-coder **supervises** the executor loop: inspect each step (or sub-run), optionally **re-compile context** (expand spec read/edit, BL-348 intel, BL-349 recent touches), and capture **thinking/reasoning tokens** per step for BL-333 / BL-335.
+
+**Three routes (try in order):**
+
+| Route | Mechanism | Pros | Cons |
+|-------|-----------|------|------|
+| **A — Outer loop (preferred)** | mcp-coder owns `compile → run(bounded sub-task) → inspect → recompile → run` inside one `delegate_to_agent`; log `executor_step_N` in `delegation_pipeline`. Expands `files_edit` only via spec/policy between steps (D-P4-10). | Backend-neutral; clean audit; composes **BL-161**, **BL-160a**, **BL-347**; works with Aider today without forking | Multiple executor calls; step budget / timeout design |
+| **B — Stream-and-react** | Enable Aider stream/tee (**BL-160b**); parse output for “add file”, errors, stall; **stop early** → return `needs_input` or auto second pass with expanded context | Lighter than full outer loop; visibility without owning turns | Not true mid-loop inject; reactive not proactive |
+| **C — Aider `Coder` subclass / owned run** | Extend or wrap `Coder.run()` for per-LLM-turn hooks: inject messages, add `fnames`, capture `reasoning_content` before Aider strips it | Richest per-turn control; direct thinking-token hook if LiteLLM callback insufficient (**BL-333**) | **High maintenance** — Aider version coupling; violates “thin adapter” spirit; hard to port to **BL-340** Cursor SDK |
+
+**Related:** **BL-333** (reasoning trace — outer loop + LiteLLM callback are complementary capture points), **BL-335** (per-step token audit), **BL-161** (internal multi-agent pipeline), **BL-160a/b** (supervised + visibility), **BL-340** (turn-based backend may make route A natural without route C), **BL-347** (re-compile policy per step), **BL-349** (inject recent touches between steps).
+
+**Open design:** Single `delegation_id` with sub-step records vs child ids; max steps; when to auto-expand context vs return to planner; strict-mode revert per step vs end-only.
+
+---
 
 ### BL-332: Host-agnostic planner rules sync
 
