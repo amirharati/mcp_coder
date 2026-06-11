@@ -23,8 +23,10 @@ This folder is the output of **Phase 4.5** — written from actually running and
 | T-03 | [Specs: contract, paths, versioning](./tutorials/03-specs-contract-versioning.md) | done |
 | T-04 | [Context compiler deep-dive](./tutorials/04-context-compiler.md) | done |
 | T-05 | [Workspace history & the RAG stub](./tutorials/05-workspace-history-rag-stub.md) | pending |
-| T-06 | [The Phase 4 pipeline](./tutorials/06-phase4-pipeline.md) | pending |
+| T-06 | [The delegation pipeline](./tutorials/06-delegation-pipeline.md) — full `delegate_to_agent` flow, `delegation_pipeline` JSONL, config flags (context detail: T-04) | pending |
 | T-07 | [Inspecting a delegation end-to-end](./tutorials/07-end-to-end-trace.md) | pending |
+
+T-04 = how context is compiled (tiers, picker, builder). T-06 = every step on a real delegate (spec read → executor → post_gateway → report) and which flags turn each on — not a second context tutorial.
 
 ## Architecture reference
 

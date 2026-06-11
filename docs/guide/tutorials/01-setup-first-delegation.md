@@ -341,7 +341,7 @@ python hello.py
 
 Even on this trivial delegation:
 
-1. **`context.delegation_pipeline`** (JSONL) / top-level `delegation_pipeline` (MCP response) shows where time went. `executor` typically dominates. `file_picker` and `context_assemble` are fast. `builder_llm` adds ~500–1500ms for the narrative brief. *(Deeper pipeline walkthrough: T-06.)*
+1. **`context.delegation_pipeline`** (JSONL) / top-level `delegation_pipeline` (MCP response) shows where time went. `executor` typically dominates. `file_picker` and `context_assemble` are fast. `builder_llm` adds ~500–1500ms for the narrative brief. *(Full delegation pipeline: T-06.)*
 2. **`model_roles`** (top-level in JSONL) — e.g. `model_roles.context_builder` if the builder brief ran on a separate model role. Configurable or disable with `context_builder_llm: false` in `config.yaml`.
 3. **`model_roles.*.tokens` may be `null`** — known gap (BL-335). The model ran; token counting is a pending fix.
 4. **The spec report** at `.mcp-coder/specs/reports/hello-01-v1.md` — mcp-coder appended an audit section. Open it to see what was recorded.

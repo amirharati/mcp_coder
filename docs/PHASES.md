@@ -602,7 +602,7 @@ Phase 1 uses only the executor (via Aider). Phase 2+ adds the context-builder **
 
 | Track | Deliverable |
 |-------|-------------|
-| **Tutorials (T-01–T-07)** | Phase 1–4 walkthroughs: setup, sessions/storage, specs, compiler, workspace history/RAG, Phase 4 pipeline, end-to-end trace |
+| **Tutorials (T-01–T-07)** | Phase 1–4 walkthroughs: setup, sessions/storage, specs, context compiler, workspace history/RAG, delegation pipeline, end-to-end trace |
 | **Architecture docs** | `docs/notes/architecture-overview.md`; layer map; storage layout; per-role models; "where reality diverges from spec" log |
 | **Live inspection** | Flag matrix experiments; real delegation traces; picker recall; token telemetry investigation |
 | **Gap analysis** | `docs/notes/phase4.5-gap-analysis.md` — what Phase 5 actually needs to solve (BL-335, BL-338, unknown gaps) |

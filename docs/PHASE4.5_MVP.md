@@ -100,7 +100,7 @@ All tutorial docs go under `docs/guide/tutorials/`. Architecture docs under `doc
 | T-03 | **Specs: contract, paths, versioning** — write a spec, delegation policies, versioned retry | Phase 1–2 | done |
 | T-04 | **Context compiler deep-dive** — `inspect-context` dry-run; tiers; what Aider actually sees | Phase 2 | done |
 | T-05 | **Workspace history & the RAG stub** — `workspace_history.db`, `list_delegations`, `get_delegation_diff`; understand what `rag_search` code exists vs what's actually used | Phase 3 | pending |
-| T-06 | **The Phase 4 pipeline** — delegation_pipeline JSONL; builder LLM; flag matrix | Phase 4 | pending |
+| T-06 | **The delegation pipeline** — full `delegate_to_agent` flow; `delegation_pipeline` JSONL phase audit; config flag matrix (context compile detail defers to T-04) | Phase 4 orchestration | pending |
 | T-07 | **Inspecting a delegation end-to-end** — pick a real delegation_id; trace it from JSONL → brief → Aider output | Phase 1–4 | pending |
 
 ### Track 2 — Architecture documentation
@@ -169,7 +169,7 @@ Interactive sessions (PM + assistant together) — not dispatched workers unless
 |---------|-------|--------|
 | **S-01** | Phase 1–2 foundations | T-01, T-02, T-03, A-01, A-03 |
 | **S-02** | Context compiler + Phase 3 memory | T-04, T-05, A-02 |
-| **S-03** | Phase 4 pipeline live inspection | T-06, T-07, Track 3 experiments |
+| **S-03** | Delegation pipeline live inspection | T-06, T-07, Track 3 experiments |
 | **S-04** | Per-role models + token telemetry | A-04, BL-335 investigation |
 | **S-05** | Gap analysis + divergence doc | Track 4 write-up, A-05 |
 | **S-06+** | Any remaining fixes; Phase 5 planning kickoff | Track 5 + bootstrap Phase 5 |

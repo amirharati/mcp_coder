@@ -405,5 +405,5 @@ Bundled templates: `resources/spec-template.md`, `spec-epic-template.md`, `spec-
 ## Next
 
 - **T-04 (Context compiler):** `inspect-context` dry-run — tiers, builder LLM, what Aider actually sees for a spec-backed delegate
-- **T-06 (Phase 4 pipeline):** full `delegation_pipeline` phase list and flag matrix
+- **T-06 (Delegation pipeline):** full `delegate_to_agent` phase list and config flag matrix
 - **BL-343:** structured delegation viewer (today `view delegations` expands mostly raw JSON)
