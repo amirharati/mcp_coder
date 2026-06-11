@@ -15,21 +15,26 @@
 ## 1. Ten phases, one delegate call
 
 ```mermaid
-%%{init: {'flowchart': {'nodeSpacing': 6, 'rankSpacing': 14}}}%%
+%%{init: {'flowchart': {'nodeSpacing': 6, 'rankSpacing': 12}}}%%
 flowchart TB
-    subgraph pre["Before executor"]
-        P1[1 spec_read]
-        P2[2 spec_validation*]
-        P3[3 file_picker]
-        P4[4 context_assemble]
-        P5[5 architect_pass*]
-        P6[6 builder_llm]
-    end
-  P1 --> P2 --> P3 --> P4 --> P5 --> P6 --> P7[7 executor]
+  P1[1 spec_read] --> P2[2 spec_validation*]
+  P2 --> P3[3 file_picker]
+  P3 --> P4[4 context_assemble]
+  P4 --> P5[5 architect_pass*]
+  P5 --> P6[6 builder_llm]
+  P6 --> P7[7 executor]
   P7 --> P8[8 post_gateway]
   P8 --> P9[9 spec_report]
   P9 --> P10[10 auto_verify*]
 ```
+
+One straight chain — no nested boxes. Three logical groups (same order as the numbered list below):
+
+| Group | Phases | What happens |
+|-------|--------|--------------|
+| **Prepare** | 1–6 | Read spec, validate, compile context, build brief — **no file edits on disk** |
+| **Execute** | 7 | Aider runs SEARCH/REPLACE |
+| **Wrap up** | 8–10 | Diff workspace, write spec report, optional pytest |
 
 `*` = opt-in (defaults: `builder_llm` on; `spec_validation`, `architect_pass`, `auto_verify` off).
 
