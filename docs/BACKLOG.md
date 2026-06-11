@@ -170,6 +170,7 @@ Phase 1 deferred executor conversation carry-over to here (BL-155); see P1-130 `
 | BL-349 | **Recently touched files — session + project, git + manifest fusion** | Today: per-delegation `files_changed` (manifest walk ± git dirty), `get_file_history` (one file → timeline), `list_delegations` — **no** aggregated “recently updated files” view, no MCP `recent_files` / picker hint, no merge of git mtime/status with `workspace_history` file deltas. **Later:** rank paths touched in current MCP session vs project-wide N delegations / time window; attach detail (checkpoint summary, diff snippet, BL-348 symbol summary) when relevant to task/RAG/symbol query; surface to planner MCP + context picker/builder as read hints (not auto edit). **Phase 5+**. From P4.5-ISS-012. |
 | BL-350 | **Supervised executor loop — inspect mid-run, inject context, capture thinking** | Today: one `coder.run(prompt)` black box; context fixed at start; post-hoc gateway only. **Later:** three implementation routes (see § BL-350) — outer mcp-coder loop (preferred), stream-and-react early stop, or Aider `Coder` subclass / owned run loop (fragile). Enables dynamic context (file Z, RAG, BL-348/349), per-step audit in `delegation_pipeline`, and **reasoning/thinking token capture** (BL-333, BL-335). High ROI; composes BL-161/160a. **Phase 5+**. From P4.5-ISS-013. |
 | BL-351 | **Simulated interactive + escalate to host (Cursor human intervention)** | Today: `InputOutput(yes=True)` auto-approves all Aider prompts (blind); “add files to chat” → implement failure; no structured handoff back to Cursor mid-delegate. **Later:** supervisor answers executor prompts via **cheap LLM + rules** (add read / expand spec / continue) instead of blind yes; when uncertain → **pause delegation** and return `needs_input` / `clarification_needed` to **Cursor planner** for human decision, then resume (BL-350 outer loop or custom IO). High leverage for scope expansion + trust. **Phase 5+**. From P4.5-ISS-014. |
+| BL-352 | **Multi-language symbol scan + outlines (C/C++, Go, Rust, …)** | Today: symbol scan hardcoded to 9 extensions (`SCAN_EXTENSIONS` in `file_picker.py`); repo-map/excerpt regex is Python `def`/`class` only — C/C++/Go/Rust/Java/etc. work via **spec contract** but not **auto-discovery** or useful outlines. **Later:** expand/configurable scan globs; per-language outline heuristics (or tie to BL-348 index); goal = “works for money cases” on polyglot/monorepo repos without hand-listing every path. **Phase 5+**. From P4.5-ISS-015. |
 
 ### BL-350: Supervised executor loop (mid-run inspect + context inject)
 
@@ -216,6 +217,31 @@ Phase 1 deferred executor conversation carry-over to here (BL-155); see P1-130 `
 **Why powerful:** Combines automation (cheap model handles 80% of “add `foo.py` as read”) with **human judgment** for contract changes, risky shell, or ambiguous scope — without a real terminal REPL (**BL-160d**). Cursor stays the planner; mcp-coder owns the supervise → escalate → resume protocol.
 
 **Related:** **BL-350**, **BL-329** (`clarification_needed`), **BL-324** (judgment loop), **BL-160a** (supervised complex task), **P1-ISS-016** (add-files-to-chat failure today), **BL-332** (host = Cursor for escalation target).
+
+---
+
+### BL-352: Multi-language picker / repo-map coverage
+
+**Status:** `idea` — 2026-06-10. Surfaced T-04 Q&A on `SCAN_EXTENSIONS` (no C/C++/Go/Rust today).
+
+**Today:**
+
+| Layer | Coverage |
+|-------|----------|
+| **Spec / `target_files`** | Any path — language-agnostic |
+| **Symbol scan (`rg`)** | `.py`, `.js`, `.ts`, `.tsx`, `.jsx`, `.md`, `.yaml`, `.yml`, `.toml` only — hardcoded `SCAN_EXTENSIONS` |
+| **Repo map / excerpts** | Python-style `def`/`class` regex — weak for C/C++/Go/Rust/Java |
+
+**Gap:** Polyglot repos (C/C++ extensions, Go, Rust, Java, Ruby, …) get full payloads only when explicitly listed in the spec; backtick symbol queries won’t discover `parser.c` or `main.cpp`.
+
+**Later (incremental, before full BL-348 AST):**
+
+1. **Widen `SCAN_EXTENSIONS`** — at minimum `.c`, `.h`, `.cpp`, `.hpp`, `.cc`, `.go`, `.rs`, `.java`, `.kt`, `.rb`, `.php`, `.sql`, `.sh`, `.json`; optional workspace config `context_scan_extensions` or detect from repo (`.go` module, `Cargo.toml`, etc.).
+2. **Per-language outline patterns** for repo-map / excerpts — e.g. C `^\w+.*\($`, Go `^func `, Rust `^fn ` — v0 regex table, not full AST.
+3. **Align** `MAP_EXTENSIONS` vs `SCAN_EXTENSIONS` (today `.json` is map-only, not symbol-scan).
+4. **Long-term:** BL-348 language-aware index subsumes regex outlines; BL-352 is the cheap path until then.
+
+**Related:** **BL-348** (proper index), **BL-347** (policy), T-04 §4 symbol scan.
 
 ---
 

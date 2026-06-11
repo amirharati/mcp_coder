@@ -6,7 +6,72 @@
 
 **Prerequisites:** T-01 (one delegation ran) and T-03 (spec structure).
 
-**Estimated time:** 25–35 min.
+**Estimated time:** 25–35 min read; +20 min if you run the hands-on demos.
+
+**How to use this tutorial:** it's one of the big ones. First pass: read §1–§3 + the diagrams, skim the rest. Second pass: run the **Try it** demos (they all use the scratch playground from §0 — no API key, no LLM calls, nothing written to your real workspace).
+
+---
+
+## 0. Scratch playground (for all "Try it" demos)
+
+Every demo below runs `inspect-context` against a throwaway workspace — dry-run only, zero API calls. Set it up once:
+
+```bash
+DEMO=/tmp/ctx-demo
+rm -rf "$DEMO" && mkdir -p "$DEMO/src" "$DEMO/.mcp-coder/specs/tasks"
+cd "$DEMO" && git init -q
+
+# Small read dependency (well under the 8 KB excerpt threshold)
+cat > src/api.py <<'EOF'
+def get_user(user_id: int) -> dict:
+    """Fetch a user record."""
+    return {"id": user_id, "name": "demo"}
+EOF
+
+# Big file (> 8 KB) — will trigger the excerpt engine
+python3 - <<'EOF'
+lines = [f'def helper_{i}(x):\n    """Helper {i}."""\n    return x + {i}\n' for i in range(200)]
+open("src/big_utils.py", "w").write("\n".join(lines))
+EOF
+
+# File the symbol scan should discover (mentions get_user, not in spec)
+cat > src/consumer.py <<'EOF'
+from src.api import get_user
+
+def show(user_id):
+    print(get_user(user_id))
+EOF
+
+# Edit target (empty for now) + a minimal spec
+touch src/cli.py
+cat > .mcp-coder/specs/tasks/demo-01-cli.md <<'EOF'
+# Demo: add CLI
+
+## Goal
+Add an argparse CLI entry point that calls `get_user`.
+
+## Constraints
+- argparse only, no extra deps
+
+## Files
+
+### Edit
+- src/cli.py
+
+### Read
+- src/api.py
+- src/big_utils.py
+EOF
+```
+
+Baseline run (you'll repeat variants of this in later sections):
+
+```bash
+mcp-coder inspect-context --workspace "$DEMO" \
+  --task 'Add CLI calling `get_user` per spec' \
+  --target-files src/cli.py,src/api.py \
+  --spec tasks/demo-01-cli.md --pretty
+```
 
 ---
 
@@ -22,6 +87,26 @@ mcp-coder sits between two **roles**:
 | **Executor / backend** | Edits files from a compiled prompt | **Aider** + an LLM provider |
 
 Cursor is **not** the executor. Aider is **not** the planner. The context compiler's job is to turn planner inputs (spec, `task`, `context_summary`, optional host transcript) into what the **executor** sees — regardless of which host/backend you plug in later.
+
+```mermaid
+flowchart LR
+    subgraph HOST["Host / planner (Cursor)"]
+        U[User chat] --> P[Planner writes spec<br/>+ calls delegate_to_agent]
+    end
+    subgraph MC["mcp-coder"]
+        CC[Context compiler<br/>picker → assemble → budget]
+    end
+    subgraph EX["Executor (Aider + LLM)"]
+        A[Edits files from<br/>compiled prompt]
+    end
+    P -- "task, context_summary,<br/>target_files, spec_path" --> CC
+    CC -- "ContextPackage<br/>(brief + payloads + map)" --> A
+    A -- "files_changed, diff,<br/>spec report" --> P
+
+    U -.->|"chat is NOT forwarded<br/>(unless host_transcript: dump)"| A
+```
+
+The dashed line is the whole point: the executor never sees your chat by default. Everything it knows arrives through the compiled package.
 
 ### What the executor does and does not see
 
@@ -86,6 +171,34 @@ budget            trim read-tier payloads until estimated tokens ≤ model budge
 executor          Aider adapter: optional Cursor transcript + package.brief + read/map blocks
 ```
 
+```mermaid
+flowchart TD
+    IN["delegate_to_agent<br/>(task, context_summary, target_files, spec)"] --> PK
+
+    PK["file_picker — rules, no LLM<br/>spec contract + hints + symbol scan"] --> AS
+    AS["context_assemble<br/>tiers + payloads + mechanical brief"] --> AR
+
+    AR{"architect_pass?<br/>(default off)"} -- yes --> ARP["helper LLM:<br/>## Architect plan (stored)"]
+    AR -- no --> BL
+    ARP --> BL
+
+    BL{"builder_llm?<br/>(default on)"} -- yes --> BLP["helper LLM:<br/>## Builder brief prepended"]
+    BL -- no --> MG
+    BLP --> MG
+
+    MG["merge: architect plan<br/>placed on top (if any)"] --> BU
+    BU["budget — mechanical<br/>degrade read tiers until ≤ limit"] --> EXE
+    EXE["executor (Aider adapter)<br/>prompt + fnames"]
+
+    style PK fill:#e8f4e8
+    style AS fill:#e8f4e8
+    style BU fill:#e8f4e8
+    style ARP fill:#fdf0e0
+    style BLP fill:#fdf0e0
+```
+
+Green = mechanical/deterministic (no LLM). Orange = optional helper-LLM stages, both **non-fatal** on failure.
+
 | Phase | Default | Toggle |
 |-------|---------|--------|
 | Picker + assemble | **on** | `context_builder: false` |
@@ -110,6 +223,52 @@ Every path in the package has a **tier** that determines how much text the execu
 | `pointer` | Path listed in brief only; no payload | Budget last resort; file unreadable |
 | `map-only` | `def`/`class` outline only; in repo map block | Files discovered by picker, not in spec contract |
 | `hide` | Not included at all | (Not currently assigned in compile path) |
+
+How a path lands in a tier:
+
+```mermaid
+flowchart TD
+    P[Path enters compile] --> Q1{In spec<br/>### Edit?}
+    Q1 -- yes --> EF["edit-full<br/>(full text, in fnames)"]
+    Q1 -- no --> Q2{"In spec ### Read<br/>or target_files hint?"}
+    Q2 -- yes --> Q3{"Size ≤ 8 KB?"}
+    Q3 -- yes --> RF["read-full<br/>(full text in prompt)"]
+    Q3 -- no --> RE["read-excerpt<br/>(symbol windows / head)"]
+    Q2 -- no --> Q4{Found by<br/>symbol scan?}
+    Q4 -- yes --> RF2["read-full / read-excerpt<br/>(never edit-full — D-P4-10)"]
+    Q4 -- no --> MO["map-only<br/>(def/class outline in repo map)"]
+
+    RF -. "budget pressure" .-> RE
+    RE -. "budget pressure" .-> PT["pointer<br/>(path name only)"]
+
+    style EF fill:#fde0e0
+    style PT fill:#eeeeee
+```
+
+Solid arrows = assemble-time decisions. Dotted = budget degradation (§7). `edit-full` (red) is the only tier that ever enters Aider's editable `fnames`, and budget can never touch it.
+
+**Try it (playground from §0):**
+
+```bash
+mcp-coder inspect-context --workspace "$DEMO" \
+  --task 'Add CLI calling `get_user` per spec' \
+  --target-files src/cli.py,src/api.py,src/big_utils.py \
+  --spec tasks/demo-01-cli.md \
+  | jq -r '.context_package.entries[] | select(.tier != "map-only") | "\(.tier)\t\(.bytes)\t\(.path)"'
+```
+
+Expected output (one line per non-map entry):
+
+```
+read-full       110    src/api.py        ← spec ### Read, under 8 KB
+read-excerpt    11903  src/big_utils.py  ← spec ### Read, over 8 KB → excerpted
+edit-full       0      src/cli.py        ← spec ### Edit (empty file, still full fidelity)
+read-full       78     src/consumer.py   ← symbol scan found `get_user` — read, never edit
+```
+
+(Note the excerpt is nearly as big as the file: `big_utils.py` is *all* `def` lines, so the ±5-line symbol windows merge into almost everything. Symbol-dense files excerpt poorly — the budget passes in §7 are the backstop.)
+
+**Gotcha worth knowing:** when a **spec** is present, `target_files` hints that are *not* in the spec contract are recorded in `metadata.hint_paths` but **not materialized** as payload entries — the spec contract wins. (Without a spec, all `target_files` become `read-full`.) If the executor must see a file, put it in the spec `### Read`, don't rely on extra `target_files`.
 
 **Critical invariant (D-P4-10, compile time):** discovered files from the symbol scan are **always** `read-full` or `map-only` — **never** `edit-full` in the `ContextPackage`. Only spec `files_edit` (or YAML `files_edit`) become `edit-full` at assemble time. Discovery never promotes a path to `fnames`.
 
@@ -174,15 +333,22 @@ We do **not** today expose fine-grained “disable dynamic add/create” flags o
 
 ### Mental model (one delegation)
 
-```
-mcp-coder                         Aider (executor backend)
-─────────                         ──────────────────────────
-compile ContextPackage  ──────►  initial prompt + fnames
-(one shot)                        │
-                                  ├─ LLM turn → SEARCH/REPLACE
-                                  ├─ may edit/create file Z  ◄── not in initial fnames
-                                  └─ loop until done
-post_gateway ◄── manifest diff     (no callback to mcp-coder mid-loop)
+```mermaid
+sequenceDiagram
+    participant M as mcp-coder
+    participant A as Aider (executor)
+    participant D as Workspace disk
+
+    M->>A: compile ContextPackage (one shot)<br/>prompt + fnames
+    Note over A: internal agentic loop —<br/>no callback to mcp-coder
+    loop until done
+        A->>A: LLM turn → SEARCH/REPLACE
+        A->>D: edit fnames files
+        A-->>D: may edit/create file Z<br/>(NOT in initial fnames)
+    end
+    A->>M: run finished
+    M->>D: manifest diff (post_gateway)
+    M->>M: files_changed, files_unexpected,<br/>scope_violations
 ```
 
 **Takeaway:** `inspect-context` shows **starting** conditions. After a delegate, always check `files_changed`, `files_unexpected`, and `scope_violations` in the JSONL response — that is the ground truth for what the loop actually did.
@@ -224,6 +390,38 @@ edit_paths (spec) → read_paths (spec) → hint_paths → discovered_read
 ```
 
 This is what goes to `assemble_context()`.
+
+```mermaid
+flowchart LR
+    subgraph IN["Inputs"]
+        SE["spec ### Edit"]
+        SR["spec ### Read"]
+        TF["target_files<br/>(planner hints)"]
+        TK["task + spec text"]
+    end
+    SE --> RANK
+    SR --> RANK
+    TF --> RANK
+    TK --> SY["symbol queries<br/>(backticked ids, def/class names,<br/>max 20)"]
+    SY --> RG["rg -l --fixed-strings<br/>over 9 extensions"]
+    RG --> DR["discovered_read<br/>(max 30, discover mode only)"]
+    DR --> RANK["ranked candidates<br/>edit → read → hint → discovered"]
+    DR -.-> SUG["suggested_edit_paths<br/>(same dir as files_edit —<br/>audit only, never promoted)"]
+    RANK --> OUT["assemble_context()"]
+```
+
+**Try it — watch the symbol scan work (playground from §0):**
+
+```bash
+# What symbols were extracted, and what did the scan discover?
+mcp-coder inspect-context --workspace "$DEMO" \
+  --task 'Add CLI calling `get_user` per spec' \
+  --target-files src/cli.py \
+  --spec tasks/demo-01-cli.md \
+  | jq '.context_package.metadata.candidate_files'
+```
+
+You should see `symbol_queries` containing `get_user` (backticked in the task **and** in the spec Goal — both are scanned) and `discovered_read` containing `src/consumer.py` — the picker ran `rg -l get_user` and found it. Note `suggested_edit_paths` also lists `src/consumer.py` (same dir as the edit target) — audit hint only, it stays a read tier.
 
 ---
 
@@ -277,6 +475,19 @@ If the picker found `suggested_edit_paths`, they are appended as a note:
 Suggested edit paths (not in spec contract): `src/helper.py`
 ```
 
+**Try it — read the actual mechanical brief (playground from §0):**
+
+```bash
+mcp-coder inspect-context --workspace "$DEMO" \
+  --task 'Add CLI calling `get_user` per spec' \
+  --context-summary "api.py is the step-1 API; CLI is new" \
+  --target-files src/cli.py,src/api.py \
+  --spec tasks/demo-01-cli.md \
+  | jq -r '.context_package.brief'
+```
+
+You'll see exactly the `## Task / ## Context / ## Goal / ## Constraints / ## Paths` stack above (sections with no content are omitted) — this text goes to the executor verbatim, with helper-LLM layers (if any) stacked on top. Note `src/consumer.py` appears both in `## Paths` and as a suggested-edit note: the symbol scan found it.
+
 ---
 
 ## 6. Excerpt engine
@@ -296,6 +507,26 @@ Excerpts are **materialized to disk** at `.mcp-coder/context/excerpts/<path__as_
 
 **Config:** `MCP_CODER_READ_FULL_MAX_BYTES` (default **8 192** bytes). Files below this threshold → full text even for read tier.
 
+**Try it — see an excerpt get materialized (playground from §0):**
+
+```bash
+mcp-coder inspect-context --workspace "$DEMO" \
+  --task "Refactor helpers" \
+  --target-files src/cli.py,src/big_utils.py > /dev/null
+
+# The excerpt was written to disk:
+head -20 "$DEMO/.mcp-coder/context/excerpts/src__big_utils.py.excerpt.txt"
+```
+
+You'll see the `# excerpt from: src/big_utils.py` header followed by `def helper_N` windows — the `symbol_windows` strategy. Then shrink the threshold and watch even `src/api.py` get excerpted:
+
+```bash
+MCP_CODER_READ_FULL_MAX_BYTES=50 mcp-coder inspect-context --workspace "$DEMO" \
+  --task "Refactor helpers" \
+  --target-files src/cli.py,src/api.py \
+  | jq -r '.context_package.entries[] | "\(.tier)\t\(.path)"'
+```
+
 ---
 
 ## 7. Budget enforcement
@@ -312,7 +543,64 @@ A token estimate is computed as `len(brief + all_payloads) // 4` (rough ~4 chars
 
 **`edit-full` entries are never degraded.** You always see the full content of files you are editing.
 
+```mermaid
+flowchart TD
+    EST["estimate = len(brief + payloads) // 4"] --> C1{"> budget?"}
+    C1 -- no --> OK["done — no truncation"]
+    C1 -- yes --> P1["Pass 1: read-full → read-excerpt"]
+    P1 --> C2{"still over?"}
+    C2 -- no --> OK
+    C2 -- yes --> P2["Pass 2: shrink excerpts<br/>to first 40 lines"]
+    P2 --> C3{"still over?"}
+    C3 -- no --> OK
+    C3 -- yes --> P3["Pass 3: read tiers → pointer<br/>(payload dropped)"]
+    P3 --> C4{"still over?"}
+    C4 -- no --> OK
+    C4 -- yes --> WARN["budget_warnings:<br/>still_over_limit<br/>(non-blocking)"]
+
+    EDIT["edit-full payloads"] -. "never touched<br/>by any pass" .-> OK
+```
+
 If still over budget after all three passes: `metadata.budget_warnings: ["context_budget:still_over_limit"]` (non-blocking; delegation proceeds).
+
+**Try it — force degradation with a tiny budget (playground from §0):**
+
+Two gotchas make a naive `MCP_CODER_CONTEXT_BUDGET_TOKENS=200` prefix silently do nothing: (1) the per-model yaml budget **beats** the env var, so you must also point at a model that isn't in `model_rates.yaml`; (2) the `scripts/mcp-coder` wrapper sources the repo `.env` **after** your prefix vars, clobbering them — bypass with an empty `MCP_CODER_ENV_FILE`.
+
+```bash
+touch "$DEMO/empty.env"
+MCP_CODER_ENV_FILE="$DEMO/empty.env" AIDER_MODEL=demo/unknown \
+MCP_CODER_CONTEXT_BUDGET_TOKENS=200 mcp-coder inspect-context --workspace "$DEMO" \
+  --task 'Add CLI calling `get_user` per spec' \
+  --target-files src/cli.py,src/api.py,src/big_utils.py \
+  --spec tasks/demo-01-cli.md \
+  | jq '{tiers: [.context_package.entries[] | select(.tier != "map-only") | {path, tier}], truncations: [.context_package.metadata.truncations[].reason]}'
+```
+
+Verified output — all three passes fire, read tiers collapse to `pointer`, and `src/cli.py` stays `edit-full`, untouched:
+
+```json
+{
+  "tiers": [
+    {"path": "src/api.py",       "tier": "pointer"},
+    {"path": "src/big_utils.py", "tier": "pointer"},
+    {"path": "src/cli.py",       "tier": "edit-full"},
+    {"path": "src/consumer.py",  "tier": "read-excerpt"}
+  ],
+  "truncations": [
+    "read_full_max_bytes",
+    "context_budget:read_full_to_excerpt",
+    "context_budget:read_full_to_excerpt",
+    "context_budget:excerpt_shrink",
+    "context_budget:excerpt_shrink",
+    "context_budget:excerpt_shrink",
+    "context_budget:drop_payload",
+    "context_budget:drop_payload"
+  ]
+}
+```
+
+Remove the budget override and the `context_budget:*` truncations disappear.
 
 **Budget resolution order:**
 
@@ -335,6 +623,22 @@ Each truncation is logged in `context_package.metadata.truncations`:
 ## 8. Helper LLM layers on the brief (builder + architect)
 
 Two helper LLMs can annotate `package.brief`. Both are **non-fatal** on failure — delegation proceeds with whatever brief was already assembled.
+
+The final brief is a stack — each optional layer sits **above** the one below, never replacing it:
+
+```mermaid
+flowchart TD
+    subgraph BRIEF["package.brief (top → bottom)"]
+        AP["## Architect plan<br/><i>opt-in (architect_pass: true)<br/>runs before builder, merged last</i>"]
+        BB["## Builder brief<br/><i>default on (context_builder_llm)<br/>narrative bullets, ≤400 words</i>"]
+        MB["## Task / ## Context / ## Goal /<br/>## Constraints / ## Paths<br/><b>mechanical brief — always present,<br/>never rewritten</b>"]
+    end
+    AP --- BB --- MB
+
+    style AP fill:#fdf0e0
+    style BB fill:#fdf0e0
+    style MB fill:#e8f4e8
+```
 
 ### 8a. Architect pass (opt-in, default off)
 
@@ -447,6 +751,18 @@ class Cache:
 ```
 
 **Pointer entries** (budget dropped) appear only as path names in the brief under `## Paths (budget)` — no payload, no block.
+
+**Try it — the executor's-eye view (playground from §0):**
+
+```bash
+mcp-coder inspect-context --workspace "$DEMO" \
+  --task 'Add CLI calling `get_user` per spec' \
+  --target-files src/cli.py,src/api.py \
+  --spec tasks/demo-01-cli.md \
+  | jq '.adapter_preview'
+```
+
+`fnames` is what Aider opens for editing; `read_paths_in_prompt` are the fenced blocks; `prompt_tokens_est` is your cost preview before any real delegate.
 
 ---
 
