@@ -949,6 +949,6 @@ Check `context_package.brief` for the `## Builder brief` section.
 
 ## Next
 
-- **T-05 (Workspace history & RAG):** `workspace_history.db`, `list_delegations`, `get_delegation_diff` — what the history layer stores and how the builder history is populated
+- **T-05 (Workspace history):** why checkpoints vs git, `mcp-coder history` CLI, revert, policy/revert building blocks; builder history is one consumer
 - **T-06 (Delegation pipeline):** full `delegate_to_agent` flow — `delegation_pipeline` JSONL, config flags, opt-in phases (spec validation, architect, auto_verify); defers context detail to this tutorial
 - **BL-335:** token counts in `model_roles` currently `null` for several paths — context builder included; understanding this gap requires T-04 context

@@ -22,7 +22,7 @@ This folder is the output of **Phase 4.5** — written from actually running and
 | T-02 | [Sessions, storage, and logs](./tutorials/02-sessions-storage-logs.md) | done |
 | T-03 | [Specs: contract, paths, versioning](./tutorials/03-specs-contract-versioning.md) | done |
 | T-04 | [Context compiler deep-dive](./tutorials/04-context-compiler.md) | done |
-| T-05 | [Workspace history & delegation RAG](./tutorials/05-workspace-history-rag.md) | done |
+| T-05 | [Workspace history](./tutorials/05-workspace-history.md) — checkpoints vs git, `mcp-coder history` CLI | done |
 | T-06 | [The delegation pipeline](./tutorials/06-delegation-pipeline.md) — full `delegate_to_agent` flow, `delegation_pipeline` JSONL, config flags (context detail: T-04) | pending |
 | T-07 | [Inspecting a delegation end-to-end](./tutorials/07-end-to-end-trace.md) | pending |
 
