@@ -40,6 +40,13 @@ T-04 = how context is compiled (tiers, picker, builder). T-06 = every step on a 
 | [architecture/per-role-models.md](./architecture/per-role-models.md) | Model registry, role resolution, known gaps |
 | [architecture/reality-vs-spec.md](./architecture/reality-vs-spec.md) | Where the real code differs from how things were described |
 
+## Reference
+
+| Document | Topic |
+|----------|-------|
+| [reference/mcp-tools.md](./reference/mcp-tools.md) | MCP tools — parameters, response fields, Cursor call rules |
+| [reference/cli.md](./reference/cli.md) | CLI subcommands — all flags, examples, env vars |
+
 ## Gap analysis
 
 | Document | Topic |
