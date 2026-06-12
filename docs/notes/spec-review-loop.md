@@ -34,6 +34,8 @@
 
 Review answers **spec** questions; it does **not** substitute for putting step N code in implement context ([P1-ISS-015](../PHASE1_ISSUES.md#p1-iss-015-review-mode-does-not-validate-prior-step-api)).
 
+**Future workflow turns** (not shipped): polish, refactor, document, digest/onboard cadence at epic boundaries — see [workflow-turns.md](./workflow-turns.md) and **BL-359**.
+
 ---
 
 ## Files

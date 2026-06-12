@@ -176,7 +176,8 @@ Phase 1 deferred executor conversation carry-over to here (BL-155); see P1-130 `
 | BL-355 | **Optional host CLI toolchain — `rg`, docs, `mcp-coder doctor`** | Today: **ripgrep** optional (Python fallback in file picker); **git** soft-required for diffs/snapshots; tutorials use **jq** / **grep** for inspection. **Later:** curated optional-deps list, `setup`/`doctor` hints (`brew install ripgrep`), perf notes when fallback is used. **Phase 5+** DX; see § BL-355. From T-04 playground (2026-06-11). |
 | BL-356 | **RAG-backed context audit refs — lean JSONL + digest provenance** | As **BL-002** indexes digests (chat, delegations, workspace files), stop duplicating bodies in `delegations.jsonl`; store `context_refs[]` + hashes; index-time metadata for replay/retrieval. Pairs with **BL-353** wire log. **Phase 5+** (after RAG corpus); see § BL-356. From T-04 observability pass (2026-06-11). |
 | BL-357 | **Storage lifecycle — promote, prune, gc (logs + RAG + traces)** | `~/.mcp-coder` grows without bound (JSONL, traces, RAG DBs, checkpoints, blobs). **Later:** per-layer TTL, promote-then-prune, `mcp-coder maintenance` / gc, archive, global dedupe. Cross-cutting — not RAG-only. **Phase 6+** (after BL-356 lean refs + some RAG corpora); see § BL-357. From RAG planning (2026-06-12). |
-| BL-358 | **Post-executor polish pass — reviewer model (comments, tests, alignment)** | After Aider succeeds: optional **cheap / large-context** model reads changed files + module neighbors; adds comments, tests, style alignment, **non-logic** micro-refactors. Distinct from critic redo (BL-006) and `auto_verify`. **Phase 5+**; see § BL-358. From planning (2026-06-12). |
+| BL-358 | **Post-executor polish pass — reviewer model (comments, tests, alignment)** | After Aider succeeds: optional **cheap / large-context** model reads changed files + module neighbors; adds comments, tests, style alignment, **non-logic** micro-refactors. Distinct from critic redo (BL-006) and `auto_verify`. **Phase 5+**; see § BL-358. Sub-mode of **BL-359**. From planning (2026-06-12). |
+| BL-359 | **Workflow turns — refactor, document, digest cadence** | Beyond `implement`/`review`: special turns (refactor, document, onboard/digest) + **when** to run (epic boundary, user, semi-auto suggest). Host rules + planner policy. **Phase 5+**; see § BL-359 + [workflow-turns.md](./notes/workflow-turns.md). From planning (2026-06-12). |
 
 ### BL-350: Supervised executor loop (mid-run inspect + context inject)
 
@@ -496,9 +497,56 @@ We want **good stuff** (worked patterns, promoted digests, spec outcomes) withou
 
 **Risks:** scope creep into second feature implementation; model “improves” logic anyway → need diff review + `logic_locked` tests. **Not RAG** — context is fresh from disk.
 
+**Trigger policy (recommended):** default **off**; run at **epic boundary** (`epic_exit`, last step) or spec `polish: true` — not every delegate. Config: `polish_trigger: off | epic_exit | spec | always`.
+
 **Phase:** **5+** (after D-P4-8 role audit stable; pairs with **BL-162** Stage 2, **BL-006** if critic and polish share infrastructure).
 
-**Related:** [notes/multi-model-roles.md](./notes/multi-model-roles.md), **BL-335** (token cost of extra pass), **BL-351** (human gate if polish wants spec expansion).
+**Related:** **BL-359** (umbrella workflow turns), [notes/multi-model-roles.md](./notes/multi-model-roles.md), **BL-335**, **BL-351**.
+
+---
+
+### BL-359: Workflow turns — refactor, document, digest cadence
+
+**Status:** `idea` — 2026-06-12. Planning — real work includes pauses to understand code, refactor, document, and re-onboard; mcp-coder should support **special turns**, not only implement loops.
+
+**Living note:** [notes/workflow-turns.md](./notes/workflow-turns.md)
+
+**Problem:** Today: `mode=review` (pre-spec Q&A) + `mode=implement` (+ optional `auto_verify`). Missing first-class turns for:
+
+| Turn | User need | Today |
+|------|-----------|-------|
+| **Polish** | Comments, tests, alignment after feature works | — → **BL-358** |
+| **Refactor** | Structure/renames/extracts; behavior unchanged | Ad-hoc implement (risky scope) |
+| **Document** | Module docs, README, epic narrative | Planner manual / outside MCP |
+| **Digest / audit / onboard** | After N phases: understand code, gaps, debt | `inspect-context`, history CLI — no guided “pause & report” turn |
+
+**Goal:** Named workflow turns with **own rules**, compiler/executor behavior, and **cadence policy** — user-initiated, spec-flagged, or **semi-auto suggest** to planner (host rules help Cursor offer the right turn).
+
+**Cadence (default bias):**
+
+| When | Suggested turns |
+|------|-----------------|
+| **Per step** | `implement` only |
+| **Epic boundary / pause** | `digest` (read-only report) → optional `polish` / `refactor` |
+| **User explicit** | Any turn via spec front matter or MCP arg |
+| **Semi-auto** | After epic step N or M delegations: `suggested_turn: digest` in MCP response — planner accepts/skips |
+
+**Semi-auto is not autonomous:** mcp-coder **suggests**; Cursor planner or human decides (pairs with **BL-351** escalate).
+
+**Host / planner:** Cursor rules for when to offer digest vs review vs refactor; generic content can live in managed rules (**BL-332** deferred).
+
+**Implementation paths (incremental):**
+
+1. **Digest** — `mode=digest` or spec `turn: audit`: wide read compile + delegation/history summary; LLM report artifact (no executor); cheapest first slice.
+2. **Polish** — **BL-358** post-executor phase.
+3. **Refactor** — `mode=refactor` + spec contract; wider `files_edit`; stronger `logic_locked` + verify required.
+4. **Document** — edit doc paths only; or planner writes digest markdown without delegate.
+
+**Distinct from:** **BL-006** critic (grade/redo), **BL-329** spec validation (pre-block), RAG (retrieval corpora — digest may *use* RAG).
+
+**Phase:** **5+** — digest/report slice can precede polish/refactor; host rule text can land early without new modes.
+
+**Related:** **BL-358**, **BL-332**, **BL-351**, [spec-review-loop.md](./notes/spec-review-loop.md), **BL-002** (digest input).
 
 ---
 
@@ -1297,7 +1345,8 @@ delegate_to_agent(backend=…)
 | **BL-355** | **Optional host CLI toolchain** — `rg`, doctor, recommended deps | See § BL-355; **Phase 5+** DX |
 | **BL-356** | **RAG-backed context audit refs** — lean JSONL, digest provenance | See § BL-356; pairs with BL-002 + BL-353; **Phase 5+** |
 | **BL-357** | **Storage lifecycle** — promote, prune, gc (logs + RAG + traces) | See § BL-357; **Phase 6+** |
-| **BL-358** | **Post-executor polish pass** — reviewer model (comments, tests, alignment) | See § BL-358; **Phase 5+** |
+| **BL-358** | **Post-executor polish pass** — reviewer model (comments, tests, alignment) | See § BL-358; sub-mode of BL-359; **Phase 5+** |
+| **BL-359** | **Workflow turns** — refactor, document, digest cadence | See § BL-359 + [workflow-turns.md](./notes/workflow-turns.md); **Phase 5+** |
 | **BL-334** | **Backend prompt customization** (system prefix + edit-format control) | See § BL-334 |
 | **BL-340** | **Cursor SDK execution backend** (beside Aider) | See § Execution backends — BL-340 |
 
@@ -1365,6 +1414,7 @@ delegate_to_agent(backend=…)
 
 | Date | Change |
 |------|--------|
+| 2026-06-12 | BL-359 added — workflow turns (refactor, document, digest cadence; semi-auto suggest); [workflow-turns.md](./notes/workflow-turns.md) |
 | 2026-06-12 | BL-358 added — post-executor polish pass (reviewer model: comments, tests, non-logic alignment); Phase 5+ |
 | 2026-06-12 | BL-357 added — storage lifecycle (promote/prune/gc) for logs, RAG, traces, checkpoints; Phase 6+ (RAG planning) |
 | 2026-06-11 | BL-356 added — RAG-backed context audit refs (lean JSONL, digest provenance); pairs with BL-002/BL-353 (T-04 observability pass) |

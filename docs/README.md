@@ -100,6 +100,7 @@ E2E reference consumer: `mcp_coder_phase1_e2e` (expense-splitter epic).
 | [notes/storage-and-linking.md](./notes/storage-and-linking.md) | `~/.mcp-coder` layout, IDs, session ↔ Cursor chat links, `specs/` |
 | [notes/spec-based-development.md](./notes/spec-based-development.md) | Spec-as-contract hypothesis → **live experiment** |
 | [notes/rag-gap-analysis.md](./notes/rag-gap-analysis.md) | **Living** — where RAG helps vs logging/index; Phase 5 corpora & open questions |
+| [notes/workflow-turns.md](./notes/workflow-turns.md) | **Living** — polish/refactor/document/digest turns & epic-boundary cadence |
 
 ## Quick start (planning)
 
