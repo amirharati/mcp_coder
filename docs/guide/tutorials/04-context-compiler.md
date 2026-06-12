@@ -17,7 +17,7 @@
 Every demo below uses the same throwaway workspace at `/tmp/ctx-demo`. Copy-paste the setup block once (safe to re-run — overwrites demo files, does **not** delete the folder). When finished, remove from a directory **outside** `$DEMO`: `rm -rf /tmp/ctx-demo` (do not run `rm -rf` while your shell is `cd`'d into the demo).
 
 ```bash
-DEMO=/tmp/ctx-demo
+export DEMO=/tmp/ctx-demo
 mkdir -p "$DEMO/src" "$DEMO/.mcp-coder/specs/tasks"
 cd "$DEMO"
 git init -q 2>/dev/null || true
@@ -75,6 +75,17 @@ Add an argparse CLI entry point that calls `get_user`.
 EOF
 ```
 
+**Playground pitfalls (read once):**
+
+| Issue | Fix |
+|-------|-----|
+| `head: /.mcp-coder/...` or empty paths | Run `export DEMO=/tmp/ctx-demo` (or `export DEMO="$PWD"` after `cd` into the demo). Every Try it assumes `$DEMO` is set. |
+| `zsh: no matches found: discover?` | Do **not** paste shell **comment** lines from the doc into zsh — especially lines with `?`. Paste only the `mcp-coder …` / `jq …` lines. |
+| `zsh: unknown file attribute` on `jq` | Keep the **whole** `jq '…'` program in **single quotes** so zsh does not glob `[…]`. |
+| `rg: command not found` | Use `grep -nE` instead (examples below use `grep`; `rg` is optional). |
+| `.cursor/mcp.json` in `map-only` entries | Do **not** run `mcp-coder setup --local` inside `$DEMO`. Wire MCP from your real project. If already created: `rm -rf "$DEMO/.cursor"`. |
+| `.aider.tags.cache.*` in `files_changed` | Aider repo-map cache under the demo tree — ignore for this tutorial; `src/cli.py` is what matters. |
+
 ### Three CLI levels (same `$DEMO`, increasing fidelity)
 
 | Level | Command | API cost | Edits disk? |
@@ -123,10 +134,13 @@ mcp-coder inspect-context --workspace "$DEMO" \
 
 Requires a working executor model (same as T-01: `mcp-coder test-model`). Uses the **same** `$DEMO` workspace — you will edit `src/cli.py` on disk and get JSONL + spec report under `$DEMO/.mcp-coder/`.
 
-```bash
-# From repo root or anywhere — credentials from your .env (T-01)
-mcp-coder test-model
+Run from anywhere (credentials from your repo `.env` — T-01). Run `mcp-coder test-model` first; exit 0 required.
 
+```bash
+mcp-coder test-model
+```
+
+```bash
 cd "$DEMO"
 mcp-coder delegate \
   --task 'Add CLI calling `get_user` per spec' \
@@ -134,22 +148,28 @@ mcp-coder delegate \
   --target-files src/cli.py,src/api.py \
   --spec tasks/demo-01-cli.md \
   --pretty > /tmp/ctx-demo-delegate.json
+```
 
-# What we sent to Aider
+What we sent to Aider:
+
+```bash
 jq -r '.artifacts.executor_in.prompt' /tmp/ctx-demo-delegate.json | head -20
+```
 
-# What Aider returned
+What Aider returned:
+
+```bash
 jq '.artifacts.executor_out' /tmp/ctx-demo-delegate.json
+```
 
-# What the planner would get (MCP shape)
+MCP-shaped response + post steps:
+
+```bash
 jq '.caller_response | {success, outcome, files_changed, files_unexpected, spec_report_path}' \
   /tmp/ctx-demo-delegate.json
-
-# Post steps (gateway, pipeline timing)
-jq '.artifacts.post_delegate | {delegation_pipeline, scope_violations}' /tmp/ctx-demo-delegate.json
-
-# Ground truth on disk
-cat src/cli.py
+jq '.artifacts.post_delegate | {delegation_pipeline, scope_violations}' \
+  /tmp/ctx-demo-delegate.json
+cat "$DEMO/src/cli.py"
 ```
 
 If `success` is false, read `artifacts.executor_out.output` and `caller_response.error_message` — the post steps (`post_gateway`, `spec_report`) still run on most failures (T-06 §2).
@@ -478,7 +498,6 @@ flowchart TB
 **Try it — watch the symbol scan work (playground from §0):**
 
 ```bash
-# What symbols were extracted, and what did the scan discover?
 mcp-coder inspect-context --workspace "$DEMO" \
   --task 'Add CLI calling `get_user` per spec' \
   --context-summary 'Demo playground' \
@@ -581,8 +600,11 @@ mcp-coder inspect-context --workspace "$DEMO" \
   --context-summary 'Demo playground' \
   --target-files src/cli.py,src/big_utils.py \
   --spec tasks/demo-01-cli.md > /dev/null
+```
 
-# The excerpt was written to disk:
+Then read the excerpt file written under the demo workspace:
+
+```bash
 head -20 "$DEMO/.mcp-coder/context/excerpts/src__big_utils.py.excerpt.txt"
 ```
 
@@ -909,7 +931,7 @@ mcp-coder delegate --workspace "$DEMO" \
   --spec tasks/demo-01-cli.md \
   --stop-after context \
   | jq -r '.artifacts.executor_in.prompt' \
-  | rg -n 'Read context|src/api.py|src/big_utils' | head -10
+  | grep -nE 'Read context|src/api.py|src/big_utils' | head -10
 ```
 
 You should see `get_user` inside the `src/api.py` fence and an excerpt header for `src/big_utils.py`.
@@ -925,32 +947,39 @@ mcp-coder delegate --workspace "$DEMO" \
   | jq -r '.artifacts.executor_in.prompt' | head -35
 ```
 
-**Step 4 — full round trip** (Aider in + post steps out; **needs API key** — see §0 Bonus):
+**Step 4 — full round trip** (Aider in + post steps out; **needs API key** — run `mcp-coder test-model` first, T-01):
 
 ```bash
-mcp-coder test-model   # must pass (T-01)
-
+mcp-coder test-model
 cd "$DEMO"
 mcp-coder delegate \
   --task "$TASK" --context-summary "$CTX" \
   --target-files src/cli.py,src/api.py \
   --spec tasks/demo-01-cli.md \
   --pretty > /tmp/ctx-demo-roundtrip.json
+```
 
-# In
+Executor input (prompt head):
+
+```bash
 jq -r '.artifacts.executor_in.prompt' /tmp/ctx-demo-roundtrip.json | head -15
+```
 
-# Out
-jq '.artifacts.executor_out | {success, output: .output[:200], files_changed}' \
+Executor output:
+
+```bash
+jq '.artifacts.executor_out | {success, output: (.output[0:200]), files_changed}' \
   /tmp/ctx-demo-roundtrip.json
+```
 
-# Back to planner (MCP shape) + post
+Back to planner (MCP) + post steps:
+
+```bash
 jq '{
   caller: .caller_response | {success, outcome, files_changed, spec_report_path},
   post: .artifacts.post_delegate | {pipeline: .delegation_pipeline, scope_violations}
 }' /tmp/ctx-demo-roundtrip.json
-
-cat src/cli.py
+cat "$DEMO/src/cli.py"
 ```
 
 `fnames` is what Aider opens for editing; `read_paths_in_prompt` are the fenced blocks; `artifacts.executor_in.prompt` is the exact wire string (brief + read + map blocks).
