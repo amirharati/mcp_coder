@@ -8,7 +8,7 @@
 
 **Estimated time:** 25–35 min read; +20 min if you run the hands-on demos.
 
-**How to use this tutorial:** it's one of the big ones. First pass: read §1–§3 + the diagrams, skim the rest. Second pass: run the **Try it** demos in §0–§10 (scratch playground — mostly dry-run, no API key). Optional third pass: §0 **Bonus** runs a real Aider delegate on the same playground (needs provider credentials; see T-01).
+**How to use this tutorial:** it's one of the big ones. First pass: read §1–§3 + the diagrams, skim the rest. Second pass: run **Try it** demos §0–§7 (dry-run). Third pass: **§8** (helper LLMs) + **§9** (full Aider prompt + optional round trip). §9 Step 4 / §0 Bonus need provider credentials (T-01).
 
 ---
 
@@ -328,6 +328,7 @@ Solid arrows = assemble-time decisions. Dotted = budget degradation (§7). `edit
 ```bash
 mcp-coder inspect-context --workspace "$DEMO" \
   --task 'Add CLI calling `get_user` per spec' \
+  --context-summary 'Demo playground' \
   --target-files src/cli.py,src/api.py,src/big_utils.py \
   --spec tasks/demo-01-cli.md \
   | jq -r '.context_package.entries[] | select(.tier != "map-only") | "\(.tier)\t\(.bytes)\t\(.path)"'
@@ -480,6 +481,7 @@ flowchart TB
 # What symbols were extracted, and what did the scan discover?
 mcp-coder inspect-context --workspace "$DEMO" \
   --task 'Add CLI calling `get_user` per spec' \
+  --context-summary 'Demo playground' \
   --target-files src/cli.py \
   --spec tasks/demo-01-cli.md \
   | jq '.context_package.metadata.candidate_files'
@@ -576,7 +578,9 @@ Excerpts are **materialized to disk** at `.mcp-coder/context/excerpts/<path__as_
 ```bash
 mcp-coder inspect-context --workspace "$DEMO" \
   --task "Refactor helpers" \
-  --target-files src/cli.py,src/big_utils.py > /dev/null
+  --context-summary 'Demo playground' \
+  --target-files src/cli.py,src/big_utils.py \
+  --spec tasks/demo-01-cli.md > /dev/null
 
 # The excerpt was written to disk:
 head -20 "$DEMO/.mcp-coder/context/excerpts/src__big_utils.py.excerpt.txt"
@@ -587,7 +591,9 @@ You'll see the `# excerpt from: src/big_utils.py` header followed by `def helper
 ```bash
 MCP_CODER_READ_FULL_MAX_BYTES=50 mcp-coder inspect-context --workspace "$DEMO" \
   --task "Refactor helpers" \
+  --context-summary 'Demo playground' \
   --target-files src/cli.py,src/api.py \
+  --spec tasks/demo-01-cli.md \
   | jq -r '.context_package.entries[] | "\(.tier)\t\(.path)"'
 ```
 
@@ -628,6 +634,7 @@ touch "$DEMO/empty.env"
 MCP_CODER_ENV_FILE="$DEMO/empty.env" AIDER_MODEL=demo/unknown \
 MCP_CODER_CONTEXT_BUDGET_TOKENS=200 mcp-coder inspect-context --workspace "$DEMO" \
   --task 'Add CLI calling `get_user` per spec' \
+  --context-summary 'Demo playground' \
   --target-files src/cli.py,src/api.py,src/big_utils.py \
   --spec tasks/demo-01-cli.md \
   | jq '{tiers: [.context_package.entries[] | select(.tier != "map-only") | {path, tier}], truncations: [.context_package.metadata.truncations[].reason]}'
@@ -744,6 +751,78 @@ When `context_builder: true` AND `context_builder_llm: true` (both default **on*
 
 **History is truncated to fit the builder's token budget** — project-wide rows dropped first, then same-spec rows. Contract (spec paths, mechanical brief) is never truncated.
 
+**Try it — helper layers on `$DEMO` (playground from §0)**
+
+Shared task line (reuse in every command below):
+
+```bash
+TASK='Add CLI calling `get_user` per spec'
+CTX='Demo playground; argparse CLI for get_user'
+```
+
+**A. Mechanical brief only** — no helper LLM calls (free):
+
+```bash
+mcp-coder inspect-context --workspace "$DEMO" \
+  --task "$TASK" --context-summary "$CTX" \
+  --target-files src/cli.py,src/api.py \
+  --spec tasks/demo-01-cli.md \
+  | jq -r '.context_package.brief' | head -20
+```
+
+No `## Builder brief` or `## Architect plan` — just `## Task` … `## Paths`.
+
+**B. Builder via inspect** — opt-in flag (**uses API**; same model as real delegate):
+
+```bash
+mcp-coder inspect-context --workspace "$DEMO" \
+  --task "$TASK" --context-summary "$CTX" \
+  --target-files src/cli.py,src/api.py \
+  --spec tasks/demo-01-cli.md \
+  --run-builder-llm --pretty \
+  | jq '{builder: .helper_phases.builder_llm, brief_head: (.context_package.brief[0:400])}'
+```
+
+On success: `helper_phases.builder_llm.applied` is `true` and the brief starts with `## Builder brief` above the mechanical stack.
+
+**C. Architect + builder via inspect** — both opt-in (**uses API**):
+
+```bash
+mcp-coder inspect-context --workspace "$DEMO" \
+  --task "$TASK" --context-summary "$CTX" \
+  --target-files src/cli.py,src/api.py \
+  --spec tasks/demo-01-cli.md \
+  --run-architect --run-builder-llm --force-helpers --pretty \
+  | jq -r '.context_package.brief' | head -15
+```
+
+First line should be `## Architect plan`, then `## Builder brief`, then mechanical `## Task` (architect merges above builder — same order as MCP).
+
+**D. Delegate-faithful prepare** — builder runs from **config** (default on), no `--run-*` flags; always returns full Aider prompt:
+
+```bash
+mcp-coder delegate --workspace "$DEMO" \
+  --task "$TASK" --context-summary "$CTX" \
+  --target-files src/cli.py,src/api.py \
+  --spec tasks/demo-01-cli.md \
+  --stop-after context --pretty \
+  | jq '{
+      helpers: .artifacts.helper_phases,
+      has_builder_brief: (.artifacts.executor_in.prompt | contains("## Builder brief")),
+      prompt_tokens: .artifacts.executor_in.prompt_tokens_est
+    }'
+```
+
+This is what §9 assembles into `executor_in` — use `jq -r '.artifacts.executor_in.prompt'` to dump the full string.
+
+To enable architect on prepare without inspect flags, add to `$DEMO/.mcp-coder/config.yaml`:
+
+```yaml
+architect_pass: true
+```
+
+Then re-run **D** — `helper_phases.architect_pass.applied` should be `true` and the prompt starts with `## Architect plan`.
+
 ---
 
 ## 9. What the executor actually receives (Aider today)
@@ -804,28 +883,77 @@ class Cache:
 
 **Pointer entries** (budget dropped) appear only as path names in the brief under `## Paths (budget)` — no payload, no block.
 
-**Try it — the executor's-eye view (playground from §0):**
+**Try it — what we send to Aider (`$DEMO`, playground from §0)**
+
+Use the same `TASK` / `CTX` variables from §8.
+
+**Step 1 — `fnames` vs read payloads** (editing set vs fenced read blocks):
 
 ```bash
-# Stats only
-mcp-coder inspect-context --workspace "$DEMO" \
-  --task 'Add CLI calling `get_user` per spec' \
-  --context-summary 'Demo playground' \
-  --target-files src/cli.py,src/api.py \
-  --spec tasks/demo-01-cli.md \
-  | jq '.adapter_preview | {fnames, read_paths_in_prompt, prompt_tokens_est}'
-
-# Full prompt string (same as Level 2 prepare)
 mcp-coder delegate --workspace "$DEMO" \
-  --task 'Add CLI calling `get_user` per spec' \
-  --context-summary 'Demo playground' \
+  --task "$TASK" --context-summary "$CTX" \
   --target-files src/cli.py,src/api.py \
   --spec tasks/demo-01-cli.md \
   --stop-after context \
-  | jq -r '.artifacts.executor_in.prompt' | head -30
+  | jq '.artifacts.executor_in | {fnames, read_paths_in_prompt, prompt_tokens_est}'
 ```
 
-`fnames` is what Aider opens for editing; `read_paths_in_prompt` are the fenced blocks; `prompt_tokens_est` is your cost preview before any real delegate.
+Expect `fnames: ["src/cli.py"]` only — `src/api.py` and `src/big_utils.py` land in the prompt as **read** blocks, not editable `fnames`.
+
+**Step 2 — read block inside the prompt** (the fenced `## Read context` section):
+
+```bash
+mcp-coder delegate --workspace "$DEMO" \
+  --task "$TASK" --context-summary "$CTX" \
+  --target-files src/cli.py,src/api.py \
+  --spec tasks/demo-01-cli.md \
+  --stop-after context \
+  | jq -r '.artifacts.executor_in.prompt' \
+  | rg -n 'Read context|src/api.py|src/big_utils' | head -10
+```
+
+You should see `get_user` inside the `src/api.py` fence and an excerpt header for `src/big_utils.py`.
+
+**Step 3 — full brief stack in the prompt** (after running §8 **B** or **D** with builder on):
+
+```bash
+mcp-coder delegate --workspace "$DEMO" \
+  --task "$TASK" --context-summary "$CTX" \
+  --target-files src/cli.py,src/api.py \
+  --spec tasks/demo-01-cli.md \
+  --stop-after context \
+  | jq -r '.artifacts.executor_in.prompt' | head -35
+```
+
+**Step 4 — full round trip** (Aider in + post steps out; **needs API key** — see §0 Bonus):
+
+```bash
+mcp-coder test-model   # must pass (T-01)
+
+cd "$DEMO"
+mcp-coder delegate \
+  --task "$TASK" --context-summary "$CTX" \
+  --target-files src/cli.py,src/api.py \
+  --spec tasks/demo-01-cli.md \
+  --pretty > /tmp/ctx-demo-roundtrip.json
+
+# In
+jq -r '.artifacts.executor_in.prompt' /tmp/ctx-demo-roundtrip.json | head -15
+
+# Out
+jq '.artifacts.executor_out | {success, output: .output[:200], files_changed}' \
+  /tmp/ctx-demo-roundtrip.json
+
+# Back to planner (MCP shape) + post
+jq '{
+  caller: .caller_response | {success, outcome, files_changed, spec_report_path},
+  post: .artifacts.post_delegate | {pipeline: .delegation_pipeline, scope_violations}
+}' /tmp/ctx-demo-roundtrip.json
+
+cat src/cli.py
+```
+
+`fnames` is what Aider opens for editing; `read_paths_in_prompt` are the fenced blocks; `artifacts.executor_in.prompt` is the exact wire string (brief + read + map blocks).
 
 ---
 
@@ -1053,35 +1181,15 @@ On inspect, spec validation never blocks exit; on a real delegate it can block (
 | Architect pass | `--run-architect` | `architect_pass: true` | Optional |
 | Builder LLM | `--run-builder-llm` | `context_builder_llm: true` (default on) | Optional |
 
-**Try it — builder on `$DEMO` (inspect, opt-in):**
+Hands-on helper + Aider prompt demos: **§8** (helper layers) and **§9** (wire format + round trip). Quick reference:
 
-```bash
-mcp-coder inspect-context --workspace "$DEMO" \
-  --task 'Add CLI calling `get_user` per spec' \
-  --context-summary 'Demo playground' \
-  --target-files src/cli.py,src/api.py \
-  --spec tasks/demo-01-cli.md \
-  --run-builder-llm --pretty \
-  | jq -r '.context_package.brief' | head -25
-```
-
-**Try it — builder on `$DEMO` (delegate prepare, config default — builder runs without a flag):**
-
-```bash
-mcp-coder delegate --workspace "$DEMO" \
-  --task 'Add CLI calling `get_user` per spec' \
-  --context-summary 'Demo playground' \
-  --target-files src/cli.py,src/api.py \
-  --spec tasks/demo-01-cli.md \
-  --stop-after context --pretty \
-  | jq '.artifacts.helper_phases.builder_llm'
-```
-
-Check `context_package.brief` or `artifacts.executor_in.prompt` for `## Builder brief` when the builder ran. Full pipeline bonus: §0.
-
-**Full executor prompt** — `delegate --stop-after context` (always) or `inspect-context --include-prompt` (opt-in).
-
-**Full Aider round-trip** — §0 Bonus; artifact map in **T-06** §5.
+| Goal | Where |
+|------|--------|
+| Mechanical vs builder vs architect | §8 **A–D** |
+| `fnames` vs read blocks vs full prompt | §9 Steps 1–3 |
+| Full Aider + post steps | §9 Step 4 / §0 Bonus |
+| `inspect` opt-in helpers | §8 **B–C** or `--run-all-helpers` |
+| Delegate-faithful prepare | §8 **D** or `delegate --stop-after context` |
 
 ---
 
