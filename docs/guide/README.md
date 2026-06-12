@@ -34,7 +34,7 @@ T-04 = how context is compiled (tiers, picker, builder). T-06 = every step on a 
 
 | Document | Topic |
 |----------|-------|
-| [architecture/overview.md](./architecture/overview.md) | Layer map — host / MCP / compiler / engine / storage |
+| [architecture/overview.md](./architecture/overview.md) | Layer map, locked decisions, delegation lifecycle, context compiler, helper LLMs, known gaps — **living** |
 | [architecture/context-pipeline.md](./architecture/context-pipeline.md) | Picker → compiler tiers → builder LLM → Aider |
 | [architecture/storage-layout.md](./architecture/storage-layout.md) | `~/.mcp-coder`, `workspace_history.db`, JSONL schema |
 | [architecture/per-role-models.md](./architecture/per-role-models.md) | Model registry, role resolution, known gaps |
