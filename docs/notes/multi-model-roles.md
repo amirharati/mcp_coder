@@ -25,6 +25,7 @@ mcp-coder runs several **roles** around a delegation. Each role is an LLM call w
 | **Review** | Spec Q&A before implement | `review_model` (defaults to executor) |
 | **Context builder** | Pick files + assemble brief | `context_builder_model` (Gemini Flash default) — P4-001b |
 | **Critic** (future) | Grade output before returning | — (BL-006 / BL-503) |
+| **Polish** (future) | Post-executor refinement (comments, tests, alignment) | — (**BL-358**) |
 
 **Invariant across all stages:** every model call logs `role`, `model`, `tokens`, `cost_est_usd`, `duration_ms`. Per-role budgets. Resolvers stay backend-neutral in `core/config/`.
 
@@ -51,6 +52,7 @@ Same role, more than one model, chosen or combined at runtime:
 | **Critic redo** | Cheap critic grades executor output; redo with stronger model if rejected | critic verdict | BL-006, BL-503 |
 | **Failed-attempt aware** | After N failed attempts for a spec, auto-pick stronger tier | `prior_failed_attempts` (P4-008 data) | BL-321 |
 | **Deeper context build** | Escalate builder to a larger/stronger model when first brief is thin or task is cross-cutting | builder self-assessment / topic | BL-162 |
+| **Post-executor polish** | After Aider succeeds: cheap/large-context model adds comments, tests, style alignment — **no logic change** | spec `polish:` / config `polish_pass` | **BL-358** (distinct from critic redo BL-006) |
 
 **Note:** `prior_failed_attempts` (shipped P4-008) is exactly the signal Stage 2 escalation would consume — the audit data is already there.
 

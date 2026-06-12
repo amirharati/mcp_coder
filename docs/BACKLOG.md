@@ -176,6 +176,7 @@ Phase 1 deferred executor conversation carry-over to here (BL-155); see P1-130 `
 | BL-355 | **Optional host CLI toolchain — `rg`, docs, `mcp-coder doctor`** | Today: **ripgrep** optional (Python fallback in file picker); **git** soft-required for diffs/snapshots; tutorials use **jq** / **grep** for inspection. **Later:** curated optional-deps list, `setup`/`doctor` hints (`brew install ripgrep`), perf notes when fallback is used. **Phase 5+** DX; see § BL-355. From T-04 playground (2026-06-11). |
 | BL-356 | **RAG-backed context audit refs — lean JSONL + digest provenance** | As **BL-002** indexes digests (chat, delegations, workspace files), stop duplicating bodies in `delegations.jsonl`; store `context_refs[]` + hashes; index-time metadata for replay/retrieval. Pairs with **BL-353** wire log. **Phase 5+** (after RAG corpus); see § BL-356. From T-04 observability pass (2026-06-11). |
 | BL-357 | **Storage lifecycle — promote, prune, gc (logs + RAG + traces)** | `~/.mcp-coder` grows without bound (JSONL, traces, RAG DBs, checkpoints, blobs). **Later:** per-layer TTL, promote-then-prune, `mcp-coder maintenance` / gc, archive, global dedupe. Cross-cutting — not RAG-only. **Phase 6+** (after BL-356 lean refs + some RAG corpora); see § BL-357. From RAG planning (2026-06-12). |
+| BL-358 | **Post-executor polish pass — reviewer model (comments, tests, alignment)** | After Aider succeeds: optional **cheap / large-context** model reads changed files + module neighbors; adds comments, tests, style alignment, **non-logic** micro-refactors. Distinct from critic redo (BL-006) and `auto_verify`. **Phase 5+**; see § BL-358. From planning (2026-06-12). |
 
 ### BL-350: Supervised executor loop (mid-run inspect + context inject)
 
@@ -457,6 +458,47 @@ We want **good stuff** (worked patterns, promoted digests, spec outcomes) withou
 **Phase:** **6+** — after **BL-356** lean refs and at least one RAG corpus in dogfood use; thin **report-only** slice could land earlier (disk breakdown, no delete). Pairs with [notes/rag-gap-analysis.md](./notes/rag-gap-analysis.md) § Retention and [notes/storage-and-linking.md](./notes/storage-and-linking.md).
 
 **Related:** **BL-002**, **BL-353**, **BL-356**, **BL-322** (checkpoints), **BL-348** (index staleness), Corpus 4 outcome-gated ingest (rag-gap-analysis).
+
+---
+
+### BL-358: Post-executor polish pass — reviewer model (comments, tests, alignment)
+
+**Status:** `idea` — 2026-06-12. Planning discussion — some models (e.g. Gemini Flash) may be better at **holistic read** of a module than at SEARCH/REPLACE execution.
+
+**Problem:** Aider/executor optimizes for **making the change work** — not for comments, test coverage, naming consistency with the rest of the repo, or light alignment with neighboring modules. Planner or human often does that cleanup in a follow-up pass.
+
+**Proposal:** Optional **post-executor phase** (after `executor`, before or after `post_gateway` / `spec_report`):
+
+| Piece | Intent |
+|-------|--------|
+| **Input** | `files_changed` from delegate + spec contract + read-tier neighbors (wider than executor `fnames`) |
+| **Model** | Cheap, **large context** role (e.g. `context_builder` tier / Flash) — not the executor model |
+| **Output** | Second edit pass: docstrings, inline comments, missing tests, import/style alignment, **micro-refactors that preserve behavior** |
+| **Guardrails** | `edit_scope` + post_gateway diff; optional `polish_pass: logic_locked` (no semantic changes); spec flag `polish: true` |
+| **Audit** | New `delegation_pipeline` phase `polish_pass`; `model_roles.polish` |
+
+**Distinct from adjacent items:**
+
+| Item | Difference |
+|------|------------|
+| **BL-006 critic** | Grades output → may **redo** executor; polish assumes success and **refines** |
+| **`mode=review`** | Pre-implement spec Q&A — before code |
+| **`auto_verify`** | Runs external command (pytest) — does not edit files |
+| **Architect pass** | Pre-executor plan in brief — no file edits |
+| **Executor** | Primary logic/feature implementation |
+
+**Implementation sketch (later):**
+
+1. Config: `polish_pass: true` or spec front matter `polish: comments,tests`.
+2. Compile read context for changed files + same-directory / import neighbors (**BL-348** helps).
+3. One-shot or small-loop LLM with explicit “no behavior change” prompt; apply via same backend adapter or read-only SEARCH/REPLACE on `files_changed` only.
+4. Re-run post_gateway; include polish diff in spec report.
+
+**Risks:** scope creep into second feature implementation; model “improves” logic anyway → need diff review + `logic_locked` tests. **Not RAG** — context is fresh from disk.
+
+**Phase:** **5+** (after D-P4-8 role audit stable; pairs with **BL-162** Stage 2, **BL-006** if critic and polish share infrastructure).
+
+**Related:** [notes/multi-model-roles.md](./notes/multi-model-roles.md), **BL-335** (token cost of extra pass), **BL-351** (human gate if polish wants spec expansion).
 
 ---
 
@@ -1255,6 +1297,7 @@ delegate_to_agent(backend=…)
 | **BL-355** | **Optional host CLI toolchain** — `rg`, doctor, recommended deps | See § BL-355; **Phase 5+** DX |
 | **BL-356** | **RAG-backed context audit refs** — lean JSONL, digest provenance | See § BL-356; pairs with BL-002 + BL-353; **Phase 5+** |
 | **BL-357** | **Storage lifecycle** — promote, prune, gc (logs + RAG + traces) | See § BL-357; **Phase 6+** |
+| **BL-358** | **Post-executor polish pass** — reviewer model (comments, tests, alignment) | See § BL-358; **Phase 5+** |
 | **BL-334** | **Backend prompt customization** (system prefix + edit-format control) | See § BL-334 |
 | **BL-340** | **Cursor SDK execution backend** (beside Aider) | See § Execution backends — BL-340 |
 
@@ -1322,6 +1365,7 @@ delegate_to_agent(backend=…)
 
 | Date | Change |
 |------|--------|
+| 2026-06-12 | BL-358 added — post-executor polish pass (reviewer model: comments, tests, non-logic alignment); Phase 5+ |
 | 2026-06-12 | BL-357 added — storage lifecycle (promote/prune/gc) for logs, RAG, traces, checkpoints; Phase 6+ (RAG planning) |
 | 2026-06-11 | BL-356 added — RAG-backed context audit refs (lean JSONL, digest provenance); pairs with BL-002/BL-353 (T-04 observability pass) |
 | 2026-06-11 | BL-353 expanded — full-delegate audit gaps (helper inputs, transcript line provenance, compile bundle, phased 5a/5b/6); BL-002 chat corpus note |
