@@ -45,3 +45,4 @@ T-04 = how context is compiled (tiers, picker, builder). T-06 = every step on a 
 | Document | Topic |
 |----------|-------|
 | [gap-analysis.md](./gap-analysis.md) | Findings → Phase 5 planning input |
+| [../notes/rag-gap-analysis.md](../notes/rag-gap-analysis.md) | **Living** — RAG vs not-RAG, four corpora, observability coupling (T-04 pass) |

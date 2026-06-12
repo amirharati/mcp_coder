@@ -174,6 +174,7 @@ Phase 1 deferred executor conversation carry-over to here (BL-155); see P1-130 `
 | BL-353 | **LLM boundary observability — full pass-through logging** | Backend-neutral tap on every LLM send/receive (all roles + executor multi-turn); correlate with compile + disk audit. **High ROI** for gap-finding, RAG/context direction, eval/training. **Phase 6 (TBD)** — see § BL-353; foundation tokens (**BL-335**) may start Phase 5. From T-04 tutorial pass (2026-06-11). |
 | BL-354 | **Executor context tools (pull) — RAG/history/read during backend loop** | **Dual model:** keep **compile-push (A)** as default; **also** expose read-only mcp-coder tools inside the executor loop (Aider today ignores planner MCP). LLM-driven `rag_search`, `workspace_search`, history, excerpts beside edit tools. **Phase 5+** (pairs with BL-002 usage); see § BL-354. From T-04 pass (2026-06-11). |
 | BL-355 | **Optional host CLI toolchain — `rg`, docs, `mcp-coder doctor`** | Today: **ripgrep** optional (Python fallback in file picker); **git** soft-required for diffs/snapshots; tutorials use **jq** / **grep** for inspection. **Later:** curated optional-deps list, `setup`/`doctor` hints (`brew install ripgrep`), perf notes when fallback is used. **Phase 5+** DX; see § BL-355. From T-04 playground (2026-06-11). |
+| BL-356 | **RAG-backed context audit refs — lean JSONL + digest provenance** | As **BL-002** indexes digests (chat, delegations, workspace files), stop duplicating bodies in `delegations.jsonl`; store `context_refs[]` + hashes; index-time metadata for replay/retrieval. Pairs with **BL-353** wire log. **Phase 5+** (after RAG corpus); see § BL-356. From T-04 observability pass (2026-06-11). |
 
 ### BL-350: Supervised executor loop (mid-run inspect + context inject)
 
@@ -250,50 +251,61 @@ Phase 1 deferred executor conversation carry-over to here (BL-155); see P1-130 `
 
 ### BL-353: LLM boundary observability — full pass-through logging
 
-**Status:** `idea` — 2026-06-11. Surfaced T-04 tutorial pass (context visibility, Aider black box, RAG/evidence planning).
+**Status:** `idea` — 2026-06-11; **expanded** 2026-06-11 (T-04 full-delegate audit gaps — helper inputs, transcript line provenance, compile bundle, RAG transition).
 
-**Target phase:** **Phase 6 (TBD)** — umbrella observability milestone. **High ROI** for product direction: find real gaps in picker/builder/RAG, measure cost/quality, feed eval sets. Small pieces (**BL-335** per-role tokens, structured compile fields in JSONL) may land earlier in Phase 5 as prerequisites.
+**Target phase:** **Phase 6 (TBD)** umbrella; **Phase 5 early slices** below are prerequisites for RAG dogfood and cost audit (**BL-335**, **BL-002**).
 
-**Problem:** Today we audit **intent** more than **reality**:
+**Problem:** Today we audit **intent** more than **reality**. A full `delegate_to_agent` / `mcp-coder delegate` run appends one `delegations.jsonl` row — but most **wire traffic** is missing or only inferable.
 
-| What we have | Gap |
-|--------------|-----|
-| `context.prompt_preview` / opt-in `prompt_full` | Initial executor prompt only — not each LLM turn inside `coder.run()` |
-| `delegation_pipeline` phase timings | No per-call request/response bodies |
-| `inspect-context` | Compile dry-run only — no wire traffic |
-| Helper LLMs (builder, architect, validation) | Outputs may appear in brief; **inputs** and raw completions not in JSONL |
-| Aider in-process chat on `Coder` reuse | Not serialized |
-| Reasoning / thinking tokens | Stripped by Aider before storage (**BL-333**) |
+#### What full delegate logs today (MCP + CLI)
 
-Hard to answer “what exact context did each LLM call see?” or dogfood RAG/context changes without evidence.
+| Captured in JSONL | Not captured (gap) |
+|-------------------|-------------------|
+| `delegation_pipeline` — phase name, status, `duration_ms` | Per-phase **input/output bodies** (picker rank list is in `candidate_files`; no assemble/budget before/after snapshots) |
+| `context.context_package` — path, tier, bytes, truncations (**no payloads**) | File payloads / fenced read blocks |
+| `context.adapter_in` — `fnames`, `read_paths_in_prompt`, prompt size/hash | Same fields duplicated on CLI `artifacts.executor_in` only — **not** in JSONL |
+| `context.prompt_preview` (~500 chars); opt-in `prompt_full` (`MCP_CODER_LOG_FULL_PROMPT=1`) | **Final** executor string only — not each Aider turn inside `coder.run()` |
+| Helper **flags** — `builder_brief_applied`, `architect_plan_applied`, errors | Helper **input prompts** (`build_builder_llm_prompt`, architect, spec_validation) and **raw completions** |
+| `model_roles` — model + duration per role (**tokens often null**, BL-335) | Reasoning / thinking tokens (**BL-333**) |
+| `host_transcript_path`, `host_session_id`, hash, `lines_parsed` / `lines_skipped`, truncation bytes | **Source line range** in Cursor JSONL (“used through line N”); which turns were injected vs dropped |
+| `inspect-context` / `delegate --stop-after context` | **No JSONL** — stdout only |
 
-**Goal:** One **backend-neutral pass-through** at the LLM boundary — whatever the execution adapter (Aider today, Cursor SDK / other later), **every** completion crosses a shared hook that records send + receive (pass-through, no behavior change by default).
+Hard to answer: “What exact prompt did the builder LLM see?” “What did Aider get on turn 3?” “Which Cursor transcript lines were in scope at validation vs builder vs executor?”
+
+**Goal:** One **backend-neutral pass-through** at the LLM boundary — every completion crosses a shared hook (no behavior change by default). Plus a **compile provenance bundle** so each LLM call’s inputs are attributable to pipeline stage.
 
 **Recommended mechanism (primary):**
 
 | Piece | Approach |
 |-------|----------|
-| **Intercept** | `litellm.success_callback` (+ failure hook) registered at MCP startup; optional thin `completion()` wrapper all roles must use |
-| **Coverage** | Executor (all Aider turns), `context_builder`, `architect_pass`, `spec_validation`, `test-model` |
-| **Correlation** | `contextvars`: `delegation_id`, `role`, `pipeline_phase`, optional `step_index` |
-| **Compile side** | Structured bundle alongside wire log: mechanical vs builder vs architect brief hashes, `context_package` entry tiers (extends today’s audit metadata) |
-| **Disk side** | Still `post_gateway` / `workspace_history` — LLM log ≠ file edits |
+| **Intercept** | `litellm.success_callback` (+ failure hook) at MCP startup; thin `completion()` wrapper all roles use |
+| **Coverage** | Executor (**all** Aider turns), `context_builder`, `architect_pass`, `spec_validation`, `test-model`; **BL-354** executor-pull tool calls as separate audit events |
+| **Correlation** | `contextvars`: `delegation_id`, `role`, `pipeline_phase`, `step_index`, optional `parent_call_id` |
+| **Compile bundle** | Per delegate, structured refs + hashes: `mechanical_brief`, `builder_input`, `builder_output`, `architect_*`, `validation_*`, `final_executor_prompt`, `context_package` entry tiers — “what came from what step” without re-parsing one blob |
+| **Host transcript provenance** | Extend `transcript_log_context`: `source_path`, `file_bytes`, `lines_parsed`, **`last_source_line`** (or byte offset range), `truncation_policy`, `bytes_dropped` — enough to slice the Cursor JSONL file for replay |
+| **Disk side** | `post_gateway` / `workspace_history` unchanged — LLM log ≠ file edits |
+
+**Phased delivery:**
+
+| Slice | When | Delivers |
+|-------|------|----------|
+| **5a — tokens + transcript refs** | Phase 5 early | Fix **BL-335**; transcript line/byte provenance; compile bundle **hashes only** in JSONL |
+| **5b — helper wire log** | Phase 5 | Store builder/architect/validation request+response in per-delegation trace file (truncated default) |
+| **6 — full tap** | Phase 6 | All executor multi-turn + reasoning payloads; viewer timeline (**BL-343**) |
 
 **Storage tiers (config):**
 
-1. **Metadata always** — model, role, tokens, latency, status, content hashes (feeds **BL-335**).
-2. **Truncated bodies** — default for JSONL / per-delegation trace file.
-3. **Full bodies opt-in** — `capture_llm_traces: full` or env; redact via `redact_secrets`; size caps.
+1. **Metadata always** — model, role, tokens, latency, status, content hashes (+ compile bundle hashes).
+2. **Truncated bodies** — default in trace file / optional `llm_calls[]` summary on delegation row.
+3. **Full bodies opt-in** — `capture_llm_traces: full` or env; `redact_secrets`; size caps. Supersedes ad-hoc `MCP_CODER_LOG_FULL_PROMPT` over time.
 
-**Storage sketch:** append `llm_calls[]` on delegation record and/or `~/.mcp-coder/projects/<key>/sessions/<id>/traces/<delegation_id>.jsonl` (one line per LLM call). Viewer (**BL-343**) renders timeline: compile → LLM calls → gateway.
+**Storage sketch:** `~/.mcp-coder/projects/<key>/sessions/<id>/traces/<delegation_id>.jsonl` (one line per LLM call + optional compile event); slim `delegations.jsonl` row holds pointers + hashes. Long-term: bodies move to **BL-356** RAG refs where corpus-backed (**lean JSONL**).
 
-**Explicit non-goals (v1):** HTTP proxy server (use LiteLLM hook unless a backend bypasses LiteLLM); replacing `delegations.jsonl` canonical row; indexing raw traces into RAG without curation (**BL-002** stays separate).
+**Explicit non-goals (v1):** HTTP proxy; replacing canonical `delegations.jsonl` row; auto-indexing raw traces into RAG without curation.
 
-**Composes / supersedes in spirit:** **BL-333** (reasoning capture), **BL-335** (token audit), **BL-350** (per-step outer loop — active control; BL-353 is passive tap first), **BL-343** (viewer), **BL-204** (sibling `context_optimizer_proxy` turn-level — complementary). Design refs: [AGENTIC_LOOP_LOGGING.md](./OTEHR_RELATED_IDEAS/AGENTIC_LOOP_LOGGING.md), [REASONING_TRACE_REUSE.md](./OTEHR_RELATED_IDEAS/REASONING_TRACE_REUSE.md) Route A.
+**Composes:** **BL-333**, **BL-335**, **BL-350**, **BL-343**, **BL-354** (tool-call audit), **BL-356** (lean refs once RAG digests exist). Design refs: [AGENTIC_LOOP_LOGGING.md](./OTEHR_RELATED_IDEAS/AGENTIC_LOOP_LOGGING.md), [REASONING_TRACE_REUSE.md](./OTEHR_RELATED_IDEAS/REASONING_TRACE_REUSE.md).
 
-**Why Phase 6:** Phase 5 focuses RAG + context-memory bases; full wire logging is cross-cutting infrastructure that benefits every later phase (BL-350 supervised loop, BL-340 alternate backends, training flywheel) once core product paths stabilize. Sequencing TBD — may ship a **minimal callback + token counts** slice earlier if Phase 5 measurement blocks RAG experiments.
-
-**Open design:** retention/TTL; per-project opt-out; whether helper-LLM prompts are stored verbatim or hashed-only by default; export format for eval/training consent.
+**Open design:** retention/TTL; default hash-only vs truncated bodies for helpers; export/consent for eval; whether CLI `artifacts` envelope is mirrored into JSONL or always resolved via trace file.
 
 ---
 
@@ -366,6 +378,46 @@ Hard to answer “what exact context did each LLM call see?” or dogfood RAG/co
 **Phase:** **5+** DX / onboarding polish (pairs with **BL-341** setup, **BL-345** spec lint CLI).
 
 **Related:** **BL-352** (multi-language scan may prefer AST tools over regex+rg), **BL-348** (incremental index may reduce per-delegate rg volume).
+
+---
+
+### BL-356: RAG-backed context audit refs — lean JSONL + digest provenance
+
+**Status:** `idea` — 2026-06-11. Follow-on to T-04 observability discussion + **BL-002** Phase 5 RAG planning.
+
+**Problem:** Today `delegations.jsonl` grows if we store full prompts (`prompt_full`), helper inputs, and inline host chat. Duplication across delegations (same transcript slice, same file summary) does not scale. Conversely, once **BL-353** captures wire traffic, we need a **stable join key** between audit logs and retrievable content — not another copy-paste blob per row.
+
+**Direction:** As **BL-002** (and **BL-348**) build indexed digests, **audit logs store references**, not bodies:
+
+| Content type | Today (inline / opt-in) | After RAG + BL-356 |
+|--------------|-------------------------|---------------------|
+| Cursor host chat | `host_transcript: dump` → inject full text; hash + line counts in JSONL | **Curated digest** in RAG (session chunks, outcome-labeled where possible); compile pulls **retrieved chunks**; JSONL = `context_refs[]` + query + chunk ids + sha256 |
+| Prior delegations / builder history | Summaries from `workspace_history.db` in builder prompt | **Delegation RAG** + checkpoint digests; builder retrieves by spec/project; log refs `delegation_id` + summary doc id |
+| Workspace file context | Full read payloads / excerpts in prompt | **BL-002** file summaries + **BL-348** symbol index; prompt gets retrieved snippets; log refs `(path, sha256, chunk_id)` |
+| Helper LLM I/O | Not logged (**BL-353** gap) | Trace file or RAG “prompt/response” docs with `role`, `phase`, `delegation_id` metadata |
+| Executor prompt | `prompt_full` opt-in | Hash + trace ref; full text in trace store or content-addressed blob |
+
+**Index-time metadata (required for replay):** every digest/chunk row should carry enough to re-fetch and explain provenance without opening JSONL:
+
+- `source_kind` — `cursor_transcript` \| `delegation` \| `workspace_file` \| `spec` \| `llm_trace`
+- `source_path` or `delegation_id` / `spec_id`
+- `source_line_range` or `byte_range` (for transcripts and files)
+- `sha256` of source at index time
+- `indexed_at`, `stale_after` / content hash for invalidation
+- optional `outcome` / `labels` for chat distillation (accepted vs rejected ideas)
+
+**`delegations.jsonl` shape (lean):** keep timing, outcome, `files_changed`, `delegation_pipeline`, `model_roles`, compile bundle **hashes**, and `context_refs: [{kind, id, sha256, lines?, role?}]`. Full replay = JSONL row + trace file + RAG lookup (**BL-343** viewer).
+
+**Interaction with compile-push vs pull:**
+
+- **BL-354** executor-pull: each `rag_search` / `workspace_search` call logs `query` + `context_refs` returned — same ref schema.
+- **BL-350** supervised loop: per-step re-compile appends new refs; timeline shows which retrieval fed which step.
+
+**Phase:** **5+** — design alongside **BL-002** corpus expansion; implement after first workspace-file + delegation digest paths exist. **BL-353** Phase 5a (hashes + transcript line refs) can ship before full RAG refs.
+
+**Non-goals:** Indexing raw Cursor JSONL verbatim without distillation (see BL-002 chat row — revisit only via curated digests); replacing `workspace_history.db` checkpoints.
+
+**Related:** **BL-002**, **BL-348**, **BL-349**, **BL-353**, **BL-354**, **BL-343**.
 
 ---
 
@@ -625,6 +677,7 @@ By design today: `project_key` = SHA-256(resolved path).
 ### BL-002: RAG / cross-session memory
 
 **Status:** `partial` — **delegation RAG shipped** (P3-002-lite, 2026-06-09); workspace-file RAG + usage decisions → **Phase 5**.  
+**Living analysis:** [notes/rag-gap-analysis.md](./notes/rag-gap-analysis.md) — RAG vs not-RAG gaps, four corpora, sequencing (update as we dogfood).  
 **Code in place:** `core/rag/` (db.py, index.py, search.py, models.py), `core/config/rag.py`, `core/cli/rag.py`; 431 pytest. Enabled by default; opt-out via `rag_enabled: false`.  
 **Phase 5 (after Phase 4 context builder):** Phase 4 will reveal which retrieval problems are real and what query shapes the builder needs. Phase 5 then designs + builds the right RAG layer (workspace-file summaries primary; delegation search revise/extend based on actual use; embeddings only if FTS recall proves insufficient).
 
@@ -636,7 +689,7 @@ By design today: `project_key` = SHA-256(resolved path).
 | **Delegation records** | 4+ | Wave 1 inspect tools now; FTS5 when scale hurts | `list_delegations` + `get_checkpoint_detail` sufficient at <200 rows. Add keyword search when pain is felt. |
 | **Decision log** | 5 | Structured exit notes → FTS5 | Session-end host writes 3–5 key decisions + deferred items. Higher signal than raw chat. |
 | **Spec files** | Skip | Grep / direct read | Too small to index (~5–50 files). |
-| **Chat transcripts** | Skip | N/A | Rejected ideas and accepted ideas indistinguishable without outcome labels. Good decisions already land in specs/docs. If distillation shows a gap, revisit then — not proactively. |
+| **Chat transcripts** | Skip (raw) | N/A | Raw JSONL not indexed — noise vs signal. **Revisit via BL-356:** curated session digests with outcome/metadata for builder/RAG retrieval; inline `host_transcript: dump` remains until then (**BL-353** transcript line provenance bridges gap). |
 | **Cursor rules / config** | Skip | Direct read | Planner reads these directly; no search needed. |
 
 #### Architecture (locked for Phase 4)
@@ -659,6 +712,8 @@ Storage: ~/.mcp-coder/projects/<key>/workspace_rag.db
 
 #### Phase 5 plan
 Phase 5 = RAG master session after Phase 4 context builder ships. Agenda: what retrieval did Phase 4 actually need? Finalize: indexing trigger (snapshot hook vs on-demand), summary prompt, symbol extraction strategy, DB schema, MCP tool signature. Then implement as first Phase 5 milestone.
+
+**Observability coupling:** RAG entries should ship with **BL-356** index-time metadata (source line range, sha256, `delegation_id`/`spec_id` links) so `delegations.jsonl` can stay lean — refs not bodies — and **BL-353** trace replay can join on `context_refs[]`.
 
 ---
 
@@ -1159,6 +1214,7 @@ delegate_to_agent(backend=…)
 | **BL-353** | **LLM boundary observability — full pass-through logging** | See § BL-353 + [AGENTIC_LOOP_LOGGING.md](./OTEHR_RELATED_IDEAS/AGENTIC_LOOP_LOGGING.md); **Phase 6 (TBD)** |
 | **BL-354** | **Executor context tools (pull)** — RAG/history/read during backend loop | See § BL-354; dual with compile-push (A); **Phase 5+** |
 | **BL-355** | **Optional host CLI toolchain** — `rg`, doctor, recommended deps | See § BL-355; **Phase 5+** DX |
+| **BL-356** | **RAG-backed context audit refs** — lean JSONL, digest provenance | See § BL-356; pairs with BL-002 + BL-353; **Phase 5+** |
 | **BL-334** | **Backend prompt customization** (system prefix + edit-format control) | See § BL-334 |
 | **BL-340** | **Cursor SDK execution backend** (beside Aider) | See § Execution backends — BL-340 |
 
@@ -1226,6 +1282,8 @@ delegate_to_agent(backend=…)
 
 | Date | Change |
 |------|--------|
+| 2026-06-11 | BL-356 added — RAG-backed context audit refs (lean JSONL, digest provenance); pairs with BL-002/BL-353 (T-04 observability pass) |
+| 2026-06-11 | BL-353 expanded — full-delegate audit gaps (helper inputs, transcript line provenance, compile bundle, phased 5a/5b/6); BL-002 chat corpus note |
 | 2026-06-11 | BL-354 added — executor context tools (pull): dual compile-push + RAG/history/read tools during backend loop; Phase 5+ (T-04 pass) |
 | 2026-06-11 | BL-353 added — LLM boundary observability (full pass-through logging); Phase 6 TBD; high ROI for gap-finding and dev direction (T-04 pass) |
 | 2026-06-09 | BL-340 added — Cursor SDK execution backend (deferred, later phase — not Phase 5) |
