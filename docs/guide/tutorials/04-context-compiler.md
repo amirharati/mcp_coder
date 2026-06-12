@@ -869,7 +869,7 @@ fnames = [edit-full paths]              # files Aider opens for editing (not rea
 
 The read context block looks like this in Aider's prompt:
 
-```
+````text
 ---
 
 ## Read context (read-only — do not edit unless spec allows)
@@ -889,11 +889,11 @@ def parse_config(...):
 class Builder:
     ...
 ```
-```
+````
 
 The repo map block:
 
-```
+```text
 ---
 
 ## Repo map (symbols only — do not edit unless spec allows)

@@ -173,6 +173,7 @@ Phase 1 deferred executor conversation carry-over to here (BL-155); see P1-130 `
 | BL-352 | **Multi-language symbol scan + outlines (C/C++, Go, Rust, …)** | Today: symbol scan hardcoded to 9 extensions (`SCAN_EXTENSIONS` in `file_picker.py`); repo-map/excerpt regex is Python `def`/`class` only — C/C++/Go/Rust/Java/etc. work via **spec contract** but not **auto-discovery** or useful outlines. **Later:** expand/configurable scan globs; per-language outline heuristics (or tie to BL-348 index); goal = “works for money cases” on polyglot/monorepo repos without hand-listing every path. **Phase 5+**. From P4.5-ISS-015. |
 | BL-353 | **LLM boundary observability — full pass-through logging** | Backend-neutral tap on every LLM send/receive (all roles + executor multi-turn); correlate with compile + disk audit. **High ROI** for gap-finding, RAG/context direction, eval/training. **Phase 6 (TBD)** — see § BL-353; foundation tokens (**BL-335**) may start Phase 5. From T-04 tutorial pass (2026-06-11). |
 | BL-354 | **Executor context tools (pull) — RAG/history/read during backend loop** | **Dual model:** keep **compile-push (A)** as default; **also** expose read-only mcp-coder tools inside the executor loop (Aider today ignores planner MCP). LLM-driven `rag_search`, `workspace_search`, history, excerpts beside edit tools. **Phase 5+** (pairs with BL-002 usage); see § BL-354. From T-04 pass (2026-06-11). |
+| BL-355 | **Optional host CLI toolchain — `rg`, docs, `mcp-coder doctor`** | Today: **ripgrep** optional (Python fallback in file picker); **git** soft-required for diffs/snapshots; tutorials use **jq** / **grep** for inspection. **Later:** curated optional-deps list, `setup`/`doctor` hints (`brew install ripgrep`), perf notes when fallback is used. **Phase 5+** DX; see § BL-355. From T-04 playground (2026-06-11). |
 
 ### BL-350: Supervised executor loop (mid-run inspect + context inject)
 
@@ -335,6 +336,36 @@ Hard to answer “what exact context did each LLM call see?” or dogfood RAG/co
 **Phase:** **5+** — especially once **BL-002** indexes exist; dogfood with delegation RAG first. Evidence from tutorial pass: today we **ignore** executor-side tool access entirely.
 
 **Open design:** which tools on by default; max calls per delegate; inject tool results into Aider chat vs replace compile; compare push-only vs push+pull in eval.
+
+---
+
+### BL-355: Optional host CLI toolchain (`rg`, docs, doctor)
+
+**Status:** `idea` — 2026-06-11. Surfaced T-04 playground — `rg` missing on PATH; file picker still worked via Python fallback.
+
+**Problem:** mcp-coder silently degrades when common dev CLIs are absent. Users discover gaps mid-tutorial (`rg: command not found`) or get slower symbol scan with no visible hint. No single place documents **recommended vs required** host tools.
+
+**Today:**
+
+| Tool | Required? | Used for | If missing |
+|------|-----------|----------|------------|
+| **git** | Soft (repo workflows) | `files_changed`, dirty snapshot, untracked hints in assemble | Manifest-only diff; untracked warnings weaker |
+| **rg** (ripgrep) | No | File picker symbol scan (`file_picker.py`) | Pure-Python scan (slower on large trees) |
+| **jq** / **grep** | No | Tutorial / operator inspection of JSON | User picks alternatives |
+| **Python 3** | Yes | Runtime | N/A |
+
+**Later (incremental):**
+
+1. **`mcp-coder doctor`** (or `setup --check-tools`) — print found/missing optional binaries + install hints (macOS `brew`, apt, etc.).
+2. **Docs** — T-01 “recommended toolchain” box; link from T-04 pitfalls.
+3. **Candidates to evaluate** (not committed): `fd` (fast find), `ast-grep` / tree-sitter (BL-352 polyglot), `ctags`/`universal-ctags`, `shellcheck`/`ruff` for verify hooks — only add when a code path needs them.
+4. **Optional:** warn once per workspace when picker used Python fallback (`context.metadata` or server log).
+
+**Non-goals:** Bundling binaries in the pip wheel; hard-failing delegate when `rg` absent.
+
+**Phase:** **5+** DX / onboarding polish (pairs with **BL-341** setup, **BL-345** spec lint CLI).
+
+**Related:** **BL-352** (multi-language scan may prefer AST tools over regex+rg), **BL-348** (incremental index may reduce per-delegate rg volume).
 
 ---
 
@@ -1127,6 +1158,7 @@ delegate_to_agent(backend=…)
 | **BL-333** | **Reasoning trace capture + cross-delegation context feed** | See § BL-333 + [REASONING_TRACE_REUSE.md](./OTEHR_RELATED_IDEAS/REASONING_TRACE_REUSE.md); wire capture is part of umbrella **BL-353** |
 | **BL-353** | **LLM boundary observability — full pass-through logging** | See § BL-353 + [AGENTIC_LOOP_LOGGING.md](./OTEHR_RELATED_IDEAS/AGENTIC_LOOP_LOGGING.md); **Phase 6 (TBD)** |
 | **BL-354** | **Executor context tools (pull)** — RAG/history/read during backend loop | See § BL-354; dual with compile-push (A); **Phase 5+** |
+| **BL-355** | **Optional host CLI toolchain** — `rg`, doctor, recommended deps | See § BL-355; **Phase 5+** DX |
 | **BL-334** | **Backend prompt customization** (system prefix + edit-format control) | See § BL-334 |
 | **BL-340** | **Cursor SDK execution backend** (beside Aider) | See § Execution backends — BL-340 |
 
