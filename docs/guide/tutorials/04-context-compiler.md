@@ -930,13 +930,43 @@ This can happen **mid-loop** even when `inspect-context` showed a tight `fnames`
 
 Check `metadata.bytes_by_tier` — which tier is dominating? Check `metadata.repo_map_count` — 150 symbol outlines add up. Lower `MCP_CODER_REPO_MAP_MAX_FILES` or set `context_builder: false` for a quick test.
 
-**"I want to see what the builder LLM would say"**
+**Helper LLMs via inspect-context**
+
+Dry-run the same helper phases as `delegate_to_agent` without calling the executor. All helpers are **opt-in** (API cost). On inspect, spec validation is **advisory** — it never blocks exit; on a real delegate it can block.
+
+| Phase | CLI flag | Workspace config | Needs host transcript? |
+|-------|----------|------------------|------------------------|
+| Spec validation | `--run-spec-validation` | `spec_validation: true` | Yes (`--host-transcript-file`) |
+| Architect pass | `--run-architect` | `architect_pass: true` | Optional (improves prompt) |
+| Builder LLM | `--run-builder-llm` | `context_builder_llm: true` (default on) | Optional |
+
+Shorthand: `--run-all-helpers`. Use `--force-helpers` to run requested phases when disabled in `config.yaml`. JSON includes `helper_phases` with `ran`, `applied`, `error`, and `would_block_delegate` (validation only).
+
+Builder example:
 
 ```bash
-MCP_CODER_INSPECT_RUN_BUILDER_LLM=1 mcp-coder inspect-context --spec tasks/my-spec.md --task "..." --target-files ... --pretty
+mcp-coder inspect-context \
+  --spec tasks/step-5b.md \
+  --task "Add comment above Expense" \
+  --target-files expense_splitter/models.py \
+  --run-builder-llm \
+  --pretty
 ```
 
-Check `context_package.brief` for the `## Builder brief` section.
+Architect + validation (with transcript file):
+
+```bash
+mcp-coder inspect-context \
+  --spec tasks/step-5b.md \
+  --task "Add comment above Expense" \
+  --target-files expense_splitter/models.py \
+  --run-architect \
+  --run-spec-validation \
+  --host-transcript-file /path/to/cursor-transcript.txt \
+  --pretty
+```
+
+Check `context_package.brief` for `## Architect plan` (above) and `## Builder brief`. Legacy env: `MCP_CODER_INSPECT_RUN_BUILDER_LLM=1` is equivalent to `--run-builder-llm`.
 
 ---
 

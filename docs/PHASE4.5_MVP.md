@@ -157,7 +157,7 @@ Small fixes found during inspection — not new features. Dispatch as workers if
 | `mcp-coder view delegations` browser | T-01 / T-02 | **done** (P4.5-003) |
 | Structured delegation viewer (no raw JSON expand) | T-02 / P4.5-ISS-006 | pending → **BL-343** |
 | `mcp-coder delegation show <id>` CLI | T-02 / T-07 | pending |
-| `inspect-context` parity: architect + validation phases | T-04 | pending |
+| `inspect-context` parity: architect + validation phases | T-04 | **done** (P4.5-004) |
 
 ---
 
@@ -192,6 +192,7 @@ Interactive sessions (PM + assistant together) — not dispatched workers unless
 
 | Date | Change |
 |------|--------|
+| 2026-06-11 | **P4.5-004 done**: `inspect-context` helper LLM parity — shared `helper_llm_pipeline.py`; CLI `--run-builder-llm` / `--run-architect` / `--run-spec-validation` / `--run-all-helpers`; `helper_phases` JSON; `main.py` passthrough fix. Track 5 inspect parity row closed. |
 | 2026-06-10 | **T-04 done**: Context compiler tutorial — file picker (symbol scan, `discover` vs `strict`), tiers (edit-full / read-full / read-excerpt / pointer / map-only), budget 3-step degradation, builder LLM narrative layer, adapter translation → Aider `fnames` + read block, `inspect-context` CLI + all output fields. |
 | 2026-06-10 | **T-03 done**: Specs tutorial — `.mcp-coder/specs/` layout, `spec_path` rules, Files contract + delegation policies, review→implement workflow, gateway `edit_scope`, reports, planner-managed `revision` (no auto filename versioning). |
 | 2026-06-10 | **P4.5-003 done**: `mcp-coder view delegations` — delegation log browser from cwd; `view` group for future UIs; 10 tests. |

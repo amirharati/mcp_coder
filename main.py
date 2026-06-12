@@ -9,6 +9,11 @@ from pathlib import Path
 
 
 def main() -> None:
+    if len(sys.argv) > 1 and sys.argv[1] == "inspect-context":
+        from core.cli.inspect_context import main_inspect_context
+
+        raise SystemExit(main_inspect_context(sys.argv[2:]))
+
     parser = argparse.ArgumentParser(description="mcp-coder MCP server and CLI")
     sub = parser.add_subparsers(dest="command")
 
@@ -59,41 +64,10 @@ def main() -> None:
         help="aider (default) = Model.send_completion; litellm = raw completion; both = compare",
     )
 
-    inspect_p = sub.add_parser(
+    sub.add_parser(
         "inspect-context",
         help="Dry-run context compiler (assemble + adapter preview, no backend)",
     )
-    inspect_p.add_argument(
-        "--workspace",
-        default=None,
-        help="Repo root (default: cwd or MCP_CODER workspace resolution)",
-    )
-    inspect_p.add_argument("--task", required=True, help="Task text")
-    inspect_p.add_argument(
-        "--target-files",
-        action="append",
-        default=[],
-        metavar="PATH",
-        help="Repo-relative path hint; repeatable or comma-separated",
-    )
-    inspect_p.add_argument("--context-summary", default="", help="Planner context summary")
-    inspect_p.add_argument(
-        "--spec",
-        dest="spec_path",
-        default=None,
-        help="Step task spec under .mcp-coder/specs/",
-    )
-    inspect_p.add_argument(
-        "--include-payloads",
-        action="store_true",
-        help="Include file payloads in entries",
-    )
-    inspect_p.add_argument(
-        "--no-adapter-preview",
-        action="store_true",
-        help="Omit adapter_preview",
-    )
-    inspect_p.add_argument("--pretty", action="store_true", help="Pretty-print JSON")
 
     view_p = sub.add_parser(
         "view",
@@ -178,11 +152,6 @@ def main() -> None:
         )
         print_test_result(result)
         raise SystemExit(0 if result.ok else 1)
-
-    if args.command == "inspect-context":
-        from core.cli.inspect_context import main_inspect_context
-
-        raise SystemExit(main_inspect_context(sys.argv[2:]))
 
     if args.command == "view":
         if args.view_command == "delegations":

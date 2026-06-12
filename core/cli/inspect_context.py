@@ -25,7 +25,9 @@ def main_inspect_context(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(
         description=(
             "Dry-run context compiler: assemble ContextPackage and adapter preview "
-            "without calling the execution backend."
+            "without calling the execution backend. Optional helper LLM phases "
+            "(builder, architect, spec validation) call configured model roles and "
+            "may incur API cost."
         ),
     )
     parser.add_argument(
@@ -63,6 +65,42 @@ def main_inspect_context(argv: list[str] | None = None) -> int:
         help="Omit adapter_preview (fnames + prompt stats)",
     )
     parser.add_argument(
+        "--run-builder-llm",
+        action="store_true",
+        help="Run context-builder LLM (opt-in; may incur API cost)",
+    )
+    parser.add_argument(
+        "--run-architect",
+        action="store_true",
+        help="Run architect pass LLM (opt-in; may incur API cost)",
+    )
+    parser.add_argument(
+        "--run-spec-validation",
+        action="store_true",
+        help="Run pre-delegate spec validation LLM (opt-in; may incur API cost)",
+    )
+    parser.add_argument(
+        "--run-all-helpers",
+        action="store_true",
+        help="Shorthand for --run-builder-llm, --run-architect, and --run-spec-validation",
+    )
+    parser.add_argument(
+        "--host-transcript-file",
+        metavar="PATH",
+        default=None,
+        help="Read host transcript from file (for validation/architect)",
+    )
+    parser.add_argument(
+        "--force-helpers",
+        action="store_true",
+        help="Run requested helpers even when disabled in workspace config.yaml",
+    )
+    parser.add_argument(
+        "--fail-on-validation-block",
+        action="store_true",
+        help="Exit code 2 when spec validation would block a real delegate (default: 0)",
+    )
+    parser.add_argument(
         "--pretty",
         action="store_true",
         help="Pretty-print JSON to stdout",
@@ -76,6 +114,14 @@ def main_inspect_context(argv: list[str] | None = None) -> int:
 
     ws = Path(args.workspace) if args.workspace else Path(workspace_path())
 
+    host_transcript: str | None = None
+    if args.host_transcript_file:
+        host_transcript = Path(args.host_transcript_file).read_text(encoding="utf-8")
+
+    run_builder = args.run_builder_llm or args.run_all_helpers
+    run_architect = args.run_architect or args.run_all_helpers
+    run_spec_validation = args.run_spec_validation or args.run_all_helpers
+
     result = inspect_context_package(
         workspace=ws,
         task=args.task,
@@ -84,6 +130,11 @@ def main_inspect_context(argv: list[str] | None = None) -> int:
         spec_path=args.spec_path,
         include_payloads=args.include_payloads,
         include_adapter_preview=not args.no_adapter_preview,
+        host_transcript=host_transcript,
+        run_builder_llm=run_builder,
+        run_architect=run_architect,
+        run_spec_validation=run_spec_validation,
+        force_helpers=args.force_helpers,
     )
 
     if args.pretty:
@@ -91,4 +142,12 @@ def main_inspect_context(argv: list[str] | None = None) -> int:
     else:
         print(json.dumps(result, ensure_ascii=False))
 
-    return 0 if result.get("ok") else 1
+    if not result.get("ok"):
+        return 1
+
+    if args.fail_on_validation_block:
+        sv = (result.get("helper_phases") or {}).get("spec_validation") or {}
+        if sv.get("would_block_delegate"):
+            return 2
+
+    return 0

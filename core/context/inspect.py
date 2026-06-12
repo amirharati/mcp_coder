@@ -6,8 +6,22 @@ import os
 from pathlib import Path
 from typing import Any
 
+from core.config.architect_pass import architect_pass_enabled
+from core.config.auto_merge import auto_merge_spec_read_enabled
+from core.config.context_builder import (
+    context_builder_enabled,
+    context_builder_llm_enabled,
+)
+from core.config.models import resolve_model_name
+from core.config.spec_validation import spec_validation_enabled
 from core.context.assemble import assemble_context
 from core.context.budget import apply_context_budget, resolve_context_budget_tokens
+from core.context.helper_llm_pipeline import (
+    apply_architect_pass,
+    apply_builder_llm,
+    apply_spec_validation,
+    merge_architect_plan,
+)
 from core.context.package import (
     COMPILER_VERSION,
     TIER_READ_EXCERPT,
@@ -17,12 +31,6 @@ from core.context.package import (
     summarize_context_package,
 )
 from core.context.summary import estimate_tokens, sha256_hex
-from core.config.auto_merge import auto_merge_spec_read_enabled
-from core.config.context_builder import (
-    context_builder_enabled,
-    context_builder_llm_enabled,
-)
-from core.config.models import resolve_model_name
 from core.context.file_picker import CandidateFilesResult, pick_candidate_files
 from core.engine.aider_engine import translate_context_package
 from core.specs.delegation_policies import (
@@ -33,6 +41,10 @@ from core.specs.delegation_policies import (
 from core.specs.read_deps_merge import resolve_spec_read_deps
 from core.specs.paths import normalize_spec_path_arg, resolve_spec_path
 from core.specs.read import read_task_spec
+
+
+def _env_truthy(name: str) -> bool:
+    return os.environ.get(name, "").strip().lower() in ("1", "true", "yes", "on")
 
 
 def _resolve_spec(
@@ -113,6 +125,29 @@ def _adapter_preview_dict(
     }
 
 
+def _helper_phase_model(record: dict[str, Any] | None) -> str | None:
+    if record is None:
+        return None
+    model = record.get("model")
+    return str(model) if model else None
+
+
+def _should_run_helper(
+    *,
+    requested: bool,
+    workspace_enabled: bool,
+    force_helpers: bool,
+    respect_workspace_flags: bool,
+) -> bool:
+    if not requested:
+        return False
+    if force_helpers:
+        return True
+    if respect_workspace_flags:
+        return workspace_enabled
+    return True
+
+
 def inspect_context_package(
     *,
     workspace: Path,
@@ -123,17 +158,28 @@ def inspect_context_package(
     include_payloads: bool = False,
     include_adapter_preview: bool = True,
     host_transcript: str | None = None,
+    run_builder_llm: bool = False,
+    run_architect: bool = False,
+    run_spec_validation: bool = False,
+    respect_workspace_flags: bool = True,
+    force_helpers: bool = False,
 ) -> dict[str, Any]:
     """Compile ContextPackage (+ optional adapter preview) without calling the backend."""
     ws = workspace.resolve()
+    ws_str = str(ws)
 
     spec_rel_path: str | None = None
     delegation_policies: DelegationPolicies | None = None
+    spec_read = None
 
     if spec_path is not None:
         spec_rel_path, delegation_policies, spec_error = _resolve_spec(ws, spec_path)
         if spec_error:
             return {"ok": False, "error": spec_error}
+        if spec_rel_path is not None:
+            spec_abs = resolve_spec_path(ws_str, spec_rel_path)
+            if spec_abs.is_file():
+                spec_read = read_task_spec(spec_abs, workspace=ws_str)
 
     effective_target_files = list(target_files)
     auto_merged_read_paths: list[str] = []
@@ -153,14 +199,71 @@ def inspect_context_package(
         effective_target_files = merge_result.effective_target_files
         auto_merged_read_paths = merge_result.auto_merged_read_paths
 
+    helper_phases: dict[str, Any] = {
+        "spec_validation": {
+            "ran": False,
+            "passed": None,
+            "clarification_needed": None,
+            "would_block_delegate": False,
+            "error": None,
+            "model": None,
+        },
+        "architect_pass": {
+            "ran": False,
+            "applied": False,
+            "error": None,
+            "model": None,
+        },
+        "builder_llm": {
+            "ran": False,
+            "applied": False,
+            "error": None,
+            "model": None,
+        },
+    }
+
+    env_builder = _env_truthy("MCP_CODER_INSPECT_RUN_BUILDER_LLM")
+    effective_run_builder = run_builder_llm or env_builder
+
+    want_spec_validation = _should_run_helper(
+        requested=run_spec_validation,
+        workspace_enabled=spec_validation_enabled(ws),
+        force_helpers=force_helpers,
+        respect_workspace_flags=respect_workspace_flags,
+    )
+    if want_spec_validation and spec_read is not None and host_transcript and host_transcript.strip():
+        (
+            blocked,
+            clarifications,
+            ran,
+            passed,
+            val_error,
+            _audit,
+            val_record,
+        ) = apply_spec_validation(
+            spec_read=spec_read,
+            workspace=ws_str,
+            task=task,
+            context_summary=context_summary or "",
+            host_transcript=host_transcript,
+        )
+        helper_phases["spec_validation"] = {
+            "ran": ran,
+            "passed": passed,
+            "clarification_needed": clarifications,
+            "would_block_delegate": blocked,
+            "error": val_error,
+            "model": _helper_phase_model(val_record),
+        }
+
     # Same picker path as delegate (dry-run parity, P4-001a)
     picker_result: CandidateFilesResult | None = None
     if delegation_policies is not None and context_builder_enabled(ws):
         spec_text: str | None = None
         if spec_rel_path is not None:
-            spec_abs = resolve_spec_path(str(ws), spec_rel_path)
+            spec_abs = resolve_spec_path(ws_str, spec_rel_path)
             if spec_abs.is_file():
-                spec_text = read_task_spec(spec_abs, workspace=ws).raw_text
+                spec_text = read_task_spec(spec_abs, workspace=ws_str).raw_text
         picker_result = pick_candidate_files(
             workspace=ws,
             task=task,
@@ -180,39 +283,64 @@ def inspect_context_package(
         include_repo_map=picker_result is not None,
     )
 
-    # Builder LLM is skipped in dry-run by default to avoid surprise API calls
-    # from the inspect CLI. Opt in with MCP_CODER_INSPECT_RUN_BUILDER_LLM=1.
-    if (
-        picker_result is not None
-        and context_builder_llm_enabled(ws)
-        and os.environ.get("MCP_CODER_INSPECT_RUN_BUILDER_LLM", "").strip() in (
-            "1", "true", "yes", "on"
-        )
-    ):
-        from core.context.builder_history import gather_builder_history
-        from core.context.builder_prompt import build_builder_llm_prompt
-        from core.engine.context_builder_llm import run_context_builder_llm
-
-        history = gather_builder_history(ws, spec_path=spec_rel_path)
-        prompt = build_builder_llm_prompt(
-            mechanical_brief=package.brief,
+    architect_plan: str | None = None
+    want_architect = _should_run_helper(
+        requested=run_architect,
+        workspace_enabled=architect_pass_enabled(ws),
+        force_helpers=force_helpers,
+        respect_workspace_flags=respect_workspace_flags,
+    )
+    if want_architect and spec_read is not None:
+        architect_plan, arch_error, arch_record = apply_architect_pass(
+            context_package=package,
+            spec_read=spec_read,
             picker_result=picker_result,
-            package_metadata=package.metadata,
-            history=history,
-            host_transcript=host_transcript,
-            context_summary=context_summary or "",
+            workspace=ws_str,
             task=task,
+            context_summary=context_summary or "",
+            host_transcript=host_transcript,
         )
-        llm_result = run_context_builder_llm(prompt, workspace_path=str(ws))
-        if llm_result.success:
-            package.brief = (
-                "## Builder brief\n\n"
-                f"{llm_result.brief.strip()}\n\n---\n\n{package.brief.strip()}"
-            )
-            package.metadata["builder_brief_applied"] = True
-        else:
-            package.metadata["builder_brief_applied"] = False
-            package.metadata["builder_llm_error"] = llm_result.error
+        helper_phases["architect_pass"] = {
+            "ran": True,
+            "applied": architect_plan is not None,
+            "error": arch_error,
+            "model": _helper_phase_model(arch_record),
+        }
+
+    want_builder = (
+        effective_run_builder
+        and picker_result is not None
+        and _should_run_helper(
+            requested=True,
+            workspace_enabled=context_builder_llm_enabled(ws),
+            force_helpers=force_helpers,
+            respect_workspace_flags=respect_workspace_flags,
+        )
+    )
+    if want_builder:
+        package, builder_applied, builder_error, builder_record = apply_builder_llm(
+            context_package=package,
+            picker_result=picker_result,
+            workspace=ws_str,
+            task=task,
+            context_summary=context_summary or "",
+            spec_rel_path=spec_rel_path,
+            host_transcript=host_transcript,
+        )
+        helper_phases["builder_llm"] = {
+            "ran": True,
+            "applied": builder_applied,
+            "error": builder_error,
+            "model": _helper_phase_model(builder_record),
+        }
+        package.metadata["builder_brief_applied"] = builder_applied
+        if builder_error:
+            package.metadata["builder_llm_error"] = builder_error
+        elif "builder_llm_error" in package.metadata:
+            package.metadata.pop("builder_llm_error", None)
+
+    if architect_plan:
+        package.brief = merge_architect_plan(architect_plan, package.brief)
 
     # Apply budget pass (mirrors delegate pipeline for dry-run parity)
     budget_model = resolve_model_name()
@@ -224,6 +352,7 @@ def inspect_context_package(
         "ok": True,
         "compiler_version": package.metadata.get("compiler_version", COMPILER_VERSION),
         "context_package": _package_dict(package, include_payloads=include_payloads),
+        "helper_phases": helper_phases,
     }
 
     if delegation_policies is not None and delegation_policies.all_paths:

@@ -25,13 +25,20 @@ from core.config.role_models import (
     ROLE_CONTEXT_BUILDER,
     ROLE_EXECUTOR,
     ROLE_REVIEW,
-    resolve_role_budget_tokens,
     resolve_role_model_name,
 )
 from core.context.assemble import assemble_context
 from core.context.file_picker import CandidateFilesResult, pick_candidate_files
 from core.context.budget import apply_context_budget, resolve_context_budget_tokens
 from core.context.capability_adjust import apply_backend_capabilities
+from core.context.helper_llm_pipeline import (
+    SPEC_VALIDATION_BLOCK_OUTPUT,
+    apply_architect_pass as _shared_apply_architect_pass,
+    apply_builder_llm as _shared_apply_builder_llm,
+    apply_spec_validation as _shared_apply_spec_validation,
+    merge_architect_plan as _merge_architect_plan,
+    merge_brief as _merge_brief,
+)
 from core.context.inspect import inspect_context_package
 from core.context.mcp_summary import build_mcp_context_summary
 from core.context.package import (
@@ -125,32 +132,8 @@ def _truncate_output(text: str, max_chars: int = OUTPUT_MAX_CHARS) -> str:
     return text[: max_chars - 20] + "\n…[truncated]"
 
 
-_BUILDER_BRIEF_HEADER = "## Builder brief"
-
-_SPEC_VALIDATION_BLOCK_OUTPUT = (
-    "Spec validation blocked delegation. Answer clarifications in Cursor, "
-    "update spec if needed, then retry delegate_to_agent."
-)
-
-
-def _merge_brief(mechanical_brief: str, llm_brief: str) -> str:
-    """Prepend LLM narrative; keep mechanical brief (incl. accurate ## Paths) below.
-
-    Chosen merge strategy (P4-001b §5): the LLM output is additive guidance, so
-    the assembler-produced brief — including the ## Paths section with real tiers
-    — is preserved verbatim beneath it. Entries/tiers/policies are never touched.
-    """
-    return (
-        f"{_BUILDER_BRIEF_HEADER}\n\n"
-        f"{llm_brief.strip()}\n\n"
-        "---\n\n"
-        f"{mechanical_brief.strip()}"
-    )
-
-
-def _merge_architect_plan(architect_plan: str, brief: str) -> str:
-    """Prepend architect plan above whatever brief is currently assembled."""
-    return f"{architect_plan.strip()}\n\n---\n\n{brief.strip()}"
+def _server_log_warn(event: str, fields: dict[str, Any]) -> None:
+    server_log_emit(event, level="warn", **fields)
 
 
 def _apply_builder_llm(
@@ -165,56 +148,18 @@ def _apply_builder_llm(
     timing: dict[str, int | float],
     delegation_id: str,
 ) -> tuple["ContextPackage", bool, str | None, dict[str, Any] | None]:
-    """Run the cheap-LLM brief pass; fall back to the mechanical brief on failure.
-
-    Returns (package, builder_brief_applied, builder_llm_error, builder_record).
-    Only ContextPackage.brief is ever mutated (D-P4-10).
-    """
-    from core.context.builder_history import gather_builder_history
-    from core.context.builder_prompt import build_builder_llm_prompt
-    from core.engine.context_builder_llm import run_context_builder_llm
-
-    mechanical_brief = context_package.brief
-    t_builder = time.perf_counter()
-
-    history = gather_builder_history(Path(workspace), spec_path=spec_rel_path)
-    budget_tokens = resolve_role_budget_tokens(ROLE_CONTEXT_BUILDER, workspace)
-    prompt = build_builder_llm_prompt(
-        mechanical_brief=mechanical_brief,
+    return _shared_apply_builder_llm(
+        context_package=context_package,
         picker_result=picker_result,
-        package_metadata=context_package.metadata,
-        history=history,
-        host_transcript=host_transcript,
-        context_summary=context_summary,
+        workspace=workspace,
         task=task,
-        budget_tokens=budget_tokens,
-    )
-
-    llm_result = run_context_builder_llm(prompt, workspace_path=workspace)
-    timing["context_builder_llm_ms"] = int((time.perf_counter() - t_builder) * 1000)
-
-    builder_record = build_role_usage_record(
-        role=ROLE_CONTEXT_BUILDER,
-        model=llm_result.model,
-        input_tokens=llm_result.tokens.get("input"),
-        output_tokens=llm_result.tokens.get("output"),
-        total_tokens=llm_result.tokens.get("total"),
-        duration_ms=llm_result.duration_ms,
-        source=str(llm_result.tokens.get("source") or "context_builder_llm"),
-    )
-
-    if llm_result.success:
-        context_package.brief = _merge_brief(mechanical_brief, llm_result.brief)
-        return context_package, True, None, builder_record
-
-    server_log_emit(
-        "context_builder_llm_failed",
-        level="warn",
+        context_summary=context_summary,
+        spec_rel_path=spec_rel_path,
+        host_transcript=host_transcript,
+        timing=timing,
         delegation_id=delegation_id,
-        model=llm_result.model,
-        error=llm_result.error,
+        log_warn=_server_log_warn,
     )
-    return context_package, False, llm_result.error, builder_record
 
 
 def _apply_architect_pass(
@@ -229,43 +174,18 @@ def _apply_architect_pass(
     timing: dict[str, int | float],
     delegation_id: str,
 ) -> tuple[str | None, str | None, dict[str, Any] | None]:
-    """Run architect pass and return (architect_plan, error, model_record)."""
-    from core.context.architect_prompt import build_architect_pass_prompt
-    from core.engine.architect_pass_llm import run_architect_pass_llm
-
-    t_arch = time.perf_counter()
-    prompt = build_architect_pass_prompt(
+    return _shared_apply_architect_pass(
+        context_package=context_package,
         spec_read=spec_read,
-        mechanical_brief=context_package.brief,
         picker_result=picker_result,
-        host_transcript=host_transcript,
+        workspace=workspace,
         task=task,
         context_summary=context_summary,
-    )
-    llm_result = run_architect_pass_llm(prompt, workspace_path=workspace)
-    timing["architect_pass_ms"] = int((time.perf_counter() - t_arch) * 1000)
-
-    architect_record = build_role_usage_record(
-        role="architect_pass",
-        model=llm_result.model,
-        input_tokens=llm_result.tokens.get("input"),
-        output_tokens=llm_result.tokens.get("output"),
-        total_tokens=llm_result.tokens.get("total"),
-        duration_ms=llm_result.duration_ms,
-        source=str(llm_result.tokens.get("source") or "architect_pass"),
-    )
-
-    if llm_result.success:
-        return llm_result.plan, None, architect_record
-
-    server_log_emit(
-        "architect_pass_failed",
-        level="warn",
+        host_transcript=host_transcript,
+        timing=timing,
         delegation_id=delegation_id,
-        model=llm_result.model,
-        error=llm_result.error,
+        log_warn=_server_log_warn,
     )
-    return None, llm_result.error, architect_record
 
 
 def _apply_spec_validation(
@@ -286,69 +206,19 @@ def _apply_spec_validation(
     dict[str, Any] | None,
     dict[str, Any] | None,
 ]:
-    """Run pre-delegate spec validation LLM.
-
-    Returns (blocked, clarifications, ran, passed, error, audit_dict, model_record).
-    On LLM/parse failure: not blocked, ran=False, audit includes error.
-    """
-    from core.context.spec_validation_prompt import build_spec_validation_prompt
-    from core.engine.spec_validation_llm import run_spec_validation_llm
-
-    t_val = time.perf_counter()
-    prompt = build_spec_validation_prompt(
+    return _shared_apply_spec_validation(
         spec_read=spec_read,
-        host_transcript=host_transcript,
+        workspace=workspace,
         task=task,
         context_summary=context_summary,
-    )
-    llm_result = run_spec_validation_llm(prompt, workspace_path=workspace)
-    timing["spec_validation_ms"] = int((time.perf_counter() - t_val) * 1000)
-
-    model_record = build_role_usage_record(
-        role="spec_validation",
-        model=llm_result.model,
-        input_tokens=llm_result.tokens.get("input"),
-        output_tokens=llm_result.tokens.get("output"),
-        total_tokens=llm_result.tokens.get("total"),
-        duration_ms=llm_result.duration_ms,
-        source=str(llm_result.tokens.get("source") or "spec_validation"),
+        host_transcript=host_transcript,
+        timing=timing,
+        delegation_id=delegation_id,
+        log_warn=_server_log_warn,
     )
 
-    if not llm_result.success or llm_result.passed is None:
-        server_log_emit(
-            "spec_validation_failed",
-            level="warn",
-            delegation_id=delegation_id,
-            model=llm_result.model,
-            error=llm_result.error,
-        )
-        audit: dict[str, Any] = {
-            "ran": False,
-            "passed": None,
-            "clarifications_count": 0,
-            "duration_ms": llm_result.duration_ms,
-        }
-        if llm_result.error:
-            audit["error"] = llm_result.error
-        return False, None, False, None, llm_result.error, audit, model_record
 
-    if llm_result.passed is True:
-        audit = {
-            "ran": True,
-            "passed": True,
-            "clarifications_count": 0,
-            "duration_ms": llm_result.duration_ms,
-        }
-        return False, None, True, True, None, audit, model_record
-
-    clarifications = llm_result.clarifications
-    audit = {
-        "ran": True,
-        "passed": False,
-        "clarifications_count": len(clarifications),
-        "duration_ms": llm_result.duration_ms,
-    }
-    return True, clarifications, True, False, None, audit, model_record
+_SPEC_VALIDATION_BLOCK_OUTPUT = SPEC_VALIDATION_BLOCK_OUTPUT
 
 
 def _build_model_roles_payload(

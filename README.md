@@ -110,7 +110,7 @@ mcp-coder test-model --via both      # Aider Model + LiteLLM
 
 Prints config resolution (env files, model source, API base, key masked) on stderr, then pings via **Aider `Model`** by default — same stack as `delegate_to_agent`. Exit `0` = `OK` + reply; exit `1` = provider error (run before a long E2E).
 
-**Inspect context** (dry-run compiler — no LLM, no file edits, no JSONL):
+**Inspect context** (dry-run compiler — no executor, no file edits, no JSONL; helper LLMs opt-in):
 
 ```bash
 mcp-coder inspect-context \
@@ -121,7 +121,9 @@ mcp-coder inspect-context \
   --pretty
 ```
 
-Returns JSON with `context_package`, optional `adapter_preview` (`fnames`, `read_paths_in_prompt`), and P2-110 `contract_warnings` when a spec is present. Same shape via MCP tool `inspect_context`.
+Optional helper phases (API cost): `--run-builder-llm`, `--run-architect`, `--run-spec-validation`, `--run-all-helpers`, `--host-transcript-file`, `--force-helpers`.
+
+Returns JSON with `context_package`, `helper_phases`, optional `adapter_preview` (`fnames`, `read_paths_in_prompt`), and P2-110 `contract_warnings` when a spec is present. Same shape via MCP tool `inspect_context`.
 
 ---
 
