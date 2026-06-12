@@ -1,8 +1,25 @@
 # Workflow turns — special modes & cadence (living note)
 
-**Status:** Living note — planning only. Not shipped.  
+**Status:** Living note — planning only. Not shipped. **Horizon:** likely Phase 5+ / later — ideas are far from implementation but directionally aligned.  
 **Backlog:** [BL-359](../BACKLOG.md#bl-359-workflow-turns--refactor-document-digest-cadence), [BL-358](../BACKLOG.md#bl-358-post-executor-polish-pass--reviewer-model-comments-tests-alignment) (polish sub-mode).  
 **Related:** [spec-review-loop.md](./spec-review-loop.md) (`mode=review` today), [multi-model-roles.md](./multi-model-roles.md).
+
+---
+
+## North star
+
+**Formalize the workflow; automate what is easy but repetitive.**
+
+| Human keeps | mcp-coder automates |
+|-------------|---------------------|
+| Judgment — when to pause, refactor, ship | Named **turns** with clear rules (implement, digest, polish, …) |
+| Creative / ambiguous design | **Cadence** hints at epic boundaries (“time to digest?”) |
+| Accept or reject suggestions | **Repetitive** compile-push, history, verify, lint, alignment passes |
+| Spec and epic intent | Audit trail so each turn is reproducible, not ad-hoc chat |
+
+We are not trying to replace the developer loop — we are **making the loop explicit** and offloading the boring parts (comments, tests skim, “what did we just build?”, cross-step read-deps) to cheap models + machinery already in Phases 1–4.
+
+Phase 5 RAG + observability = **better memory** for those turns. Phase 5+ workflow modes = **named beats** in the loop. Both serve the same goal: less thrash, more deliberate pauses.
 
 ---
 
@@ -93,4 +110,5 @@ Digest may **consume** RAG; it is not a corpus by itself.
 
 | Date | Change |
 |------|--------|
+| 2026-06-12 | § North star — formalize workflow, automate easy repetitive tasks; horizon note |
 | 2026-06-12 | Initial note — polish/refactor/document/digest turns, cadence triggers, host rules (planning discussion) |

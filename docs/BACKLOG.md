@@ -507,7 +507,7 @@ We want **good stuff** (worked patterns, promoted digests, spec outcomes) withou
 
 ### BL-359: Workflow turns — refactor, document, digest cadence
 
-**Status:** `idea` — 2026-06-12. Planning — real work includes pauses to understand code, refactor, document, and re-onboard; mcp-coder should support **special turns**, not only implement loops.
+**Status:** `idea` — 2026-06-12. **Horizon:** Phase 5+ / later (not near-term). **North star:** formalize the developer workflow into named turns while automating easy, repetitive tasks (digest, polish, verify, cadence hints) — judgment stays with planner/human.
 
 **Living note:** [notes/workflow-turns.md](./notes/workflow-turns.md)
 
