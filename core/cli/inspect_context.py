@@ -65,6 +65,11 @@ def main_inspect_context(argv: list[str] | None = None) -> int:
         help="Omit adapter_preview (fnames + prompt stats)",
     )
     parser.add_argument(
+        "--include-prompt",
+        action="store_true",
+        help="Include full executor prompt text in adapter_preview.prompt (can be large)",
+    )
+    parser.add_argument(
         "--run-builder-llm",
         action="store_true",
         help="Run context-builder LLM (opt-in; may incur API cost)",
@@ -130,6 +135,7 @@ def main_inspect_context(argv: list[str] | None = None) -> int:
         spec_path=args.spec_path,
         include_payloads=args.include_payloads,
         include_adapter_preview=not args.no_adapter_preview,
+        include_prompt=args.include_prompt,
         host_transcript=host_transcript,
         run_builder_llm=run_builder,
         run_architect=run_architect,

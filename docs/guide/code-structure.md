@@ -78,7 +78,8 @@ CLI subcommands (see `core/cli/` table below for implementations):
 | *(no subcommand)* | Starts the MCP stdio server (used by Cursor `mcp.json`); bare TTY prints help |
 | `mcp-coder setup` | Workspace info, model resolution, `mcp.json` wiring (`--local` / `--global`) |
 | `mcp-coder test-model` | Ping configured model(s); `--all` tests every role |
-| `mcp-coder inspect-context` | Dry-run context compiler — builds the prompt without calling any backend; opt-in `--run-builder-llm`, `--run-architect`, `--run-spec-validation`, `--run-all-helpers`, `--host-transcript-file`, `--force-helpers` |
+| `mcp-coder inspect-context` | Dry-run context compiler — builds the prompt without calling any backend; opt-in helper LLM flags; `--include-prompt` |
+| `mcp-coder delegate` | Full delegation pipeline (or `--stop-after context` for prepare-only); structured `artifacts` + `caller_response` |
 | `mcp-coder view delegations` | Delegation log browser UI (`delegations.jsonl`; default cwd workspace) |
 | `mcp-coder history` | Browse `workspace_history.db` (list, diff, revert) |
 | `mcp-coder rag` | Delegation FTS5 search / index |
@@ -101,6 +102,7 @@ This is the largest file and the place everything connects. It:
 | `setup.py` | `mcp-coder setup` | Print workspace info, model resolution, ready-to-paste `mcp.json` block; `--init-config` creates `config.yaml` |
 | `test_model.py` | `mcp-coder test-model` | Ping one model (or `--all` roles) using the same Aider/LiteLLM stack as delegations |
 | `inspect_context.py` | `mcp-coder inspect-context` | Dry-run the full context compiler; optional helper LLM flags (see `--help`) |
+| `delegate.py` | `mcp-coder delegate` | Run delegate pipeline; `--stop-after context` for pre-executor artifacts |
 | `history.py` | `mcp-coder history` | Browse `workspace_history.db` (list, diff, revert) |
 | `view_delegations.py` | `mcp-coder view delegations` | Serve `tools/delegation_viewer.html` for cwd workspace or one JSONL file |
 | `rag.py` | `mcp-coder rag` | Search / index the delegation FTS5 RAG index |
@@ -146,6 +148,8 @@ The heart of the system. Builds the prompt Aider sees.
 | `spec_validation_prompt.py` | Assembles the spec validation prompt |
 | `inspect.py` | `inspect_context_package()` — dry-run path (no Aider); called by `inspect-context` CLI |
 | `helper_llm_pipeline.py` | Shared builder/architect/spec-validation helpers used by delegate and inspect |
+| `../delegation/prepare.py` | Delegate-faithful pre-executor compile (`prepare_delegation_context`) |
+| `../delegation/artifacts.py` | CLI artifact envelope (`executor_in` / `executor_out` / `post_delegate`) |
 | `capability_adjust.py` | Adjusts context based on Aider edit format capabilities |
 | `mcp_summary.py` | Handles `context_summary` field from MCP call (Phase 1 fallback mode) |
 | `summary.py` | Simple text summary utilities |

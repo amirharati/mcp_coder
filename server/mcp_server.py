@@ -432,6 +432,7 @@ def delegate_to_agent(
     backend: str = "aider",
     spec_path: str | None = None,
     mode: str = "implement",
+    cli_artifacts: bool = False,
 ) -> str:
     """Run one delegated implementation via the selected backend; append JSONL log."""
     delegation_id = new_delegation_id()
@@ -1459,6 +1460,35 @@ def delegate_to_agent(
         error=error,
     )
 
+    if cli_artifacts:
+        from core.delegation.artifacts import delegation_envelope, full_run_artifacts
+
+        read_entries_in_prompt: list[str] = []
+        fnames_for_cli: list[str] = []
+        if context_package is not None:
+            read_entries_in_prompt = [
+                e.path
+                for e in context_package.entries
+                if e.tier in (TIER_READ_FULL, TIER_READ_EXCERPT) and e.payload is not None
+            ]
+            fnames_for_cli = sorted(
+                e.path for e in context_package.entries if e.tier == TIER_EDIT_FULL
+            )
+        envelope = delegation_envelope(
+            ok=bool(success) and not spec_validation_blocked,
+            stop_after="full",
+            artifacts=full_run_artifacts(
+                caller_response=response,
+                executor_prompt=executor_prompt,
+                fnames=fnames_for_cli,
+                read_paths_in_prompt=read_entries_in_prompt,
+                capability_warnings=cap_warnings or None,
+            ),
+            caller_response=response,
+            error=error if (not success or spec_validation_blocked) else None,
+        )
+        return json.dumps(envelope, ensure_ascii=False)
+
     return json.dumps(response, ensure_ascii=False)
 
 
@@ -1467,7 +1497,8 @@ def delegate_to_agent(
     description=(
         "DRY-RUN CONTEXT INSPECTOR: Compile ContextPackage and adapter preview "
         "(fnames, read paths in prompt) without calling the execution backend. "
-        "No file edits, no LLM call, no JSONL delegation log. "
+        "No file edits by default; optional helper LLM flags via CLI only. "
+        "Set include_prompt=true for full executor prompt text in adapter_preview. "
         "Use before delegate_to_agent to verify read-deps and edit scope. "
         "Required: task, target_files, context_summary. "
         "Optional spec_path under .mcp-coder/specs/tasks/."
@@ -1480,6 +1511,7 @@ def inspect_context(
     spec_path: str | None = None,
     include_payloads: bool = False,
     include_adapter_preview: bool = True,
+    include_prompt: bool = False,
 ) -> str:
     """Return assembled context package + adapter preview as JSON (dry-run only)."""
     ws = workspace_path()
@@ -1491,6 +1523,7 @@ def inspect_context(
         spec_path=spec_path,
         include_payloads=include_payloads,
         include_adapter_preview=include_adapter_preview,
+        include_prompt=include_prompt,
         host_transcript=None,
     )
     return json.dumps(result, ensure_ascii=False)

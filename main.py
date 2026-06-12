@@ -14,6 +14,11 @@ def main() -> None:
 
         raise SystemExit(main_inspect_context(sys.argv[2:]))
 
+    if len(sys.argv) > 1 and sys.argv[1] == "delegate":
+        from core.cli.delegate import main_delegate
+
+        raise SystemExit(main_delegate(sys.argv[2:]))
+
     parser = argparse.ArgumentParser(description="mcp-coder MCP server and CLI")
     sub = parser.add_subparsers(dest="command")
 
@@ -67,6 +72,10 @@ def main() -> None:
     sub.add_parser(
         "inspect-context",
         help="Dry-run context compiler (assemble + adapter preview, no backend)",
+    )
+    sub.add_parser(
+        "delegate",
+        help="Run delegation pipeline (full or --stop-after context for prepare-only)",
     )
 
     view_p = sub.add_parser(

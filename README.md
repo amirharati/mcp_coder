@@ -121,9 +121,21 @@ mcp-coder inspect-context \
   --pretty
 ```
 
-Optional helper phases (API cost): `--run-builder-llm`, `--run-architect`, `--run-spec-validation`, `--run-all-helpers`, `--host-transcript-file`, `--force-helpers`.
+Optional helper phases (API cost): `--run-builder-llm`, `--run-architect`, `--run-spec-validation`, `--run-all-helpers`, `--host-transcript-file`, `--force-helpers`. Add `--include-prompt` for the full executor prompt text in JSON.
 
 Returns JSON with `context_package`, `helper_phases`, optional `adapter_preview` (`fnames`, `read_paths_in_prompt`), and P2-110 `contract_warnings` when a spec is present. Same shape via MCP tool `inspect_context`.
+
+**Delegate from CLI** (full pipeline or prepare-only):
+
+```bash
+# Phases 1–6 only — full executor prompt in artifacts.executor_in
+mcp-coder delegate --spec tasks/foo.md --task "..." --target-files src/a.py \
+  --context-summary "..." --stop-after context --pretty
+
+# Full run — same as MCP delegate_to_agent; artifacts + caller_response JSON
+mcp-coder delegate --spec tasks/foo.md --task "..." --target-files src/a.py \
+  --context-summary "..." --pretty
+```
 
 ---
 

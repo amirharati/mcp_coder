@@ -199,6 +199,32 @@ def test_no_engine_called(tmp_path, monkeypatch):
     assert result["ok"] is True
 
 
+def test_include_prompt_omitted_by_default(tmp_path):
+    ws = _setup_workspace(tmp_path)
+    result = inspect_context_package(
+        workspace=ws,
+        task="t",
+        target_files=["expense_splitter/models.py"],
+        spec_path="tasks/step-5b.md",
+    )
+    assert "prompt" not in result["adapter_preview"]
+
+
+def test_include_prompt_returns_executor_prompt(tmp_path):
+    ws = _setup_workspace(tmp_path)
+    result = inspect_context_package(
+        workspace=ws,
+        task="Add comment",
+        target_files=["expense_splitter/models.py"],
+        spec_path="tasks/step-5b.md",
+        include_prompt=True,
+    )
+    prompt = result["adapter_preview"]["prompt"]
+    assert "## Task" in prompt or "Add comment" in prompt
+    assert result["adapter_preview"]["prompt_chars"] == len(prompt)
+    assert "expense_splitter/loader.py" in prompt
+
+
 def test_no_adapter_preview_when_disabled(tmp_path):
     ws = _setup_workspace(tmp_path)
     result = inspect_context_package(

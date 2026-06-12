@@ -6,9 +6,9 @@
 
 **Prerequisites:** T-02 (JSONL records), T-03 (specs), T-04 (context compiler), T-05 (workspace history).
 
-**Estimated time:** 20 min skim; +15 min if you run the **Try it** blocks in §5.
+**Estimated time:** 20 min skim; +15 min if you run **§5** (CLI) or **§6** (JSONL) try-it blocks.
 
-**How to use this tutorial:** First pass — §1 diagram + §2 status values + §4 config matrix. Second pass — run §5 against a real `delegations.jsonl` from your machine. **T-07** will walk one `delegation_id` through every artifact (JSONL → history → spec report → `inspect-context`); T-06 stays focused on the pipeline map and quick CLI reads.
+**How to use this tutorial:** First pass — §1 diagram + §2 status values + §4 config matrix. Second pass — **§5** `mcp-coder delegate` or **§6** against a real `delegations.jsonl` from your machine. **T-07** will walk one `delegation_id` through every artifact (JSONL → history → spec report → `inspect-context`); T-06 stays focused on the pipeline map and quick CLI reads.
 
 ---
 
@@ -220,7 +220,45 @@ When off or executor failed: `auto_verify` → `skipped`, `detail: disabled_or_n
 
 ---
 
-## 5. Try it — read pipeline timing from JSONL
+## 5. CLI — run the pipeline without Cursor
+
+`mcp-coder delegate` calls the same code path as MCP `delegate_to_agent`. Output is a structured envelope:
+
+| Field | Contents |
+|-------|----------|
+| `artifacts.executor_in` | Full prompt + `fnames` sent to Aider |
+| `artifacts.executor_out` | Aider `output`, `files_changed`, `files_unexpected` |
+| `artifacts.post_delegate` | `post_gateway`, `spec_report_path`, `verify_result`, `delegation_pipeline`, … |
+| `caller_response` | Exact MCP JSON (what Cursor would receive) |
+
+**Prepare only** (phases 1–6, no file edits) — same helper/config behavior as a real delegate:
+
+```bash
+mcp-coder delegate \
+  --spec tasks/my-spec.md \
+  --task "..." \
+  --target-files src/foo.py \
+  --context-summary "..." \
+  --stop-after context \
+  --pretty | jq '.artifacts.executor_in.prompt'
+```
+
+**Full run** (pre + executor + post):
+
+```bash
+mcp-coder delegate \
+  --spec tasks/my-spec.md \
+  --task "..." \
+  --target-files src/foo.py \
+  --context-summary "..." \
+  --pretty
+```
+
+For opt-in helper debugging with manual flags, use `inspect-context` (T-04 §14). For delegate-faithful compile (config-driven helpers + host transcript policy), use `delegate --stop-after context`.
+
+---
+
+## 6. Try it — read pipeline timing from JSONL
 
 These commands inspect **phase timing and status** only. For a full walk (same `delegation_id` → history diff → spec report → context reconstruction), use **T-07** when it ships.
 

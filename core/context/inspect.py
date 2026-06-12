@@ -32,6 +32,8 @@ from core.context.package import (
 )
 from core.context.summary import estimate_tokens, sha256_hex
 from core.context.file_picker import CandidateFilesResult, pick_candidate_files
+from core.context.capability_adjust import apply_backend_capabilities
+from core.engine import get_engine
 from core.engine.aider_engine import translate_context_package
 from core.specs.delegation_policies import (
     DelegationPolicies,
@@ -109,6 +111,7 @@ def _adapter_preview_dict(
     package: ContextPackage,
     *,
     host_transcript: str | None,
+    include_prompt: bool = False,
 ) -> dict[str, Any]:
     req = translate_context_package(package, host_transcript=host_transcript)
     read_paths_in_prompt = [
@@ -116,13 +119,16 @@ def _adapter_preview_dict(
         for e in package.entries
         if e.tier in (TIER_READ_FULL, TIER_READ_EXCERPT) and e.payload is not None
     ]
-    return {
+    preview: dict[str, Any] = {
         "fnames": req.fnames,
         "read_paths_in_prompt": read_paths_in_prompt,
         "prompt_chars": len(req.prompt),
         "prompt_tokens_est": estimate_tokens(req.prompt),
         "prompt_hash": sha256_hex(req.prompt),
     }
+    if include_prompt:
+        preview["prompt"] = req.prompt
+    return preview
 
 
 def _helper_phase_model(record: dict[str, Any] | None) -> str | None:
@@ -157,12 +163,14 @@ def inspect_context_package(
     spec_path: str | Path | None = None,
     include_payloads: bool = False,
     include_adapter_preview: bool = True,
+    include_prompt: bool = False,
     host_transcript: str | None = None,
     run_builder_llm: bool = False,
     run_architect: bool = False,
     run_spec_validation: bool = False,
     respect_workspace_flags: bool = True,
     force_helpers: bool = False,
+    backend: str | None = None,
 ) -> dict[str, Any]:
     """Compile ContextPackage (+ optional adapter preview) without calling the backend."""
     ws = workspace.resolve()
@@ -342,8 +350,23 @@ def inspect_context_package(
     if architect_plan:
         package.brief = merge_architect_plan(architect_plan, package.brief)
 
+    cap_warnings: list[str] = []
+    if backend:
+        try:
+            caps = get_engine(backend).capabilities()
+            package, cap_warnings = apply_backend_capabilities(
+                package, caps, workspace=ws
+            )
+        except (NotImplementedError, AttributeError, Exception):
+            cap_warnings = []
+
     # Apply budget pass (mirrors delegate pipeline for dry-run parity)
     budget_model = resolve_model_name()
+    if backend:
+        try:
+            budget_model = get_engine(backend).model_name
+        except Exception:
+            pass
     budget = resolve_context_budget_tokens(model=budget_model)
     if budget is not None:
         package = apply_context_budget(package, workspace=ws, budget_tokens=budget)
@@ -354,6 +377,8 @@ def inspect_context_package(
         "context_package": _package_dict(package, include_payloads=include_payloads),
         "helper_phases": helper_phases,
     }
+    if cap_warnings:
+        result["capability_warnings"] = cap_warnings
 
     if delegation_policies is not None and delegation_policies.all_paths:
         if auto_merged_read_paths:
@@ -369,6 +394,7 @@ def inspect_context_package(
         result["adapter_preview"] = _adapter_preview_dict(
             package,
             host_transcript=host_transcript,
+            include_prompt=include_prompt,
         )
 
     return result
