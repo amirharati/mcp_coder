@@ -172,6 +172,7 @@ Phase 1 deferred executor conversation carry-over to here (BL-155); see P1-130 `
 | BL-351 | **Simulated interactive + escalate to host (Cursor human intervention)** | Today: `InputOutput(yes=True)` auto-approves all Aider prompts (blind); “add files to chat” → implement failure; no structured handoff back to Cursor mid-delegate. **Later:** supervisor answers executor prompts via **cheap LLM + rules** (add read / expand spec / continue) instead of blind yes; when uncertain → **pause delegation** and return `needs_input` / `clarification_needed` to **Cursor planner** for human decision, then resume (BL-350 outer loop or custom IO). High leverage for scope expansion + trust. **Phase 5+**. From P4.5-ISS-014. |
 | BL-352 | **Multi-language symbol scan + outlines (C/C++, Go, Rust, …)** | Today: symbol scan hardcoded to 9 extensions (`SCAN_EXTENSIONS` in `file_picker.py`); repo-map/excerpt regex is Python `def`/`class` only — C/C++/Go/Rust/Java/etc. work via **spec contract** but not **auto-discovery** or useful outlines. **Later:** expand/configurable scan globs; per-language outline heuristics (or tie to BL-348 index); goal = “works for money cases” on polyglot/monorepo repos without hand-listing every path. **Phase 5+**. From P4.5-ISS-015. |
 | BL-353 | **LLM boundary observability — full pass-through logging** | Backend-neutral tap on every LLM send/receive (all roles + executor multi-turn); correlate with compile + disk audit. **High ROI** for gap-finding, RAG/context direction, eval/training. **Phase 6 (TBD)** — see § BL-353; foundation tokens (**BL-335**) may start Phase 5. From T-04 tutorial pass (2026-06-11). |
+| BL-354 | **Executor context tools (pull) — RAG/history/read during backend loop** | **Dual model:** keep **compile-push (A)** as default; **also** expose read-only mcp-coder tools inside the executor loop (Aider today ignores planner MCP). LLM-driven `rag_search`, `workspace_search`, history, excerpts beside edit tools. **Phase 5+** (pairs with BL-002 usage); see § BL-354. From T-04 pass (2026-06-11). |
 
 ### BL-350: Supervised executor loop (mid-run inspect + context inject)
 
@@ -189,7 +190,7 @@ Phase 1 deferred executor conversation carry-over to here (BL-155); see P1-130 `
 | **B — Stream-and-react** | Enable Aider stream/tee (**BL-160b**); parse output for “add file”, errors, stall; **stop early** → return `needs_input` or auto second pass with expanded context | Lighter than full outer loop; visibility without owning turns | Not true mid-loop inject; reactive not proactive |
 | **C — Aider `Coder` subclass / owned run** | Extend or wrap `Coder.run()` for per-LLM-turn hooks: inject messages, add `fnames`, capture `reasoning_content` before Aider strips it | Richest per-turn control; direct thinking-token hook if LiteLLM callback insufficient (**BL-333**) | **High maintenance** — Aider version coupling; violates “thin adapter” spirit; hard to port to **BL-340** Cursor SDK |
 
-**Related:** **BL-333** (reasoning trace — outer loop + LiteLLM callback are complementary capture points), **BL-335** (per-step token audit), **BL-161** (internal multi-agent pipeline), **BL-160a/b** (supervised + visibility), **BL-340** (turn-based backend may make route A natural without route C), **BL-347** (re-compile policy per step), **BL-349** (inject recent touches between steps), **BL-351** (escalate to host when supervisor cannot auto-decide).
+**Related:** **BL-354** (executor-pull tools — lighter than outer loop; model fetches context mid-run), **BL-333** (reasoning trace — outer loop + LiteLLM callback are complementary capture points), **BL-335** (per-step token audit), **BL-161** (internal multi-agent pipeline), **BL-160a/b** (supervised + visibility), **BL-340** (turn-based backend may make route A natural without route C), **BL-347** (re-compile policy per step), **BL-349** (inject recent touches between steps), **BL-351** (escalate to host when supervisor cannot auto-decide).
 
 **Open design:** Single `delegation_id` with sub-step records vs child ids; max steps; when to auto-expand context vs return to planner; strict-mode revert per step vs end-only.
 
@@ -292,6 +293,48 @@ Hard to answer “what exact context did each LLM call see?” or dogfood RAG/co
 **Why Phase 6:** Phase 5 focuses RAG + context-memory bases; full wire logging is cross-cutting infrastructure that benefits every later phase (BL-350 supervised loop, BL-340 alternate backends, training flywheel) once core product paths stabilize. Sequencing TBD — may ship a **minimal callback + token counts** slice earlier if Phase 5 measurement blocks RAG experiments.
 
 **Open design:** retention/TTL; per-project opt-out; whether helper-LLM prompts are stored verbatim or hashed-only by default; export format for eval/training consent.
+
+---
+
+### BL-354: Executor context tools (pull) — RAG/history/read during backend loop
+
+**Status:** `idea` — 2026-06-11. Surfaced T-04 pass — alternative/complement to **BL-350** outer-loop control.
+
+**Dual model (intentional):**
+
+| Mode | Who | When | Today |
+|------|-----|------|--------|
+| **A — Compile-push** | mcp-coder compiler + builder | Before `coder.run()` | **Default** — picker, tiers, brief, `fnames` |
+| **B — Executor-pull** | Backend LLM during inner loop | Mid-run, model-chosen | **Not wired** — planner MCP tools (`rag_search`, `history`, …) exist; executor cannot call them |
+
+**Goal:** Keep **A** as the baseline (spec contract, predictable prompt, budget). **Add B** so the executor can organically fetch more context — RAG queries, delegation history, file excerpts, recent touches (**BL-348/349**) — via **specialized read-only tools** alongside normal edit/shell tools. Less mcp-coder micromanagement than **BL-350**; more model-driven than front-loading everything.
+
+**Candidate tool surface (backend-neutral):**
+
+| Tool | Wraps | Read-only |
+|------|--------|-----------|
+| `search_delegations` / `rag_search` | `core/rag/search.py` | yes |
+| `workspace_search` | BL-002 workspace-file RAG (when built) | yes |
+| `get_delegation_summary` / `get_file_history` | `core/workspace/history_query.py` | yes |
+| `read_path_excerpt` | `core/context/excerpts.py` or on-demand read | yes |
+| `list_recent_files` | BL-349 (when built) | yes |
+| `ask_planner` / escalate | **BL-351** — human gate, not silent expand | policy |
+
+**Not in v1:** executor tools that widen `files_edit` without spec/policy; arbitrary shell (stays constrained); duplicating planner-only MCP surface wholesale.
+
+**Implementation routes (try in order):**
+
+1. **CLI subprocess from Aider** — e.g. model runs `mcp-coder rag search …` via shell tool (hacky; dogfood whether pull helps).
+2. **Backend function tools** — native tool schema on backends that support it; thin wrappers call same `core/` functions as MCP.
+3. **BL-340 Cursor SDK** — may be the cleanest first backend for real tool calling.
+
+**Requires:** tool-call audit (**BL-353**); policy per `edit_scope` / spec; likely smarter than blind `yes=True` for tool approval (**BL-351**). **post_gateway** unchanged — disk truth still after loop.
+
+**vs BL-350:** Outer loop = mcp-coder **controls** steps and re-compile. BL-354 = mcp-coder **offers** tools; backend LLM **decides** when to pull. Composable: compile-push defaults + pull on demand; supervisor loop for hard cases.
+
+**Phase:** **5+** — especially once **BL-002** indexes exist; dogfood with delegation RAG first. Evidence from tutorial pass: today we **ignore** executor-side tool access entirely.
+
+**Open design:** which tools on by default; max calls per delegate; inject tool results into Aider chat vs replace compile; compare push-only vs push+pull in eval.
 
 ---
 
@@ -1083,6 +1126,7 @@ delegate_to_agent(backend=…)
 | BL-506 | Generic `transcript.md` watch folder (non-Cursor hosts) |
 | **BL-333** | **Reasoning trace capture + cross-delegation context feed** | See § BL-333 + [REASONING_TRACE_REUSE.md](./OTEHR_RELATED_IDEAS/REASONING_TRACE_REUSE.md); wire capture is part of umbrella **BL-353** |
 | **BL-353** | **LLM boundary observability — full pass-through logging** | See § BL-353 + [AGENTIC_LOOP_LOGGING.md](./OTEHR_RELATED_IDEAS/AGENTIC_LOOP_LOGGING.md); **Phase 6 (TBD)** |
+| **BL-354** | **Executor context tools (pull)** — RAG/history/read during backend loop | See § BL-354; dual with compile-push (A); **Phase 5+** |
 | **BL-334** | **Backend prompt customization** (system prefix + edit-format control) | See § BL-334 |
 | **BL-340** | **Cursor SDK execution backend** (beside Aider) | See § Execution backends — BL-340 |
 
@@ -1150,6 +1194,7 @@ delegate_to_agent(backend=…)
 
 | Date | Change |
 |------|--------|
+| 2026-06-11 | BL-354 added — executor context tools (pull): dual compile-push + RAG/history/read tools during backend loop; Phase 5+ (T-04 pass) |
 | 2026-06-11 | BL-353 added — LLM boundary observability (full pass-through logging); Phase 6 TBD; high ROI for gap-finding and dev direction (T-04 pass) |
 | 2026-06-09 | BL-340 added — Cursor SDK execution backend (deferred, later phase — not Phase 5) |
 | 2026-06-09 | Phase 4 exit — P4-ISS-002–007/014–021 carried; BL-335–339 added; BL-309e/328/330 cross-linked |
