@@ -175,6 +175,7 @@ Phase 1 deferred executor conversation carry-over to here (BL-155); see P1-130 `
 | BL-354 | **Executor context tools (pull) — RAG/history/read during backend loop** | **Dual model:** keep **compile-push (A)** as default; **also** expose read-only mcp-coder tools inside the executor loop (Aider today ignores planner MCP). LLM-driven `rag_search`, `workspace_search`, history, excerpts beside edit tools. **Phase 5+** (pairs with BL-002 usage); see § BL-354. From T-04 pass (2026-06-11). |
 | BL-355 | **Optional host CLI toolchain — `rg`, docs, `mcp-coder doctor`** | Today: **ripgrep** optional (Python fallback in file picker); **git** soft-required for diffs/snapshots; tutorials use **jq** / **grep** for inspection. **Later:** curated optional-deps list, `setup`/`doctor` hints (`brew install ripgrep`), perf notes when fallback is used. **Phase 5+** DX; see § BL-355. From T-04 playground (2026-06-11). |
 | BL-356 | **RAG-backed context audit refs — lean JSONL + digest provenance** | As **BL-002** indexes digests (chat, delegations, workspace files), stop duplicating bodies in `delegations.jsonl`; store `context_refs[]` + hashes; index-time metadata for replay/retrieval. Pairs with **BL-353** wire log. **Phase 5+** (after RAG corpus); see § BL-356. From T-04 observability pass (2026-06-11). |
+| BL-357 | **Storage lifecycle — promote, prune, gc (logs + RAG + traces)** | `~/.mcp-coder` grows without bound (JSONL, traces, RAG DBs, checkpoints, blobs). **Later:** per-layer TTL, promote-then-prune, `mcp-coder maintenance` / gc, archive, global dedupe. Cross-cutting — not RAG-only. **Phase 6+** (after BL-356 lean refs + some RAG corpora); see § BL-357. From RAG planning (2026-06-12). |
 
 ### BL-350: Supervised executor loop (mid-run inspect + context inject)
 
@@ -417,7 +418,45 @@ Hard to answer: “What exact prompt did the builder LLM see?” “What did Aid
 
 **Non-goals:** Indexing raw Cursor JSONL verbatim without distillation (see BL-002 chat row — revisit only via curated digests); replacing `workspace_history.db` checkpoints.
 
-**Related:** **BL-002**, **BL-348**, **BL-349**, **BL-353**, **BL-354**, **BL-343**.
+**Related:** **BL-002**, **BL-348**, **BL-349**, **BL-353**, **BL-354**, **BL-343**, **BL-357** (retention after lean refs exist).
+
+---
+
+### BL-357: Storage lifecycle — promote, prune, gc (logs + RAG + traces)
+
+**Status:** `idea` — 2026-06-12. Surfaced RAG / Phase 5 planning — retention is cross-cutting; will become painful once RAG corpora, trace files, and lean refs accumulate.
+
+**Problem:** mcp-coder stores **many** durable layers under `~/.mcp-coder/projects/<key>/` with no unified lifecycle policy. Everything grows until disk pain:
+
+| Layer | Path / store | Grows how | Default bias |
+|-------|----------------|-----------|--------------|
+| **Delegation JSONL** | `sessions/<id>/delegations.jsonl` | +1 row per delegate | Project-scoped audit |
+| **LLM traces** | `sessions/.../traces/*.jsonl` (**BL-353**) | Per call when enabled | Forensics window |
+| **Server log** | `server.jsonl` | Events | Ops |
+| **Delegation RAG** | per-project DB (**BL-002**) | Per delegate indexed | Project memory |
+| **Workspace-file RAG** | `workspace_rag.db` | Per file summary | Refresh on sha256 |
+| **Workspace history** | `workspace_history.db`, checkpoint blobs | Checkpoints, manifests | Restore / audit |
+| **Excerpts / context cache** | `.mcp-coder/context/excerpts/` | Per large read | Regenerable |
+| **Global / promoted knowledge** | `~/.mcp-coder/global/` (vision) | Outcome-gated patterns (**Corpus 4**) | **Long-term keep** |
+
+We want **good stuff** (worked patterns, promoted digests, spec outcomes) without keeping **everything** forever. Project-scoped delegation noise should be prunable once lessons are promoted.
+
+**Principle — promote then prune:** Never delete project audit/RAG rows until promoted artifacts exist (global Corpus 4, distilled chat, spec report, lean `context_refs[]` per **BL-356**). Replay = JSONL lean row + refs + optional archive — not full prompt bodies forever.
+
+**Later tooling (incremental):**
+
+1. **`mcp-coder maintenance`** (or `storage gc`) — report disk by layer; **dry-run** prune; per-workspace and global totals.
+2. **TTL / caps** — config: max delegation JSONL age/rows, max trace size, max per-project RAG rows (defaults conservative).
+3. **Promote** — copy digest/pattern to global store with `promoted_from: {workspace, delegation_id}`; dedupe by `sha256`.
+4. **Archive** — tar old session JSONL/traces with manifest; keep lean index row.
+5. **Stale invalidation** — RAG file rows when sha256 changes; optional “stack tag obsolete” on global patterns.
+6. **Integrate** with `view delegations` / **BL-343** — show archived vs live.
+
+**Non-goals (v1):** silent auto-delete without promote path; prune checkpoints user might restore (**BL-322g**); mandatory cloud offload.
+
+**Phase:** **6+** — after **BL-356** lean refs and at least one RAG corpus in dogfood use; thin **report-only** slice could land earlier (disk breakdown, no delete). Pairs with [notes/rag-gap-analysis.md](./notes/rag-gap-analysis.md) § Retention and [notes/storage-and-linking.md](./notes/storage-and-linking.md).
+
+**Related:** **BL-002**, **BL-353**, **BL-356**, **BL-322** (checkpoints), **BL-348** (index staleness), Corpus 4 outcome-gated ingest (rag-gap-analysis).
 
 ---
 
@@ -1215,6 +1254,7 @@ delegate_to_agent(backend=…)
 | **BL-354** | **Executor context tools (pull)** — RAG/history/read during backend loop | See § BL-354; dual with compile-push (A); **Phase 5+** |
 | **BL-355** | **Optional host CLI toolchain** — `rg`, doctor, recommended deps | See § BL-355; **Phase 5+** DX |
 | **BL-356** | **RAG-backed context audit refs** — lean JSONL, digest provenance | See § BL-356; pairs with BL-002 + BL-353; **Phase 5+** |
+| **BL-357** | **Storage lifecycle** — promote, prune, gc (logs + RAG + traces) | See § BL-357; **Phase 6+** |
 | **BL-334** | **Backend prompt customization** (system prefix + edit-format control) | See § BL-334 |
 | **BL-340** | **Cursor SDK execution backend** (beside Aider) | See § Execution backends — BL-340 |
 
@@ -1282,6 +1322,7 @@ delegate_to_agent(backend=…)
 
 | Date | Change |
 |------|--------|
+| 2026-06-12 | BL-357 added — storage lifecycle (promote/prune/gc) for logs, RAG, traces, checkpoints; Phase 6+ (RAG planning) |
 | 2026-06-11 | BL-356 added — RAG-backed context audit refs (lean JSONL, digest provenance); pairs with BL-002/BL-353 (T-04 observability pass) |
 | 2026-06-11 | BL-353 expanded — full-delegate audit gaps (helper inputs, transcript line provenance, compile bundle, phased 5a/5b/6); BL-002 chat corpus note |
 | 2026-06-11 | BL-354 added — executor context tools (pull): dual compile-push + RAG/history/read tools during backend loop; Phase 5+ (T-04 pass) |

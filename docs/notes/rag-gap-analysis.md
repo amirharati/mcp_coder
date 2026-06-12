@@ -128,8 +128,43 @@ When non-RAG items are stripped away, Phase 5 retrieval collapses into **four co
 | **Consumers** | Planner before delegate; builder preamble (explicitly invoked to avoid noise) |
 
 **Gap today:** No corpus. **BL-008** (skills injection) is adjacent — may share index machinery with BL-002.
-**Note on global patterns:** Scraping the internet dynamically for "similar problems already solved" is **Web Search** (a tool), not a local RAG index. We rely on the LLM's pre-training for global patterns, and use local RAG only for project-specific external docs/skills.
-**Note on cross-project RAG:** Today, `mcp-coder` RAG is strictly per-workspace (`~/.mcp-coder/projects/<key>/workspace_rag.db`). In the future, this corpus could act as a federation layer to query *other* local workspaces' RAG DBs, or a global `~/.mcp-coder/global_rag.db` for shared patterns. Keeping this explicitly separate from Corpus 1 (Workspace files) is a deliberate tradeoff to prevent irrelevant cross-project noise from polluting normal, single-project work.
+
+**Three tiers for “global” / external patterns** (not one binary choice):
+
+| Tier | What | When | RAG? |
+|------|------|------|------|
+| **A — Live web search** | Planner/executor hits web for this issue *now* | First encounter, time-sensitive, library-specific bug reports | **No** — ephemeral tool result |
+| **B — Curated localization** | Web search → try pattern/solution → **save only if it worked** → local corpus for reuse | Same *class* of problem recurs; avoid indexing noise | **Yes** — Corpus 4, **outcome-gated** ingest |
+| **C — Cross-project / global DB** | Query other workspaces’ RAG or a shared `global_rag.db` | “How did *we* solve this elsewhere?” | **Yes** — federation; invoke explicitly |
+
+**Hypothesis (H6):** Across many workspaces we hit the **same problem types** (auth flows, OAuth quirks, framework bugs, stack-specific patterns). Tier **B** captures the payoff: one pattern that **actually worked** → reused on the next similar task without re-searching.
+
+**Ingest rule — save only what worked (not everything found):**
+
+- **Do not** index every web hit, blog post, or snippet we *might* use.
+- **Do** localize after we **tried** a pattern/idea/solution and can label outcome: helped / didn’t help / partial.
+- Failed attempts stay in delegation audit (**Corpus 2**) or traces (**BL-353**) — not Corpus 4 unless we want a short “avoid this” note with `outcome: failed`.
+
+This mirrors Corpus 3 (don’t index raw chat) and BL-002’s rejection of unlabeled transcript noise: **outcome labels are the filter**.
+
+**Localization pipeline (Tier B — suggested shape, Phase 5+ / ~8–9):**
+
+```
+issue / error / task
+    → web_search or paste URL (Tier A — ephemeral, not stored)
+    → apply pattern in delegate / manual try
+    → post-run: did it help? (planner, spec report, delegate success)
+         ├─ no  → discard or log in delegation history only
+         └─ yes → normalize to markdown chunk(s) + metadata:
+                  source_url, applied_in_delegation_id, problem_class,
+                  stack tags, sha256, outcome: worked
+              → index Corpus 4 (workspace references/ or global skills/)
+    → later: retrieve(query, corpus=external) when explicitly needed
+```
+
+**Why not skip straight to internet-scale RAG:** Crawling/indexing the open web is cost, staleness, and junk. **Outcome-gated localization** keeps Corpus 4 small and high-signal — same discipline as “good decisions land in specs,” but for **external** patterns we validated in practice.
+
+**Note on cross-project RAG (Tier C):** Today per-workspace (`~/.mcp-coder/projects/<key>/workspace_rag.db`). Later: federation across workspaces or `global_rag.db` for shared patterns. Keeping Tier B/C **explicitly separate** from Corpus 1 prevents irrelevant external noise in normal single-project work.
 
 ---
 
@@ -217,6 +252,44 @@ When RAG corpora exist, JSONL should hold **`context_refs[]`** (kind, id, sha256
 
 ---
 
+## Retention, pruning & long-term maintenance (later — not today)
+
+We will **accumulate** data in several places — RAG DBs, `delegations.jsonl`, trace files, `workspace_history.db`, distilled chunks. We **cannot** keep everything forever, but we **do** want to keep good stuff. Different layers have different lifetimes.
+
+### Lifetimes by layer (intent)
+
+| Layer | Typical scope | Retention bias | After prune, what survives |
+|-------|---------------|----------------|----------------------------|
+| **Corpus 1** — workspace files | Per-project | Refresh on sha256 change; drop stale summaries | Re-index on next edit |
+| **Corpus 2** — delegations | Per-project | **Shorter** — project audit, replay while active | Promote distilled lessons → Corpus 3/4 or spec reports |
+| **Corpus 3** — chat digests | Per-session / cross-session | Medium — decisions worth keeping | Raw transcript can go |
+| **Corpus 4** — worked patterns, skills, localized web | **Global / long-term** | **Keep** — outcome-gated, small, high signal | Source URL + delegation ref for provenance |
+| **JSONL + traces (BL-353)** | Per-session | **Shorter** — forensics window | Lean row + `context_refs[]` (**BL-356**) points at promoted digests |
+| **Checkpoints / blobs** | Per-project | Policy-driven (BL-322g restore deferred) | Manifest + summary in history DB |
+
+**Key idea:** **Promote then prune.** Before deleting old delegation RAG rows or compacting JSONL, extract what mattered (outcome `worked`, checkpoint summary, localized pattern) into long-term corpora or specs. Project-scoped noise goes away; global good stuff stays.
+
+### Why a global DB helps space (vision)
+
+If Corpus 4 / tier B patterns live in `~/.mcp-coder/global/` (or federated global RAG), per-workspace delegation indexes can be **trimmed** once lessons are promoted — same pattern referenced once globally instead of duplicated per `project_key`. Not required for Phase 5; design retrieval refs so promotion does not break replay.
+
+### Tools we will need eventually (not Phase 5)
+
+| Tool / policy | Purpose |
+|---------------|---------|
+| **`mcp-coder maintenance` / `gc`** | Report disk by layer; optional prune with dry-run |
+| **TTL / max-rows** | Per workspace: e.g. delegation RAG > N days or > M MB |
+| **Promote** | Copy digest → global Corpus 4 with `promoted_from: {delegation_id, workspace}` |
+| **Archive** | Move old session JSONL/traces to cold storage (tar + index manifest) |
+| **Dedupe** | By `sha256` across global store — one copy of same worked pattern |
+| **Stale invalidation** | File summary stale after sha256; global pattern stale if stack tag obsolete |
+
+**Non-goals for v1 maintenance:** auto-delete without promote path; silent prune of checkpoints user might restore.
+
+**Backlog:** [BL-357](../BACKLOG.md#bl-357-storage-lifecycle--promote-prune-gc-logs--rag--traces) — cross-cutting storage lifecycle (logs, RAG, traces, checkpoints, not RAG-only). Pairs with [storage-and-linking.md](./storage-and-linking.md).
+
+---
+
 ## Highest-ROI hypotheses (to validate in dogfood)
 
 | # | Hypothesis | Validate how |
@@ -226,6 +299,7 @@ When RAG corpora exist, JSONL should hold **`context_refs[]`** (kind, id, sha256
 | H3 | **FTS suffices** for Phase 5 — embeddings not needed yet | Measure recall on 20 real planner queries |
 | H4 | **Raw chat RAG** hurts more than helps | Compare dump vs digest on noisy sessions |
 | H5 | **Lean refs** keep JSONL usable at 100+ delegates | Size row with refs only vs `prompt_full` |
+| H6 | **Outcome-gated localization** (save only what worked) beats indexing all web hits | After 3–5 auth/OAuth solves, only persist winners; measure retrieval hit rate vs re-search |
 
 Add results to § Open evidence as we learn.
 
@@ -302,10 +376,13 @@ ContextRef { kind, id, sha256, snippet, score, source_line_range?, corpus }
 | **Hot transcript window only** (no RAG) | Small, valuable — but separate from retrieval | 5+ near P5-2 (config on `host_transcript`) |
 | **Embeddings / vector store** | FTS + summaries first; H3 decides | 5+ only if measured miss rate |
 | **Executor-pull (BL-354)** | Harder audit; compile-push must work first | 5+ |
-| **Cross-project / global RAG (Corpus 4)** | Noise risk; explicit invoke only | ~8–9 vision |
-| **Internet-scale “similar solved problems”** | Web Search tool, not local index | Tooling, not RAG corpus |
+| **Cross-project / global RAG (Corpus 4 tier C)** | Noise risk; explicit invoke only | ~8–9 vision |
+| **Curated web localization (Corpus 4 tier B)** | Needs ingest pipeline + triage UX; stacks on P5 retrieval contract | 5+ / ~8–9 after per-workspace RAG works |
+| **Live web search only (tier A)** | Always available as tool; not stored | Tooling (no RAG) |
+| **Internet-scale crawl/index** | Junk, staleness, cost — rejected | Not planned |
 | **Full wire logging (BL-353 5b/6)** | Cross-cutting; P5-5 takes refs + tokens slice only | 6 |
 | **Reasoning trace reuse (BL-333)** | Capture before reuse | 6+ |
+| **Retention / gc / promote-prune** | Need promote path + Corpus 4 global first | **BL-357** Phase 6+ |
 
 ### Minimum vs full Phase 5 exit
 
@@ -325,6 +402,10 @@ ContextRef { kind, id, sha256, snippet, score, source_line_range?, corpus }
 4. **Embeddings:** defer until FTS miss rate measured — what threshold triggers BL-002 embedding slice?
 5. **Executor-pull (BL-354):** Phase 5 or 5+ — does dogfood need it before workspace-file RAG is solid?
 6. **Corpus boundaries:** same DB for file + delegation digests vs separate stores (BL-002 locked separate lifecycles)?
+7. **Web localization store:** per-workspace `references/` vs `~/.mcp-coder/global/` for stack-wide patterns (OAuth, FastAPI, etc.)?
+8. **Outcome gate:** who marks “worked” — planner after review, auto on `outcome: success` + spec report, or explicit `localize_reference` MCP tool?
+9. **Failed external tries:** store `outcome: failed` in Corpus 4 (avoid list) or only in delegation RAG?
+10. **Retention defaults:** TTL for per-project delegation RAG vs immortal global Corpus 4 — when to auto-promote before prune?
 
 ---
 
@@ -338,6 +419,7 @@ ContextRef { kind, id, sha256, snippet, score, source_line_range?, corpus }
 | [BL-353](../BACKLOG.md#bl-353-llm-boundary-observability--full-pass-through-logging) | LLM wire logging + provenance |
 | [BL-354](../BACKLOG.md#bl-354-executor-context-tools-pull--raghistoryread-during-backend-loop) | Executor-pull retrieval |
 | [BL-356](../BACKLOG.md#bl-356-rag-backed-context-audit-refs--lean-jsonl--digest-provenance) | Lean JSONL + digest metadata |
+| [BL-357](../BACKLOG.md#bl-357-storage-lifecycle--promote-prune-gc-logs--rag--traces) | Storage lifecycle — promote, prune, gc (logs + RAG + traces) |
 | [BL-333](../BACKLOG.md) | Reasoning trace reuse |
 | [BL-335](../BACKLOG.md) | Per-role token audit |
 | [T-04](../guide/tutorials/04-context-compiler.md) | Context compiler — what executor sees |
@@ -360,6 +442,9 @@ ContextRef { kind, id, sha256, snippet, score, source_line_range?, corpus }
 | 2026-06-12 | Planning discussion | Phase 5 = infra + connect; advanced corpora ~8–9 after dogfood | — | § Phase 5 MVP |
 | 2026-06-12 | Planning discussion | RAG works on FTS today; embeddings deferred until measured | — | § RAG ≠ embeddings |
 | 2026-06-12 | Planning discussion | Chat: hot window direct + cold tail distill; no live RAG stream | 5+ | Corpus 3 mechanism |
+| 2026-06-12 | Planning discussion | Global patterns: web search → triage → localize (Corpus 4 tier B); recurring problem classes (H6) | Yes — curated external | Corpus 4 |
+| 2026-06-12 | Planning discussion | Corpus 4 tier B: **save only what worked** after try — outcome-gated, not index-all-hits | Yes — outcome labels | Corpus 4 |
+| 2026-06-12 | Planning discussion | Lifetimes differ: project delegations pruneable; global/worked patterns long-term; promote-then-prune + gc tools later | — | **BL-357** |
 
 ---
 
@@ -367,6 +452,10 @@ ContextRef { kind, id, sha256, snippet, score, source_line_range?, corpus }
 
 | Date | Change |
 |------|--------|
+| 2026-06-12 | **BL-357** linked — storage lifecycle backlog item (logs + RAG + traces) |
+| 2026-06-12 | § Retention, pruning & long-term maintenance — lifetimes table, promote-then-prune, future gc tools (not Phase 5) |
+| 2026-06-12 | Corpus 4 tier B — **outcome-gated** ingest (save only what worked after try); pipeline + open Q8–9 |
+| 2026-06-12 | Corpus 4 — three tiers (live web / curated localization / cross-project); H6 recurring problem classes; localization pipeline sketch |
 | 2026-06-12 | § Phase 5 MVP candidate — milestones P5-1…P5-5, philosophy (5 vs 8–9), FTS vs embeddings, Corpus 3 window mechanism, defer table |
 | 2026-06-12 | Added Epics/Tasks (historical specs), past MCP sessions, and global internet patterns to the corpora definitions based on planning discussion |
 | 2026-06-11 | Initial note — litmus test, gap table, four corpora, dependency order, observability coupling, open questions (from planning chat after T-04 / BL-353/356 backlog updates) |
