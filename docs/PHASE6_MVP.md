@@ -61,6 +61,8 @@ The `ObservabilityBackend` adapter seam (D-P6-1) is what makes this extractable.
 
 ### P6-001 — Observability adapter seam + logging consolidation *(refactor)*
 
+**Status:** **done** (2026-06-13, commit `6e6b1cc`)
+
 **Goal:** Audit all current logging/telemetry surface; extract into `core/observability/` with a clean `ObservabilityBackend` interface. No new behavior — just the seam. This is the prerequisite for everything else.
 
 **Current surface being consolidated:**
@@ -187,4 +189,5 @@ Opt-out env vars follow existing pattern: `MCP_CODER_OBS_VERBOSITY`, `MCP_CODER_
 
 | Date | Change |
 |------|--------|
+| 2026-06-13 | P6-001 done — `core/observability/` seam shipped (`6e6b1cc`); P6-ISS-001 fixed |
 | 2026-06-13 | Created — Phase 6 planning locked; milestones P6-001…P6-005; `ObservabilityBackend` adapter seam as POC/MVP of AGENTIC_LOOP_LOGGING product strategy |
