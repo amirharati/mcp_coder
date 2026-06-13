@@ -165,6 +165,22 @@ class ObservabilityBackend(ABC):
         """Merge role usage records keyed by role."""
 
     @abstractmethod
+    def get_role_tokens(
+        self, delegation_id: str, role: str
+    ) -> dict[str, Any] | None:
+        """Return callback-accumulated token usage for a delegation role."""
+
+    @abstractmethod
+    def overlay_model_roles_tokens(
+        self,
+        model_roles: dict[str, Any] | None,
+        *,
+        delegation_id: str,
+        executor_fallback_tokens: dict[str, Any] | None = None,
+    ) -> dict[str, Any] | None:
+        """Merge LiteLLM callback tokens into model_roles when live attrs are missing."""
+
+    @abstractmethod
     def new_pipeline_recorder(self) -> PipelineRecorder:
         """Return a fresh pipeline phase recorder."""
 

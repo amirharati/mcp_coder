@@ -64,6 +64,19 @@ def session_delegations_path(workspace: str | Path, mcp_session_id: str) -> Path
     return session_folder(workspace, mcp_session_id) / "delegations.jsonl"
 
 
+def session_trace_path(
+    workspace: str | Path,
+    mcp_session_id: str,
+    delegation_id: str,
+) -> Path:
+    """Per-delegation LLM trace file (D-P6-3)."""
+    return (
+        session_folder(workspace, mcp_session_id)
+        / "traces"
+        / f"{delegation_id}.jsonl"
+    )
+
+
 def workspace_pointer_path(workspace: str | Path) -> Path:
     """System-managed pointer under .mcp-coder/session.json."""
     return Path(workspace).resolve() / ".mcp-coder" / "session.json"

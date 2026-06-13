@@ -9,6 +9,8 @@ from typing import Iterator
 delegation_id_var: ContextVar[str | None] = ContextVar("delegation_id", default=None)
 role_var: ContextVar[str | None] = ContextVar("role", default=None)
 pipeline_phase_var: ContextVar[str | None] = ContextVar("pipeline_phase", default=None)
+workspace_var: ContextVar[str | None] = ContextVar("workspace", default=None)
+session_dir_var: ContextVar[str | None] = ContextVar("session_dir", default=None)
 
 CLI_FALLBACK_ROLE = "cli_test"
 
@@ -19,11 +21,23 @@ def delegation_context(delegation_id: str) -> Iterator[None]:
     from core.observability.litellm_callback import note_delegation_start
 
     note_delegation_start(delegation_id)
-    reset = delegation_id_var.set(delegation_id)
+    delegation_reset = delegation_id_var.set(delegation_id)
     try:
         yield
     finally:
-        delegation_id_var.reset(reset)
+        delegation_id_var.reset(delegation_reset)
+        workspace_var.set(None)
+        session_dir_var.set(None)
+
+
+def bind_delegation_trace_scope(
+    *,
+    workspace: str,
+    session_dir: str | Path,
+) -> None:
+    """Set workspace + session_dir for per-delegation trace writes (mid-delegate)."""
+    workspace_var.set(workspace)
+    session_dir_var.set(str(session_dir))
 
 
 @contextmanager
@@ -49,3 +63,5 @@ def clear_delegation_context() -> None:
     delegation_id_var.set(None)
     role_var.set(None)
     pipeline_phase_var.set(None)
+    workspace_var.set(None)
+    session_dir_var.set(None)

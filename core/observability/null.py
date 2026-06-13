@@ -152,6 +152,20 @@ class NullObservability(ObservabilityBackend):
     ) -> dict[str, Any] | None:
         return {}
 
+    def get_role_tokens(
+        self, delegation_id: str, role: str
+    ) -> dict[str, Any] | None:
+        return None
+
+    def overlay_model_roles_tokens(
+        self,
+        model_roles: dict[str, Any] | None,
+        *,
+        delegation_id: str,
+        executor_fallback_tokens: dict[str, Any] | None = None,
+    ) -> dict[str, Any] | None:
+        return model_roles
+
     def new_pipeline_recorder(self) -> PipelineRecorder:
         return PipelineRecorder()
 

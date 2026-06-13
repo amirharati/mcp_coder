@@ -5,7 +5,13 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Any
 
-from core.observability.context import CLI_FALLBACK_ROLE, delegation_id_var, role_var
+from core.observability.context import (
+    CLI_FALLBACK_ROLE,
+    delegation_id_var,
+    role_var,
+    session_dir_var,
+    workspace_var,
+)
 from core.usage.litellm_tokens import _coerce_int, _tokens_from_usage_mapping
 
 _ACCUMULATOR_KEY = tuple[str, str]
@@ -67,7 +73,14 @@ def _correlation_key() -> _ACCUMULATOR_KEY:
 def get_accumulated_usage(delegation_id: str, role: str) -> dict[str, Any] | None:
     """Return merged token usage for (delegation_id, role), or None."""
     bucket = _store.get((delegation_id, role))
-    if bucket is None or bucket.call_count == 0:
+    if bucket is None:
+        return None
+    if (
+        bucket.call_count == 0
+        and bucket.input == 0
+        and bucket.output == 0
+        and bucket.total == 0
+    ):
         return None
     return bucket.to_token_dict()
 
@@ -81,12 +94,29 @@ def pop_cli_accumulated_usage() -> dict[str, Any] | None:
     """Read and remove CLI fallback usage."""
     key = _CLI_KEY
     bucket = _store.pop(key, None)
-    if bucket is None or bucket.call_count == 0:
+    if bucket is None:
+        return None
+    if bucket.input == 0 and bucket.output == 0 and bucket.total == 0:
         return None
     return bucket.to_token_dict()
 
 
+def _ensure_bucket(key: _ACCUMULATOR_KEY) -> _UsageBucket:
+    bucket = _store.get(key)
+    if bucket is None:
+        bucket = _UsageBucket()
+        _store[key] = bucket
+    return bucket
+
+
+def _bump_call_index(key: _ACCUMULATOR_KEY) -> int:
+    bucket = _ensure_bucket(key)
+    bucket.call_count += 1
+    return bucket.call_count
+
+
 def _record_usage(
+    key: _ACCUMULATOR_KEY,
     *,
     model: str | None,
     usage: dict[str, int | None] | None,
@@ -103,13 +133,7 @@ def _record_usage(
     if inp == 0 and out == 0 and total == 0:
         return
 
-    key = _correlation_key()
-    bucket = _store.get(key)
-    if bucket is None:
-        bucket = _UsageBucket()
-        _store[key] = bucket
-
-    bucket.call_count += 1
+    bucket = _ensure_bucket(key)
     if model:
         bucket.model = model
     bucket.input += inp
@@ -128,6 +152,88 @@ def _duration_ms(start_time: Any, end_time: Any) -> int | None:
         return max(0, int((end_time - start_time).total_seconds() * 1000))
     except (TypeError, AttributeError, ValueError):
         return None
+
+
+def _extract_prompt_text(kwargs: dict[str, Any]) -> str | None:
+    messages = kwargs.get("messages")
+    if isinstance(messages, list):
+        parts: list[str] = []
+        for message in messages:
+            if isinstance(message, dict):
+                content = message.get("content")
+                if isinstance(content, str) and content.strip():
+                    parts.append(content)
+        if parts:
+            return "\n\n".join(parts)
+    prompt = kwargs.get("prompt")
+    if isinstance(prompt, str) and prompt.strip():
+        return prompt
+    return None
+
+
+def _extract_response_parts(response_obj: Any) -> tuple[str | None, str | None]:
+    if response_obj is None:
+        return None, None
+    try:
+        choices = getattr(response_obj, "choices", None)
+        if not choices and isinstance(response_obj, dict):
+            choices = response_obj.get("choices")
+        if not choices:
+            return None, None
+        first = choices[0]
+        message = getattr(first, "message", None)
+        if message is None and isinstance(first, dict):
+            message = first.get("message")
+        if message is None:
+            return None, None
+        if isinstance(message, dict):
+            content = message.get("content")
+            reasoning = message.get("reasoning_content")
+        else:
+            content = getattr(message, "content", None)
+            reasoning = getattr(message, "reasoning_content", None)
+        text = content if isinstance(content, str) else None
+        reasoning_text = reasoning if isinstance(reasoning, str) else None
+        return text, reasoning_text
+    except (AttributeError, IndexError, TypeError):
+        return None, None
+
+
+def _append_trace_for_completion(
+    *,
+    delegation_id: str,
+    role: str,
+    call_index: int,
+    model: str | None,
+    duration_ms: int | None,
+    usage: dict[str, int | None] | None,
+    kwargs: dict[str, Any],
+    response_obj: Any,
+) -> None:
+    session_dir = session_dir_var.get()
+    workspace = workspace_var.get()
+    if not session_dir or not workspace:
+        return
+
+    from core.config.observability import resolve_observability_verbosity
+    from core.observability.trace import append_trace_record, build_trace_record
+
+    prompt_text = _extract_prompt_text(kwargs)
+    response_text, reasoning_text = _extract_response_parts(response_obj)
+    verbosity = resolve_observability_verbosity(workspace)
+    record = build_trace_record(
+        delegation_id=delegation_id,
+        role=role,
+        model=model,
+        call_index=call_index,
+        duration_ms=duration_ms,
+        tokens=usage,
+        verbosity=verbosity,
+        prompt_text=prompt_text,
+        response_text=response_text,
+        reasoning_text=reasoning_text,
+    )
+    append_trace_record(record, session_dir=session_dir, delegation_id=delegation_id)
 
 
 def _extract_from_success(
@@ -155,12 +261,46 @@ def _extract_from_success(
             else usage_raw.get("reasoning_tokens")
         )
 
-    _record_usage(
-        model=str(model) if model else None,
-        usage=usage,
-        reasoning_tokens=reasoning,
-        duration_ms=_duration_ms(start_time, end_time),
-    )
+    duration_ms = _duration_ms(start_time, end_time)
+    model_str = str(model) if model else None
+
+    delegation_id = delegation_id_var.get()
+    role = role_var.get() or CLI_FALLBACK_ROLE
+    key = _correlation_key()
+    call_index: int | None = None
+    if delegation_id:
+        trace_key = (delegation_id, role)
+        call_index = _bump_call_index(trace_key)
+        _record_usage(
+            trace_key,
+            model=model_str,
+            usage=usage,
+            reasoning_tokens=reasoning,
+            duration_ms=duration_ms,
+        )
+    else:
+        _record_usage(
+            key,
+            model=model_str,
+            usage=usage,
+            reasoning_tokens=reasoning,
+            duration_ms=duration_ms,
+        )
+
+    if delegation_id and call_index is not None:
+        try:
+            _append_trace_for_completion(
+                delegation_id=delegation_id,
+                role=role,
+                call_index=call_index,
+                model=model_str,
+                duration_ms=duration_ms,
+                usage=usage,
+                kwargs=kwargs,
+                response_obj=response_obj,
+            )
+        except Exception:
+            pass
 
 
 def litellm_success_handler(

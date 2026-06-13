@@ -5,6 +5,7 @@ from __future__ import annotations
 from core.observability.base import ObservabilityBackend
 from core.observability.context import (
     CLI_FALLBACK_ROLE,
+    bind_delegation_trace_scope,
     clear_delegation_context,
     delegation_context,
     role_context,
@@ -24,6 +25,7 @@ __all__ = [
     "LocalObservability",
     "NullObservability",
     "ObservabilityBackend",
+    "bind_delegation_trace_scope",
     "clear_delegation_context",
     "delegation_context",
     "get_observability",

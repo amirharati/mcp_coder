@@ -66,11 +66,11 @@ from core.host.cursor_transcript import (
 from core.observability import (
     CONTEXT_MODE_FALLBACK,
     CONTEXT_MODE_HOST_TRANSCRIPT,
+    bind_delegation_trace_scope,
     delegation_context,
     get_observability,
     role_context,
 )
-from core.observability.litellm_callback import overlay_model_roles_from_callback
 from core.engine import get_engine, list_backends
 from core.engine.factory import UnknownBackendError
 from core.session.policy import resolve_session_policy
@@ -277,7 +277,7 @@ def _build_model_roles_payload(
             roles = {}
         roles["spec_validation"] = spec_validation_record
 
-    roles = overlay_model_roles_from_callback(
+    roles = obs.overlay_model_roles_tokens(
         roles,
         delegation_id=delegation_id,
         executor_fallback_tokens=tokens,
@@ -541,6 +541,7 @@ def delegate_to_agent(
         t_sess = time.perf_counter()
         storage = SessionStore().acquire(ws, policy, host_hint)
         session_decision_ms = int((time.perf_counter() - t_sess) * 1000)
+        bind_delegation_trace_scope(workspace=ws, session_dir=storage.session_dir)
 
         obs.emit(
             "session_acquired",

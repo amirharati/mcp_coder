@@ -36,6 +36,9 @@ session_policy: always_new
 # workspace_file_hints: false     # file summary hints in picker/builder (needs workspace_file_rag)
 # First-time: mcp-coder index-workspace --workspace .  (LLM cost per eligible file)
 
+# Phase 6 trace verbosity: lean | standard | full (default: standard)
+# observability_verbosity: full
+
 # Review model for mode=review (overrides MCP_CODER_REVIEW_MODEL when both set)
 # review_model: openrouter/anthropic/claude-sonnet-4
 
