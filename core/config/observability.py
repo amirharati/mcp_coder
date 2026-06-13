@@ -105,3 +105,61 @@ def resolve_reasoning_buffer_size(workspace: str | Path) -> int:
             pass
 
     return size
+
+
+RETENTION_SESSION = "session"
+RETENTION_FOREVER = "forever"
+_VALID_RETENTION = frozenset({RETENTION_SESSION, RETENTION_FOREVER})
+
+
+def _warn_invalid_retention(value: str, *, workspace: str | Path) -> None:
+    server_log_warn(
+        f"invalid observability_retention '{value}' — using '{RETENTION_SESSION}'",
+        workspace_path=str(workspace),
+    )
+
+
+def resolve_observability_retention(workspace: str | Path) -> str:
+    """Default session. Env MCP_CODER_OBS_RETENTION then yaml observability_retention.
+
+    Accepts ``session``, ``forever``, or ``<N>_days`` (e.g. ``30_days``) as policy stub.
+  """
+    retention = RETENTION_SESSION
+
+    env_raw = os.environ.get("MCP_CODER_OBS_RETENTION", "").strip().lower()
+    if env_raw:
+        if env_raw in _VALID_RETENTION or env_raw.endswith("_days"):
+            retention = env_raw
+        else:
+            _warn_invalid_retention(env_raw, workspace=workspace)
+
+    ws_value = load_workspace_config(workspace).get("observability_retention")
+    if isinstance(ws_value, str):
+        normalized = ws_value.strip().lower()
+        if normalized in _VALID_RETENTION or normalized.endswith("_days"):
+            retention = normalized
+        elif normalized:
+            _warn_invalid_retention(normalized, workspace=workspace)
+
+    return retention
+
+
+def capture_for_training_enabled(workspace: str | Path) -> bool:
+    """Default False. Env MCP_CODER_CAPTURE_FOR_TRAINING=1 then yaml capture_for_training: true."""
+    enabled = False
+
+    env_raw = os.environ.get("MCP_CODER_CAPTURE_FOR_TRAINING", "").strip()
+    if env_raw:
+        parsed = _env_bool(env_raw)
+        if parsed is not None:
+            enabled = parsed
+
+    ws_value = load_workspace_config(workspace).get("capture_for_training")
+    if isinstance(ws_value, bool):
+        enabled = ws_value
+    elif isinstance(ws_value, str):
+        parsed = _env_bool(ws_value)
+        if parsed is not None:
+            enabled = parsed
+
+    return enabled

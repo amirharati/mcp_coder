@@ -43,6 +43,14 @@ session_policy: always_new
 # capture_reasoning: false
 # reasoning_buffer_size: 3
 
+# Phase 6 training capture (opt-in; writes traces/<delegation_id>-training.json)
+# capture_for_training: true
+
+# Phase 6 retention policy stub (enforcement deferred to BL-357)
+# observability_retention: session
+# observability_retention: 30_days
+# observability_retention: forever
+
 # Review model for mode=review (overrides MCP_CODER_REVIEW_MODEL when both set)
 # review_model: openrouter/anthropic/claude-sonnet-4
 

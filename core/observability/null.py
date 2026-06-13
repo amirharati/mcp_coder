@@ -193,6 +193,30 @@ class NullObservability(ObservabilityBackend):
     def resolve_reasoning_buffer_size(self, workspace: str | Path) -> int:
         return 3
 
+    def capture_for_training_enabled(self, workspace: str | Path) -> bool:
+        return False
+
+    def resolve_observability_retention(self, workspace: str | Path) -> str:
+        return "session"
+
+    def write_training_capture_if_enabled(
+        self,
+        *,
+        workspace: str | Path,
+        session_dir: str | Path,
+        delegation_id: str,
+        timestamp_end: str,
+        task: str,
+        context_package_hash: str | None,
+        reasoning_summary: str | None,
+        outcome: str | None,
+        verify_result: dict[str, Any] | None,
+        success: bool,
+        model_roles: dict[str, Any] | None,
+        pipeline_flags_runtime: dict[str, Any] | None = None,
+    ) -> Path | None:
+        return None
+
     def new_pipeline_recorder(self) -> PipelineRecorder:
         return PipelineRecorder()
 

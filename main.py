@@ -143,6 +143,16 @@ def main() -> None:
     index_ws_p.add_argument("--limit", type=int, default=None, help="Max files to index")
     index_ws_p.add_argument("--json", action="store_true", help="JSON summary output")
 
+    maintenance_p = sub.add_parser(
+        "maintenance",
+        help="Observability storage stats and maintenance (subcommands: stats)",
+    )
+    maintenance_p.add_argument(
+        "maintenance_args",
+        nargs=argparse.REMAINDER,
+        help="maintenance subcommand: stats",
+    )
+
     parser.add_argument(
         "--mcp",
         action="store_true",
@@ -237,6 +247,14 @@ def main() -> None:
         if args.json:
             index_argv.append("--json")
         raise SystemExit(main_index_workspace(index_argv))
+
+    if args.command == "maintenance":
+        from core.cli.maintenance import main_maintenance
+
+        maintenance_argv = args.maintenance_args or []
+        if maintenance_argv and maintenance_argv[0] == "--":
+            maintenance_argv = maintenance_argv[1:]
+        raise SystemExit(main_maintenance(maintenance_argv))
 
     # Bare invocation from an interactive terminal: the stdio server would just
     # sit waiting for JSON-RPC on stdin (looks like a hang). Cursor runs us with

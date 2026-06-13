@@ -1600,6 +1600,39 @@ def delegate_to_agent(
             error=error,
         )
 
+        context_package_hash = None
+        if context_package is not None:
+            from core.context.package_cache import compute_context_package_cache_key
+
+            context_package_hash = compute_context_package_cache_key(context_package)
+
+        pipeline_flags_runtime = {
+            "context_builder_llm_enabled": (
+                builder_llm_enabled if picker_result is not None else None
+            ),
+            "builder_brief_applied": builder_brief_applied if builder_llm_enabled else None,
+            "spec_validation_ran": spec_validation_ran,
+            "spec_validation_passed": spec_validation_passed,
+            "auto_verify_enabled": verify_enabled if verify_result is not None else None,
+            "rag_retrieval_on": rag_retrieval_on,
+        }
+        obs.write_training_capture_if_enabled(
+            workspace=ws,
+            session_dir=storage.session_dir,
+            delegation_id=delegation_id,
+            timestamp_end=timestamp_end,
+            task=task,
+            context_package_hash=context_package_hash,
+            reasoning_summary=reasoning_summary,
+            outcome=outcome,
+            verify_result=(
+                verify_result.to_response_dict() if verify_result is not None else None
+            ),
+            success=success,
+            model_roles=model_roles_payload,
+            pipeline_flags_runtime=pipeline_flags_runtime,
+        )
+
         if cli_artifacts:
             from core.delegation.artifacts import delegation_envelope, full_run_artifacts
 

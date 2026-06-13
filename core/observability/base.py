@@ -213,6 +213,33 @@ class ObservabilityBackend(ABC):
         """Return max prior reasoning entries kept per MCP session."""
 
     @abstractmethod
+    def capture_for_training_enabled(self, workspace: str | Path) -> bool:
+        """Return whether opt-in training tuple export is enabled."""
+
+    @abstractmethod
+    def resolve_observability_retention(self, workspace: str | Path) -> str:
+        """Return observability retention policy stub (session | N_days | forever)."""
+
+    @abstractmethod
+    def write_training_capture_if_enabled(
+        self,
+        *,
+        workspace: str | Path,
+        session_dir: str | Path,
+        delegation_id: str,
+        timestamp_end: str,
+        task: str,
+        context_package_hash: str | None,
+        reasoning_summary: str | None,
+        outcome: str | None,
+        verify_result: dict[str, Any] | None,
+        success: bool,
+        model_roles: dict[str, Any] | None,
+        pipeline_flags_runtime: dict[str, Any] | None = None,
+    ) -> Path | None:
+        """Write training tuple when capture_for_training is enabled."""
+
+    @abstractmethod
     def new_pipeline_recorder(self) -> PipelineRecorder:
         """Return a fresh pipeline phase recorder."""
 

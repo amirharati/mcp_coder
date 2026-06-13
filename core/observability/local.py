@@ -104,6 +104,49 @@ class LocalObservability(ObservabilityBackend):
 
         return resolve_reasoning_buffer_size(workspace)
 
+    def capture_for_training_enabled(self, workspace: str | Path) -> bool:
+        from core.config.observability import capture_for_training_enabled
+
+        return capture_for_training_enabled(workspace)
+
+    def resolve_observability_retention(self, workspace: str | Path) -> str:
+        from core.config.observability import resolve_observability_retention
+
+        return resolve_observability_retention(workspace)
+
+    def write_training_capture_if_enabled(
+        self,
+        *,
+        workspace: str | Path,
+        session_dir: str | Path,
+        delegation_id: str,
+        timestamp_end: str,
+        task: str,
+        context_package_hash: str | None,
+        reasoning_summary: str | None,
+        outcome: str | None,
+        verify_result: dict[str, Any] | None,
+        success: bool,
+        model_roles: dict[str, Any] | None,
+        pipeline_flags_runtime: dict[str, Any] | None = None,
+    ) -> Path | None:
+        from core.observability.training_capture import write_training_capture_if_enabled
+
+        return write_training_capture_if_enabled(
+            workspace=workspace,
+            session_dir=session_dir,
+            delegation_id=delegation_id,
+            timestamp_end=timestamp_end,
+            task=task,
+            context_package_hash=context_package_hash,
+            reasoning_summary=reasoning_summary,
+            outcome=outcome,
+            verify_result=verify_result,
+            success=success,
+            model_roles=model_roles,
+            pipeline_flags_runtime=pipeline_flags_runtime,
+        )
+
     def emit(self, event: str, *, level: str = "info", **fields: Any) -> None:
         server_log_emit(event, level=level, **fields)
 

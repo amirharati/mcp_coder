@@ -17,7 +17,7 @@ from core.observability.context import (
     role_context,
 )
 from core.observability.litellm_callback import litellm_success_handler, reset_callback_state_for_tests
-from core.observability.trace import PREVIEW_MAX_CHARS
+from core.observability.trace import PREVIEW_MAX_CHARS, TRACE_TYPE_LLM_CALL
 from core.storage.paths import session_trace_path
 from core.storage.session_paths import prepare_delegation_storage
 
@@ -93,6 +93,15 @@ def _fire_trace(
     )
 
 
+def _trace_llm_calls(path: Path) -> list[dict]:
+    lines = [
+        json.loads(row)
+        for row in path.read_text(encoding="utf-8").strip().splitlines()
+        if row.strip()
+    ]
+    return [line for line in lines if line.get("type") == TRACE_TYPE_LLM_CALL]
+
+
 @pytest.fixture(autouse=True)
 def _reset_state():
     reset_callback_state_for_tests()
@@ -103,7 +112,7 @@ def _reset_state():
 def test_lean_verbosity_trace_has_hashes_not_bodies(tmp_path, monkeypatch):
     path = _fire_trace(tmp_path, monkeypatch, verbosity=VERBOSITY_LEAN)
     assert path.is_file()
-    line = json.loads(path.read_text(encoding="utf-8").strip())
+    line = _trace_llm_calls(path)[0]
     assert line["type"] == "llm_call"
     assert line["verbosity"] == VERBOSITY_LEAN
     assert line["prompt_hash"]
@@ -121,7 +130,7 @@ def test_standard_verbosity_trace_has_previews_not_bodies(tmp_path, monkeypatch)
         prompt="P" * 800,
         response="R" * 800,
     )
-    line = json.loads(path.read_text(encoding="utf-8").strip())
+    line = _trace_llm_calls(path)[0]
     assert line["verbosity"] == VERBOSITY_STANDARD
     assert "prompt_preview" in line
     assert "response_preview" in line
@@ -133,7 +142,7 @@ def test_standard_verbosity_trace_has_previews_not_bodies(tmp_path, monkeypatch)
 
 def test_full_verbosity_trace_has_bodies(tmp_path, monkeypatch):
     path = _fire_trace(tmp_path, monkeypatch, verbosity=VERBOSITY_FULL)
-    line = json.loads(path.read_text(encoding="utf-8").strip())
+    line = _trace_llm_calls(path)[0]
     assert line["verbosity"] == VERBOSITY_FULL
     assert line["prompt_body"] == "Prompt body"
     assert line["response_body"] == "Response body"
@@ -155,7 +164,7 @@ def test_multi_call_same_role_increments_call_index(tmp_path, monkeypatch):
                 litellm_success_handler(kwargs, response_obj, None, None)
 
     path = session_trace_path(tmp_path / "workspace", storage.mcp_session_id, delegation_id)
-    lines = [json.loads(row) for row in path.read_text(encoding="utf-8").strip().splitlines()]
+    lines = _trace_llm_calls(path)
     assert len(lines) == 2
     assert lines[0]["call_index"] == 1
     assert lines[1]["call_index"] == 2
@@ -181,7 +190,7 @@ def test_redaction_applied_to_stored_body(tmp_path, monkeypatch):
         verbosity=VERBOSITY_FULL,
         prompt=secret_prompt,
     )
-    line = json.loads(path.read_text(encoding="utf-8").strip())
+    line = _trace_llm_calls(path)[0]
     assert "sk-***" in line["prompt_body"]
     assert "sk-abcdefghijklmnopqrstuvwxyz123456" not in line["prompt_body"]
 

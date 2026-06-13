@@ -279,7 +279,7 @@ def _append_trace_for_completion(
         response_text=response_text,
         reasoning_text=reasoning_text,
     )
-    append_trace_record(record, session_dir=session_dir, delegation_id=delegation_id)
+    append_trace_record(record, session_dir=session_dir, delegation_id=delegation_id, workspace=workspace)
 
 
 def _extract_from_success(

@@ -135,6 +135,8 @@ The `ObservabilityBackend` adapter seam (D-P6-1) is what makes this extractable.
 
 ### P6-005 — Training opt-in schema + summarization policy *(optional capstone)*
 
+**Status:** **done** (2026-06-13)
+
 **Goal:** Implement D-P6-6: training capture flag + extraction-ready tuple schema + initial summarization/retention policy (BL-357 first slice).
 
 **Acceptance:**
@@ -195,6 +197,7 @@ Opt-out env vars follow existing pattern: `MCP_CODER_OBS_VERBOSITY`, `MCP_CODER_
 
 | Date | Change |
 |------|--------|
+| 2026-06-13 | P6-005 done — version tags on trace headers, training tuple (opt-in), `maintenance stats` CLI, retention stub |
 | 2026-06-13 | P6-004 done — executor reasoning capture + hot buffer + builder `## Prior reasoning`; **recommended exit** met (code) |
 | 2026-06-13 | P6-003 done — per-delegation trace files + verbosity tiers; P6-ISS-004/005 closed |
 | 2026-06-13 | P6-002 done (code) — LiteLLM callback + token overlay; live BL-335 dogfood pending |

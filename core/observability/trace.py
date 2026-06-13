@@ -14,6 +14,7 @@ from core.context.summary import redact_secrets, sha256_hex
 from core.logging.delegation_log import _append_jsonl_line, utc_now_iso
 
 TRACE_TYPE_LLM_CALL = "llm_call"
+TRACE_TYPE_HEADER = "trace_header"
 PREVIEW_MAX_CHARS = 500
 
 
@@ -21,6 +22,29 @@ def _truncate_preview(text: str, *, max_chars: int = PREVIEW_MAX_CHARS) -> str:
     if len(text) <= max_chars:
         return text
     return text[: max_chars - 1] + "…"
+
+
+def ensure_trace_header(
+    *,
+    session_dir: str | Path,
+    delegation_id: str,
+    workspace: str | Path,
+) -> None:
+    """Write trace_header line once when the per-delegation trace file is first created."""
+    path = Path(session_dir) / "traces" / f"{delegation_id}.jsonl"
+    if path.is_file() and path.stat().st_size > 0:
+        return
+
+    from core.observability.version_tags import build_trace_version_tags
+
+    path.parent.mkdir(parents=True, exist_ok=True)
+    header = {
+        "type": TRACE_TYPE_HEADER,
+        "delegation_id": delegation_id,
+        "timestamp": utc_now_iso(),
+        "version_tags": build_trace_version_tags(workspace),
+    }
+    _append_jsonl_line(path, header)
 
 
 def build_trace_record(
@@ -101,8 +125,15 @@ def append_trace_record(
     *,
     session_dir: str | Path,
     delegation_id: str,
+    workspace: str | Path | None = None,
 ) -> Path:
     """Append one trace line under session_dir/traces/<delegation_id>.jsonl."""
+    if workspace is not None:
+        ensure_trace_header(
+            session_dir=session_dir,
+            delegation_id=delegation_id,
+            workspace=workspace,
+        )
     path = Path(session_dir) / "traces" / f"{delegation_id}.jsonl"
     _append_jsonl_line(path, record)
     return path
