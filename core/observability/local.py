@@ -18,6 +18,11 @@ from core.logging.delegation_log import (
 )
 from core.logging.server_log import server_log_emit
 from core.observability.base import ObservabilityBackend
+from core.observability.litellm_callback import (
+    get_accumulated_usage,
+    overlay_model_roles_from_callback,
+    register_litellm_callbacks,
+)
 from core.pipeline.phases import PipelineRecorder
 from core.usage import (
     build_usage_report,
@@ -30,6 +35,29 @@ from core.usage.role_audit import build_role_usage_record, merge_model_roles
 
 class LocalObservability(ObservabilityBackend):
     """Default observability backend — JSONL logs, SQLite-adjacent paths, usage telemetry."""
+
+    def __init__(self) -> None:
+        register_litellm_callbacks()
+
+    def get_role_tokens(
+        self, delegation_id: str, role: str
+    ) -> dict[str, Any] | None:
+        """Return callback-accumulated tokens for a delegation role."""
+        return get_accumulated_usage(delegation_id, role)
+
+    def overlay_model_roles_tokens(
+        self,
+        model_roles: dict[str, Any] | None,
+        *,
+        delegation_id: str,
+        executor_fallback_tokens: dict[str, Any] | None = None,
+    ) -> dict[str, Any] | None:
+        """Merge LiteLLM callback tokens into model_roles when live attrs are missing."""
+        return overlay_model_roles_from_callback(
+            model_roles,
+            delegation_id=delegation_id,
+            executor_fallback_tokens=executor_fallback_tokens,
+        )
 
     def emit(self, event: str, *, level: str = "info", **fields: Any) -> None:
         server_log_emit(event, level=level, **fields)

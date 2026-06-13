@@ -95,4 +95,30 @@ def extract_litellm_model_tokens(model_obj: Any, *, role_source: str) -> dict[st
         if response_tokens is not None:
             return {**response_tokens, "source": role_source}
 
+    callback_tokens = _tokens_from_callback_accumulator()
+    if callback_tokens is not None:
+        return {**callback_tokens, "source": "litellm_callback"}
+
     return dict(_UNAVAILABLE)
+
+
+def _tokens_from_callback_accumulator() -> dict[str, int | None] | None:
+    """Best-effort read from LiteLLM success_callback accumulator for current context."""
+    try:
+        from core.observability.context import delegation_id_var, role_var
+        from core.observability.litellm_callback import get_accumulated_usage
+
+        delegation_id = delegation_id_var.get()
+        role = role_var.get()
+        if not delegation_id or not role:
+            return None
+        acc = get_accumulated_usage(delegation_id, role)
+        if acc is None:
+            return None
+        return {
+            "input": acc.get("input"),
+            "output": acc.get("output"),
+            "total": acc.get("total"),
+        }
+    except Exception:
+        return None

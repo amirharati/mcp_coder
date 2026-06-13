@@ -88,6 +88,8 @@ The `ObservabilityBackend` adapter seam (D-P6-1) is what makes this extractable.
 
 ### P6-002 — LiteLLM callback + BL-335 live token fix
 
+**Status:** **done** (code + unit tests 2026-06-13) — **live dogfood pending** (BL-335 replicate; master session)
+
 **Goal:** Wire `litellm.success_callback` at MCP startup (Route A from REASONING_TRACE_REUSE.md). Fix BL-335: `model_roles.*.tokens` not null on live OpenRouter/Gemini delegates. First real new capability on the clean P6-001 seam.
 
 **Acceptance:**
@@ -189,5 +191,6 @@ Opt-out env vars follow existing pattern: `MCP_CODER_OBS_VERBOSITY`, `MCP_CODER_
 
 | Date | Change |
 |------|--------|
+| 2026-06-13 | P6-002 done (code) — LiteLLM callback + token overlay; live BL-335 dogfood pending |
 | 2026-06-13 | P6-001 done — `core/observability/` seam shipped (`6e6b1cc`); P6-ISS-001 fixed |
 | 2026-06-13 | Created — Phase 6 planning locked; milestones P6-001…P6-005; `ObservabilityBackend` adapter seam as POC/MVP of AGENTIC_LOOP_LOGGING product strategy |

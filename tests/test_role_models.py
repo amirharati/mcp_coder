@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 from pathlib import Path
+from types import SimpleNamespace
 from unittest.mock import patch
 
 from core.config.models import resolve_model_name
@@ -18,8 +19,10 @@ from core.config.role_models import (
 )
 from core.engine.base import ExecutionResult
 from core.logging.delegation_log import build_delegation_record
+from core.observability.context import delegation_context, role_context
+from core.observability.litellm_callback import litellm_success_handler, reset_callback_state_for_tests
 from core.usage.role_audit import build_role_usage_record, merge_model_roles
-from server.mcp_server import delegate_to_agent
+from server.mcp_server import _build_model_roles_payload, delegate_to_agent
 
 
 def _write_workspace_config(workspace: Path, content: str) -> None:
@@ -240,3 +243,31 @@ def test_review_delegate_jsonl_has_model_roles(tmp_path, monkeypatch):
     line = log_path.read_text(encoding="utf-8").strip().splitlines()[-1]
     record = json.loads(line)
     assert record["model_roles"]["review"]["model"] == "openrouter/test/review-model"
+
+
+def test_build_model_roles_payload_executor_tokens_from_callback():
+    reset_callback_state_for_tests()
+    delegation_id = "executor-tokens-test"
+    with delegation_context(delegation_id):
+        with role_context(ROLE_EXECUTOR):
+            usage = SimpleNamespace(prompt_tokens=900, completion_tokens=100, total_tokens=1000)
+            litellm_success_handler(
+                {},
+                SimpleNamespace(model="openrouter/openai/gpt-4o-mini", usage=usage),
+                None,
+                None,
+            )
+
+    roles = _build_model_roles_payload(
+        delegation_id=delegation_id,
+        delegate_mode="implement",
+        resolved_model="openrouter/openai/gpt-4o-mini",
+        tokens={"source": "unavailable"},
+        timing={"engine_run_ms": 1200},
+        workspace="/tmp/ws",
+    )
+    assert roles is not None
+    assert roles[ROLE_EXECUTOR]["tokens"]["input"] == 900
+    assert roles[ROLE_EXECUTOR]["tokens"]["output"] == 100
+    assert roles[ROLE_EXECUTOR]["tokens"]["total"] == 1000
+    assert roles[ROLE_EXECUTOR]["cost_est_usd"]["total"] > 0

@@ -69,6 +69,8 @@ def test_success_mocked_litellm(monkeypatch):
     assert result.ok is True
     assert result.via == "litellm"
     assert result.reply == "ok"
+    assert result.usage is not None
+    assert result.usage.get("total") == 7 or result.usage.get("total_tokens") == 7
 
 
 def test_aider_error(monkeypatch):

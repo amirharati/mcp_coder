@@ -6,6 +6,7 @@ from types import SimpleNamespace
 
 import pytest
 
+from core.config.role_models import ROLE_CONTEXT_BUILDER
 from core.engine.architect_pass_llm import _extract_architect_tokens
 from core.engine.context_builder_llm import _extract_builder_tokens
 from core.engine.spec_validation_llm import _extract_validation_tokens
@@ -86,3 +87,26 @@ def test_extract_tokens_unavailable_for_none_model():
     tokens = _extract_builder_tokens(None)
     assert tokens["source"] == "unavailable"
     assert tokens["total"] is None
+
+
+def test_extract_tokens_from_callback_accumulator_fallback():
+    from core.observability.context import delegation_context, role_context
+    from core.observability.litellm_callback import litellm_success_handler, reset_callback_state_for_tests
+
+    reset_callback_state_for_tests()
+    delegation_id = "delegation-fallback"
+    with delegation_context(delegation_id):
+        with role_context(ROLE_CONTEXT_BUILDER):
+            usage = SimpleNamespace(prompt_tokens=321, completion_tokens=9, total_tokens=330)
+            litellm_success_handler(
+                {},
+                SimpleNamespace(model="openrouter/test/model", usage=usage),
+                None,
+                None,
+            )
+            model = SimpleNamespace(total_tokens=None, tokens_sent=None, tokens_received=None)
+            tokens = extract_litellm_model_tokens(model, role_source="context_builder_llm")
+    assert tokens["input"] == 321
+    assert tokens["output"] == 9
+    assert tokens["total"] == 330
+    assert tokens["source"] == "litellm_callback"

@@ -109,16 +109,22 @@ def _ping_litellm(
     prompt: str,
     max_tokens: int,
 ) -> ModelTestResult:
+    from core.observability import CLI_FALLBACK_ROLE, get_observability, role_context
+    from core.observability.litellm_callback import pop_cli_accumulated_usage
+
+    get_observability()  # registers LiteLLM success callback
+
     t0 = time.perf_counter()
     try:
         import litellm
 
         litellm.suppress_debug_info = True
-        response = litellm.completion(
-            model=model,
-            messages=[{"role": "user", "content": prompt}],
-            max_tokens=max_tokens,
-        )
+        with role_context(CLI_FALLBACK_ROLE):
+            response = litellm.completion(
+                model=model,
+                messages=[{"role": "user", "content": prompt}],
+                max_tokens=max_tokens,
+            )
     except Exception as exc:
         latency_ms = int((time.perf_counter() - t0) * 1000)
         return ModelTestResult(
@@ -139,10 +145,28 @@ def _ping_litellm(
     usage = None
     if usage_raw is not None:
         usage = {
+            "input": getattr(usage_raw, "prompt_tokens", None),
+            "output": getattr(usage_raw, "completion_tokens", None),
+            "total": getattr(usage_raw, "total_tokens", None),
             "prompt_tokens": getattr(usage_raw, "prompt_tokens", None),
             "completion_tokens": getattr(usage_raw, "completion_tokens", None),
             "total_tokens": getattr(usage_raw, "total_tokens", None),
+            "source": "litellm_response",
         }
+
+    callback_usage = pop_cli_accumulated_usage()
+    if callback_usage and (usage is None or usage.get("total") is None):
+        usage = {
+            "input": callback_usage.get("input"),
+            "output": callback_usage.get("output"),
+            "total": callback_usage.get("total"),
+            "prompt_tokens": callback_usage.get("input"),
+            "completion_tokens": callback_usage.get("output"),
+            "total_tokens": callback_usage.get("total"),
+            "source": callback_usage.get("source") or "litellm_callback",
+        }
+    elif callback_usage and usage is not None and usage.get("source") is None:
+        usage["source"] = "litellm_response"
 
     if not reply.strip():
         return ModelTestResult(

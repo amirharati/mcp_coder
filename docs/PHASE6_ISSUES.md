@@ -21,6 +21,10 @@ Status: `open` | `done` | `wontfix` | `carried`
 | ID | Status | Priority | Title | Resolution |
 |----|--------|----------|-------|------------|
 | P6-ISS-001 | **done** | low | **`NullObservability.merge_model_roles` returns `None` — wrong return type** | Fixed in `6e6b1cc` — returns `{}`; test added. |
+| P6-ISS-002 | **open** | low | **V1 logging = LiteLLM callback; revisit unified `LlmGateway` proxy** | **Locked for P6-002–P6-004:** Route A (`litellm.success_callback` + `contextvars`) is v1 — good start, ships tokens + trace substrate without Aider patching. **Revisit:** end-of-Phase-6 planning session (design); real implementation likely **Phase 7+** after minimum exit. Target: single completion proxy for owned calls (helpers, `test-model`, future backends) — logging + related concerns (budget, redaction, rate limits); callback remains shim for Aider executor until BL-350 owns the loop. See Observations 2026-06-13. |
+| P6-ISS-003 | **open** | medium | **BL-335 live dogfood not run in P6-002 worker session** | Code + unit tests shipped (`test_litellm_callback.py`, overlay merge). Master session: one live delegate on `mcp_coder_phase1_e2e` with helpers enabled; confirm `model_roles.*.tokens` non-null in JSONL. Close when replicate passes. |
+| P6-ISS-004 | **open** | low | **`get_role_tokens` / `overlay_model_roles_tokens` not on `ObservabilityBackend` ABC** | P6-002 added methods on `LocalObservability` only; `NullObservability` lacks stubs. Polish: promote to ABC + null no-ops; route `mcp_server` through `obs.*` only. Defer to P6-003 prep or small polish pass. |
+| P6-ISS-005 | **open** | low | **`mcp_server` bypasses seam for token overlay** | Imports `overlay_model_roles_from_callback` from `litellm_callback` directly. Should call `obs.overlay_model_roles_tokens()` for single import surface. Pair with P6-ISS-004. |
 
 ---
 
@@ -28,6 +32,8 @@ Status: `open` | `done` | `wontfix` | `carried`
 
 | Date | Finding |
 |------|---------|
+| 2026-06-13 | P6-002 deep-check: implementation matches D-P6-2. Minor seam nits (non-blocking): `get_role_tokens` / `overlay_model_roles_tokens` on `LocalObservability` only (not ABC/`NullObservability`); `mcp_server` imports `overlay_model_roles_from_callback` directly instead of `obs.overlay_*`. |
+| 2026-06-13 | **Logging v1 architecture (master session):** Prefer long-term **unified `LlmGateway` / completion proxy** so mcp-coder does not chase per-backend details — one boundary for everything sent/received. **Not this iteration:** P6-002 ships **LiteLLM `success_callback`** (D-P6-2) as v1; covers helper + executor paths without forking Aider. Callback is a **transitional tap** for the opaque executor loop; owned helper calls (~6 `core/engine/*_llm.py` modules) are natural first migrate targets when proxy lands. Proxy scope is **broader than logging** (tokens, trace bodies, reasoning, budget, redaction) but same seam — aligns with AGENTIC_LOOP_LOGGING extract and **BL-353**. Schedule: note at Phase 6 exit; implement when executor loop ownership (BL-350) or P6-003 trace needs make callback-only awkward. |
 | 2026-06-13 | P6-001 deep-check: `NullObservability.merge_model_roles` returns `None` (matches `dict \| None` annotation) but `_build_model_roles_payload` in `mcp_server.py` expects a dict. No production impact (production uses `LocalObservability`), but will cause `TypeError` if any future test wires `NullObservability` through the full delegate path. |
 
 ---
@@ -36,6 +42,9 @@ Status: `open` | `done` | `wontfix` | `carried`
 
 | Date | Change |
 |------|--------|
+| 2026-06-13 | P6-ISS-004, P6-ISS-005 opened — observability seam polish from P6-002 deep-check |
+| 2026-06-13 | P6-ISS-003 opened — BL-335 live dogfood pending after P6-002 code ship |
+| 2026-06-13 | P6-ISS-002 opened — v1 callback locked for P6-002; defer unified LlmGateway proxy revisit to Phase 6 exit / Phase 7+ |
 | 2026-06-13 | P6-ISS-001 → done (commit `6e6b1cc`) |
 | 2026-06-13 | P6-ISS-001 opened — `NullObservability.merge_model_roles` wrong return type found during P6-001 deep-check |
 | 2026-06-13 | Created at Phase 6 planning session |

@@ -10,6 +10,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING, Any, Callable
 
 from core.config.role_models import ROLE_CONTEXT_BUILDER, resolve_role_budget_tokens
+from core.observability.context import role_context
 from core.usage.role_audit import build_role_usage_record
 
 if TYPE_CHECKING:
@@ -82,7 +83,8 @@ def apply_builder_llm(
         rag_refs=rag_refs,
     )
 
-    llm_result = run_context_builder_llm(prompt, workspace_path=workspace)
+    with role_context(ROLE_CONTEXT_BUILDER):
+        llm_result = run_context_builder_llm(prompt, workspace_path=workspace)
     if timing is not None:
         timing["context_builder_llm_ms"] = int((time.perf_counter() - t_builder) * 1000)
 
@@ -138,7 +140,8 @@ def apply_architect_pass(
         task=task,
         context_summary=context_summary,
     )
-    llm_result = run_architect_pass_llm(prompt, workspace_path=workspace)
+    with role_context("architect_pass"):
+        llm_result = run_architect_pass_llm(prompt, workspace_path=workspace)
     if timing is not None:
         timing["architect_pass_ms"] = int((time.perf_counter() - t_arch) * 1000)
 
@@ -201,7 +204,8 @@ def apply_spec_validation(
         task=task,
         context_summary=context_summary,
     )
-    llm_result = run_spec_validation_llm(prompt, workspace_path=workspace)
+    with role_context("spec_validation"):
+        llm_result = run_spec_validation_llm(prompt, workspace_path=workspace)
     if timing is not None:
         timing["spec_validation_ms"] = int((time.perf_counter() - t_val) * 1000)
 
