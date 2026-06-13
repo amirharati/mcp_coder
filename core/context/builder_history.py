@@ -31,6 +31,7 @@ _SUMMARY_FIELDS = (
 class BuilderHistoryContext:
     same_spec: list[dict[str, Any]] = field(default_factory=list)
     project_recent: list[dict[str, Any]] = field(default_factory=list)
+    prior_reasoning: list[Any] = field(default_factory=list)
 
     def is_empty(self) -> bool:
         return not self.same_spec and not self.project_recent

@@ -101,6 +101,36 @@ def _history_section(history: BuilderHistoryContext) -> str:
     return "\n".join(parts)
 
 
+def _prior_reasoning_section(entries: list[Any]) -> str:
+    if not entries:
+        return ""
+    parts: list[str] = ["## Prior reasoning"]
+    for entry in entries:
+        delegation_id = getattr(entry, "delegation_id", None) or entry.get("delegation_id", "")
+        summary = getattr(entry, "reasoning_summary", None) or entry.get("reasoning_summary", "")
+        if not summary:
+            continue
+        short_id = str(delegation_id)[:8]
+        parts.append(f"- **{short_id}…**: {summary}")
+    return "\n".join(parts) if len(parts) > 1 else ""
+
+
+def _truncate_prior_reasoning_to_budget(
+    entries: list[Any],
+    *,
+    fixed_tokens: int,
+    budget_tokens: int,
+) -> list[Any]:
+    """Drop oldest prior-reasoning entries until the section fits the budget."""
+    items = list(entries)
+    while items:
+        section = _prior_reasoning_section(items)
+        if fixed_tokens + estimate_tokens(section) <= budget_tokens:
+            break
+        items.pop(0)
+    return items
+
+
 def dedupe_rag_refs_against_history(
     rag_refs: list["ContextRef"] | None,
     history: BuilderHistoryContext,
@@ -272,22 +302,40 @@ def build_builder_llm_prompt(
     fixed_text = "\n\n".join(s for s in fixed_sections if s)
 
     effective_history = history
-    if budget_tokens is not None and not history.is_empty():
-        effective_history = _truncate_history_to_budget(
-            history,
+    prior_reasoning = list(history.prior_reasoning)
+    if budget_tokens is not None and prior_reasoning:
+        prior_reasoning = _truncate_prior_reasoning_to_budget(
+            prior_reasoning,
             fixed_tokens=estimate_tokens(fixed_text),
             budget_tokens=budget_tokens,
         )
 
+    if budget_tokens is not None and not history.is_empty():
+        fixed_with_reasoning = fixed_text
+        if prior_reasoning:
+            reasoning_text = _prior_reasoning_section(prior_reasoning)
+            fixed_with_reasoning = fixed_text + ("\n\n" + reasoning_text if reasoning_text else "")
+        effective_history = _truncate_history_to_budget(
+            history,
+            fixed_tokens=estimate_tokens(fixed_with_reasoning),
+            budget_tokens=budget_tokens,
+        )
+    elif budget_tokens is not None and prior_reasoning:
+        effective_history = history
+
     history_text = _history_section(effective_history)
+    prior_reasoning_text = _prior_reasoning_section(prior_reasoning)
     history_tokens = estimate_tokens(history_text)
+    prior_reasoning_tokens = estimate_tokens(prior_reasoning_text)
     effective_delegation_refs = delegation_refs
     effective_file_refs = file_refs
     if budget_tokens is not None and (delegation_refs or file_refs):
         effective_delegation_refs, effective_file_refs = _truncate_rag_to_budget(
             delegation_refs,
             file_refs,
-            fixed_tokens=estimate_tokens(fixed_text) + history_tokens,
+            fixed_tokens=estimate_tokens(fixed_text)
+            + history_tokens
+            + prior_reasoning_tokens,
             budget_tokens=budget_tokens,
         )
     rag_text = _combined_rag_sections(effective_delegation_refs, effective_file_refs)
@@ -297,6 +345,7 @@ def build_builder_llm_prompt(
         "## Mechanical brief\n" + mechanical_brief.strip(),
         _picker_section(picker_result),
         _suggested_edits_section(picker_result),
+        prior_reasoning_text,
         history_text,
         rag_text,
         _transcript_section(host_transcript),

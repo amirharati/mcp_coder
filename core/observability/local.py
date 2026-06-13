@@ -19,9 +19,15 @@ from core.logging.delegation_log import (
 from core.logging.server_log import server_log_emit
 from core.observability.base import ObservabilityBackend
 from core.observability.litellm_callback import (
+    finalize_delegation_reasoning_summary,
     get_accumulated_usage,
     overlay_model_roles_from_callback,
     register_litellm_callbacks,
+)
+from core.observability.reasoning_buffer import (
+    ReasoningBufferEntry,
+    get_prior_reasoning,
+    record_session_reasoning,
 )
 from core.pipeline.phases import PipelineRecorder
 from core.usage import (
@@ -58,6 +64,45 @@ class LocalObservability(ObservabilityBackend):
             delegation_id=delegation_id,
             executor_fallback_tokens=executor_fallback_tokens,
         )
+
+    def finalize_reasoning_summary(self, delegation_id: str) -> str | None:
+        return finalize_delegation_reasoning_summary(delegation_id)
+
+    def record_reasoning_in_session(
+        self,
+        mcp_session_id: str,
+        delegation_id: str,
+        reasoning_summary: str,
+        *,
+        buffer_size: int,
+    ) -> None:
+        record_session_reasoning(
+            mcp_session_id,
+            delegation_id,
+            reasoning_summary,
+            max_entries=buffer_size,
+        )
+
+    def get_prior_reasoning_for_builder(
+        self,
+        mcp_session_id: str,
+        *,
+        exclude_delegation_id: str | None = None,
+    ) -> list[ReasoningBufferEntry]:
+        return get_prior_reasoning(
+            mcp_session_id,
+            exclude_delegation_id=exclude_delegation_id,
+        )
+
+    def capture_reasoning_enabled(self, workspace: str | Path) -> bool:
+        from core.config.observability import capture_reasoning_enabled
+
+        return capture_reasoning_enabled(workspace)
+
+    def resolve_reasoning_buffer_size(self, workspace: str | Path) -> int:
+        from core.config.observability import resolve_reasoning_buffer_size
+
+        return resolve_reasoning_buffer_size(workspace)
 
     def emit(self, event: str, *, level: str = "info", **fields: Any) -> None:
         server_log_emit(event, level=level, **fields)

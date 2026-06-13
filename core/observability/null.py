@@ -166,6 +166,33 @@ class NullObservability(ObservabilityBackend):
     ) -> dict[str, Any] | None:
         return model_roles
 
+    def finalize_reasoning_summary(self, delegation_id: str) -> str | None:
+        return None
+
+    def record_reasoning_in_session(
+        self,
+        mcp_session_id: str,
+        delegation_id: str,
+        reasoning_summary: str,
+        *,
+        buffer_size: int,
+    ) -> None:
+        pass
+
+    def get_prior_reasoning_for_builder(
+        self,
+        mcp_session_id: str,
+        *,
+        exclude_delegation_id: str | None = None,
+    ) -> list[Any]:
+        return []
+
+    def capture_reasoning_enabled(self, workspace: str | Path) -> bool:
+        return False
+
+    def resolve_reasoning_buffer_size(self, workspace: str | Path) -> int:
+        return 3
+
     def new_pipeline_recorder(self) -> PipelineRecorder:
         return PipelineRecorder()
 

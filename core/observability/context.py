@@ -11,6 +11,7 @@ role_var: ContextVar[str | None] = ContextVar("role", default=None)
 pipeline_phase_var: ContextVar[str | None] = ContextVar("pipeline_phase", default=None)
 workspace_var: ContextVar[str | None] = ContextVar("workspace", default=None)
 session_dir_var: ContextVar[str | None] = ContextVar("session_dir", default=None)
+mcp_session_id_var: ContextVar[str | None] = ContextVar("mcp_session_id", default=None)
 
 CLI_FALLBACK_ROLE = "cli_test"
 
@@ -28,16 +29,20 @@ def delegation_context(delegation_id: str) -> Iterator[None]:
         delegation_id_var.reset(delegation_reset)
         workspace_var.set(None)
         session_dir_var.set(None)
+        mcp_session_id_var.set(None)
 
 
 def bind_delegation_trace_scope(
     *,
     workspace: str,
     session_dir: str | Path,
+    mcp_session_id: str | None = None,
 ) -> None:
-    """Set workspace + session_dir for per-delegation trace writes (mid-delegate)."""
+    """Set workspace, session_dir, and optional mcp_session_id for trace/reasoning."""
     workspace_var.set(workspace)
     session_dir_var.set(str(session_dir))
+    if mcp_session_id:
+        mcp_session_id_var.set(mcp_session_id)
 
 
 @contextmanager
@@ -65,3 +70,4 @@ def clear_delegation_context() -> None:
     pipeline_phase_var.set(None)
     workspace_var.set(None)
     session_dir_var.set(None)
+    mcp_session_id_var.set(None)

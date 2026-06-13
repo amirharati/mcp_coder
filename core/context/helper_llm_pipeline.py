@@ -54,6 +54,7 @@ def apply_builder_llm(
     host_transcript: str | None,
     timing: dict[str, int | float] | None = None,
     delegation_id: str | None = None,
+    mcp_session_id: str | None = None,
     log_warn: LogWarnFn | None = None,
     rag_refs: list["ContextRef"] | None = None,
 ) -> tuple[ContextPackage, bool, str | None, dict[str, Any] | None]:
@@ -62,14 +63,31 @@ def apply_builder_llm(
     Returns (package, builder_brief_applied, builder_llm_error, builder_record).
     Only ContextPackage.brief is ever mutated (D-P4-10).
     """
-    from core.context.builder_history import gather_builder_history
+    from core.context.builder_history import BuilderHistoryContext, gather_builder_history
     from core.context.builder_prompt import build_builder_llm_prompt
     from core.engine.context_builder_llm import run_context_builder_llm
+    from core.observability import get_observability
 
     mechanical_brief = context_package.brief
     t_builder = time.perf_counter()
 
     history = gather_builder_history(Path(workspace), spec_path=spec_rel_path)
+    obs = get_observability()
+    prior_reasoning = []
+    if (
+        mcp_session_id
+        and delegation_id
+        and obs.capture_reasoning_enabled(workspace)
+    ):
+        prior_reasoning = obs.get_prior_reasoning_for_builder(
+            mcp_session_id,
+            exclude_delegation_id=delegation_id,
+        )
+    history = BuilderHistoryContext(
+        same_spec=history.same_spec,
+        project_recent=history.project_recent,
+        prior_reasoning=prior_reasoning,
+    )
     budget_tokens = resolve_role_budget_tokens(ROLE_CONTEXT_BUILDER, workspace)
     prompt = build_builder_llm_prompt(
         mechanical_brief=mechanical_brief,

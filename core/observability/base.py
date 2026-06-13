@@ -181,6 +181,38 @@ class ObservabilityBackend(ABC):
         """Merge LiteLLM callback tokens into model_roles when live attrs are missing."""
 
     @abstractmethod
+    def finalize_reasoning_summary(self, delegation_id: str) -> str | None:
+        """Finalize executor reasoning text captured during a delegation."""
+
+    @abstractmethod
+    def record_reasoning_in_session(
+        self,
+        mcp_session_id: str,
+        delegation_id: str,
+        reasoning_summary: str,
+        *,
+        buffer_size: int,
+    ) -> None:
+        """Store reasoning summary in the in-memory session hot buffer."""
+
+    @abstractmethod
+    def get_prior_reasoning_for_builder(
+        self,
+        mcp_session_id: str,
+        *,
+        exclude_delegation_id: str | None = None,
+    ) -> list[Any]:
+        """Prior-session reasoning entries for builder brief injection."""
+
+    @abstractmethod
+    def capture_reasoning_enabled(self, workspace: str | Path) -> bool:
+        """Return whether executor reasoning capture is enabled."""
+
+    @abstractmethod
+    def resolve_reasoning_buffer_size(self, workspace: str | Path) -> int:
+        """Return max prior reasoning entries kept per MCP session."""
+
+    @abstractmethod
     def new_pipeline_recorder(self) -> PipelineRecorder:
         """Return a fresh pipeline phase recorder."""
 

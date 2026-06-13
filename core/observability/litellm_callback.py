@@ -5,6 +5,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Any
 
+from core.config.role_models import ROLE_EXECUTOR
 from core.observability.context import (
     CLI_FALLBACK_ROLE,
     delegation_id_var,
@@ -45,6 +46,8 @@ class _UsageBucket:
 
 _store: dict[_ACCUMULATOR_KEY, _UsageBucket] = {}
 _last_delegation_id: str | None = None
+_reasoning_text: dict[str, list[str]] = {}
+REASONING_SUMMARY_MAX_CHARS = 2000
 
 
 def note_delegation_start(delegation_id: str) -> None:
@@ -52,7 +55,50 @@ def note_delegation_start(delegation_id: str) -> None:
     global _last_delegation_id
     if _last_delegation_id and _last_delegation_id != delegation_id:
         clear_delegation_tokens(_last_delegation_id)
+        _reasoning_text.pop(_last_delegation_id, None)
     _last_delegation_id = delegation_id
+
+
+def clear_delegation_reasoning_text(delegation_id: str) -> None:
+    """Remove in-flight executor reasoning snippets for one delegation."""
+    _reasoning_text.pop(delegation_id, None)
+
+
+def _format_reasoning_summary(snippets: list[str]) -> str | None:
+    if not snippets:
+        return None
+    from core.context.summary import redact_secrets
+
+    combined = redact_secrets("\n\n---\n\n".join(snippets))
+    if not combined.strip():
+        return None
+    suffix = "…[truncated]"
+    if len(combined) <= REASONING_SUMMARY_MAX_CHARS:
+        return combined
+    keep = REASONING_SUMMARY_MAX_CHARS - len(suffix)
+    return combined[:keep] + suffix
+
+
+def _record_executor_reasoning(delegation_id: str, reasoning_text: str | None) -> None:
+    if not reasoning_text or not reasoning_text.strip():
+        return
+    _reasoning_text.setdefault(delegation_id, []).append(reasoning_text.strip())
+
+
+def finalize_delegation_reasoning_summary(delegation_id: str) -> str | None:
+    """Join snippets, redact, truncate to 2000 chars; pop accumulator entry."""
+    snippets = _reasoning_text.pop(delegation_id, None)
+    if not snippets:
+        return None
+    return _format_reasoning_summary(snippets)
+
+
+def peek_delegation_reasoning_summary(delegation_id: str) -> str | None:
+    """Non-destructive read of in-flight executor reasoning (tests)."""
+    snippets = _reasoning_text.get(delegation_id)
+    if not snippets:
+        return None
+    return _format_reasoning_summary(list(snippets))
 
 
 def clear_delegation_tokens(delegation_id: str) -> None:
@@ -302,6 +348,18 @@ def _extract_from_success(
         except Exception:
             pass
 
+    if delegation_id and role == ROLE_EXECUTOR:
+        try:
+            workspace = workspace_var.get()
+            if workspace:
+                from core.config.observability import capture_reasoning_enabled
+
+                if capture_reasoning_enabled(workspace):
+                    _, reasoning_text = _extract_response_parts(response_obj)
+                    _record_executor_reasoning(delegation_id, reasoning_text)
+        except Exception:
+            pass
+
 
 def litellm_success_handler(
     kwargs: dict[str, Any],
@@ -463,5 +521,9 @@ def reset_callback_state_for_tests() -> None:
     """Clear accumulator and registration flag (tests only)."""
     global _registered, _last_delegation_id
     _store.clear()
+    _reasoning_text.clear()
     _registered = False
     _last_delegation_id = None
+    from core.observability.reasoning_buffer import clear_all_session_reasoning
+
+    clear_all_session_reasoning()

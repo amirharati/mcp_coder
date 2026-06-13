@@ -32,6 +32,7 @@ Status: `open` | `done` | `wontfix` | `carried`
 
 | Date | Finding |
 |------|---------|
+| 2026-06-13 | P6-004 deep-check: executor-only callback capture, JSONL `context.reasoning_summary` omit-when-absent, hot buffer + builder injection; recommended exit met (P6-ISS-003 live dogfood still open). |
 | 2026-06-13 | P6-003 deep-check: trace append via callback; lean/standard/full tiers; P6-ISS-004/005 closed. |
 | 2026-06-13 | P6-002 deep-check: implementation matches D-P6-2. Minor seam nits (non-blocking): `get_role_tokens` / `overlay_model_roles_tokens` on `LocalObservability` only (not ABC/`NullObservability`); `mcp_server` imports `overlay_model_roles_from_callback` directly instead of `obs.overlay_*`. **Fixed P6-003.** |
 | 2026-06-13 | **Logging v1 architecture (master session):** Prefer long-term **unified `LlmGateway` / completion proxy** so mcp-coder does not chase per-backend details — one boundary for everything sent/received. **Not this iteration:** P6-002 ships **LiteLLM `success_callback`** (D-P6-2) as v1; covers helper + executor paths without forking Aider. Callback is a **transitional tap** for the opaque executor loop; owned helper calls (~6 `core/engine/*_llm.py` modules) are natural first migrate targets when proxy lands. Proxy scope is **broader than logging** (tokens, trace bodies, reasoning, budget, redaction) but same seam — aligns with AGENTIC_LOOP_LOGGING extract and **BL-353**. Schedule: note at Phase 6 exit; implement when executor loop ownership (BL-350) or P6-003 trace needs make callback-only awkward. |
@@ -43,7 +44,7 @@ Status: `open` | `done` | `wontfix` | `carried`
 
 | Date | Change |
 |------|--------|
-| 2026-06-13 | P6-ISS-004, P6-ISS-005 → done (P6-003 seam polish) |
+| 2026-06-13 | Phase 6 **recommended exit** met in code (P6-001–P6-004); P6-ISS-003 live BL-335 dogfood still open |
 | 2026-06-13 | P6-ISS-004, P6-ISS-005 opened — observability seam polish from P6-002 deep-check |
 | 2026-06-13 | P6-ISS-003 opened — BL-335 live dogfood pending after P6-002 code ship |
 | 2026-06-13 | P6-ISS-002 opened — v1 callback locked for P6-002; defer unified LlmGateway proxy revisit to Phase 6 exit / Phase 7+ |

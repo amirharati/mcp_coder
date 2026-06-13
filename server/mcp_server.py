@@ -142,6 +142,7 @@ def _apply_builder_llm(
     host_transcript: str | None,
     timing: dict[str, int | float],
     delegation_id: str,
+    mcp_session_id: str,
     rag_refs: list[ContextRef] | None = None,
 ) -> tuple["ContextPackage", bool, str | None, dict[str, Any] | None]:
     return _shared_apply_builder_llm(
@@ -154,6 +155,7 @@ def _apply_builder_llm(
         host_transcript=host_transcript,
         timing=timing,
         delegation_id=delegation_id,
+        mcp_session_id=mcp_session_id,
         log_warn=obs.warn,
         rag_refs=rag_refs,
     )
@@ -541,7 +543,11 @@ def delegate_to_agent(
         t_sess = time.perf_counter()
         storage = SessionStore().acquire(ws, policy, host_hint)
         session_decision_ms = int((time.perf_counter() - t_sess) * 1000)
-        bind_delegation_trace_scope(workspace=ws, session_dir=storage.session_dir)
+        bind_delegation_trace_scope(
+            workspace=ws,
+            session_dir=storage.session_dir,
+            mcp_session_id=storage.mcp_session_id,
+        )
 
         obs.emit(
             "session_acquired",
@@ -959,6 +965,7 @@ def delegate_to_agent(
                             host_transcript=host_transcript_text,
                             timing=timing,
                             delegation_id=delegation_id,
+                            mcp_session_id=storage.mcp_session_id,
                             rag_refs=rag_retrieval_refs if rag_retrieval_on else None,
                         )
                         if pipeline_recorder is not None:
@@ -1517,6 +1524,16 @@ def delegate_to_agent(
             mcp_request["delegation_policies"] = policies_response
         if scope_violations:
             mcp_request["scope_violations"] = scope_violations
+
+        reasoning_summary = obs.finalize_reasoning_summary(delegation_id)
+        if reasoning_summary:
+            context_block["reasoning_summary"] = reasoning_summary
+            obs.record_reasoning_in_session(
+                storage.mcp_session_id,
+                delegation_id,
+                reasoning_summary,
+                buffer_size=obs.resolve_reasoning_buffer_size(ws),
+            )
 
         record = obs.build_delegation_record(
             delegation_id=delegation_id,

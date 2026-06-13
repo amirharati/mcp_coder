@@ -39,6 +39,10 @@ session_policy: always_new
 # Phase 6 trace verbosity: lean | standard | full (default: standard)
 # observability_verbosity: full
 
+# Phase 6 reasoning capture (executor thinking tokens via LiteLLM callback)
+# capture_reasoning: false
+# reasoning_buffer_size: 3
+
 # Review model for mode=review (overrides MCP_CODER_REVIEW_MODEL when both set)
 # review_model: openrouter/anthropic/claude-sonnet-4
 
