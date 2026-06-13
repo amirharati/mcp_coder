@@ -20,7 +20,7 @@ Status: `open` | `done` | `wontfix` | `carried`
 
 | ID | Status | Priority | Title | Resolution |
 |----|--------|----------|-------|------------|
-| P6-ISS-001 | **open** | low | **`NullObservability.merge_model_roles` returns `None` — wrong return type** | Fix: return `{}` instead of `None`. See spec P6-ISS-001. |
+| P6-ISS-001 | **done** | low | **`NullObservability.merge_model_roles` returns `None` — wrong return type** | Fixed in `6e6b1cc` — returns `{}`; test added. |
 
 ---
 
@@ -36,5 +36,6 @@ Status: `open` | `done` | `wontfix` | `carried`
 
 | Date | Change |
 |------|--------|
+| 2026-06-13 | P6-ISS-001 → done (commit `6e6b1cc`) |
 | 2026-06-13 | P6-ISS-001 opened — `NullObservability.merge_model_roles` wrong return type found during P6-001 deep-check |
 | 2026-06-13 | Created at Phase 6 planning session |
