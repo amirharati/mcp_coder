@@ -16,7 +16,9 @@
 | [`inspect-context`](#inspect-context) | Dry-run context compiler, no backend |
 | [`view delegations`](#view-delegations) | Browser UI for `delegations.jsonl` |
 | [`history`](#history) | Browse / diff / revert from `workspace_history.db` |
-| [`rag`](#rag) | Search, index, and inspect the delegation RAG index |
+| [`rag`](#rag) | Search / index delegation FTS5 (`delegation_rag.db`) |
+| [`search`](#search) | Unified search: `delegations` \| `files` (Phase 5 toolset) |
+| [`index-workspace`](#index-workspace) | Build / refresh `workspace_rag.db` file summaries |
 
 > **Bare invocation at a terminal** prints help; it does **not** start the MCP server. The stdio server starts only when Cursor launches the process (stdin is not a TTY), or when you explicitly pass `--mcp`.
 
@@ -303,6 +305,53 @@ mcp-coder rag stats [--workspace PATH] [--json]
 
 Prints `row_count`, `last_indexed` timestamp, `db_path`.
 
+> **Note:** `mcp-coder rag` is the legacy delegation-only interface. Prefer **`mcp-coder search delegations`** for the same backend plus `--format plain` (executor-injectable snippets). Both remain supported.
+
+---
+
+## `search`
+
+Unified keyword search over indexed corpora (same backends as `rag_search` and `workspace_search` MCP tools).
+
+### Subcommands
+
+#### `search delegations <query>`
+
+```
+mcp-coder search delegations QUERY [--workspace PATH] [--limit N]
+                                [--spec-prefix PREFIX] [--outcome OUTCOME]
+                                [--format table|plain] [--json]
+```
+
+Same hits as `mcp-coder rag search` / `rag_search` MCP. `--format plain` emits copy-paste blocks for executor prompts.
+
+#### `search files <query>`
+
+```
+mcp-coder search files QUERY [--workspace PATH] [--limit N]
+                             [--format table|plain] [--json]
+```
+
+Requires `workspace_rag.db` (run `index-workspace` first). Same backend as `workspace_search` MCP.
+
+---
+
+## `index-workspace`
+
+Index workspace source files into `workspace_rag.db` (per-file LLM summary + FTS5).
+
+```
+mcp-coder index-workspace [--workspace PATH] [--changed-only] [--limit N] [--json]
+```
+
+| Flag | Meaning |
+|------|---------|
+| `--changed-only` | Re-index only new/changed files (sha256 staleness) |
+| `--limit N` | Cap files processed (useful for dry runs) |
+| `--json` | Summary JSON (`indexed`, `skipped`, `errors`, …) |
+
+**When to run:** Once per repo before first file RAG use; thereafter delegations incrementally re-index `files_changed`. Controlled by `workspace_file_rag` (default on).
+
 ---
 
 ## Environment variables
@@ -314,6 +363,12 @@ Prints `row_count`, `last_indexed` timestamp, `db_path`.
 | `MCP_CODER_LOG_FULL_PROMPT` | server | `1` = include full prompt in `delegations.jsonl` (off by default) |
 | `MCP_CODER_HOST` | server | Host provider override (`auto`, `cursor`, `none`) |
 | `MCP_CODER_SINGLETON` | server | `0` = allow multiple stdio servers (default `1`) |
+| `MCP_CODER_RAG_ENABLED` | server | Master RAG index toggle (default on) |
+| `MCP_CODER_BUILDER_HISTORY_RAG` | server | Builder delegation RAG (default on) |
+| `MCP_CODER_WORKSPACE_FILE_RAG` | server | Workspace-file corpus (default on) |
+| `MCP_CODER_WORKSPACE_FILE_HINTS` | server | File hints in picker/builder (default on) |
+| `MCP_CODER_BUILDER_RAG_K` | server | Max delegation hits in builder (default 5) |
+| `MCP_CODER_WORKSPACE_FILE_RAG_K` | server | Max file hits in builder (default 5) |
 | `MCP_CODER_SESSION_POLICY` | server | `always_new` or `align_host` |
 
 `.env` files at workspace root and mcp-coder repo root are loaded automatically on server start.
@@ -325,8 +380,9 @@ Prints `row_count`, `last_indexed` timestamp, `db_path`.
 | Path | Contents |
 |------|----------|
 | `~/.mcp-coder/projects/<key>/sessions/<id>/delegations.jsonl` | Audit log — one record per delegation |
-| `.mcp-coder/workspace_history.db` | SQLite — snapshots + checkpoints + file deltas |
-| `.mcp-coder/delegation_rag.db` | SQLite FTS5 — delegation summaries index |
+| `~/.mcp-coder/projects/<key>/workspace_history.db` | SQLite — snapshots + checkpoints + file deltas |
+| `~/.mcp-coder/projects/<key>/delegation_rag.db` | SQLite FTS5 — delegation summaries |
+| `~/.mcp-coder/projects/<key>/workspace_rag.db` | SQLite FTS5 — workspace-file summaries |
 | `.mcp-coder/specs/tasks/<slug>.md` | Step task specs |
 | `.mcp-coder/specs/epics/<slug>.md` | Epic specs |
 | `.mcp-coder/specs/reports/<slug>-report.md` | Appended delegation reports |
@@ -338,4 +394,5 @@ Prints `row_count`, `last_indexed` timestamp, `db_path`.
 
 | Date | Change |
 |------|--------|
+| 2026-06-13 | Phase 5 — `search`, `index-workspace`; RAG defaults on; env vars for corpus toggles |
 | 2026-06-12 | Initial version — all commands with full flag tables, examples, env vars, storage paths |

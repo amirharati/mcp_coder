@@ -19,6 +19,11 @@ from core.config.context_builder import (
     context_builder_enabled,
     context_builder_llm_enabled,
 )
+from core.config.rag import (
+    builder_history_rag_enabled,
+    rag_enabled,
+    workspace_file_hints_enabled,
+)
 from core.config.spec_validation import spec_validation_enabled
 from core.config.models import resolve_model_name
 from core.config.role_models import (
@@ -58,20 +63,11 @@ from core.host.cursor_transcript import (
     load_cursor_transcript,
     transcript_log_context,
 )
-from core.logging.delegation_log import (
+from core.observability import (
     CONTEXT_MODE_FALLBACK,
     CONTEXT_MODE_HOST_TRANSCRIPT,
-    append_delegation_record,
-    build_delegation_record,
-    log_delegation_received,
-    log_delegation_sent,
-    log_host_resolved,
-    new_delegation_id,
-    should_log_full_prompt,
-    utc_now_iso,
-    workspace_path,
+    get_observability,
 )
-from core.logging.server_log import server_log_emit
 from core.engine import get_engine, list_backends
 from core.engine.factory import UnknownBackendError
 from core.session.policy import resolve_session_policy
@@ -98,16 +94,16 @@ from core.verify.runner import VerifyResult, run_verify_command
 from core.specs.paths import normalize_spec_path_arg, resolve_spec_path
 from core.specs.read import read_task_spec
 from core.specs.write import apply_post_delegation_report_updates
-from core.pipeline.phases import PipelineRecorder
-from core.usage import (
-    build_usage_report,
-    build_usage_warnings,
-    format_usage_run_log_line,
-    resolve_usage_report_enabled,
+from core.rag.builder_retrieval import (
+    rag_retrieval_should_run,
+    run_builder_workspace_file_retrieval,
+    run_merged_builder_rag_retrieval,
 )
-from core.usage.role_audit import build_role_usage_record, merge_model_roles
+from core.rag.retrieval import ContextRef, context_refs_to_dict
 
 OUTPUT_MAX_CHARS = 16_000
+
+obs = get_observability()
 
 
 def use_context_package() -> bool:
@@ -132,10 +128,6 @@ def _truncate_output(text: str, max_chars: int = OUTPUT_MAX_CHARS) -> str:
     return text[: max_chars - 20] + "\n…[truncated]"
 
 
-def _server_log_warn(event: str, fields: dict[str, Any]) -> None:
-    server_log_emit(event, level="warn", **fields)
-
-
 def _apply_builder_llm(
     *,
     context_package: "ContextPackage",
@@ -147,6 +139,7 @@ def _apply_builder_llm(
     host_transcript: str | None,
     timing: dict[str, int | float],
     delegation_id: str,
+    rag_refs: list[ContextRef] | None = None,
 ) -> tuple["ContextPackage", bool, str | None, dict[str, Any] | None]:
     return _shared_apply_builder_llm(
         context_package=context_package,
@@ -158,7 +151,8 @@ def _apply_builder_llm(
         host_transcript=host_transcript,
         timing=timing,
         delegation_id=delegation_id,
-        log_warn=_server_log_warn,
+        log_warn=obs.warn,
+        rag_refs=rag_refs,
     )
 
 
@@ -184,7 +178,7 @@ def _apply_architect_pass(
         host_transcript=host_transcript,
         timing=timing,
         delegation_id=delegation_id,
-        log_warn=_server_log_warn,
+        log_warn=obs.warn,
     )
 
 
@@ -214,7 +208,7 @@ def _apply_spec_validation(
         host_transcript=host_transcript,
         timing=timing,
         delegation_id=delegation_id,
-        log_warn=_server_log_warn,
+        log_warn=obs.warn,
     )
 
 
@@ -237,8 +231,8 @@ def _build_model_roles_payload(
     duration_ms = int(engine_ms) if engine_ms is not None else None
 
     if delegate_mode == DELEGATE_MODE_REVIEW:
-        roles = merge_model_roles(
-            build_role_usage_record(
+        roles = obs.merge_model_roles(
+            obs.build_role_usage_record(
                 role=ROLE_REVIEW,
                 model=resolved_model,
                 input_tokens=tokens.get("input"),
@@ -249,8 +243,8 @@ def _build_model_roles_payload(
             )
         )
     elif delegate_mode == DELEGATE_MODE_IMPLEMENT:
-        roles = merge_model_roles(
-            build_role_usage_record(
+        roles = obs.merge_model_roles(
+            obs.build_role_usage_record(
                 role=ROLE_EXECUTOR,
                 model=resolve_role_model_name(ROLE_EXECUTOR, workspace),
                 source="executor",
@@ -435,9 +429,9 @@ def delegate_to_agent(
     cli_artifacts: bool = False,
 ) -> str:
     """Run one delegated implementation via the selected backend; append JSONL log."""
-    delegation_id = new_delegation_id()
+    delegation_id = obs.new_delegation_id()
     t0 = time.perf_counter()
-    timestamp_start = utc_now_iso()
+    timestamp_start = obs.utc_now_iso()
 
     mcp_request = {
         "task": task,
@@ -464,8 +458,8 @@ def delegate_to_agent(
             ensure_ascii=False,
         )
     mcp_request["mode"] = delegate_mode
-    ws = workspace_path()
-    usage_report_enabled = resolve_usage_report_enabled(ws)
+    ws = obs.default_workspace_path()
+    usage_report_enabled = obs.resolve_usage_report_enabled(ws)
     ensure_workspace_spec_layout(ws)
 
     spec_rel_path: str | None = None
@@ -502,13 +496,13 @@ def delegate_to_agent(
             spec_invalid_reason = str(exc)
     spec_read_duration_ms = int((time.perf_counter() - t_spec_read) * 1000)
 
-    pipeline_recorder: PipelineRecorder | None = None
+    pipeline_recorder: Any | None = None
     if (
         delegate_mode == DELEGATE_MODE_IMPLEMENT
         and spec_read is not None
         and not spec_invalid_reason
     ):
-        pipeline_recorder = PipelineRecorder()
+        pipeline_recorder = obs.new_pipeline_recorder()
         pipeline_recorder.mark("spec_read", status="ok", duration_ms=spec_read_duration_ms)
     policy = resolve_session_policy(ws)
     host_transcript_policy = resolve_host_transcript_policy(ws)
@@ -524,7 +518,7 @@ def delegate_to_agent(
     storage = SessionStore().acquire(ws, policy, host_hint)
     session_decision_ms = int((time.perf_counter() - t_sess) * 1000)
 
-    server_log_emit(
+    obs.emit(
         "session_acquired",
         level="info",
         workspace_path=ws,
@@ -558,7 +552,7 @@ def delegate_to_agent(
             context_mode = CONTEXT_MODE_HOST_TRANSCRIPT
             host_transcript_text = transcript_result.text
 
-    log_host_resolved(
+    obs.log_host_resolved(
         hint_host_kind=host_hint.host_kind,
         host_session_id=host_hint.host_session_id,
         transcript_path=host_hint.host_transcript_path,
@@ -566,14 +560,14 @@ def delegate_to_agent(
         host_resolve_ms=host_resolve_ms,
     )
     if host_hint.resolve_error:
-        server_log_emit(
+        obs.emit(
             "host_resolve_failed",
             level="warn",
             workspace_path=ws,
             resolve_error=host_hint.resolve_error,
         )
 
-    log_delegation_received(
+    obs.log_delegation_received(
         delegation_id=delegation_id,
         target_files=target_files,
         backend=backend,
@@ -647,7 +641,7 @@ def delegate_to_agent(
             effective_target_files = merge_result.effective_target_files
             auto_merged_read_paths = merge_result.auto_merged_read_paths
             if contract_warnings:
-                server_log_emit(
+                obs.emit(
                     "spec_files_contract_warn",
                     level="warn",
                     delegation_id=delegation_id,
@@ -681,6 +675,12 @@ def delegate_to_agent(
     spec_validation_passed: bool | None = None
     spec_validation_audit: dict[str, Any] | None = None
     spec_validation_record: dict[str, Any] | None = None
+    builder_history_rag_on = False
+    workspace_file_hints_on = False
+    rag_retrieval_on = False
+    rag_retrieval_refs: list[ContextRef] = []
+    workspace_file_rag_refs: list[ContextRef] = []
+    delegation_rag_refs: list[ContextRef] = []
 
     if (
         pipeline_recorder is not None
@@ -747,7 +747,32 @@ def delegate_to_agent(
                 result = run_spec_review(prompt, workspace_path=ws)
             elif _use_pkg:
                 builder_on = context_builder_enabled(ws)
+                workspace_rag_paths_for_picker: list[str] = []
                 if builder_on and delegation_policies is not None:
+                    rag_should_run, _rag_skip = rag_retrieval_should_run(
+                        ws, builder_on=builder_on, implement_mode=True
+                    )
+                    if workspace_file_hints_enabled(ws):
+                        workspace_file_hints_on = True
+                        try:
+                            spec_sections_pre = (
+                                spec_read.sections if spec_read is not None else None
+                            )
+                            workspace_file_rag_refs = run_builder_workspace_file_retrieval(
+                                ws,
+                                task=task,
+                                spec_sections=spec_sections_pre,
+                            )
+                            workspace_rag_paths_for_picker = [
+                                ref.id for ref in workspace_file_rag_refs
+                            ]
+                        except Exception:
+                            workspace_file_rag_refs = []
+                            workspace_rag_paths_for_picker = []
+                    if builder_history_rag_enabled(ws):
+                        builder_history_rag_on = True
+                    if rag_should_run:
+                        rag_retrieval_on = True
                     if pipeline_recorder is not None:
                         pipeline_recorder.start("file_picker")
                     try:
@@ -757,6 +782,7 @@ def delegate_to_agent(
                             spec_text=spec_read.raw_text if spec_read else None,
                             policies=delegation_policies,
                             target_files=effective_target_files,
+                            workspace_rag_paths=workspace_rag_paths_for_picker or None,
                         )
                     except Exception as exc:
                         if pipeline_recorder is not None:
@@ -775,6 +801,53 @@ def delegate_to_agent(
                         status="skipped",
                         detail="context_builder_disabled",
                     )
+                rag_skip_detail: str | None = None
+                if not rag_retrieval_on:
+                    _, rag_skip_detail = rag_retrieval_should_run(
+                        ws,
+                        builder_on=builder_on,
+                        implement_mode=delegate_mode == DELEGATE_MODE_IMPLEMENT,
+                    )
+
+                if pipeline_recorder is not None:
+                    if rag_retrieval_on:
+                        pipeline_recorder.start("rag_retrieval")
+                        try:
+                            spec_sections = (
+                                spec_read.sections if spec_read is not None else None
+                            )
+                            (
+                                delegation_rag_refs,
+                                workspace_file_rag_refs,
+                                rag_retrieval_refs,
+                            ) = run_merged_builder_rag_retrieval(
+                                ws,
+                                task=task,
+                                spec_sections=spec_sections,
+                            )
+                            pipeline_recorder.end(
+                                "rag_retrieval",
+                                status="ok",
+                                detail=(
+                                    f"{len(delegation_rag_refs)} delegation + "
+                                    f"{len(workspace_file_rag_refs)} file hits"
+                                ),
+                            )
+                        except Exception as exc:
+                            rag_retrieval_refs = []
+                            delegation_rag_refs = []
+                            workspace_file_rag_refs = []
+                            pipeline_recorder.end(
+                                "rag_retrieval",
+                                status="error",
+                                detail=f"{type(exc).__name__}: {exc}"[:200],
+                            )
+                    else:
+                        pipeline_recorder.mark(
+                            "rag_retrieval",
+                            status="skipped",
+                            detail=rag_skip_detail or "disabled",
+                        )
                 if pipeline_recorder is not None:
                     pipeline_recorder.start("context_assemble")
                 try:
@@ -860,6 +933,7 @@ def delegate_to_agent(
                         host_transcript=host_transcript_text,
                         timing=timing,
                         delegation_id=delegation_id,
+                        rag_refs=rag_retrieval_refs if rag_retrieval_on else None,
                     )
                     if pipeline_recorder is not None:
                         if builder_llm_error:
@@ -909,6 +983,11 @@ def delegate_to_agent(
                 if pipeline_recorder is not None:
                     pipeline_recorder.mark(
                         "file_picker",
+                        status="skipped",
+                        detail="context_package_disabled",
+                    )
+                    pipeline_recorder.mark(
+                        "rag_retrieval",
                         status="skipped",
                         detail="context_package_disabled",
                     )
@@ -1030,6 +1109,14 @@ def delegate_to_agent(
                 context_block["builder_brief_applied"] = builder_brief_applied
                 if builder_llm_error:
                     context_block["builder_llm_error"] = builder_llm_error
+            if rag_retrieval_on:
+                if builder_history_rag_on:
+                    context_block["builder_history_rag_enabled"] = True
+                if workspace_file_hints_on:
+                    context_block["workspace_file_hints_enabled"] = True
+                context_block["rag_retrieval_hit_count"] = len(rag_retrieval_refs)
+                context_block["rag_retrieval_delegation_hits"] = len(delegation_rag_refs)
+                context_block["rag_retrieval_file_hits"] = len(workspace_file_rag_refs)
         context_block["adapter_in"] = {
             "fnames": sorted(
                 e.path for e in context_package.entries if e.tier == TIER_EDIT_FULL
@@ -1045,18 +1132,18 @@ def delegate_to_agent(
     if caps is not None:
         context_block["backend_capabilities"] = caps.to_dict()
 
-    usage_dict = build_usage_report(
+    usage_dict = obs.build_usage_report(
         model=resolved_model,
         prompt=executor_prompt,
         actual_tokens=tokens,
         preflight_tokens_est=int(context_block.get("prompt_tokens_est") or 0),
         preflight_chars=int(context_block.get("prompt_chars") or len(executor_prompt)),
     )
-    usage_summary_line = format_usage_run_log_line(usage_dict)
+    usage_summary_line = obs.format_usage_run_log_line(usage_dict)
     context_block["token_estimate_preflight"] = usage_dict["preflight_tokens_est"]
-    usage_warnings = build_usage_warnings(usage_dict["preflight_tokens_est"])
+    usage_warnings = obs.build_usage_warnings(usage_dict["preflight_tokens_est"])
 
-    timestamp_end = utc_now_iso()
+    timestamp_end = obs.utc_now_iso()
     spec_sha256: str | None = spec_read.sha256 if spec_read else None
     spec_bytes: int | None = spec_read.file_bytes if spec_read else None
     spec_mtime: str | None = spec_read.mtime_iso if spec_read else None
@@ -1147,7 +1234,7 @@ def delegate_to_agent(
                     scope_violations=scope_violations,
                 )
                 if scope_violations:
-                    server_log_emit(
+                    obs.emit(
                         "spec_scope_violation",
                         level="warn",
                         delegation_id=delegation_id,
@@ -1185,7 +1272,7 @@ def delegate_to_agent(
                 files_changed=files_changed,
             )
         elif verify_result.error:
-            server_log_emit(
+            obs.emit(
                 "verify_command_failed",
                 level="warn",
                 delegation_id=delegation_id,
@@ -1293,6 +1380,10 @@ def delegate_to_agent(
         checkpoint_summary=_checkpoint_summary_for_rag,
     )
 
+    from core.rag.workspace_indexer import index_workspace_paths_after_delegate
+
+    index_workspace_paths_after_delegate(ws, files_changed)
+
     delegation_diff_payload: dict[str, Any] | None = None
     judgment_checklist_payload: dict[str, Any] | None = None
     if delegate_mode == DELEGATE_MODE_IMPLEMENT and workspace_snapshot is not None:
@@ -1398,7 +1489,7 @@ def delegate_to_agent(
     if scope_violations:
         mcp_request["scope_violations"] = scope_violations
 
-    record = build_delegation_record(
+    record = obs.build_delegation_record(
         delegation_id=delegation_id,
         timestamp_start=timestamp_start,
         timestamp_end=timestamp_end,
@@ -1429,7 +1520,7 @@ def delegate_to_agent(
         host_context=host_context,
         executor_reused=executor_reused,
         executor_recreated=executor_recreated,
-        prompt_full=executor_prompt if should_log_full_prompt() else None,
+        prompt_full=executor_prompt if obs.should_log_full_prompt() else None,
         spec_path=spec_rel_path,
         spec_report_path=spec_report_rel_path,
         spec_sha256=spec_sha256,
@@ -1449,9 +1540,12 @@ def delegate_to_agent(
         auto_merged_read_paths=auto_merged_read_paths or None,
         auto_merge_spec_read=auto_merge_spec_read,
         model_roles=model_roles_payload,
+        context_refs=(
+            context_refs_to_dict(rag_retrieval_refs) if rag_retrieval_on else None
+        ),
     )
-    log_path = append_delegation_record(record, ws=ws)
-    log_delegation_sent(
+    log_path = obs.append_delegation_record(record, ws=ws)
+    obs.log_delegation_sent(
         delegation_id=delegation_id,
         success=success,
         duration_ms=duration_ms,
@@ -1514,7 +1608,7 @@ def inspect_context(
     include_prompt: bool = False,
 ) -> str:
     """Return assembled context package + adapter preview as JSON (dry-run only)."""
-    ws = workspace_path()
+    ws = obs.default_workspace_path()
     result = inspect_context_package(
         workspace=Path(ws),
         task=task,
@@ -1543,10 +1637,9 @@ def list_delegations_tool(
     workspace_path: str | None = None,
 ) -> str:
     """Browse recent checkpoints (read-only)."""
-    from core.logging.delegation_log import workspace_path as default_workspace
     from core.workspace.history_query import list_delegations_for_mcp
 
-    ws = workspace_path or default_workspace()
+    ws = workspace_path or obs.default_workspace_path()
     result = list_delegations_for_mcp(
         ws, limit=limit, spec_path=spec_path, file_path=file_path
     )
@@ -1567,10 +1660,9 @@ def get_checkpoint_detail(
     workspace_path: str | None = None,
 ) -> str:
     """Lightweight checkpoint inspect (read-only)."""
-    from core.logging.delegation_log import workspace_path as default_workspace
     from core.workspace.history_query import checkpoint_detail_for_mcp
 
-    ws = workspace_path or default_workspace()
+    ws = workspace_path or obs.default_workspace_path()
     result = checkpoint_detail_for_mcp(
         ws, delegation_id, latest=latest
     )
@@ -1590,10 +1682,9 @@ def get_file_history(
     workspace_path: str | None = None,
 ) -> str:
     """File change timeline across checkpoints (read-only)."""
-    from core.logging.delegation_log import workspace_path as default_workspace
     from core.workspace.history_query import file_history_for_mcp
 
-    ws = workspace_path or default_workspace()
+    ws = workspace_path or obs.default_workspace_path()
     result = file_history_for_mcp(ws, file_path, limit=limit)
     return json.dumps(result, ensure_ascii=False)
 
@@ -1614,10 +1705,9 @@ def get_delegation_diff(
     workspace_path: str | None = None,
 ) -> str:
     """Fetch delegation_diff for a past delegation (read-only)."""
-    from core.logging.delegation_log import workspace_path as default_workspace
     from core.workspace.history_query import delegation_diff_for_mcp
 
-    ws = workspace_path or default_workspace()
+    ws = workspace_path or obs.default_workspace_path()
     result = delegation_diff_for_mcp(
         ws,
         delegation_id,
@@ -1643,10 +1733,9 @@ def rag_search_tool(
     outcome: str | None = None,
 ) -> str:
     """Search delegation RAG index (read-only)."""
-    from core.logging.delegation_log import workspace_path as default_workspace
     from core.rag.search import rag_search_for_mcp
 
-    ws = workspace_path or default_workspace()
+    ws = workspace_path or obs.default_workspace_path()
     result = rag_search_for_mcp(
         ws,
         query,
@@ -1654,6 +1743,27 @@ def rag_search_tool(
         spec_path_prefix=spec_path_prefix,
         outcome=outcome,
     )
+    return json.dumps(result, ensure_ascii=False)
+
+
+@mcp.tool(
+    name="workspace_search",
+    description=(
+        "Keyword search over indexed workspace source files (LLM summaries + symbol "
+        "outlines in workspace_rag.db). Parity with mcp-coder search files CLI. "
+        "Requires workspace_file_rag: true and mcp-coder index-workspace."
+    ),
+)
+def workspace_search_tool(
+    query: str,
+    limit: int = 5,
+    workspace_path: str | None = None,
+) -> str:
+    """Search workspace-file RAG index (read-only)."""
+    from core.rag.workspace_search import workspace_search_for_mcp
+
+    ws = workspace_path or obs.default_workspace_path()
+    result = workspace_search_for_mcp(ws, query, limit=limit)
     return json.dumps(result, ensure_ascii=False)
 
 

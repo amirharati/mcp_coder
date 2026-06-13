@@ -2,7 +2,7 @@
 
 **Purpose:** the mental model. Everything you need to keep in your head to operate, debug, or extend the system. Re-read when coming back after a break. Deeper detail lives in [architecture/](./architecture/) and the [tutorials](./tutorials/); module-by-module map in [code-structure.md](./code-structure.md).
 
-**Covers:** Phases 1–4 as shipped. Last updated: 2026-06-10.
+**Covers:** Phases 1–5 as shipped. Last updated: 2026-06-13.
 
 ---
 
@@ -61,6 +61,7 @@ For `mode=implement` with a valid spec, the phases run in this order. Each phase
 spec_read          parse spec front-matter, sections, Files contract
 spec_validation*   helper LLM: does spec match the conversation? → can BLOCK
 file_picker        rules-based: spec paths + rg symbol scan + repo map → candidates
+rag_retrieval*     FTS over past delegations + workspace-file summaries → brief + context_refs
 context_assemble   build ContextPackage: tiers, budget, mechanical brief
 architect_pass*    helper LLM: prepend "## Architect plan" to the brief
 builder_llm*       helper LLM: prepend narrative "## Builder brief" (mechanical brief stays verbatim)
@@ -81,7 +82,7 @@ The executor's prompt is a **ContextPackage** (`core/context/package.py`), not r
 1. **Spec is the contract.** A markdown file under `.mcp-coder/specs/tasks/` with front-matter + `## Goal / ## Files / ## Constraints / ## Acceptance`. The `Files` section defines what may be edited (enforced post-hoc by the gateway).
 2. **Tiers control cost.** Files enter the package at different fidelity: full payload (edit targets) → read-only payload → excerpt → map-only (def/class outline from the repo map). A token budget trims from the bottom.
 3. **The picker discovers, the assembler materializes.** The file picker ranks candidates (spec paths, symbol hits via ripgrep, repo map); discovered files become *read* tiers only — discovery never grants edit rights (D-P4-10).
-4. **The brief is layered.** Bottom: the *mechanical brief* (authoritative paths/tiers, never rewritten by any LLM). On top, optionally: builder LLM narrative, then architect plan. LLMs annotate; they don't replace.
+4. **The brief is layered.** Bottom: the *mechanical brief* (authoritative paths/tiers, never rewritten by any LLM). Phase 5 adds **`## Relevant prior work`** from RAG (cross-spec delegations + file-summary hits). On top, optionally: builder LLM narrative, then architect plan. LLMs annotate; they don't replace.
 5. **`context_summary` is the planner's voice.** Decisions from chat that the executor can't otherwise see. With `host_transcript: dump` enabled, a tail of the actual host transcript is also available to the validation/builder LLMs.
 
 You can see exactly what would be sent — without spending executor tokens — via `mcp-coder inspect-context` or the `inspect_context` MCP tool.
@@ -121,12 +122,13 @@ Two storage scopes — repo vs home — and the distinction matters:
 ~/.mcp-coder/projects/<sha256-of-workspace-path>/    OUTSIDE the repo
   project.json                   project registry entry
   workspace_history.db           SQLite: per-file hashes, delegation checkpoints, diffs
-  delegation_rag.db              FTS5 index over past delegations (search shipped; pipeline use = Phase 5)
+  delegation_rag.db              FTS5 index over past delegations (auto-indexed each delegate)
+  workspace_rag.db                 FTS5 index over per-file LLM summaries (run index-workspace once)
   sessions/<mcp_session_id>/
     delegations.jsonl            one record per delegation — the canonical audit trail
 ```
 
-Cross-session memory works through this: `prior_failed_attempts` (past failures on the same spec surface in the next delegation), builder history (past delegations fed to the builder LLM), `list_delegations` / `get_file_history` / `rag_search` MCP tools for the planner.
+Cross-session memory works through this: `prior_failed_attempts` (past failures on the same spec surface in the next delegation), builder history (past delegations fed to the builder LLM), **RAG retrieval** (delegation + workspace-file hits wired into the brief by default), and planner tools (`list_delegations`, `get_file_history`, `rag_search`, `workspace_search`, `mcp-coder search …`).
 
 **Sessions:** delegations group into MCP sessions (policy `always_new` or `align_host`). An Aider `Coder` instance is cached per session, so consecutive delegations in one session reuse executor state.
 
@@ -152,6 +154,11 @@ Precedence is layered, later wins: **built-in default → env var → `.mcp-code
 | `architect_pass` | off | architect plan in brief |
 | `auto_verify` | off | post-delegate verify command |
 | `host_transcript` | off | dump host transcript tail for helper LLMs (Cursor today) |
+| `builder_history_rag` | **on** | cross-spec delegation hits in builder + `rag_retrieval` phase |
+| `workspace_file_rag` | **on** | `workspace_rag.db` indexing + `workspace_search` |
+| `workspace_file_hints` | **on** | file-summary hints in picker/builder (needs `workspace_file_rag`) |
+
+First-time workspace-file RAG: run `mcp-coder index-workspace` once (LLM cost per file). New delegations incrementally re-index changed paths. Opt out per flag above or `MCP_CODER_*=0` env vars (see [reference/cli.md](./reference/cli.md)).
 
 API keys and model ids live in `.env` (OpenRouter is the common provider for everything today).
 
@@ -174,4 +181,4 @@ API keys and model ids live in `.env` (OpenRouter is the common provider for eve
 | Hands-on walkthroughs | [tutorials/](./tutorials/) (T-01…T-07) |
 | Subsystem internals | [architecture/](./architecture/) |
 | What's planned / deferred | [../PHASES.md](../PHASES.md), [../BACKLOG.md](../BACKLOG.md) |
-| Known gaps from dogfooding | [../PHASE4_ISSUES.md](../PHASE4_ISSUES.md) (frozen), [gap-analysis.md](./gap-analysis.md) |
+| Known gaps from dogfooding | [../PHASE5_ISSUES.md](../PHASE5_ISSUES.md) (frozen), [../notes/rag-gap-analysis.md](../notes/rag-gap-analysis.md) |

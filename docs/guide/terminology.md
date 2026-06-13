@@ -73,7 +73,10 @@ For the full mental model see [how-it-works.md](./how-it-works.md); for the modu
 | **Snapshot** | SHA-256 manifest of the workspace taken before/after the executor; diffed to compute `files_changed`. |
 | **Checkpoint** | A recorded delegation point in workspace history (inspectable via `get_checkpoint_detail`). |
 | **Delegation log** | `delegations.jsonl` — one record per delegation, the canonical audit trail. |
-| **RAG index** | `delegation_rag.db` (FTS5) full-text search over past delegations. Shipped (P3); **not yet fed back into the pipeline** (Phase 5). |
+| **RAG index (delegations)** | `delegation_rag.db` (FTS5) over past delegations. Auto-indexed each delegate; searched by planner (`rag_search`) and **builder** (`rag_retrieval`, default on). |
+| **`workspace_rag.db`** | FTS5 index of per-file LLM summaries. Built by `mcp-coder index-workspace`; searched by `workspace_search` / builder file hints. |
+| **`rag_retrieval`** | Pipeline phase (after `file_picker`, before `context_assemble`): FTS over delegations + workspace files; merges hits into brief + `context_refs[]`. |
+| **`context_refs[]`** | Top-level JSONL list of retrieval hits (source, id, snippet, score) for audit — delegation + workspace-file corpora. |
 | **`prior_failed_attempts`** | Past failures on the same spec, surfaced into the next delegation's response so the planner can adjust. |
 
 ## Verification & trust
@@ -98,6 +101,9 @@ Precedence everywhere: **default → env → `.mcp-coder/config.yaml`** (yaml wi
 | `auto_verify` | off | post-delegate verify command |
 | `auto_merge_spec_read` | on | append spec Read paths to executor file list (list union — not git merge) |
 | `host_transcript` | off | dump host transcript tail for helper LLMs |
+| `builder_history_rag` | on | cross-spec delegation RAG in builder |
+| `workspace_file_rag` | on | workspace-file corpus + search |
+| `workspace_file_hints` | on | file-summary hints in picker/builder |
 
 ## Conventions in docs/code
 

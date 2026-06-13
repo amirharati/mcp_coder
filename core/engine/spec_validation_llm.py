@@ -192,19 +192,6 @@ def run_spec_validation_llm(
 
 
 def _extract_validation_tokens(model_obj: Any) -> dict[str, Any]:
-    for attr_total in ("total_tokens",):
-        if hasattr(model_obj, attr_total):
-            total = getattr(model_obj, attr_total)
-            if total is not None:
-                return {
-                    "input": getattr(model_obj, "tokens_sent", None),
-                    "output": getattr(model_obj, "tokens_received", None),
-                    "total": total,
-                    "source": "spec_validation",
-                }
-    return {
-        "input": None,
-        "output": None,
-        "total": None,
-        "source": "spec_validation",
-    }
+    from core.usage.litellm_tokens import extract_litellm_model_tokens
+
+    return extract_litellm_model_tokens(model_obj, role_source="spec_validation")

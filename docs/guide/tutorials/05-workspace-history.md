@@ -32,10 +32,10 @@ Git stays the source of truth for **your** commits. Workspace history is the sou
 
 Workspace history is **not** only context-builder fuel. It is the per-delegation truth layer for:
 
-| Use | Today | Later (Phase 5+) |
-|-----|-------|------------------|
+| Use | Today | Later |
+|-----|-------|-------|
 | **`files_changed` / `files_unexpected`** | Manifest diff after each delegate | Same; primary attribution |
-| **Context builder** (T-04 §8b) | Last 5 same-spec + 5 project summaries in builder prompt | Richer hints (BL-348/349) |
+| **Context builder** (T-04 §8b) | Recency summaries + **RAG hits** (delegation + file, default on) | Richer hints (BL-348/349) |
 | **Scope / policy enforcement** | `edit_scope: strict` → `scope_violations` + auto-revert via stored blobs (post_gateway) | Stronger "expected vs actual" gates (BL-349, gatekeeping ideas) |
 | **Revert to working checkpoint** | `mcp-coder history revert <id>` restores pre-delegate file content from blobs | Planner-guided "roll back step 2, keep step 1" |
 | **Audit & debugging** | CLI/MCP: list, diff, per-file timeline | T-07 end-to-end trace |
@@ -251,15 +251,18 @@ This is **best-effort** — if snapshots are disabled or the DB is empty, delega
 
 ---
 
-## 9. Delegation search (RAG) — coming soon
+## 9. Retrieval search (Phase 5)
 
-Phase 3 shipped a separate `delegation_rag.db` and keyword search over past delegations. **This tutorial does not cover it** — Phase 5 may replace or redesign the approach (BL-002, BL-348). Until then:
+Two FTS corpora live under `~/.mcp-coder/projects/<key>/`:
 
-- No planner workflow depends on it
-- Context compile does **not** call it
-- Ignore `mcp-coder rag` / `rag_search` unless you are experimenting
+| DB | Built by | Search via |
+|----|----------|------------|
+| `delegation_rag.db` | Auto each delegate | `rag_search` MCP, `mcp-coder search delegations` |
+| `workspace_rag.db` | `mcp-coder index-workspace` (+ incremental on `files_changed`) | `workspace_search` MCP, `mcp-coder search files` |
 
-When we document search properly, it will get its own section or tutorial update.
+**Builder (default on):** `rag_retrieval` pipeline phase merges hits into `## Relevant prior work` and top-level `context_refs[]` in JSONL. Skipped when `spec_validation` blocks (no pipeline) — empty `context_refs` is expected (BL-364).
+
+**Planner workflow:** Use search tools to preview hits before delegating; run `index-workspace` once on a new repo before file RAG is useful. Legacy `mcp-coder rag search` still works; prefer `search delegations`. Details: [reference/cli.md](../reference/cli.md), T-06 config matrix.
 
 ---
 

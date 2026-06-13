@@ -8,12 +8,12 @@
 
 # Phase 4.5 — Full stack onboarding + gap analysis
 
-**Status:** **Active** (2026-06-09)  
-**Purpose:** Understand everything we built across Phases 1–4 from first principles — docs, tutorials, live inspection, gap analysis. Foundation for Phase 5+ planning grounded in real evidence, not theory.  
-**Not a product phase** — no new arc number; Phase 5 scope unchanged.  
-**PM board:** this file · **Issues:** [PHASE4.5_ISSUES.md](./PHASE4.5_ISSUES.md) · **Output folder:** [docs/guide/](./guide/README.md)  
-**Phases (closed):** [PHASE4_MVP.md](./PHASE4_MVP.md) · [PHASE3_MVP.md](./PHASE3_MVP.md)  
-**Phase 5 (next):** [PHASES.md](./PHASES.md) § Phase 5
+**Status:** **Planning handoff complete (2026-06-13)** — Phase 5 scope locked; PHASE5_MVP.md created. Pending 4.5 items deferred to BACKLOG (BL-362, BL-363).
+**Purpose:** Understand everything we built across Phases 1–4 from first principles — docs, tutorials, live inspection, gap analysis. Foundation for Phase 5+ planning grounded in real evidence, not theory.
+**Not a product phase** — no new arc number; Phase 5 scope unchanged.
+**PM board:** this file · **Issues:** [PHASE4.5_ISSUES.md](./PHASE4.5_ISSUES.md) (frozen) · **Output folder:** [docs/guide/](./guide/README.md)
+**Phases (closed):** [PHASE4_MVP.md](./PHASE4_MVP.md) · [PHASE3_MVP.md](./PHASE3_MVP.md)
+**Phase 5 (active):** [PHASE5_MVP.md](./PHASE5_MVP.md)
 
 ---
 
@@ -100,8 +100,8 @@ All tutorial docs go under `docs/guide/tutorials/`. Architecture docs under `doc
 | T-03 | **Specs: contract, paths, versioning** — write a spec, delegation policies, versioned retry | Phase 1–2 | done |
 | T-04 | **Context compiler deep-dive** — `inspect-context` dry-run; tiers; what Aider actually sees | Phase 2 | done |
 | T-05 | **Workspace history** — why vs git; `workspace_history.db`; `mcp-coder history` CLI (list/show/diff/file/revert); MCP parity; policies/revert/trajectory metadata; builder history; delegation search deferred to Phase 5 | Phase 3 | done |
-| T-06 | **The delegation pipeline** — full `delegate_to_agent` flow; `delegation_pipeline` JSONL phase audit; config flag matrix (context compile detail defers to T-04) | Phase 4 orchestration | skeleton |
-| T-07 | **Inspecting a delegation end-to-end** — pick a real delegation_id; trace it from JSONL → brief → Aider output | Phase 1–4 | pending |
+| T-06 | **The delegation pipeline** — full `delegate_to_agent` flow; `delegation_pipeline` JSONL phase audit; config flag matrix | Phase 4 orchestration | skeleton → **BL-362** |
+| T-07 | **Inspecting a delegation end-to-end** — pick a real delegation_id; trace it from JSONL → brief → Aider output | Phase 1–4 | pending → **BL-362** |
 
 ### Track 2 — Architecture documentation
 
@@ -179,17 +179,18 @@ Interactive sessions (PM + assistant together) — not dispatched workers unless
 
 ## Success criteria
 
-- [ ] Tutorials T-01 through T-07 written — each self-contained and usable by a new user
-- [ ] `docs/notes/architecture-overview.md` written — single accurate reference for Phases 1–4
-- [ ] `docs/notes/phase4.5-gap-analysis.md` written — answers "what Phase 5 actually needs to solve"
+- [x] Tutorials T-01 through T-05 written — each self-contained and usable by a new user; T-06 skeleton, T-07 pending → BL-362
+- [x] `docs/guide/architecture/overview.md` written — layer map, locked decisions D-1–D-8, gap table; sub-pages pending → BL-363
+- [x] Gap analysis: content absorbed into `rag-gap-analysis.md` (living) + architecture overview § Known gaps; formal `phase4.5-gap-analysis.md` deferred → BL-363
 - [ ] A-05 divergence log populated — "where reality differs from spec"
 - [ ] All Track 3 experiments run with results recorded
 - [ ] At least BL-335 (token audit) root cause understood; fix attempted
-- [ ] Phase 5 planning can start from gap analysis, not from theory
+- [x] Phase 5 planning started and locked — PHASE5_MVP.md created 2026-06-13
 
 ---
 
 ## Changelog
+| 2026-06-13 | **Planning handoff complete** — Phase 5 scope locked; PHASE5_MVP.md + PHASE5_ISSUES.md created; all P4.5 issues carried to BACKLOG BL-341–363; rag-gap-analysis.md § MVP promoted to locked |
 
 | Date | Change |
 |------|--------|

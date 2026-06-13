@@ -139,6 +139,7 @@ tail -1 <path/to/delegations.jsonl> | python3 -m json.tool | head -80
 | `outcome` | string | `success`, `partial`, `needs_input`, `error` |
 | `files_requested` | list | `target_files` from MCP call |
 | `files_changed` | list | Files actually created/modified/deleted (from snapshot diff) |
+| `context_refs` | list | RAG retrieval hits when `rag_retrieval` ran (empty if validation blocked) |
 
 ### `mcp_request` — what the planner sent
 

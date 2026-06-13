@@ -321,9 +321,9 @@ Add results to § Open evidence as we learn.
 
 ---
 
-## Phase 5 MVP candidate (suggestion — not PM truth yet)
+## Phase 5 MVP candidate (locked — see PHASE5_MVP.md)
 
-**Status:** Planning note only — refine after more tutorials / dogfood. Do not treat as `PHASE5_MVP.md` until a master session locks it.
+**Status:** **Locked 2026-06-13** — promoted from planning note to [PHASE5_MVP.md](../PHASE5_MVP.md). Milestones P5-001…P5-005 are the authoritative source. This section preserved as design rationale.
 
 ### Philosophy — what Phase 5 is vs later phases
 
@@ -359,8 +359,8 @@ ContextRef { kind, id, sha256, snippet, score, source_line_range?, corpus }
 | ID | Milestone | What | Why this order | RAG? | Can exit phase here? |
 |----|-----------|------|----------------|------|----------------------|
 | **P5-1** | **Retrieval contract** | `ContextRef` + `retrieve()` over existing delegation `core/rag/search` | Seam before behavior change; same API for all corpora | Plumbing | Partial — contract only |
-| **P5-2** | **Relevance delegation history → builder** | FTS query from task + spec Goal; merge with recency/same-spec; audit `builder_history_source` | **H1** — shipped index, highest ROI wiring; cross-spec memory | **Full** | **Yes — minimum viable Phase 5 exit** |
-| **P5-3** | **Workspace-file corpus** | Per-file LLM summary + symbols; sha256 staleness; FTS in `workspace_rag.db` | **BL-002 primary** corpus; fixes “concept ≠ symbol name” at file level | **Full** | Yes |
+| **P5-2** | **Relevance delegation history → builder + delegation search CLI** | FTS query from task + spec Goal; merge with recency/same-spec; audit `builder_history_source`; `mcp-coder search delegations` CLI with `--format plain` | **H1** — shipped index, highest ROI wiring; cross-spec memory; CLI pre-shapes BL-354 | **Full** | **Yes — minimum viable Phase 5 exit** |
+| **P5-3** | **Workspace-file corpus** | Per-file LLM summary + symbols; sha256 staleness; FTS in `workspace_rag.db`; `workspace_search` MCP + `mcp-coder search files` CLI (`--format plain`) | **BL-002 primary** corpus; fixes "concept ≠ symbol name" at file level; CLI pre-shapes BL-354 | **Full** | Yes |
 | **P5-4** | **Picker/builder consume file corpus** | Retrieval hints into picker or builder prompt | **H2** — closes fuzzy file recall in compile-push (A) | **Full** | Yes — “full” MVP |
 | **P5-5** | **Measure + lean-ref seam** | FTS recall metric (H3); `context_refs[]` in JSONL; thin **BL-335** token slice if needed | Decides embeddings; keeps logs scalable | Consumer | Capstone |
 
@@ -440,6 +440,7 @@ ContextRef { kind, id, sha256, snippet, score, source_line_range?, corpus }
 | 2026-06-12 | Planning discussion | Past MCP sessions belong in Distilled Chat corpus | Yes — distillation | BL-356 |
 | 2026-06-12 | Planning discussion | Cross-project RAG queries belong in External Knowledge corpus (federated or global DB) | Yes — cross-project | BL-002 |
 | 2026-06-12 | Planning discussion | Phase 5 = infra + connect; advanced corpora ~8–9 after dogfood | — | § Phase 5 MVP |
+| 2026-06-13 | Phase 5 master session | RAG toolset (CLI+MCP) is fundamental infra — `--format plain` output designed for direct executor prompt injection; pre-shapes BL-354 (executor-pull) at toolset level. Added as D-P5-8 in PHASE5_MVP.md | — | BL-002 |
 | 2026-06-12 | Planning discussion | RAG works on FTS today; embeddings deferred until measured | — | § RAG ≠ embeddings |
 | 2026-06-12 | Planning discussion | Chat: hot window direct + cold tail distill; no live RAG stream | 5+ | Corpus 3 mechanism |
 | 2026-06-12 | Planning discussion | Global patterns: web search → triage → localize (Corpus 4 tier B); recurring problem classes (H6) | Yes — curated external | Corpus 4 |
@@ -456,6 +457,7 @@ ContextRef { kind, id, sha256, snippet, score, source_line_range?, corpus }
 | 2026-06-12 | § Retention, pruning & long-term maintenance — lifetimes table, promote-then-prune, future gc tools (not Phase 5) |
 | 2026-06-12 | Corpus 4 tier B — **outcome-gated** ingest (save only what worked after try); pipeline + open Q8–9 |
 | 2026-06-12 | Corpus 4 — three tiers (live web / curated localization / cross-project); H6 recurring problem classes; localization pipeline sketch |
+| 2026-06-13 | Promoted § Phase 5 MVP candidate from "planning note" to **locked** — authoritative plan in PHASE5_MVP.md; milestones P5-001–P5-005 with RAG toolset (CLI+MCP, `--format plain`) as D-P5-8; open Qs 1–2 closed, Q3–10 deferred or locked |
 | 2026-06-12 | § Phase 5 MVP candidate — milestones P5-1…P5-5, philosophy (5 vs 8–9), FTS vs embeddings, Corpus 3 window mechanism, defer table |
 | 2026-06-12 | Added Epics/Tasks (historical specs), past MCP sessions, and global internet patterns to the corpora definitions based on planning discussion |
 | 2026-06-11 | Initial note — litmus test, gap table, four corpora, dependency order, observability coupling, open questions (from planning chat after T-04 / BL-353/356 backlog updates) |

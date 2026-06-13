@@ -12,6 +12,10 @@ from core.config.context_builder import (
     context_builder_enabled,
     context_builder_llm_enabled,
 )
+from core.config.rag import (
+    builder_history_rag_enabled,
+    workspace_file_hints_enabled,
+)
 from core.config.models import resolve_model_name
 from core.config.spec_validation import spec_validation_enabled
 from core.context.assemble import assemble_context
@@ -216,6 +220,11 @@ def inspect_context_package(
             "error": None,
             "model": None,
         },
+        "rag_retrieval": {
+            "ran": False,
+            "hit_count": 0,
+            "error": None,
+        },
         "architect_pass": {
             "ran": False,
             "applied": False,
@@ -266,7 +275,42 @@ def inspect_context_package(
 
     # Same picker path as delegate (dry-run parity, P4-001a)
     picker_result: CandidateFilesResult | None = None
+    rag_retrieval_refs: list[Any] = []
+    delegation_rag_refs: list[Any] = []
+    workspace_file_rag_refs: list[Any] = []
+    rag_retrieval_on = False
+    workspace_file_hints_on = False
+    builder_history_rag_on = False
+
     if delegation_policies is not None and context_builder_enabled(ws):
+        from core.rag.builder_retrieval import (
+            rag_retrieval_should_run,
+            run_builder_workspace_file_retrieval,
+            run_merged_builder_rag_retrieval,
+        )
+
+        rag_should_run, _ = rag_retrieval_should_run(
+            ws, builder_on=True, implement_mode=True
+        )
+        workspace_rag_paths_for_picker: list[str] = []
+        if workspace_file_hints_enabled(ws):
+            workspace_file_hints_on = True
+            try:
+                spec_sections_pre = spec_read.sections if spec_read is not None else None
+                workspace_file_rag_refs = run_builder_workspace_file_retrieval(
+                    ws_str,
+                    task=task,
+                    spec_sections=spec_sections_pre,
+                )
+                workspace_rag_paths_for_picker = [ref.id for ref in workspace_file_rag_refs]
+            except Exception:
+                workspace_file_rag_refs = []
+                workspace_rag_paths_for_picker = []
+        if builder_history_rag_enabled(ws):
+            builder_history_rag_on = True
+        if rag_should_run:
+            rag_retrieval_on = True
+
         spec_text: str | None = None
         if spec_rel_path is not None:
             spec_abs = resolve_spec_path(ws_str, spec_rel_path)
@@ -278,7 +322,37 @@ def inspect_context_package(
             spec_text=spec_text,
             policies=delegation_policies,
             target_files=effective_target_files,
+            workspace_rag_paths=workspace_rag_paths_for_picker or None,
         )
+
+        if rag_retrieval_on:
+            try:
+                spec_sections = spec_read.sections if spec_read is not None else None
+                (
+                    delegation_rag_refs,
+                    workspace_file_rag_refs,
+                    rag_retrieval_refs,
+                ) = run_merged_builder_rag_retrieval(
+                    ws_str,
+                    task=task,
+                    spec_sections=spec_sections,
+                )
+                helper_phases["rag_retrieval"] = {
+                    "ran": True,
+                    "hit_count": len(rag_retrieval_refs),
+                    "delegation_hits": len(delegation_rag_refs),
+                    "file_hits": len(workspace_file_rag_refs),
+                    "error": None,
+                }
+            except Exception as exc:
+                rag_retrieval_refs = []
+                helper_phases["rag_retrieval"] = {
+                    "ran": True,
+                    "hit_count": 0,
+                    "delegation_hits": 0,
+                    "file_hits": 0,
+                    "error": f"{type(exc).__name__}: {exc}",
+                }
 
     package = assemble_context(
         workspace=ws,
@@ -334,6 +408,7 @@ def inspect_context_package(
             context_summary=context_summary or "",
             spec_rel_path=spec_rel_path,
             host_transcript=host_transcript,
+            rag_refs=rag_retrieval_refs if rag_retrieval_on else None,
         )
         helper_phases["builder_llm"] = {
             "ran": True,
@@ -376,7 +451,12 @@ def inspect_context_package(
         "compiler_version": package.metadata.get("compiler_version", COMPILER_VERSION),
         "context_package": _package_dict(package, include_payloads=include_payloads),
         "helper_phases": helper_phases,
+        "context_refs": [],
     }
+    if rag_retrieval_on:
+        from core.rag.retrieval import context_refs_to_dict
+
+        result["context_refs"] = context_refs_to_dict(rag_retrieval_refs)
     if cap_warnings:
         result["capability_warnings"] = cap_warnings
 

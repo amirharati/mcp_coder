@@ -8,8 +8,8 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
-from core.context.summary import redact_secrets
 from core.logging.server_log import server_log_emit
+from core.logging.stderr import log_stderr
 from core.storage.paths import (
     legacy_workspace_log_path,
     mirror_log_targets,
@@ -92,10 +92,6 @@ def log_brief() -> bool:
     return raw not in ("0", "false", "no", "off")
 
 
-def log_stderr(message: str) -> None:
-    print(redact_secrets(message), file=sys.stderr, flush=True)
-
-
 def should_log_full_prompt() -> bool:
     return os.environ.get("MCP_CODER_LOG_FULL_PROMPT", "").strip() in ("1", "true", "yes")
 
@@ -152,6 +148,7 @@ def build_delegation_record(
     auto_merged_read_paths: list[str] | None = None,
     auto_merge_spec_read: bool | None = None,
     model_roles: dict[str, Any] | None = None,
+    context_refs: list[dict[str, Any]] | None = None,
 ) -> dict[str, Any]:
     session_dir_str = str(Path(session_dir).resolve())
     log_path_str = str(Path(log_path).resolve())
@@ -196,6 +193,7 @@ def build_delegation_record(
         },
         "timing": timing,
         "tokens": tokens,
+        "context_refs": context_refs if context_refs is not None else [],
     }
     if prompt_full is not None and should_log_full_prompt():
         record["context"]["prompt_full"] = prompt_full

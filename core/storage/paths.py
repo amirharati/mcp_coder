@@ -43,6 +43,11 @@ def delegation_rag_db_path(workspace: str | Path) -> Path:
     return project_dir(workspace) / "delegation_rag.db"
 
 
+def workspace_rag_db_path(workspace: str | Path) -> Path:
+    """Per-project workspace-file FTS5 index (D-P5-4 — sibling to delegation_rag.db)."""
+    return project_dir(workspace) / "workspace_rag.db"
+
+
 def project_json_path(workspace: str | Path) -> Path:
     return project_dir(workspace) / "project.json"
 

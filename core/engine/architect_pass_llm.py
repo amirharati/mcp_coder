@@ -181,19 +181,6 @@ def run_architect_pass_llm(
 
 
 def _extract_architect_tokens(model_obj: Any) -> dict[str, Any]:
-    for attr_total in ("total_tokens",):
-        if hasattr(model_obj, attr_total):
-            total = getattr(model_obj, attr_total)
-            if total is not None:
-                return {
-                    "input": getattr(model_obj, "tokens_sent", None),
-                    "output": getattr(model_obj, "tokens_received", None),
-                    "total": total,
-                    "source": "architect_pass",
-                }
-    return {
-        "input": None,
-        "output": None,
-        "total": None,
-        "source": "architect_pass",
-    }
+    from core.usage.litellm_tokens import extract_litellm_model_tokens
+
+    return extract_litellm_model_tokens(model_obj, role_source="architect_pass")

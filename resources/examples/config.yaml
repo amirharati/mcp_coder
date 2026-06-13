@@ -30,6 +30,12 @@ session_policy: always_new
 # Delegation keyword search index (rag_search MCP + post-delegate upsert; default: on)
 # rag_enabled: false
 
+# Phase 5 retrieval — compile-push RAG (defaults on since Phase 5 exit 2026-06-13)
+# builder_history_rag: false      # cross-spec delegation hits in builder + rag_retrieval
+# workspace_file_rag: false       # workspace_rag.db indexing + workspace_search
+# workspace_file_hints: false     # file summary hints in picker/builder (needs workspace_file_rag)
+# First-time: mcp-coder index-workspace --workspace .  (LLM cost per eligible file)
+
 # Review model for mode=review (overrides MCP_CODER_REVIEW_MODEL when both set)
 # review_model: openrouter/anthropic/claude-sonnet-4
 

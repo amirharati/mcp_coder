@@ -211,20 +211,6 @@ def run_context_builder_llm(
 
 
 def _extract_builder_tokens(model_obj: Any) -> dict[str, Any]:
-    """Best-effort token usage from the Model object; source=context_builder_llm."""
-    for attr_total in ("total_tokens",):
-        if hasattr(model_obj, attr_total):
-            total = getattr(model_obj, attr_total)
-            if total is not None:
-                return {
-                    "input": getattr(model_obj, "tokens_sent", None),
-                    "output": getattr(model_obj, "tokens_received", None),
-                    "total": total,
-                    "source": "context_builder_llm",
-                }
-    return {
-        "input": None,
-        "output": None,
-        "total": None,
-        "source": "context_builder_llm",
-    }
+    from core.usage.litellm_tokens import extract_litellm_model_tokens
+
+    return extract_litellm_model_tokens(model_obj, role_source="context_builder_llm")

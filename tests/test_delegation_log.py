@@ -66,6 +66,7 @@ def test_append_delegation_record(tmp_path, monkeypatch):
     assert parsed["host_kind"] is None
     assert parsed["host_session_id"] is None
     assert parsed["session_id"] == storage.mcp_session_id
+    assert parsed["context_refs"] == []
 
     pointer = tmp_path / "workspace" / ".mcp-coder" / "session.json"
     assert pointer.is_file()

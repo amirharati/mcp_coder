@@ -10,7 +10,7 @@
 
 This document is the **delivery plan**: what to build, in what order, and how we validate each step. Vision and rationale live in [IDEA.md](./IDEA.md) · doc map: [VISION_DOCS.md](./VISION_DOCS.md). Implementation happens in focused coding sessions once a phase (or sub-step) is agreed.
 
-**Status:** Phase 1 **complete** (P1-199). Phase 2 **complete** (P2-499). Phase 3 **complete** (P3-499). Phase 4 **complete** (2026-06-09). **Active:** Phase 5 — RAG + builder improvements ([PHASE4_MVP.md](./PHASE4_MVP.md) closed; open items → [BACKLOG.md](./BACKLOG.md) § Phase 4 exit).
+**Status:** Phase 1 **complete** (P1-199). Phase 2 **complete** (P2-499). Phase 3 **complete** (P3-499). Phase 4 **complete** (2026-06-09). Phase 5 **complete** (2026-06-13). Phase 6 **active** — planning locked 2026-06-13. **Active:** Phase 6 implementation.
 
 ---
 
@@ -48,9 +48,9 @@ This document is the **delivery plan**: what to build, in what order, and how we
 | **3** | **Workspace truth** + planner history + delegation RAG shipped (scope → Phase 5) | [PHASE3_MVP.md](./PHASE3_MVP.md); [WORKSPACE_HISTORY.md](./OTEHR_RELATED_IDEAS/WORKSPACE_HISTORY.md) |
 | **4** | **Context builder + manager** — smart assembly, cheap LLM file picker, janitor, verify, internal pipeline | [PHASE4_MVP.md](./PHASE4_MVP.md) **complete** 2026-06-09; carried gaps → BACKLOG § Phase 4 exit |
 | **4.5** | **Full stack onboarding** — Phases 1–4 tutorials, architecture docs, live inspection, gap analysis; no new arc number | [PHASE4.5_MVP.md](./PHASE4.5_MVP.md) **active** |
-| **5** | **RAG** (workspace-file summaries + delegation search) + **improve** builder/manager from Phase 4 learnings | [BACKLOG.md](./BACKLOG.md) BL-002 |
-| **5+** | **Reasoning trace reuse** + backend prompt control — capture, escalate, transfer intelligence, training flywheel *(placeholder; after Phase 5)* | BL-333, BL-334; [REASONING_TRACE_REUSE.md](./OTEHR_RELATED_IDEAS/REASONING_TRACE_REUSE.md) |
-| **6+** | Interactive/long-running sessions, multi-host, product UX, ensemble | BL-160, BL-201/202, BL-007, BL-152, BL-340 |
+| **5** | **RAG + retrieval integration** — retrieval contract, delegation RAG → builder, workspace-file corpus, RAG toolset (CLI+MCP) | [PHASE5_MVP.md](./PHASE5_MVP.md) **complete** 2026-06-13 |
+| **6** | **Observability substrate + reasoning buffer** — `core/observability/` adapter seam; live tokens; trace files; reasoning hot buffer; training opt-in (POC/MVP of AGENTIC_LOOP_LOGGING product) | [PHASE6_MVP.md](./PHASE6_MVP.md) **active** |
+| **6+** | Interactive/long-running sessions, supervised loop control, escalation hooks, multi-host, product UX, ensemble | BL-350, BL-354, BL-160, BL-201/202, BL-007, BL-152, BL-340 |
 
 **Principle (Phase 3+ attribution):** MCP reports `files_changed` from **delegation-scoped workspace manifest delta** — git-agnostic, backend-agnostic. User git is complementary; optional `git_tracked` metadata later (trivial).
 
@@ -614,22 +614,30 @@ Phase 1 uses only the executor (via Aider). Phase 2+ adds the context-builder **
 
 ---
 
-### Phase 5: RAG + context builder/manager improvements
+### Phase 5: RAG + retrieval integration *(closed 2026-06-13)*
 
-**Goal:** Now that Phase 4 reveals what retrieval the context builder actually needs, build the right RAG layer and improve builder/manager based on real learnings.
+**PM board:** [PHASE5_MVP.md](./PHASE5_MVP.md) (frozen) · **Issues:** [PHASE5_ISSUES.md](./PHASE5_ISSUES.md) (frozen) · **Design:** [notes/rag-gap-analysis.md](./notes/rag-gap-analysis.md)
 
-**Rationale:** Phase 4 will show which retrieval problems are real. Phase 5 answers them properly with the right corpus scope and architecture (see [BACKLOG.md](./BACKLOG.md) § BL-002 for design decisions).
+**Exit:** Recommended tier met (dogfood `712a04d9`, 5+5 `context_refs`). P5-001…P5-004 + P5-006 done. P5-005 deferred. RAG defaults **on**. Carried: BL-335, BL-364.
 
-| Theme | Backlog / intent |
-|-------|------------------|
-| **Workspace-file RAG** | BL-002 — hash + LLM summary per file + FTS5; `workspace_search` MCP tool |
-| **Delegation search at scale** | BL-002 — `core/rag/` delegation FTS5 already shipped; extend or revise based on Phase 4 use |
-| **Decision log / session memory** | BL-002 — structured exit notes → FTS (Phase 5+ if Phase 4 shows distillation gap) |
-| **Context builder improvements** | Tune file-picker prompts, tier decisions, and janitor based on Phase 4 evidence |
-| **Chunked / symbol-scoped edit files** | BL-331 — new executor edit format (symbol-scoped patches or two-pass locate+edit); needs Phase 4 token telemetry + executor format decision |
-| **Embeddings** | P3-002b — only if FTS5 recall proves insufficient |
+**Goal (archive):** Move the context builder from *recency + `rg`* toward *relevance retrieval* — delegation RAG + workspace-file summaries + RAG toolset (CLI + MCP).
 
-**Success:** Planner retrieves relevant files + past delegation outcomes in pre-delegate call without manual spec hints; delegation search used and validated in practice.
+**Rationale:** Phase 4 shipped the context builder pipeline. Phase 4.5 (literacy gate) confirmed what retrieval problems are real: (1) cross-spec delegation history ignored by builder; (2) fuzzy file recall misses concept-name mismatches. Phase 5 solves both with infra + wiring. Scope locked 2026-06-13.
+
+| Milestone | Status | What |
+|-----------|--------|------|
+| **P5-001** | done | `ContextRef` + `retrieve()`; BL-335 extractor (live tokens still BL-335) |
+| **P5-002** | done | `rag_retrieval` phase; `mcp-coder search delegations` |
+| **P5-003** | done | `workspace_rag.db`; `index-workspace`; `search files`; `workspace_search` MCP |
+| **P5-004** | done | Picker/builder file hints; merged `context_refs` |
+| **P5-006** | done | FTS fix (long tasks, hyphen tokens) |
+| **P5-005** | deferred | Recall metric; cost delta; embeddings go/no-go |
+
+**RAG toolset principle:** CLI tools (`mcp-coder search delegations`, `mcp-coder search files`) share implementation with MCP tools. `--format plain` output can be embedded directly in executor prompts — pre-shapes BL-354 (executor-pull) without mid-loop wiring.
+
+**Explicitly NOT Phase 5:** Chat distillation (BL-356), embeddings (measure first), executor-pull BL-354, cross-project RAG, full wire logging BL-353, workflow turns BL-359.
+
+**Success:** Builder pulls a relevant fact from a different spec’s prior delegation and a file the symbol scan would have missed — both visible in `context_refs` and reachable via CLI.
 
 ---
 
@@ -637,7 +645,7 @@ Phase 1 uses only the executor (via Aider). Phase 2+ adds the context-builder **
 
 **Goal (draft):** Capture hidden `reasoning_content` from LLM calls (today discarded by Aider) and turn delegation logs into a reusable intelligence layer — not just audit.
 
-**When to enter:** After Phase 5 RAG is running and Phase 4 builder/manager is stable. Prerequisite: reliable per-role token/usage telemetry (P4-ISS-014/015) so capture cost and quality are measurable.
+**When to enter:** Phase 5 RAG is running (2026-06-13). Phase 4 builder/manager stable. **Still open:** reliable per-role token telemetry (**BL-335**).
 
 **Three axes** ([REASONING_TRACE_REUSE.md](./OTEHR_RELATED_IDEAS/REASONING_TRACE_REUSE.md)):
 
@@ -712,8 +720,8 @@ Phase 3+:
 Phase 4+:
   + smart context builder / file picker / janitor / verify / internal pipeline
 
-Phase 5:
-  + workspace-file RAG + improve context builder from Phase 4 learnings
+Phase 5 (closed):
+  + delegation + workspace-file RAG wired into builder; RAG defaults on; FTS hardened
 
 Phase 5+ (placeholder):
   + reasoning trace capture (escalation, transfer intelligence, training flywheel)
@@ -737,5 +745,6 @@ Both projects can be developed in parallel. Phase 1 does not require the proxy o
 - [x] Phase 3 — **P3-311** read-deps auto-merge (D-P3-7); 412 pytest.
 - [x] Phase 3 exit — **P3-499** (2026-06-09); [PHASE3_MVP.md](./PHASE3_MVP.md) closed.
 - [x] Phase 4 complete — context builder + manager + pipeline (P4-499 exit 2026-06-09); [PHASE4_MVP.md](./PHASE4_MVP.md).
-- [ ] **Active:** Phase 4.5 — stack literacy gate; tutorials, inspect, gap analysis; [PHASE4.5_MVP.md](./PHASE4.5_MVP.md).
-- [ ] Phase 5 — RAG (BL-002) + builder improvements; after Phase 4.5 gap analysis lands.
+- [x] Phase 4.5 — stack literacy gate; tutorials, inspect, gap analysis; [PHASE4.5_MVP.md](./PHASE4.5_MVP.md).
+- [x] Phase 5 — RAG + retrieval (P5-001…P5-004, P5-006); recommended exit met 2026-06-13; [PHASE5_MVP.md](./PHASE5_MVP.md).
+- [ ] **Phase 6 — Active** — Observability substrate + reasoning buffer; planning locked 2026-06-13; [PHASE6_MVP.md](./PHASE6_MVP.md). Start: P6-001 (`core/observability/` adapter seam).

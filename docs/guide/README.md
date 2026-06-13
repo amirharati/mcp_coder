@@ -1,8 +1,8 @@
 # mcp-coder guide
 
-Onboarding, tutorials, and architecture reference for the mcp-coder stack (Phases 1–4).
+Onboarding, tutorials, and architecture reference for the mcp-coder stack (Phases 1–5).
 
-This folder is the output of **Phase 4.5** — written from actually running and reading the code, not from specs alone.
+This folder is the output of **Phase 4.5** literacy work, updated lightly after **Phase 5** (RAG wired into the builder). Written from running and reading the code, not from specs alone.
 
 ## Start here
 
@@ -34,7 +34,7 @@ T-04 = how context is compiled (tiers, picker, builder). T-06 = every step on a 
 
 | Document | Topic |
 |----------|-------|
-| [architecture/overview.md](./architecture/overview.md) | Layer map, locked decisions, delegation lifecycle, context compiler, helper LLMs, known gaps — **living** |
+| [architecture/overview.md](./architecture/overview.md) | Layer map, locked decisions, delegation lifecycle, context compiler, helper LLMs, known gaps — **living** (Phase 5 RAG synced 2026-06-13) |
 | [architecture/context-pipeline.md](./architecture/context-pipeline.md) | Picker → compiler tiers → builder LLM → Aider |
 | [architecture/storage-layout.md](./architecture/storage-layout.md) | `~/.mcp-coder`, `workspace_history.db`, JSONL schema |
 | [architecture/per-role-models.md](./architecture/per-role-models.md) | Model registry, role resolution, known gaps |
@@ -47,9 +47,8 @@ T-04 = how context is compiled (tiers, picker, builder). T-06 = every step on a 
 | [reference/mcp-tools.md](./reference/mcp-tools.md) | MCP tools — parameters, response fields, Cursor call rules |
 | [reference/cli.md](./reference/cli.md) | CLI subcommands — all flags, examples, env vars |
 
-## Gap analysis
+## Gap analysis & RAG design
 
 | Document | Topic |
 |----------|-------|
-| [gap-analysis.md](./gap-analysis.md) | Findings → Phase 5 planning input |
-| [../notes/rag-gap-analysis.md](../notes/rag-gap-analysis.md) | **Living** — RAG vs not-RAG, four corpora, observability coupling (T-04 pass) |
+| [../notes/rag-gap-analysis.md](../notes/rag-gap-analysis.md) | **Living** — corpora, litmus test, Phase 5 scope (shipped), open items (P5-005, BL-354) |

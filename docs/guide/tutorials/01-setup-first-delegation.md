@@ -51,7 +51,9 @@ mcp-coder setup           # shows workspace + model info (see §3)
 | `mcp-coder inspect-context` | Dry-run the context compiler — no backend call |
 | `mcp-coder view delegations` | Browser UI for `delegations.jsonl` (see T-02) |
 | `mcp-coder history` | Browse `workspace_history.db` |
-| `mcp-coder rag` | Search the delegation FTS5 index |
+| `mcp-coder rag` | Search delegation FTS5 index (legacy) |
+| `mcp-coder search` | `delegations` \| `files` search (Phase 5) |
+| `mcp-coder index-workspace` | Build workspace-file summary index (once per repo) |
 
 ---
 

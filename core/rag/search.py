@@ -42,18 +42,7 @@ def _recency_weight(timestamp_end: str | None) -> float:
     return 1.0 + 0.1 * math.exp(-days_ago / 30.0)
 
 
-def _fts_match_query(raw: str) -> str:
-    terms = [t for t in re.split(r"\s+", raw.strip()) if len(t) >= 2]
-    if not terms:
-        return ""
-    cleaned: list[str] = []
-    for term in terms:
-        safe = re.sub(r'["*()\-:]', "", term)
-        if safe:
-            cleaned.append(safe)
-    return " OR ".join(cleaned)
-
-
+from core.rag.fts import fts_match_query
 def _parse_files_changed(raw: str | None) -> list[str]:
     if not raw:
         return []
@@ -76,7 +65,7 @@ def rag_search(
         return []
 
     limit = max(1, min(limit, _MAX_LIMIT))
-    fts_q = _fts_match_query(q)
+    fts_q = fts_match_query(q)
     if not fts_q:
         return []
 

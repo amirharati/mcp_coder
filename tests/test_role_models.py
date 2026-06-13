@@ -165,6 +165,7 @@ def test_delegation_record_includes_model_roles():
         model_roles=roles,
     )
     assert record["model_roles"]["review"]["model"] == "openrouter/test/review"
+    assert record["context_refs"] == []
 
 
 TASK_SPEC = """---

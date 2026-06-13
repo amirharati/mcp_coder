@@ -120,6 +120,29 @@ def main() -> None:
         help="rag subcommand: search | index | stats",
     )
 
+    search_p = sub.add_parser(
+        "search",
+        help="Search indexed project context",
+    )
+    search_p.add_argument(
+        "search_args",
+        nargs=argparse.REMAINDER,
+        help="search subcommand: delegations | files",
+    )
+
+    index_ws_p = sub.add_parser(
+        "index-workspace",
+        help="Index workspace source files into workspace_rag.db (FTS5)",
+    )
+    index_ws_p.add_argument("--workspace", default=None, help="Repo root (default: cwd)")
+    index_ws_p.add_argument(
+        "--changed-only",
+        action="store_true",
+        help="Re-index only new/changed files",
+    )
+    index_ws_p.add_argument("--limit", type=int, default=None, help="Max files to index")
+    index_ws_p.add_argument("--json", action="store_true", help="JSON summary output")
+
     parser.add_argument(
         "--mcp",
         action="store_true",
@@ -192,6 +215,28 @@ def main() -> None:
         if rag_argv and rag_argv[0] == "--":
             rag_argv = rag_argv[1:]
         raise SystemExit(main_rag(rag_argv))
+
+    if args.command == "search":
+        from core.cli.search import main_search
+
+        search_argv = args.search_args or []
+        if search_argv and search_argv[0] == "--":
+            search_argv = search_argv[1:]
+        raise SystemExit(main_search(search_argv))
+
+    if args.command == "index-workspace":
+        from core.cli.index_workspace import main_index_workspace
+
+        index_argv: list[str] = []
+        if args.workspace:
+            index_argv.extend(["--workspace", args.workspace])
+        if args.changed_only:
+            index_argv.append("--changed-only")
+        if args.limit is not None:
+            index_argv.extend(["--limit", str(args.limit)])
+        if args.json:
+            index_argv.append("--json")
+        raise SystemExit(main_index_workspace(index_argv))
 
     # Bare invocation from an interactive terminal: the stdio server would just
     # sit waiting for JSON-RPC on stdin (looks like a hang). Cursor runs us with

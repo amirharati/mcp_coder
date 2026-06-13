@@ -15,6 +15,7 @@ from core.usage.role_audit import build_role_usage_record
 if TYPE_CHECKING:
     from core.context.file_picker import CandidateFilesResult
     from core.context.package import ContextPackage
+    from core.rag.retrieval import ContextRef
 
 BUILDER_BRIEF_HEADER = "## Builder brief"
 
@@ -53,6 +54,7 @@ def apply_builder_llm(
     timing: dict[str, int | float] | None = None,
     delegation_id: str | None = None,
     log_warn: LogWarnFn | None = None,
+    rag_refs: list["ContextRef"] | None = None,
 ) -> tuple[ContextPackage, bool, str | None, dict[str, Any] | None]:
     """Run the cheap-LLM brief pass; fall back to the mechanical brief on failure.
 
@@ -77,6 +79,7 @@ def apply_builder_llm(
         context_summary=context_summary,
         task=task,
         budget_tokens=budget_tokens,
+        rag_refs=rag_refs,
     )
 
     llm_result = run_context_builder_llm(prompt, workspace_path=workspace)

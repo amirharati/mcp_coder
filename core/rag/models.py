@@ -5,6 +5,36 @@ from typing import Any
 
 
 @dataclass
+class WorkspaceFileIndexRow:
+    path: str
+    sha256: str
+    llm_summary: str | None
+    symbol_list: str | None
+    searchable_text: str
+    indexed_at: str
+
+
+@dataclass
+class WorkspaceFileHit:
+    path: str
+    score: float
+    sha256: str | None
+    llm_summary: str | None
+    symbol_list: str | None
+    indexed_at: str | None
+
+    def to_dict(self) -> dict[str, Any]:
+        return {
+            "path": self.path,
+            "score": round(self.score, 4),
+            "sha256": self.sha256,
+            "llm_summary": self.llm_summary,
+            "symbol_list": self.symbol_list,
+            "indexed_at": self.indexed_at,
+        }
+
+
+@dataclass
 class DelegationIndexRow:
     delegation_id: str
     workspace_path: str

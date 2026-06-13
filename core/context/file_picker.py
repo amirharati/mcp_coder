@@ -44,6 +44,7 @@ SOURCE_SPEC_EDIT = "spec_edit"
 SOURCE_SPEC_READ = "spec_read"
 SOURCE_HINT = "hint"
 SOURCE_SYMBOL_SCAN = "symbol_scan"
+SOURCE_WORKSPACE_RAG = "workspace_rag"
 
 
 @dataclass
@@ -58,12 +59,18 @@ class CandidateFilesResult:
 
     def to_audit_dict(self) -> dict[str, list[str]]:
         """Compact summary for metadata / JSONL (no payloads)."""
-        return {
+        data: dict[str, list[str]] = {
             "ranked_paths": self.ranked_paths,
             "discovered_read": self.discovered_read,
             "suggested_edit_paths": self.suggested_edit_paths,
             "symbol_queries": self.symbol_queries,
         }
+        workspace_rag = [
+            p for p, src in self.path_sources.items() if src == SOURCE_WORKSPACE_RAG
+        ]
+        if workspace_rag:
+            data["workspace_rag_paths"] = sorted(workspace_rag)
+        return data
 
 
 def max_discovered_paths() -> int:
@@ -207,6 +214,7 @@ def pick_candidate_files(
     spec_text: str | None,
     policies: DelegationPolicies,
     target_files: list[str],
+    workspace_rag_paths: list[str] | None = None,
 ) -> CandidateFilesResult:
     """Rank candidate files: spec contract → planner hints → symbol discoveries.
 
@@ -238,17 +246,27 @@ def pick_candidate_files(
     for p in hint_paths:
         path_sources.setdefault(p, SOURCE_HINT)
 
+    edit_set = set(edit_paths)
+    workspace_rag_filtered: list[str] = []
+    for raw in workspace_rag_paths or []:
+        norm = normalize_repo_path(raw)
+        if not norm or norm in contract or norm in edit_set:
+            continue
+        if norm not in workspace_rag_filtered:
+            workspace_rag_filtered.append(norm)
+            path_sources[norm] = SOURCE_WORKSPACE_RAG
+
     discover = policies.edit_scope == EDIT_SCOPE_DISCOVER
     symbol_queries: list[str] = []
     discovered_read: list[str] = []
     suggested_edit_paths: list[str] = []
 
     if discover:
+        discovered_set: set[str] = set(workspace_rag_filtered)
         symbol_queries = extract_symbol_queries(task, spec_text)
-        known = contract | set(hint_paths)
+        known = contract | set(hint_paths) | set(workspace_rag_filtered)
         hits_by_symbol = scan_symbols(workspace, symbol_queries)
         cap = max_discovered_paths()
-        discovered_set: set[str] = set()
         for symbol in symbol_queries:
             for hit in hits_by_symbol.get(symbol, []):
                 if hit in known or hit in discovered_set:
@@ -256,23 +274,31 @@ def pick_candidate_files(
                 if len(discovered_set) >= cap:
                     break
                 discovered_set.add(hit)
-        discovered_read = sorted(discovered_set)
-        for p in discovered_read:
-            path_sources.setdefault(p, SOURCE_SYMBOL_SCAN)
+                path_sources.setdefault(hit, SOURCE_SYMBOL_SCAN)
+        # Workspace RAG paths first, then symbol discoveries (stable order).
+        discovered_read = workspace_rag_filtered + sorted(
+            discovered_set - set(workspace_rag_filtered)
+        )
 
         edit_dirs = _edit_dirs(edit_paths)
         suggested_edit_paths = sorted(
             p
             for p in discovered_read
-            if str(Path(p).parent.as_posix()) in edit_dirs
+            if p not in workspace_rag_filtered
+            and str(Path(p).parent.as_posix()) in edit_dirs
         )
+    else:
+        for p in workspace_rag_filtered:
+            if p not in read_paths_spec and p not in hint_paths:
+                read_paths_spec.append(p)
 
     ranked: list[str] = []
     for bucket in (
         sorted(edit_paths),
         sorted(set(read_paths_spec) - set(edit_paths)),
         hint_paths,
-        discovered_read,
+        workspace_rag_filtered,
+        [p for p in discovered_read if p not in workspace_rag_filtered],
     ):
         for p in bucket:
             if p not in ranked:
@@ -281,7 +307,9 @@ def pick_candidate_files(
     return CandidateFilesResult(
         ranked_paths=ranked,
         edit_paths=sorted(edit_paths),
-        read_paths=sorted(set(read_paths_spec) | set(hint_paths) | set(discovered_read)),
+        read_paths=sorted(
+            set(read_paths_spec) | set(hint_paths) | set(discovered_read) | set(workspace_rag_filtered)
+        ),
         discovered_read=discovered_read,
         suggested_edit_paths=suggested_edit_paths,
         symbol_queries=symbol_queries,

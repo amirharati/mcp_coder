@@ -2,7 +2,7 @@
 
 **Purpose:** Read this first. Explains what every directory and module does so you can find your way around the codebase without loading the whole thing into your head.
 
-**Last updated:** 2026-06-10 (reflects Phases 1–4, post Phase 4.5 onboarding)
+**Last updated:** 2026-06-13 (reflects Phases 1–5)
 
 ---
 
@@ -27,7 +27,7 @@ mcp_coder/
     host/                 Host adapter (Cursor paths, transcript, rules sync)
     logging/              Delegation JSONL writer + reader, server log
     pipeline/             Phase recorder (P4-020: delegation_pipeline audit)
-    rag/                  Delegation FTS5 index + search (shipped P3, usage deferred)
+    rag/                  Delegation + workspace-file FTS5; builder retrieval (Phase 5)
     server/               MCP singleton (process-level server instance)
     session/              Session store, policy, executor cache
     specs/                Spec reading, contract enforcement, outcome labelling
@@ -82,12 +82,14 @@ CLI subcommands (see `core/cli/` table below for implementations):
 | `mcp-coder delegate` | Full delegation pipeline (or `--stop-after context` for prepare-only); structured `artifacts` + `caller_response` |
 | `mcp-coder view delegations` | Delegation log browser UI (`delegations.jsonl`; default cwd workspace) |
 | `mcp-coder history` | Browse `workspace_history.db` (list, diff, revert) |
-| `mcp-coder rag` | Delegation FTS5 search / index |
+| `mcp-coder rag` | Delegation FTS5 search / index (legacy; prefer `search delegations`) |
+| `mcp-coder search` | `delegations` \| `files` keyword search |
+| `mcp-coder index-workspace` | Build / refresh `workspace_rag.db` summaries |
 
 ### `server/mcp_server.py` — the hub (~1750 lines)
 
 This is the largest file and the place everything connects. It:
-- Registers MCP tools (`delegate_to_agent`, `inspect_context`, `list_delegations`, `get_delegation_diff`, `get_checkpoint_detail`, `get_file_history`, `rag_search`)
+- Registers MCP tools (`delegate_to_agent`, `inspect_context`, `list_delegations`, `get_delegation_diff`, `get_checkpoint_detail`, `get_file_history`, `rag_search`, `workspace_search`)
 - Runs the delegation pipeline on each `delegate_to_agent` call
 - Calls into `core/` for all the actual work
 
@@ -105,7 +107,9 @@ This is the largest file and the place everything connects. It:
 | `delegate.py` | `mcp-coder delegate` | Run delegate pipeline; `--stop-after context` for pre-executor artifacts |
 | `history.py` | `mcp-coder history` | Browse `workspace_history.db` (list, diff, revert) |
 | `view_delegations.py` | `mcp-coder view delegations` | Serve `tools/delegation_viewer.html` for cwd workspace or one JSONL file |
-| `rag.py` | `mcp-coder rag` | Search / index the delegation FTS5 RAG index |
+| `rag.py` | `mcp-coder rag` | Legacy delegation search / index |
+| `search.py` | `mcp-coder search` | Unified `delegations` / `files` search |
+| `index_workspace.py` | `mcp-coder index-workspace` | Workspace-file summary indexer |
 
 ---
 
@@ -126,7 +130,7 @@ Everything that reads `.mcp-coder/config.yaml` or environment variables.
 | `aider_runtime.py` | Aider-specific config (headless URL policy, `infer_run_success`, delegation I/O) |
 | `openrouter_models.py` | OpenRouter-specific defaults |
 | `env.py` | Shared env-reading helpers |
-| `rag.py` | RAG feature flags (unused in pipeline; Phase 5) |
+| `rag.py` | RAG feature flags — `rag_enabled`, `builder_history_rag`, `workspace_file_rag`, `workspace_file_hints` (defaults on) |
 
 **Pattern:** every flag follows the same precedence: env var → yaml key → hardcoded default.
 
@@ -264,16 +268,20 @@ The heart of the system. Builds the prompt Aider sees.
 | `aider_tokens.py` | Extract token counts from Aider `Coder` post-run (currently returns `None` — BL-335) |
 | `policy.py` | Usage policy helpers |
 
-### `core/rag/` — delegation search (Phase 3, usage deferred)
+### `core/rag/` — retrieval (Phase 3 index + Phase 5 builder wiring)
 
 | Module | What it does |
 |--------|-------------|
 | `db.py` | `delegation_rag.db` SQLite FTS5 schema |
 | `index.py` | Index a delegation into FTS5 |
-| `search.py` | `rag_search()` — FTS5 full-text search over past delegations |
-| `models.py` | Data models |
+| `search.py` | `rag_search()` — delegation FTS5 search |
+| `retrieval.py` | `ContextRef`, `retrieve()`, `context_refs_to_dict()` — shared contract |
+| `builder_retrieval.py` | `rag_retrieval` pipeline phase; merged delegation + file hits |
+| `workspace_search.py` | `workspace_search()` over `workspace_rag.db` |
+| `workspace_index.py` | Per-file LLM summary indexer (`index-workspace`) |
+| `fts.py` | Query tokenization (stopwords, term cap, hyphen split) |
 
-**Status:** Code ships; `rag_search` MCP tool is registered. The index is populated on each delegation. But the search results are **not fed back into the pipeline** — they're available for the planner to call manually. Active integration is Phase 5.
+**Status:** Delegation index auto-updates each delegate. Workspace-file index: `index-workspace` + incremental on `files_changed`. Builder consumes both by default (`rag_retrieval` phase → `## Relevant prior work` + JSONL `context_refs[]`). Planner tools: `rag_search`, `workspace_search`, CLI `search`.
 
 ---
 

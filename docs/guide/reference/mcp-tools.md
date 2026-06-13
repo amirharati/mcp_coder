@@ -17,6 +17,7 @@
 | [`get_file_history`](#get_file_history) | History | No | Per-file timeline |
 | [`get_delegation_diff`](#get_delegation_diff) | History | No | Unified diffs |
 | [`rag_search`](#rag_search) | Search | No | Ranked past delegations |
+| [`workspace_search`](#workspace_search) | Search | No | Ranked workspace-file summaries |
 
 ---
 
@@ -76,6 +77,7 @@
 | `auto_merged_read_paths` | `list[str]` | Read paths auto-added from spec `files_read` |
 | `suggested_edit_paths` | `list[str]` | Symbol-scan hits in edit dirs (audit hint, not in contract) |
 | `model_roles` | `dict` | Per-role model + token counts (tokens often `null` — BL-335) |
+| `context_refs` | `list` | RAG retrieval hits (delegation + workspace-file) when `rag_retrieval` ran |
 | `usage` | `dict` | Token estimate + preflight info |
 | `verify_result` | `dict` | `auto_verify` outcome (command, exit_code, passed) |
 | `error_class` / `error_message` | `str` | Structured error info on failure |
@@ -87,10 +89,11 @@
 - Spec report appended to `.mcp-coder/specs/reports/<spec-name>-report.md`
 - Workspace history row + checkpoint in `workspace_history.db`
 - Delegation indexed in `delegation_rag.db` (FTS5)
+- Changed files incrementally re-indexed in `workspace_rag.db` when `workspace_file_rag` is on
 
 ### When spec_validation blocks
 
-If `spec_validation: true` in config and the LLM finds real ambiguity: `success: false`, `outcome: needs_input`, `clarification_needed: [...]` — executor never runs, no files changed.
+If `spec_validation: true` in config and the LLM finds real ambiguity: `success: false`, `outcome: needs_input`, `clarification_needed: [...]` — executor never runs, no files changed. **Pipeline stops before `rag_retrieval`** — `context_refs` stays empty (by design; see BL-364).
 
 ---
 
@@ -122,6 +125,7 @@ Dry-run context compiler. Builds the `ContextPackage` that *would* be sent to th
 | `adapter_preview.prompt_chars` / `prompt_tokens_est` | Prompt size estimate |
 | `adapter_preview.prompt` | Full executor prompt (only if `include_prompt: true`) |
 | `auto_merged_read_paths` | Read paths auto-added from spec |
+| `context_refs` | RAG hits when `rag_retrieval` ran (inspect dry-run mirrors delegate) |
 | `contract_warnings` | Spec contract issues |
 
 **Note:** `inspect_context` (MCP) does not run helper LLMs. Use `mcp-coder inspect-context --run-builder-llm` from CLI to opt into helper phases.
@@ -208,7 +212,27 @@ Keyword search over indexed past delegations (FTS5 over `delegation_rag.db`).
 
 Ranked list with `delegation_id`, `score`, `spec_path`, `outcome`, `checkpoint_summary`. Pair with `get_delegation_diff` for the full diff.
 
-**Note:** RAG search is available to the planner. It is **not yet wired into the context compiler** (builder history). That is Phase 5 — BL-002.
+Also available via `mcp-coder search delegations` CLI (`--format plain` for executor snippets).
+
+---
+
+## `workspace_search`
+
+Keyword search over indexed workspace-file summaries (`workspace_rag.db`).
+
+### Parameters
+
+| Param | Type | Default | Notes |
+|-------|------|---------|-------|
+| `query` | `str` | — | Free text — searches file paths + summary text |
+| `limit` | `int` | 5 | Max hits |
+| `workspace_path` | `str` | — | Optional |
+
+### Response
+
+Ranked list with `path`, `score`, `snippet` (summary excerpt). Requires `mcp-coder index-workspace` (or a prior delegate that indexed changed files). Parity: `mcp-coder search files` CLI.
+
+**Builder integration:** When `workspace_file_hints` is on (default), hits feed the picker and appear in `## Relevant prior work` + `context_refs[]`.
 
 ---
 
@@ -219,7 +243,7 @@ Cursor's agent reads `use-mcp-coder.mdc` (synced by `mcp-coder setup`) which ins
 - `delegate_to_agent` when user asks to build / create / change files — with `spec_path` when a step spec exists.
 - `inspect_context` before delegating when scope or read-deps are uncertain.
 - History tools (`list_delegations`, `get_file_history`, etc.) when user asks "what changed?", "what did the last step do?", or to inform the next `context_summary`.
-- `rag_search` when the user asks about prior work on a spec or topic.
+- `rag_search` / `workspace_search` when the user asks about prior work, a topic, or "where is X implemented?" — or to sanity-check what the builder will retrieve.
 
 ---
 
@@ -227,4 +251,5 @@ Cursor's agent reads `use-mcp-coder.mdc` (synced by `mcp-coder setup`) which ins
 
 | Date | Change |
 |------|--------|
+| 2026-06-13 | Phase 5 — `workspace_search`, `context_refs`; builder RAG wired; validation-block note |
 | 2026-06-12 | Initial version — all 7 tools, parameter tables, response fields, Cursor call rules |

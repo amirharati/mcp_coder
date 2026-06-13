@@ -19,7 +19,7 @@ Status: `idea` | `deferred` | `blocked` | `done`
 | ID | Item | Target | Notes |
 |----|------|--------|-------|
 | BL-001 | Owned context pipeline (summarize, rank, trim) | Phase 2 | Phase 1 is pass-through only |
-| BL-002 | RAG / cross-session memory (`rag_search`, SQLite) | **Phase 5** | Delegation RAG shipped (P3-002-lite); workspace-file RAG + usage → Phase 5 (after Phase 4 context builder reveals real retrieval needs); see § BL-002 |
+| BL-002 | RAG / cross-session memory (`rag_search`, SQLite) | **Phase 5 done** (compile-push) | P5-001…P5-006 shipped; defaults on. Remaining gaps → BL-354, BL-356–357, **BL-365–366**. See § BL-002 |
 | BL-003 | Router / janitor LLM inside mcp-coder | Phase 2+ | Cheap orchestrator pattern |
 | BL-005 | Dual-mode CLI (`mcp-coder run …`) | Phase 2+ | Same core as MCP; after context system useful |
 | BL-006 | Context janitor, critic, test-writer sub-agents | Phase 4 | Composable one-shots |
@@ -125,6 +125,8 @@ Phase 1 deferred executor conversation carry-over to here (BL-155); see P1-130 `
 
 **Status:** `done` — **P4-009** (2026-06-09). Opt-in `spec_validation`; `clarification_needed` blocks executor; rules v14.
 
+**Phase 5 dogfood note (P5-ISS-004):** When validation blocks (`needs_input`), the compile pipeline — including `rag_retrieval` — does not run; `context_refs` stays empty. This is **expected** but easy to misread as a RAG regression. Session `1432fc02-c6b1-4452-aa28-261ce77f896b` entries #2–#4 (`expensesplit-p5-dogfood-v2/v3`, SEARCH/REPLACE-style host tasks). Optional: log `rag_retrieval: skipped (spec_validation_blocked)` in `delegation_pipeline` for blocked delegates (BL-353 observability).
+
 **Goal:** Before delegating, the context builder reads the host session transcript and checks whether the spec is well-aligned with the current conversation. If ambiguous or contradictory, return a `clarification_needed` list to Cursor instead of delegating — forcing the host to answer before retrying.
 
 **Mechanism:**
@@ -171,13 +173,63 @@ Phase 1 deferred executor conversation carry-over to here (BL-155); see P1-130 `
 | BL-350 | **Supervised executor loop — inspect mid-run, inject context, capture thinking** | Today: one `coder.run(prompt)` black box; context fixed at start; post-hoc gateway only. **Later:** three implementation routes (see § BL-350) — outer mcp-coder loop (preferred), stream-and-react early stop, or Aider `Coder` subclass / owned run loop (fragile). Enables dynamic context (file Z, RAG, BL-348/349), per-step audit in `delegation_pipeline`, and **reasoning/thinking token capture** (BL-333, BL-335). High ROI; composes BL-161/160a. **Phase 5+**. From P4.5-ISS-013. |
 | BL-351 | **Simulated interactive + escalate to host (Cursor human intervention)** | Today: `InputOutput(yes=True)` auto-approves all Aider prompts (blind); “add files to chat” → implement failure; no structured handoff back to Cursor mid-delegate. **Later:** supervisor answers executor prompts via **cheap LLM + rules** (add read / expand spec / continue) instead of blind yes; when uncertain → **pause delegation** and return `needs_input` / `clarification_needed` to **Cursor planner** for human decision, then resume (BL-350 outer loop or custom IO). High leverage for scope expansion + trust. **Phase 5+**. From P4.5-ISS-014. |
 | BL-352 | **Multi-language symbol scan + outlines (C/C++, Go, Rust, …)** | Today: symbol scan hardcoded to 9 extensions (`SCAN_EXTENSIONS` in `file_picker.py`); repo-map/excerpt regex is Python `def`/`class` only — C/C++/Go/Rust/Java/etc. work via **spec contract** but not **auto-discovery** or useful outlines. **Later:** expand/configurable scan globs; per-language outline heuristics (or tie to BL-348 index); goal = “works for money cases” on polyglot/monorepo repos without hand-listing every path. **Phase 5+**. From P4.5-ISS-015. |
-| BL-353 | **LLM boundary observability — full pass-through logging** | Backend-neutral tap on every LLM send/receive (all roles + executor multi-turn); correlate with compile + disk audit. **High ROI** for gap-finding, RAG/context direction, eval/training. **Phase 6 (TBD)** — see § BL-353; foundation tokens (**BL-335**) may start Phase 5. From T-04 tutorial pass (2026-06-11). |
+| BL-353 | **LLM boundary observability — full pass-through logging** | Backend-neutral tap on every LLM send/receive (all roles + executor multi-turn); correlate with compile + disk audit. **High ROI** for gap-finding, RAG/context direction, eval/training. **Phase 6 — P6-002/P6-003** (LiteLLM callback + trace files); foundation tokens (**BL-335** = P6-002). From T-04 tutorial pass (2026-06-11). |
 | BL-354 | **Executor context tools (pull) — RAG/history/read during backend loop** | **Dual model:** keep **compile-push (A)** as default; **also** expose read-only mcp-coder tools inside the executor loop (Aider today ignores planner MCP). LLM-driven `rag_search`, `workspace_search`, history, excerpts beside edit tools. **Phase 5+** (pairs with BL-002 usage); see § BL-354. From T-04 pass (2026-06-11). |
 | BL-355 | **Optional host CLI toolchain — `rg`, docs, `mcp-coder doctor`** | Today: **ripgrep** optional (Python fallback in file picker); **git** soft-required for diffs/snapshots; tutorials use **jq** / **grep** for inspection. **Later:** curated optional-deps list, `setup`/`doctor` hints (`brew install ripgrep`), perf notes when fallback is used. **Phase 5+** DX; see § BL-355. From T-04 playground (2026-06-11). |
 | BL-356 | **RAG-backed context audit refs — lean JSONL + digest provenance** | As **BL-002** indexes digests (chat, delegations, workspace files), stop duplicating bodies in `delegations.jsonl`; store `context_refs[]` + hashes; index-time metadata for replay/retrieval. Pairs with **BL-353** wire log. **Phase 5+** (after RAG corpus); see § BL-356. From T-04 observability pass (2026-06-11). |
 | BL-357 | **Storage lifecycle — promote, prune, gc (logs + RAG + traces)** | `~/.mcp-coder` grows without bound (JSONL, traces, RAG DBs, checkpoints, blobs). **Later:** per-layer TTL, promote-then-prune, `mcp-coder maintenance` / gc, archive, global dedupe. Cross-cutting — not RAG-only. **Phase 6+** (after BL-356 lean refs + some RAG corpora); see § BL-357. From RAG planning (2026-06-12). |
 | BL-358 | **Post-executor polish pass — reviewer model (comments, tests, alignment)** | After Aider succeeds: optional **cheap / large-context** model reads changed files + module neighbors; adds comments, tests, style alignment, **non-logic** micro-refactors. Distinct from critic redo (BL-006) and `auto_verify`. **Phase 5+**; see § BL-358. Sub-mode of **BL-359**. From planning (2026-06-12). |
 | BL-359 | **Workflow turns — refactor, document, digest cadence** | Beyond `implement`/`review`: special turns (refactor, document, onboard/digest) + **when** to run (epic boundary, user, semi-auto suggest). Host rules + planner policy. **Phase 5+**; see § BL-359 + [workflow-turns.md](./notes/workflow-turns.md). From planning (2026-06-12). |
+| BL-360 | **Code layout refactor — instance sub-folders, file size audit** | `core/engine/` and `core/host/` mix abstract factories with concrete implementations in flat folders. Later: `core/engine/backends/aider/`, `core/host/hosts/cursor/`; audit + split files > ~400 lines (`server/mcp_server.py` ~1750 today). Pure structural; **no behavior change**. **Phase 5+**. From P4.5-ISS-001. |
+| BL-361 | **"One step at a time" / always-review-before-implement delegate mode** | Today: fully automatic implement flow; `inspect-context` + `mode=review` cover manual pause. Later: small config flag for `review_before_implement: true` (always run `mode=review` then confirm before `implement`) or pipeline `pause_after: [file_picker]` style hook for step-by-step inspection without rewriting the whole pipeline. **Phase 5+**. From P4.5-ISS-004. |
+| BL-362 | **T-06 + T-07 tutorials — delegation pipeline + end-to-end trace** | T-06 (delegation pipeline full tutorial) exists as skeleton; T-07 (pick a real delegation\_id and trace it JSONL → brief → Aider output) not started. Complete when time allows; not required for Phase 5. From Phase 4.5 deferred. |
+| BL-363 | **Architecture sub-pages + guide depth** | `overview.md` + light Phase 5 guide sync done (2026-06-13); four sub-pages pending (context-pipeline, storage-layout, per-role-models, reality-vs-spec). From Phase 4.5 deferred. |
+| BL-364 | **Blocked-delegate pipeline skip reasons in JSONL** | **P5-ISS-004** — `spec_validation` block → no `rag_retrieval` / empty `context_refs` (by design; confusing in logs). Log skip reason on blocked delegates. **Phase 5+** / BL-353-5a. Repro: session `1432fc02…` #2–#4. |
+| BL-365 | **RAG toolset DX — unified CLI + workspace index stats** | Phase 5 core search/index **shipped**; polish when we care: deprecate/consolidate `mcp-coder rag` vs `search delegations`; symmetric `workspace_rag` stats (today only `rag stats` + `index-workspace` row_count); optional MCP `index_workspace` if planners need it. See § BL-365. **Phase 5+** DX. |
+| BL-366 | **RAG retrieval evaluation (P5-005 capstone)** | Recall metric on dogfood tasks; builder token/cost delta with RAG on vs off; embeddings go/no-go vs FTS5. Deferred at Phase 5 exit. See § BL-366. **Phase 5+** / Phase 6. |
+
+### BL-365: RAG toolset DX — unified CLI + workspace index stats
+
+**Status:** `deferred` — 2026-06-13. Phase 5 **minimum toolset shipped** (P5-002/P5-003); this item tracks **cosmetic / operator** gaps only — not missing core RAG.
+
+**Shipped (do not re-track):**
+
+| Capability | CLI | MCP |
+|------------|-----|-----|
+| Search delegations | `mcp-coder search delegations` (+ legacy `rag search`) | `rag_search` |
+| Search workspace files | `mcp-coder search files` | `workspace_search` |
+| Index delegations | `mcp-coder rag index` (backfill) | auto each delegate |
+| Index workspace files | `mcp-coder index-workspace` | — (CLI only) |
+| Builder auto-retrieval | inside `delegate` / `inspect-context` | `delegate_to_agent` |
+
+**Gaps (pull when DX matters):**
+
+1. **Legacy duplicate** — `mcp-coder rag {search,index,stats}` vs `mcp-coder search delegations`; same backend. Consolidate or document deprecation path.
+2. **Asymmetric stats** — `rag stats` for `delegation_rag.db` only; no `workspace_rag.db` stats command (only `row_count` in `index-workspace` output).
+3. **Index MCP parity** — workspace indexing is CLI-only; add `index_workspace` MCP only if planner workflows need it (dogfood has not required it).
+4. **Guide** — [docs/guide/reference/cli.md](./guide/reference/cli.md) synced 2026-06-13; dedicated RAG tutorial walkthrough still optional (**BL-362** adjacency).
+
+**Related:** **BL-002**, **BL-355** (doctor could report RAG DB health), **BL-357** (gc).
+
+---
+
+### BL-366: RAG retrieval evaluation (P5-005 capstone)
+
+**Status:** `deferred` — 2026-06-13. Optional Phase 5 milestone; recommended exit met without it.
+
+**Goal:** Evidence-based decision on whether FTS5 retrieval is enough and whether RAG default-on is worth the token cost.
+
+| Slice | What |
+|-------|------|
+| **Recall metric** | Fixed task set (e.g. expensesplit dogfood): did builder retrieve expected delegation + file hits? |
+| **Cost delta** | Same tasks with RAG flags on vs off — `prompt_tokens_est`, helper tokens, `context_refs` count |
+| **Embeddings go/no-go** | If FTS misses are systematic, prototype vector search on one corpus; else stay FTS5 |
+
+**Depends on:** **BL-335** (per-role tokens for cost comparison), dogfood workspace fixtures.
+
+**Related:** **BL-002**, **BL-347** (adaptive policies), [PHASE5_MVP.md](./PHASE5_MVP.md) P5-005.
+
+---
 
 ### BL-350: Supervised executor loop (mid-run inspect + context inject)
 
@@ -256,7 +308,7 @@ Phase 1 deferred executor conversation carry-over to here (BL-155); see P1-130 `
 
 **Status:** `idea` — 2026-06-11; **expanded** 2026-06-11 (T-04 full-delegate audit gaps — helper inputs, transcript line provenance, compile bundle, RAG transition).
 
-**Target phase:** **Phase 6 (TBD)** umbrella; **Phase 5 early slices** below are prerequisites for RAG dogfood and cost audit (**BL-335**, **BL-002**).
+**Target phase:** **Phase 6 — P6-002/P6-003** umbrella; **BL-335** (tokens) = P6-002 first; trace files = P6-003.
 
 **Problem:** Today we audit **intent** more than **reality**. A full `delegate_to_agent` / `mcp-coder delegate` run appends one `delegations.jsonl` row — but most **wire traffic** is missing or only inferable.
 
@@ -805,10 +857,27 @@ By design today: `project_key` = SHA-256(resolved path).
 
 ### BL-002: RAG / cross-session memory
 
-**Status:** `partial` — **delegation RAG shipped** (P3-002-lite, 2026-06-09); workspace-file RAG + usage decisions → **Phase 5**.  
-**Living analysis:** [notes/rag-gap-analysis.md](./notes/rag-gap-analysis.md) — RAG vs not-RAG gaps, four corpora, sequencing (update as we dogfood).  
-**Code in place:** `core/rag/` (db.py, index.py, search.py, models.py), `core/config/rag.py`, `core/cli/rag.py`; 431 pytest. Enabled by default; opt-out via `rag_enabled: false`.  
-**Phase 5 (after Phase 4 context builder):** Phase 4 will reveal which retrieval problems are real and what query shapes the builder needs. Phase 5 then designs + builds the right RAG layer (workspace-file summaries primary; delegation search revise/extend based on actual use; embeddings only if FTS recall proves insufficient).
+**Status:** `partial` — **Phase 5 compile-push slice done** (2026-06-13). Milestones P5-001…P5-004 + P5-006 dogfood fix; optional P5-005 capstone deferred.
+**Delegation RAG:** indexed post-delegate (Phase 3); wired into builder + `rag_retrieval` (P5-002).
+**Workspace-file RAG:** `workspace_rag.db`, `index-workspace`, `search files`, picker/builder hints (P5-003…P5-004).
+**Defaults:** `builder_history_rag`, `workspace_file_rag`, `workspace_file_hints` → **on** (opt-out via yaml/env).
+**Living design note:** [notes/rag-gap-analysis.md](./notes/rag-gap-analysis.md)
+**Code:** `core/rag/`, `core/config/rag.py`, `core/cli/search.py`, `core/cli/index_workspace.py`
+
+**Still open (Phase 5+):** see table below — corpora, integration modes, DX polish, measurement. **Not** “RAG missing from CLI” (core toolset shipped).
+
+| Gap | Backlog | Notes |
+|-----|---------|-------|
+| Executor-pull (RAG mid Aider loop) | **BL-354** | Compile-push default; planner MCP exists, executor cannot call |
+| Chat / decision-log corpora | **BL-356**, corpus table below | Raw chat skipped; curated digests |
+| Lean JSONL / digest provenance | **BL-356** | `context_refs[]` partial shipped P5-001 |
+| Cross-project RAG | **BL-002** | Single workspace scope today |
+| Storage gc / maintenance | **BL-357** | No `mcp-coder maintenance` |
+| Richer code intel (AST, deps) | **BL-348** | Beyond file-summary RAG |
+| CLI/MCP DX polish | **BL-365** | Legacy `rag` vs `search`; workspace stats |
+| Recall / cost / embeddings | **BL-366** (P5-005) | Deferred capstone |
+| Live token audit | **BL-335** | Blocks cost comparison |
+| Validation-block observability | **BL-364** | Empty `context_refs` confusing |
 
 #### Corpus decisions
 
@@ -839,8 +908,19 @@ Storage: ~/.mcp-coder/projects/<key>/workspace_rag.db
 - No delegation history in same DB (different lifecycle and access pattern)
 - No raw chat transcript indexing
 
-#### Phase 5 plan
-Phase 5 = RAG master session after Phase 4 context builder ships. Agenda: what retrieval did Phase 4 actually need? Finalize: indexing trigger (snapshot hook vs on-demand), summary prompt, symbol extraction strategy, DB schema, MCP tool signature. Then implement as first Phase 5 milestone.
+#### Phase 5 outcome (2026-06-13)
+
+Phase 5 shipped compile-push RAG: `rag_retrieval` pipeline phase, `search delegations|files`, `index-workspace`, `workspace_search` MCP, defaults on. Dogfood exit met. Optional P5-005 → **BL-366**. DX polish → **BL-365**.
+
+#### Shipped CLI/MCP toolset (reference)
+
+| Capability | CLI | MCP |
+|------------|-----|-----|
+| Search delegations | `search delegations`, `rag search` | `rag_search` |
+| Search workspace files | `search files` | `workspace_search` |
+| Index workspace | `index-workspace` | — |
+| Backfill delegation index | `rag index` | auto on delegate |
+| Builder retrieval | `delegate`, `inspect-context` | `delegate_to_agent` |
 
 **Observability coupling:** RAG entries should ship with **BL-356** index-time metadata (source line range, sha256, `delegation_id`/`spec_id` links) so `delegations.jsonl` can stay lean — refs not bodies — and **BL-353** trace replay can join on `context_refs[]`.
 
@@ -1095,7 +1175,7 @@ Delegation `58bb9846` failed; host recovered silently with duplicate spec tree.
 | BL-309e | P4-ISS-004, P4-ISS-018 | Phase 5 | **yes** if long delegates common | Delegation timeout storms; 217s engine_run on full-file replace; document `MCP_CODER_DELEGATION_TIMEOUT_S` in templates |
 | BL-328 | P4-ISS-007 | Phase 5+ | optional | Spec v2 retry after implement failure — **partially dogfooded** P4-EXIT (`prior_failed_attempts` on stats v2–v3); failure-driven versioned retry workflow still thin |
 | BL-330 | P4-ISS-002 | Phase 5+ | optional | Inspect-tool calls not auditable in `server.jsonl` |
-| BL-335 | P4-ISS-014, P4-ISS-015 | **Phase 5** | **yes** | Per-role `model_roles.*.tokens` always `None` — blocks cost audit, BL-162 escalation, BL-333 capture |
+| BL-335 | P4-ISS-014, P4-ISS-015, **P5-ISS-001** | **Phase 5+** | **partial** | Extractor shipped P5-001; **live dogfood still null** — delegate `712a04d9` (2026-06-13, `mcp_coder_phase1_e2e`): all `model_roles.*.tokens` null on OpenRouter Gemini helpers + gpt-4o-mini executor. See § BL-335 replicate. |
 | BL-336 | P4-ISS-003 | Phase 5+ | optional | `judgment_checklist` nested under `response_to_cursor` in JSONL only |
 | BL-337 | P4-ISS-005 | Phase 5+ | optional | `config_deprecated` noise in `server.jsonl` (e.g. `MCP_CODER_FALLBACK_SESSION` in consumer `mcp.json`) |
 | BL-338 | P4-ISS-016, P4-ISS-020 | **Phase 5** | **yes** before BL-321 | Executor `edit_format` / constraint blindness on cheap models (gpt-4o-mini); model-selection guidance or auto-escalation |
@@ -1103,15 +1183,23 @@ Delegation `58bb9846` failed; host recovered silently with duplicate spec tree.
 
 #### BL-335: Per-role token audit in delegation JSONL
 
-**Status:** `deferred` — **P4-ISS-014**, **P4-ISS-015** (P4-EXIT dogfood 2026-06-09).
+**Status:** `partial` — extractor shipped **P5-001** (`core/usage/litellm_tokens.py`, unit-tested). **Live path still broken** — **P5-ISS-001 carried**. **Phase 6 milestone: P6-002** (LiteLLM callback + live fix).
 
-**Problem:** All `model_roles` blocks (`executor`, `context_builder`, `architect_pass`, `spec_validation`) report `tokens: null` / `cost_est_usd: null` on live delegates. Preflight cost works; `usage.actual` may have executor numbers but is not copied into `model_roles.executor`.
+**Problem:** All `model_roles` blocks (`executor`, `context_builder`, `architect_pass`, `spec_validation`) report `tokens: null` / `cost_est_usd: null` on live delegates. Preflight cost works; top-level `usage.actual` may have executor numbers (`aider_output_parse`) but is **not** copied into `model_roles.executor`.
 
-**Why mandatory later:** BL-162 Stage 2 (tiered escalation), BL-333 (reasoning trace + cost flywheel), and BL-002 RAG cost budgeting all need per-role usage. Without this, Phase 5 cannot measure builder vs executor spend or trigger escalation on token budget.
+**Replicate (2026-06-13):**
 
-**Fix sketch:** (a) LiteLLM callback for cheap-model calls (builder, validation, architect); (b) `_extract_tokens()` in `aider_engine.py` → `message_tokens_sent` / `message_tokens_received`; (c) merge into `model_roles` from `usage.actual` when available.
+1. Workspace: `mcp_coder_phase1_e2e` with helper LLMs enabled (`context_builder`, `spec_validation`, `architect_pass` in config).
+2. Delegate implement via MCP (any spec); models from `mcp_coder/.env` e.g. `openrouter/google/gemini-2.5-flash` (helpers), `openrouter/openai/gpt-4o-mini` (executor).
+3. Open latest `~/.mcp-coder/projects/<key>/sessions/<id>/delegations.jsonl`.
+4. **Expected bug:** every `model_roles.<role>.tokens.input` / `.output` is `null`.
+5. **Reference record:** delegation `712a04d9-772c-4d17-92d3-b5c31906b2d6`, session `1432fc02-c6b1-4452-aa28-261ce77f896b` (Phase 5 RAG dogfood — RAG/context_refs OK, tokens not).
 
-**Target:** **Phase 5 early** — small worker task before BL-162 Stage 2 or BL-002 dogfood.
+**Why mandatory later:** BL-162 Stage 2 (tiered escalation), BL-333 (reasoning trace + cost flywheel), BL-002 RAG cost budgeting (P5-005), and BL-353 observability all need per-role usage.
+
+**Fix sketch:** (a) LiteLLM callback / response object for OpenRouter+Gemini helper calls (`context_builder_llm`, `architect_pass_llm`, `spec_validation_llm`); (b) merge top-level `usage.actual` into `model_roles.executor` when Aider parse succeeds; (c) verify on same replicate path above.
+
+**Target:** **Phase 5+** (P5-005 capstone or Phase 6 BL-353 foundation) — does not block Phase 5 recommended exit (RAG dogfood passed).
 
 #### BL-336: Top-level JSONL audit fields for judgment loop
 
@@ -1154,6 +1242,18 @@ Delegation `58bb9846` failed; host recovered silently with duplicate spec tree.
 **Mandatory?** No — validation feature works; this is dogfood methodology + optional spec template guidance (keep retry notes out of Constraints; use fresh v1 for format traps).
 
 **Target:** Phase 5+ optional — spec template note or validation prompt tweak.
+
+#### BL-364: Blocked-delegate pipeline skip reasons in JSONL
+
+**Status:** `deferred` — **P5-ISS-004** (Phase 5 dogfood 2026-06-13).
+
+**Problem:** When `spec_validation` blocks (`needs_input`), the compile pipeline — including `rag_retrieval` — does not run. JSONL has empty `context_refs` and no `delegation_pipeline` RAG rows. **Expected behavior** but easy to misread as a RAG regression when grepping logs.
+
+**Replicate:** `spec_validation: true` + ambiguous or SEARCH/REPLACE-style host task → `needs_input`. Session `1432fc02-c6b1-4452-aa28-261ce77f896b` entries #2–#4 (`expensesplit-p5-dogfood-v2/v3`).
+
+**Fix:** Emit `delegation_pipeline` skip entries on blocked delegates, e.g. `rag_retrieval: skipped (spec_validation_blocked)`.
+
+**Target:** Phase 5+ / **BL-353**-5a observability. Related: **BL-329** dogfood note.
 
 **BL-309e note (P4-ISS-004/018):** Four `delegation_timeout` storms before MCP restart (Wave 1 dogfood); stats v2 full-file replace hit 217s at `MCP_CODER_DELEGATION_TIMEOUT_S=200`. Operator fix: raise to 300s. **Pull into Phase 5** if bounded run time + clearer timeout errors not yet shipped (see § BL-309e).
 
@@ -1347,12 +1447,15 @@ delegate_to_agent(backend=…)
 | **BL-357** | **Storage lifecycle** — promote, prune, gc (logs + RAG + traces) | See § BL-357; **Phase 6+** |
 | **BL-358** | **Post-executor polish pass** — reviewer model (comments, tests, alignment) | See § BL-358; sub-mode of BL-359; **Phase 5+** |
 | **BL-359** | **Workflow turns** — refactor, document, digest cadence | See § BL-359 + [workflow-turns.md](./notes/workflow-turns.md); **Phase 5+** |
+| **BL-364** | **Blocked-delegate skip reasons in JSONL** | See table; **Phase 5+** |
+| **BL-365** | **RAG toolset DX** — unified CLI, workspace stats | See § BL-365; **Phase 5+** |
+| **BL-366** | **RAG evaluation (P5-005)** — recall, cost, embeddings | See § BL-366; **Phase 5+** |
 | **BL-334** | **Backend prompt customization** (system prefix + edit-format control) | See § BL-334 |
 | **BL-340** | **Cursor SDK execution backend** (beside Aider) | See § Execution backends — BL-340 |
 
 ### BL-333: Reasoning trace capture + cross-delegation context feed
 
-**Status:** `idea` — 2026-06-09.
+**Status:** `idea` — 2026-06-09. **Phase 6 milestone: P6-004** (reasoning capture + session hot buffer → builder brief injection).
 **Full design + motivation:** [docs/OTEHR_RELATED_IDEAS/REASONING_TRACE_REUSE.md](./OTEHR_RELATED_IDEAS/REASONING_TRACE_REUSE.md)
 
 **One-liner:** High-end reasoning models emit a hidden `reasoning_content` trace per call which Aider discards (`remove_reasoning_content()`). Capture it once and it powers **three axes**: (1) **model upgrade/escalation** signal inside the MCP loop (or suggestion-only), (2) **transfer intelligence** — feed traces as context into later *cheaper* calls so a mid-tier model inherits the expensive thinking, (3) **training data** — `(task, context, trace, outcome)` tuples for distillation and for replacing hand-written modules (picker, builder, validation) with learned e2e components. "Reason once expensively, propagate downhill" + a data flywheel.
@@ -1414,6 +1517,9 @@ delegate_to_agent(backend=…)
 
 | Date | Change |
 |------|--------|
+| 2026-06-13 | Phase 6 planning locked — BL-335 → P6-002, BL-353 → P6-002/003, BL-333 → P6-004; phase refs updated |
+| 2026-06-13 | BL-365–366 added — RAG toolset DX gaps + P5-005 evaluation capstone; BL-002 § gaps table + shipped CLI/MCP reference; BL-363 guide sync note |
+| 2026-06-13 | BL-360–363 added — code layout refactor, always-review mode, T-06/T-07 tutorials, arch sub-pages (from Phase 4.5 handoff); BL-002 status updated to `active`; Phase 5 planning locked in PHASE5_MVP.md |
 | 2026-06-12 | BL-359 added — workflow turns (refactor, document, digest cadence; semi-auto suggest); [workflow-turns.md](./notes/workflow-turns.md) |
 | 2026-06-12 | BL-358 added — post-executor polish pass (reviewer model: comments, tests, non-logic alignment); Phase 5+ |
 | 2026-06-12 | BL-357 added — storage lifecycle (promote/prune/gc) for logs, RAG, traces, checkpoints; Phase 6+ (RAG planning) |

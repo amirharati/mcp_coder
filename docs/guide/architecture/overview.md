@@ -1,7 +1,7 @@
 # Architecture overview
 
 **Status:** Living — update as shipped decisions change.  
-**Scope:** Phases 1–4 + 4.5 as implemented. Phase 5+ decisions are in planning docs (see § Future direction).  
+**Scope:** Phases 1–5 as implemented. Phase 5+ / observability items in backlog (see § Known gaps).  
 **How to use:** Read as a structural reference after [how-it-works.md](../how-it-works.md). That doc is the *operator* mental model; this one is the *layer map and design decisions*. Deeper per-subsystem docs live alongside this file.
 
 ---
@@ -21,7 +21,7 @@
 │  server/mcp_server.py  (~1750 lines)                              │
 │  • Registers tools: delegate_to_agent, inspect_context,           │
 │    list_delegations, get_delegation_diff, get_checkpoint_detail,  │
-│    get_file_history, rag_search                                    │
+│    get_file_history, rag_search, workspace_search                  │
 │  • Orchestrates the delegation pipeline                           │
 │  • Writes JSONL audit record + updates history DB after each run  │
 └──────────────────────────────┬────────────────────────────────────┘
@@ -56,7 +56,7 @@
 │    config.yaml    specs/    reports/    session.json              │
 │                                                                   │
 │  ~/.mcp-coder/projects/<sha256>/  OUTSIDE repo                    │
-│    workspace_history.db    delegation_rag.db                      │
+│    workspace_history.db    delegation_rag.db    workspace_rag.db  │
 │    sessions/<id>/delegations.jsonl                                │
 └───────────────────────────────────────────────────────────────────┘
 ```
@@ -117,6 +117,7 @@ delegate_to_agent()
   ├── spec_validation*  core/engine/spec_validation_llm.py  [can BLOCK]
   │
   ├── file_picker       core/context/file_picker.py → CandidateFilesResult
+  ├── rag_retrieval*    core/rag/builder_retrieval.py → context_refs + brief section
   ├── context_assemble  core/context/assemble.py → ContextPackage
   ├── architect_pass*   core/engine/architect_pass_llm.py
   ├── builder_llm*      core/engine/context_builder_llm.py
@@ -136,10 +137,10 @@ delegate_to_agent()
   └── audit
         ├── core/logging/delegation_log.py → append delegations.jsonl
         ├── core/workspace/history_db.py → checkpoint row
-        └── core/rag/ → index delegation (FTS5)
+        └── core/rag/ → index delegation + incremental workspace files (FTS5)
 ```
 
-`*` = opt-in, default off.
+`*` = opt-in helper stages default off; `rag_retrieval` runs when `context_builder` on and RAG flags on (defaults **on** since Phase 5).
 
 ---
 
@@ -157,6 +158,7 @@ spec contract
                                        tier: edit-full | read-full | read-excerpt | map-only | pointer
                                        bytes, excerpt_path
                                 →  budget            →  trim read entries to fit
+                                →  rag_retrieval*    →  ## Relevant prior work + context_refs
                                 →  builder_llm*      →  prepend ## Builder brief
                                 →  architect_pass*   →  prepend ## Architect plan
                                 →  translate_context_package()
@@ -203,7 +205,8 @@ Executor reuse is audited: `executor_reused: true/false` and `executor_recreated
     <sha256(workspace_path)>/
       project.json
       workspace_history.db          SQLite: manifests, checkpoints, file-level diffs
-      delegation_rag.db             SQLite FTS5: delegation index (shipped; pipeline use Phase 5)
+      delegation_rag.db             SQLite FTS5: delegation index
+      workspace_rag.db              SQLite FTS5: per-file summary index (Phase 5)
       sessions/
         <mcp_session_id>/
           delegations.jsonl         canonical audit trail
@@ -225,18 +228,17 @@ Full layout: [storage-layout.md](./storage-layout.md) (pending) and [`notes/stor
 
 ---
 
-## Known gaps and open seams (Phase 5 targets)
+## Known gaps and open seams
 
 | Gap | Where it hurts | Backlog |
 |-----|----------------|---------|
 | **Token counts null** for builder/architect/validation | `model_roles` audit incomplete; cost estimates unreliable | BL-335 |
 | **Helper LLM inputs not logged** | Can't replay or audit what builder saw | BL-353 |
-| **Transcript line provenance missing** | `lines_parsed` but no "used through line N" | BL-353 §5a |
-| **Delegation RAG not used in builder** | Existing index queried by planner only; relevance vs recency unresolved | BL-002 |
-| **No workspace-file summaries** | Picker finds symbols by name, not concept | BL-002 |
-| **`delegations.jsonl` carries full bodies opt-in** | Grows with `prompt_full`; no lean-refs yet | BL-356 |
+| **Validation block → empty `context_refs`** | Looks like RAG regression when spec blocks | BL-364 |
+| **`delegations.jsonl` carries full bodies opt-in** | Grows with `prompt_full`; lean-refs partial (`context_refs` shipped) | BL-356 |
 | **Single executor backend (Aider)** | `opencode_engine.py` stub exists; no second backend | BL-340 |
 | **Session policy heuristics** | `align_host` matching is fragile (slug-based) | BL-317 |
+| **Embeddings / recall metric** | FTS-only retrieval; no measured recall | P5-005 deferred |
 
 ---
 
@@ -253,12 +255,12 @@ Full layout: [storage-layout.md](./storage-layout.md) (pending) and [`notes/stor
 
 | Area | Note |
 |------|------|
-| **RAG pipeline integration** | Workspace-file summaries + cross-spec delegation retrieval into builder (BL-002 / rag-gap-analysis.md) |
 | **LLM wire logging** | LiteLLM pass-through tap for all roles; per-delegation trace files (BL-353) |
-| **Lean JSONL refs** | Replace inline bodies with `context_refs[]` once RAG corpora exist (BL-356) |
-| **Workflow turns** | Named modes beyond implement/review: digest, polish, refactor, document (BL-359 / workflow-turns.md) |
-| **Alternate backends** | Cursor-SDK executor (BL-340); engine adapter ready |
-| **Storage lifecycle** | Retention, promote-then-prune, gc across layers (BL-357) |
+| **Lean JSONL refs** | Expand `context_refs[]`; drop inline bodies once corpora mature (BL-356) |
+| **Executor-pull tools** | `mcp-coder search --format plain` pre-shapes BL-354 |
+| **Workflow turns** | Named modes beyond implement/review: digest, polish, refactor (BL-359) |
+| **Alternate backends** | Cursor-SDK executor (BL-340) |
+| **Storage lifecycle** | Retention, promote-then-prune, gc (BL-357) |
 
 ---
 
@@ -273,7 +275,7 @@ Full layout: [storage-layout.md](./storage-layout.md) (pending) and [`notes/stor
 | Where reality diverges from docs | [reality-vs-spec.md](./reality-vs-spec.md) (pending) |
 | Module-by-module map | [code-structure.md](../code-structure.md) |
 | Terminology | [terminology.md](../terminology.md) |
-| RAG planning | [rag-gap-analysis.md](../../notes/rag-gap-analysis.md) |
+| RAG (shipped) + open items | [rag-gap-analysis.md](../../notes/rag-gap-analysis.md) |
 | Workflow turns (future modes) | [workflow-turns.md](../../notes/workflow-turns.md) |
 
 ---
@@ -282,4 +284,5 @@ Full layout: [storage-layout.md](./storage-layout.md) (pending) and [`notes/stor
 
 | Date | Change |
 |------|--------|
+| 2026-06-13 | Phase 5 — `rag_retrieval`, `workspace_rag.db`, `workspace_search`; gaps table refresh |
 | 2026-06-12 | Initial version — layer map, 8 locked decisions, delegation lifecycle, context compiler, helper LLMs, sessions, storage paths, known gaps |

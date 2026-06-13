@@ -217,7 +217,7 @@ The dashed line is the whole point: the executor never sees your chat unless mcp
 | **Helper-LLM wire traffic** | No | Separate cheap-model calls; executor sees merged brief, not builder/architect prompts |
 | **Aider in-process LLM chat** | Maybe | If the **same** `Coder` object is reused (uncommon — see below) |
 
-**Delegate 1 → delegate 2 (same MCP session):** Call 2 still gets a **fully recompiled** package. Cross-delegate context you control is mainly **`builder_history`** (+ planner `context_summary`, optional `rag_search`). Step 1 → step 2 usually creates a **new** `Coder` because edit paths or the compiled package hash changed (`core/session/executor_cache.py`). When `executor_reused: true` in JSONL, Aider may also retain **its own** internal multi-turn chat from the previous `coder.run()` — that is a performance-cache side effect, **not** an intentional memory feature, and mcp-coder does not serialize it today.
+**Delegate 1 → delegate 2 (same MCP session):** Call 2 still gets a **fully recompiled** package. Cross-delegate context you control is **`builder_history`**, **RAG retrieval** (delegation + file hits, default on), planner `context_summary`, and optional manual `rag_search` / `workspace_search`. Step 1 → step 2 usually creates a **new** `Coder` because edit paths or the compiled package hash changed (`core/session/executor_cache.py`). When `executor_reused: true` in JSONL, Aider may also retain **its own** internal multi-turn chat from the previous `coder.run()` — that is a performance-cache side effect, **not** an intentional memory feature, and mcp-coder does not serialize it today.
 
 What it **always** gets (with a spec + `context_builder` on) is a compiled `ContextPackage`:
 

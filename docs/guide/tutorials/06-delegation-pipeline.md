@@ -46,6 +46,7 @@ delegate_to_agent(mode=implement, spec_path=..., task=..., ...)
   ├─ 1  spec_read          parse spec contract — Files, policies, outcome rules
   ├─ 2  spec_validation*   cheap LLM — spec vs host transcript → clarification_needed?
   ├─ 3  file_picker        rg + spec paths + hints → candidate_files   [T-04 §4]
+  ├─ 3b rag_retrieval      FTS: past delegations + file summaries → context_refs  [default on]
   ├─ 4  context_assemble   tiers → ContextPackage → mechanical brief   [T-04 §5]
   ├─ 5  architect_pass*    cheap LLM → ## Architect plan above brief   [T-04 §8a]
   ├─ 6  builder_llm        cheap LLM → ## Builder brief merged on top  [T-04 §8b]
@@ -57,7 +58,7 @@ delegate_to_agent(mode=implement, spec_path=..., task=..., ...)
 * = opt-in (default off except builder_llm which is on by default)
 ```
 
-Phases 3–6 are covered in T-04. Phases 8–9 touch T-05 history. This tutorial fills in 2, 7, 9, 10 and shows how to read timing for all of them.
+Phases 3–6 are covered in T-04. **Phase 5:** `rag_retrieval` (3b) runs between picker and assemble when `context_builder` + RAG flags are on (defaults). Phases 8–9 touch T-05 history. This tutorial fills in 2, 7, 9, 10 and shows how to read timing for all of them.
 
 **When is `delegation_pipeline` present?** Only for **`mode=implement` with a valid spec** (Phase 4+). Pass-through delegations, `mode=review`, invalid specs, or older runs may omit it entirely (T-02 §4).
 
@@ -137,6 +138,17 @@ or `MCP_CODER_SPEC_VALIDATION=1`.
 
 When blocked: JSONL `status: blocked`; response contains `clarification_needed: "..."`.
 
+### 3b — `rag_retrieval` (default on since Phase 5)
+
+Runs after `file_picker`, before `context_assemble`. FTS over `delegation_rag.db` + `workspace_rag.db`; merges into `## Relevant prior work` and JSONL `context_refs[]`. Fast when indexes exist; skipped when `context_builder` off or all RAG flags off. **Not run** when `spec_validation` blocks — later phases absent too.
+
+Check hits without a full delegate:
+
+```bash
+mcp-coder search delegations "retry logic" --limit 3
+mcp-coder search files "ledger" --limit 3   # needs index-workspace first
+```
+
 ### 3 — `file_picker` → 4 — `context_assemble` → 5 — `architect_pass` → 6 — `builder_llm`
 
 See **T-04** §4–§8 for full detail. Quick summary here:
@@ -210,7 +222,10 @@ When off or executor failed: `auto_verify` → `skipped`, `detail: disabled_or_n
 |------|---------|-----------------|
 | `context_builder` | **on** | Phases 3–6 (picker, assemble, architect, builder) |
 | `context_builder_llm` | **on** | Phase 6 only (builder brief) |
-| `architect_pass` | **off** | Phase 5 |
+| `builder_history_rag` | **on** | Phase 3b — delegation hits in builder |
+| `workspace_file_rag` | **on** | `workspace_rag.db` + search |
+| `workspace_file_hints` | **on** | File hits in picker + brief |
+| `architect_pass` | **off** | Phase 5 (architect plan LLM) |
 | `spec_validation` | **off** | Phase 2 |
 | `host_transcript` | `none` | Phases 2, 5, 6 (helper LLMs see transcript when `dump`) |
 | `auto_verify` | **off** | Phase 10 |

@@ -10,12 +10,11 @@ from __future__ import annotations
 import os
 from pathlib import Path
 
-from core.context.excerpts import _SYMBOL_RE
 from core.context.package import TIER_MAP_ONLY, PathEntry
+from core.context.symbol_outline import symbol_outline_for_path
 from core.workspace.walk import walk_workspace
 
 DEFAULT_MAX_FILES = 150
-MAX_OUTLINE_LINES = 40
 
 MAP_EXTENSIONS = frozenset(
     {".py", ".js", ".ts", ".tsx", ".jsx", ".md", ".yaml", ".yml", ".json", ".toml"}
@@ -29,22 +28,6 @@ def repo_map_max_files() -> int:
         return val if val > 0 else DEFAULT_MAX_FILES
     except (ValueError, TypeError):
         return DEFAULT_MAX_FILES
-
-
-def _symbol_outline(abs_path: Path) -> str | None:
-    """def/class lines only, capped at MAX_OUTLINE_LINES."""
-    try:
-        text = abs_path.read_text(encoding="utf-8")
-    except (OSError, UnicodeDecodeError):
-        return None
-    lines = [
-        line.strip()
-        for line in text.splitlines()
-        if _SYMBOL_RE.match(line.lstrip())
-    ]
-    if not lines:
-        return None
-    return "\n".join(lines[:MAX_OUTLINE_LINES])
 
 
 def build_repo_map_entries(
@@ -68,7 +51,7 @@ def build_repo_map_entries(
             continue
         if manifest[rel].is_binary:
             continue
-        outline = _symbol_outline(ws / rel)
+        outline = symbol_outline_for_path(ws / rel)
         entries.append(
             PathEntry(
                 path=rel,
