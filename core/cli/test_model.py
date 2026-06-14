@@ -109,14 +109,11 @@ def _ping_litellm(
     prompt: str,
     max_tokens: int,
 ) -> ModelTestResult:
-    from core.observability import CLI_FALLBACK_ROLE, get_observability, role_context
-    from core.observability.gateway import LlmGateway, get_llm_gateway, set_llm_gateway
+    from core.observability import CLI_FALLBACK_ROLE, role_context
+    from core.observability.bootstrap import ensure_observability_bootstrap
+    from core.observability.gateway import get_llm_gateway
 
-    obs = get_observability()  # registers LiteLLM success callback
-    try:
-        get_llm_gateway()
-    except RuntimeError:
-        set_llm_gateway(LlmGateway(obs))
+    ensure_observability_bootstrap()
 
     t0 = time.perf_counter()
     try:

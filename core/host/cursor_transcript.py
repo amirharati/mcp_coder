@@ -21,6 +21,8 @@ class TranscriptLoadResult:
     truncation_reason: str | None
     bytes_dropped: int
     read_error: str | None
+    source_byte_start: int | None = None
+    source_byte_end: int | None = None
 
 
 def empty_transcript_result(*, file_bytes: int | None = None) -> TranscriptLoadResult:
@@ -98,10 +100,23 @@ def _format_transcript_block(turns: list[str]) -> str:
 
 def parse_cursor_transcript_jsonl(raw: str) -> tuple[str, int, int]:
     """Parse JSONL text into injectable transcript block."""
+    text, lines_parsed, lines_skipped, _, _ = _parse_cursor_transcript_jsonl(raw)
+    return text, lines_parsed, lines_skipped
+
+
+def _parse_cursor_transcript_jsonl(
+    raw: str,
+) -> tuple[str, int, int, list[tuple[int, int]], list[str]]:
+    """Parse JSONL; return formatted text, counts, source byte ranges, and turns."""
     turns: list[str] = []
     lines_parsed = 0
     lines_skipped = 0
-    for line in raw.splitlines():
+    line_ranges: list[tuple[int, int]] = []
+    offset = 0
+    for line in raw.splitlines(keepends=True):
+        line_start = offset
+        line_end = offset + len(line.encode("utf-8"))
+        offset = line_end
         stripped = line.strip()
         if not stripped:
             continue
@@ -118,11 +133,72 @@ def parse_cursor_transcript_jsonl(raw: str) -> tuple[str, int, int]:
             lines_skipped += 1
             continue
         lines_parsed += 1
+        line_ranges.append((line_start, line_end))
         if text:
             turns.append(f"[{role}]\n{text}")
         else:
             turns.append(f"[{role}]")
-    return _format_transcript_block(turns), lines_parsed, lines_skipped
+    return _format_transcript_block(turns), lines_parsed, lines_skipped, line_ranges, turns
+
+
+def _turn_byte_spans_in_formatted(turns: list[str]) -> list[tuple[int, int]]:
+    """Byte spans of each turn inside the formatted transcript block (UTF-8)."""
+    if not turns:
+        return []
+    header = f"{TRANSCRIPT_HEADER}\n\n"
+    offset = len(header.encode("utf-8"))
+    spans: list[tuple[int, int]] = []
+    for index, turn in enumerate(turns):
+        suffix = "" if index == len(turns) - 1 else "\n\n"
+        block = f"{turn}{suffix}"
+        block_len = len(block.encode("utf-8"))
+        spans.append((offset, offset + block_len))
+        offset += block_len
+    return spans
+
+
+def _compute_source_byte_provenance(
+    *,
+    formatted_text: str,
+    line_ranges: list[tuple[int, int]],
+    turns: list[str],
+    truncated: bool,
+) -> tuple[int | None, int | None]:
+    """Map parsed host transcript lines to inclusive-start/exclusive-end file byte range."""
+    if not line_ranges:
+        return None, None
+
+    if not truncated:
+        return 0, line_ranges[-1][1]
+
+    cap = _max_transcript_bytes_cap()
+    if cap <= 0:
+        return 0, line_ranges[-1][1]
+
+    capped_text, was_truncated, _ = apply_max_transcript_bytes(formatted_text, cap)
+    if not was_truncated or not capped_text:
+        return 0, line_ranges[-1][1]
+
+    full_bytes = formatted_text.encode("utf-8")
+    capped_bytes = capped_text.encode("utf-8")
+    if len(capped_bytes) >= len(full_bytes):
+        return 0, line_ranges[-1][1]
+
+    tail_start = len(full_bytes) - len(capped_bytes)
+    if len(turns) != len(line_ranges):
+        return None, None
+
+    included: list[int] = []
+    for index, (turn_start, turn_end) in enumerate(_turn_byte_spans_in_formatted(turns)):
+        if turn_end > tail_start:
+            included.append(index)
+
+    if not included:
+        return None, None
+
+    first = included[0]
+    last = included[-1]
+    return line_ranges[first][0], line_ranges[last][1]
 
 
 def load_cursor_transcript(path: str | Path) -> TranscriptLoadResult:
@@ -158,15 +234,23 @@ def load_cursor_transcript(path: str | Path) -> TranscriptLoadResult:
             read_error=f"{type(exc).__name__}: {exc}",
         )
 
-    text, lines_parsed, lines_skipped = parse_cursor_transcript_jsonl(raw)
+    text, lines_parsed, lines_skipped, line_ranges, turns = _parse_cursor_transcript_jsonl(raw)
     truncated = False
     truncation_reason: str | None = None
     bytes_dropped = 0
+    formatted_before_cap = text
     cap = _max_transcript_bytes_cap()
     if text and cap > 0:
         text, truncated, bytes_dropped = apply_max_transcript_bytes(text, cap)
         if truncated:
             truncation_reason = "max_transcript_bytes"
+
+    source_byte_start, source_byte_end = _compute_source_byte_provenance(
+        formatted_text=formatted_before_cap,
+        line_ranges=line_ranges,
+        turns=turns,
+        truncated=truncated,
+    )
 
     injected_bytes = len(text.encode("utf-8")) if text else 0
     return TranscriptLoadResult(
@@ -179,6 +263,8 @@ def load_cursor_transcript(path: str | Path) -> TranscriptLoadResult:
         truncation_reason=truncation_reason,
         bytes_dropped=bytes_dropped,
         read_error=None,
+        source_byte_start=source_byte_start,
+        source_byte_end=source_byte_end,
     )
 
 

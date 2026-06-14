@@ -132,9 +132,9 @@ from core.rag.retrieval import ContextRef, context_refs_to_dict, context_refs_to
 OUTPUT_MAX_CHARS = 16_000
 
 obs = get_observability()
-from core.observability.gateway import LlmGateway, set_llm_gateway
+from core.observability.bootstrap import ensure_observability_bootstrap
 
-set_llm_gateway(LlmGateway(obs))
+ensure_observability_bootstrap(obs)
 
 
 def _emit_compile_event(
@@ -182,6 +182,8 @@ def _emit_compile_provenance_pair(
     output_stage: str,
     provenance: dict[str, Any],
     source_path: str | None = None,
+    byte_start: int | None = None,
+    byte_end: int | None = None,
     last_source_line: int | None = None,
 ) -> None:
     """Emit input/output compile events for a helper stage."""
@@ -196,6 +198,8 @@ def _emit_compile_provenance_pair(
             session_dir=session_dir,
             obs_verbosity=obs_verbosity,
             source_path=source_path,
+            byte_start=byte_start,
+            byte_end=byte_end,
             last_source_line=last_source_line,
         )
     if output_text:
@@ -1006,6 +1010,8 @@ def delegate_to_agent(
                         if transcript_result.lines_parsed > 0
                         else None
                     ),
+                    byte_start=transcript_result.source_byte_start,
+                    byte_end=transcript_result.source_byte_end,
                 )
                 if spec_validation_blocked:
                     pipeline_recorder.end("spec_validation", status="blocked")

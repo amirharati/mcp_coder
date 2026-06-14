@@ -14,6 +14,7 @@ from core.observability.trace import (
     STAGE_BUILDER_OUTPUT,
     STAGE_FINAL_EXECUTOR_PROMPT,
     STAGE_MECHANICAL_BRIEF,
+    STAGE_VALIDATION_INPUT,
     TRACE_TYPE_COMPILE_EVENT,
     build_compile_event_record,
 )
@@ -80,11 +81,13 @@ def test_build_compile_event_record_validation_metadata():
         text_body="validate this",
         source_path="/tmp/chat.jsonl",
         last_source_line=42,
+        byte_start=0,
+        byte_end=128,
     )
     assert rec["source_path"] == "/tmp/chat.jsonl"
     assert rec["last_source_line"] == 42
-    assert "byte_start" not in rec
-    assert "byte_end" not in rec
+    assert rec["byte_start"] == 0
+    assert rec["byte_end"] == 128
 
 
 def test_emit_compile_event_writes_to_trace(tmp_path):
@@ -122,6 +125,37 @@ def test_emit_compile_provenance_pair_input_output(tmp_path):
     records = [json.loads(l) for l in trace_path.read_text().splitlines() if l.strip()]
     stages = [r["stage"] for r in records if r.get("type") == TRACE_TYPE_COMPILE_EVENT]
     assert stages == [STAGE_BUILDER_INPUT, STAGE_BUILDER_OUTPUT]
+
+
+def test_emit_compile_provenance_pair_passes_byte_range_on_input(tmp_path):
+    session_dir = tmp_path / "sess"
+    session_dir.mkdir()
+    _emit_compile_provenance_pair(
+        delegation_id="d-bytes",
+        workspace=str(tmp_path),
+        session_dir=session_dir,
+        obs_verbosity=VERBOSITY_LEAN,
+        input_stage="validation_input",
+        output_stage="validation_output",
+        provenance={"input_prompt": "validate", "output_text": "ok"},
+        source_path="/tmp/chat.jsonl",
+        byte_start=0,
+        byte_end=42,
+        last_source_line=2,
+    )
+    trace_path = session_dir / "traces" / "d-bytes.jsonl"
+    records = [json.loads(l) for l in trace_path.read_text().splitlines() if l.strip()]
+    validation_input = next(
+        r for r in records if r.get("type") == TRACE_TYPE_COMPILE_EVENT and r["stage"] == "validation_input"
+    )
+    validation_output = next(
+        r for r in records if r.get("type") == TRACE_TYPE_COMPILE_EVENT and r["stage"] == "validation_output"
+    )
+    assert validation_input["byte_start"] == 0
+    assert validation_input["byte_end"] == 42
+    assert validation_input["last_source_line"] == 2
+    assert "byte_start" not in validation_output
+    assert "byte_end" not in validation_output
 
 
 def test_helper_pipeline_returns_provenance():
@@ -296,3 +330,108 @@ def test_delegate_emits_compile_events_without_bloating_jsonl(tmp_path, monkeypa
     assert STAGE_FINAL_EXECUTOR_PROMPT in compile_stages
     llm_calls = [r for r in records if r.get("type") == "llm_call"]
     assert llm_calls  # executor llm_call from P7-002 loop still present
+
+
+def test_delegate_validation_input_includes_transcript_byte_range(tmp_path, monkeypatch):
+    """Integration: validation_input compile_event carries host JSONL byte provenance."""
+    from core.engine.base import ExecutionResult
+    from core.engine.spec_validation_llm import SpecValidationLlmResult
+    from core.host.base import HostSessionHint
+    from core.host.cursor_transcript import load_cursor_transcript
+    from server.mcp_server import delegate_to_agent
+
+    ws = tmp_path / "workspace"
+    ws.mkdir()
+    (ws / ".mcp-coder").mkdir()
+    (ws / ".mcp-coder" / "config.yaml").write_text(
+        "observability_verbosity: lean\nhost_transcript: dump\nspec_validation: true\n",
+        encoding="utf-8",
+    )
+    spec_dir = ws / ".mcp-coder" / "specs" / "tasks"
+    spec_dir.mkdir(parents=True)
+    spec_path = spec_dir / "step.md"
+    spec_path.write_text(
+        "---\nfiles_edit:\n  - foo.py\n---\n\n# Step\n\n## Files\n\nfoo.py\n",
+        encoding="utf-8",
+    )
+    (ws / "foo.py").write_text("# foo\n", encoding="utf-8")
+
+    transcript = tmp_path / "chat.jsonl"
+    transcript.write_text(
+        json.dumps(
+            {
+                "role": "user",
+                "message": {"content": [{"type": "text", "text": "Use JSON files"}]},
+            }
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+    expected = load_cursor_transcript(transcript)
+
+    monkeypatch.setenv("MCP_CODER_HOME", str(tmp_path / "home"))
+    monkeypatch.chdir(ws)
+
+    fake = ExecutionResult(
+        success=True,
+        output="ok",
+        files_changed=["foo.py"],
+        model="m",
+        prompt_used="final prompt",
+    )
+    engine = MagicMock()
+    engine.model_name = "m"
+    engine.capabilities.return_value = MagicMock()
+    engine.run_context.return_value = fake
+
+    ok = SpecValidationLlmResult(
+        success=True,
+        passed=True,
+        clarifications=[],
+        model="cheap-model",
+        duration_ms=5,
+    )
+    hint = HostSessionHint(
+        host_kind="cursor",
+        host_session_id="sess-1",
+        host_transcript_path=str(transcript.resolve()),
+    )
+
+    with patch("server.mcp_server.get_host_provider") as host_provider, patch(
+        "server.mcp_server.get_engine", return_value=engine
+    ), patch(
+        "core.engine.spec_validation_llm.run_spec_validation_llm",
+        return_value=ok,
+    ), patch(
+        "server.mcp_server.context_builder_enabled", return_value=False
+    ), patch(
+        "server.mcp_server.architect_pass_enabled", return_value=False
+    ):
+        host_provider.return_value.resolve_active_session.return_value = hint
+        raw = delegate_to_agent(
+            task="t",
+            target_files=["foo.py"],
+            context_summary="ctx",
+            spec_path="tasks/step.md",
+            mode="implement",
+        )
+
+    resp = json.loads(raw)
+    log_path = Path(resp["log_path"])
+    trace_files = list((log_path.parent / "traces").glob("*.jsonl"))
+    records = [
+        json.loads(line)
+        for line in trace_files[-1].read_text(encoding="utf-8").splitlines()
+        if line.strip()
+    ]
+    validation_input = next(
+        r
+        for r in records
+        if r.get("type") == TRACE_TYPE_COMPILE_EVENT and r.get("stage") == STAGE_VALIDATION_INPUT
+    )
+    assert validation_input["source_path"] == str(transcript.resolve())
+    assert validation_input["byte_start"] == expected.source_byte_start
+    assert validation_input["byte_end"] == expected.source_byte_end
+    assert 0 <= validation_input["byte_start"] < validation_input["byte_end"] <= transcript.stat().st_size
+    sliced = transcript.read_bytes()[validation_input["byte_start"] : validation_input["byte_end"]]
+    sliced.decode("utf-8")

@@ -9,7 +9,7 @@
 
 # Phase 8 — Backend interception: full Aider visibility
 
-**Status:** Active — master session complete 2026-06-13; P8-001 done (capture + attribution + cache-warm validated in live dogfood; thinking fields are provider-path-dependent and non-blocking). P8-002 done. P8-003/P8-004 specs ready.
+**Status:** Active — master session complete 2026-06-13; P8-001 done (capture + attribution + cache-warm validated in live dogfood; thinking fields carried as follow-up). P8-002 done. P8-003 done. P8-004 done.
 **Purpose:** Capture every Aider LLM sub-call (including thinking tokens) with exact attribution — so Phase 9 can make an honest "100% captured" claim when it flips the write-always gate.
 **PM board:** this file · **Issues:** [PHASE8_ISSUES.md](./PHASE8_ISSUES.md)
 **Phase 7 (closed):** [PHASE7_MVP.md](./PHASE7_MVP.md) (frozen) · [PHASE7_ISSUES.md](./PHASE7_ISSUES.md) (frozen)
@@ -143,7 +143,7 @@ Phase 8 fixes all three. It is **passive observation only** — no control, no i
 
 ### P8-003 — CLI gateway bootstrap hardening *(BL-369)*
 
-**Status:** `spec ready` — [docs/tasks/P8-003-cli-bootstrap-v1.md](../tasks/P8-003-cli-bootstrap-v1.md); can task in parallel with P8-001
+**Status:** `done` — implementation delivered in [docs/tasks/P8-003-cli-bootstrap-v1.md](../tasks/P8-003-cli-bootstrap-v1.md) § Results; full pytest pass (804/1); shared bootstrap now used by server + `test-model`.
 
 **Goal:** Centralize `LlmGateway` initialization in a shared bootstrap path so all CLI entry points have a consistent owned LLM boundary without per-command self-heal guards. Remove ad-hoc fallback branches introduced in Phase 7.
 
@@ -166,7 +166,7 @@ Phase 8 fixes all three. It is **passive observation only** — no control, no i
 
 ### P8-004 — Host transcript byte-range provenance *(BL-370)*
 
-**Status:** `spec ready` — [docs/tasks/P8-004-byte-range-provenance-v1.md](../tasks/P8-004-byte-range-provenance-v1.md); can task in parallel with P8-001
+**Status:** `done` — implementation delivered in [docs/tasks/P8-004-byte-range-provenance-v1.md](../tasks/P8-004-byte-range-provenance-v1.md) § Results; full pytest pass (808/1); `validation_input` now carries byte-range provenance.
 
 **Goal:** Extend compile `compile_event` validation_input events with `byte_start` / `byte_end` fields so they slice the host transcript JSONL file precisely. Prerequisite for Phase 9 replay-grade provenance (currently only `source_path` + `last_source_line` are present — P7-003 deviation).
 
@@ -222,7 +222,9 @@ Phase 8 fixes all three. It is **passive observation only** — no control, no i
 
 | Date | Change |
 |------|--------|
-| 2026-06-14 | A5 complex dogfood (`86fe232f-3bdd-4d04-a9e3-bdcbd3d8ce63`) confirmed backend capture with no reasoning fields on Sonnet/OpenRouter path. P8-ISS-004 closed as provider-path-dependent, non-blocking. P8-001 moved to `done`. |
+| 2026-06-14 | P8-004 delivered: transcript loader now computes source byte ranges; `validation_input` compile events include `byte_start`/`byte_end`; tests green (808 passed, 1 skipped). Milestone moved to `done`. |
+| 2026-06-14 | P8-003 delivered: added `core/observability/bootstrap.py`, wired `mcp_server` and `test_model`, removed command-local gateway self-heal; tests green (804 passed, 1 skipped). Milestone moved to `done`. |
+| 2026-06-14 | A5 complex dogfood (`86fe232f-3bdd-4d04-a9e3-bdcbd3d8ce63`) confirmed backend capture with no reasoning fields on Sonnet/OpenRouter path. P8-ISS-004 carried as provider-path follow-up (non-blocking). P8-001 moved to `done`. |
 | 2026-06-14 | Joint dogfood (`334072d7-2a19-46a2-853b-7a12dc481f3f`) + `maintenance stats --verbose` validation: `backend_llm_call` present with `step_index=1`; interception profile block printed (`strategy=subclass`, `thinking=true`, verified/gaps). P8-002 moved to `done`. |
 | 2026-06-14 | P8-002 worker delivered implementation: `InterceptionProfile` dataclass + `AiderEngine.interception_profile` + engine-factory warning + `maintenance stats --verbose` output. Milestone moved to `in_review` pending joint dogfood confirmation. |
 | 2026-06-14 | Re-dogfood pass after P8-001a (`70d63f1a-c7fc-4633-ac6d-dd3f2285e3f7`): `backend_llm_call` restored in live trace (A1/A2/A4). P8-ISS-006 closed; A5 still pending thinking-capable model run. |

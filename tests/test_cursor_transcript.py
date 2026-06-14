@@ -82,3 +82,30 @@ def test_load_applies_byte_cap(tmp_path, monkeypatch):
     assert result.truncation_reason == "max_transcript_bytes"
     assert result.bytes_dropped > 0
     assert result.injected_bytes <= 64
+    assert result.source_byte_start is not None
+    assert result.source_byte_end is not None
+    assert result.source_byte_start > 0
+    assert 0 <= result.source_byte_start < result.source_byte_end <= result.file_bytes
+
+
+def test_load_source_byte_range_full_file(tmp_path):
+    path = tmp_path / "chat.jsonl"
+    raw = _line("user", "from disk") + "\n" + _line("assistant", "reply") + "\n"
+    path.write_text(raw, encoding="utf-8")
+    result = load_cursor_transcript(path)
+    assert result.source_byte_start == 0
+    assert result.source_byte_end is not None
+    assert result.source_byte_end <= result.file_bytes
+    sliced = path.read_bytes()[result.source_byte_start : result.source_byte_end]
+    sliced.decode("utf-8")
+    assert "from disk" in sliced.decode("utf-8")
+    assert "reply" in sliced.decode("utf-8")
+
+
+def test_load_source_byte_range_empty_transcript(tmp_path):
+    path = tmp_path / "empty.jsonl"
+    path.write_text("not json\n", encoding="utf-8")
+    result = load_cursor_transcript(path)
+    assert result.lines_parsed == 0
+    assert result.source_byte_start is None
+    assert result.source_byte_end is None
