@@ -14,6 +14,7 @@ from core.context.summary import redact_secrets, sha256_hex
 from core.logging.delegation_log import _append_jsonl_line, utc_now_iso
 
 TRACE_TYPE_LLM_CALL = "llm_call"
+TRACE_TYPE_BACKEND_LLM_CALL = "backend_llm_call"
 TRACE_TYPE_HEADER = "trace_header"
 TRACE_TYPE_TOOL_CALL = "tool_call"
 TRACE_TYPE_ACTION = "action"
@@ -155,6 +156,105 @@ def build_trace_record(
         record["prompt_preview"] = _truncate_preview(redacted_prompt)
     if redacted_response:
         record["response_preview"] = _truncate_preview(redacted_response)
+    return record
+
+
+def build_backend_llm_call_record(
+    *,
+    delegation_id: str,
+    step_index: int | None,
+    call_type: str,
+    model: str | None,
+    verbosity: str,
+    timestamp: str | None = None,
+    duration_ms: int | None = None,
+    thinking_text: str | None = None,
+    thinking_tokens: int | None = None,
+    usage: dict[str, Any] | None = None,
+    prompt_text: str | None = None,
+    response_text: str | None = None,
+) -> dict[str, Any]:
+    """Build one JSONL trace line for an Aider inner-loop LLM completion."""
+    record: dict[str, Any] = {
+        "type": TRACE_TYPE_BACKEND_LLM_CALL,
+        "delegation_id": delegation_id,
+        "call_type": call_type,
+        "model": model,
+        "timestamp": timestamp or utc_now_iso(),
+        "verbosity": verbosity,
+    }
+
+    if step_index is not None:
+        record["step_index"] = step_index
+
+    if duration_ms is not None:
+        record["duration_ms"] = duration_ms
+
+    if thinking_text:
+        record["thinking_text"] = thinking_text
+    if thinking_tokens is not None and thinking_tokens > 0:
+        record["thinking_tokens"] = thinking_tokens
+
+    if usage:
+        record["usage"] = {
+            "input": usage.get("input"),
+            "output": usage.get("output"),
+            "total": usage.get("total"),
+        }
+
+    if prompt_text:
+        record["prompt_hash"] = sha256_hex(prompt_text)
+    if response_text:
+        record["response_hash"] = sha256_hex(response_text)
+
+    if verbosity == VERBOSITY_LEAN:
+        return record
+
+    redacted_prompt = redact_secrets(prompt_text) if prompt_text else None
+    redacted_response = redact_secrets(response_text) if response_text else None
+    redacted_thinking = redact_secrets(thinking_text) if thinking_text else None
+
+    if verbosity == VERBOSITY_STANDARD:
+        if redacted_prompt:
+            record["prompt_preview"] = _truncate_preview(
+                redacted_prompt, max_chars=BRIEF_MAX_CHARS
+            )
+        if redacted_response:
+            record["response_preview"] = _truncate_preview(
+                redacted_response, max_chars=BRIEF_MAX_CHARS
+            )
+        if redacted_thinking:
+            record["thinking_preview"] = _truncate_preview(
+                redacted_thinking, max_chars=BRIEF_MAX_CHARS
+            )
+        return record
+
+    if verbosity == VERBOSITY_FULL:
+        if redacted_prompt:
+            record["prompt_preview"] = _truncate_preview(
+                redacted_prompt, max_chars=BRIEF_MAX_CHARS
+            )
+            record["prompt_body"] = redacted_prompt
+        if redacted_response:
+            record["response_preview"] = _truncate_preview(
+                redacted_response, max_chars=BRIEF_MAX_CHARS
+            )
+            record["response_body"] = redacted_response
+        if redacted_thinking:
+            record["thinking_preview"] = _truncate_preview(
+                redacted_thinking, max_chars=BRIEF_MAX_CHARS
+            )
+            record["thinking_body"] = redacted_thinking
+        return record
+
+    if redacted_prompt:
+        record["prompt_preview"] = _truncate_preview(
+            redacted_prompt, max_chars=BRIEF_MAX_CHARS
+        )
+    if redacted_response:
+        record["response_preview"] = _truncate_preview(
+            redacted_response, max_chars=BRIEF_MAX_CHARS
+        )
     return record
 
 

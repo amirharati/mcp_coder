@@ -276,3 +276,19 @@ class ObservabilityBackend(ABC):
         Returns token dict: {"input": int|None, "output": int|None, "total": int|None, "source": str}.
         Must never raise — observability must not break completions.
         """
+
+    @abstractmethod
+    def record_backend_llm_call(
+        self,
+        *,
+        call_type: str,
+        model: str | None,
+        step_index: int | None = None,
+        thinking_text: str | None = None,
+        thinking_tokens: int | None = None,
+        usage: dict[str, Any] | None = None,
+        duration_ms: int | None = None,
+        prompt_text: str | None = None,
+        response_text: str | None = None,
+    ) -> None:
+        """Record an Aider inner-loop LLM completion as backend_llm_call trace event."""

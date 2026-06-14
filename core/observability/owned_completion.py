@@ -1,7 +1,8 @@
 """Synchronous token + trace capture for owned litellm.completion calls (P6-008).
 
 Deprecated (P7-001): prefer LlmGateway.complete() + ObservabilityBackend.record_llm_call().
-This module remains as a thin re-export for backward compatibility.
+Deprecated (P8-001): inner-loop Aider capture now via ObservableModel + backend_llm_call;
+this module remains as a thin re-export for backward compatibility.
 """
 
 from __future__ import annotations

@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from contextlib import contextmanager
 from contextvars import ContextVar, Token
+from pathlib import Path
 from typing import Iterator
 
 delegation_id_var: ContextVar[str | None] = ContextVar("delegation_id", default=None)
@@ -12,6 +13,10 @@ pipeline_phase_var: ContextVar[str | None] = ContextVar("pipeline_phase", defaul
 workspace_var: ContextVar[str | None] = ContextVar("workspace", default=None)
 session_dir_var: ContextVar[str | None] = ContextVar("session_dir", default=None)
 mcp_session_id_var: ContextVar[str | None] = ContextVar("mcp_session_id", default=None)
+step_index_var: ContextVar[int | None] = ContextVar("step_index", default=None)
+
+# Set by ObservableModel.send_completion(); litellm_callback skips Route A when True.
+_backend_call_active: ContextVar[bool] = ContextVar("_backend_call_active", default=False)
 
 CLI_FALLBACK_ROLE = "cli_test"
 
@@ -55,6 +60,16 @@ def role_context(role: str) -> Iterator[None]:
         role_var.reset(reset)
 
 
+@contextmanager
+def executor_step_context(step_index: int) -> Iterator[None]:
+    """Bind executor outer-loop step index for backend_llm_call attribution."""
+    reset = step_index_var.set(step_index)
+    try:
+        yield
+    finally:
+        step_index_var.reset(reset)
+
+
 def bind_delegation(delegation_id: str) -> Token:
     """Set delegation_id without a context manager (tests)."""
     from core.observability.litellm_callback import note_delegation_start
@@ -71,3 +86,4 @@ def clear_delegation_context() -> None:
     workspace_var.set(None)
     session_dir_var.set(None)
     mcp_session_id_var.set(None)
+    step_index_var.set(None)

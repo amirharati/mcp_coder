@@ -173,7 +173,7 @@ Phase 1 deferred executor conversation carry-over to here (BL-155); see P1-130 `
 | BL-350 | **Supervised executor loop — inspect mid-run, inject context, capture thinking** | **Phase 7 partial shipped (P7-002):** bounded outer loop + executor `llm_call` / `tool_call` / `action` events + `executor_turns` stats. **Remaining:** adaptive multi-step continuation protocol and stronger supervised escalation behavior (BL-351). |
 | BL-351 | **Simulated interactive + escalate to host (Cursor human intervention)** | Today: `InputOutput(yes=True)` auto-approves all Aider prompts (blind); “add files to chat” → implement failure; no structured handoff back to Cursor mid-delegate. **Later:** supervisor answers executor prompts via **cheap LLM + rules** (add read / expand spec / continue) instead of blind yes; when uncertain → **pause delegation** and return `needs_input` / `clarification_needed` to **Cursor planner** for human decision, then resume (BL-350 outer loop or custom IO). High leverage for scope expansion + trust. **Phase 5+**. From P4.5-ISS-014. |
 | BL-352 | **Multi-language symbol scan + outlines (C/C++, Go, Rust, …)** | Today: symbol scan hardcoded to 9 extensions (`SCAN_EXTENSIONS` in `file_picker.py`); repo-map/excerpt regex is Python `def`/`class` only — C/C++/Go/Rust/Java/etc. work via **spec contract** but not **auto-discovery** or useful outlines. **Later:** expand/configurable scan globs; per-language outline heuristics (or tie to BL-348 index); goal = “works for money cases” on polyglot/monorepo repos without hand-listing every path. **Phase 5+**. From P4.5-ISS-015. |
-| BL-353 | **LLM boundary observability — full pass-through logging** | **Phase 6+7 partial shipped:** helper traces/tokens (P6), executor step events (P7-002), compile provenance bundle (P7-003). **Remaining:** backend-complete interception + replay-grade completeness under **BL-367** and **BL-371**. |
+| BL-353 | **LLM boundary observability — full pass-through logging** | **Phase 6+7+8 partial shipped:** helper traces/tokens (P6), executor step events (P7-002), compile provenance bundle (P7-003), Aider inner-loop capture via `ObservableModel` + thinking tokens (P8-001). **Remaining:** write-always storage + replay-grade completeness → **BL-367** (Phase 9). |
 | BL-354 | **Executor context tools (pull) — RAG/history/read during backend loop** | **Dual model:** keep **compile-push (A)** as default; **also** expose read-only mcp-coder tools inside the executor loop (Aider today ignores planner MCP). LLM-driven `rag_search`, `workspace_search`, history, excerpts beside edit tools. **Phase 5+** (pairs with BL-002 usage); see § BL-354. From T-04 pass (2026-06-11). |
 | BL-355 | **Optional host CLI toolchain — `rg`, docs, `mcp-coder doctor`** | Today: **ripgrep** optional (Python fallback in file picker); **git** soft-required for diffs/snapshots; tutorials use **jq** / **grep** for inspection. **Later:** curated optional-deps list, `setup`/`doctor` hints (`brew install ripgrep`), perf notes when fallback is used. **Phase 5+** DX; see § BL-355. From T-04 playground (2026-06-11). |
 | BL-356 | **RAG-backed context audit refs — lean JSONL + digest provenance** | As **BL-002** indexes digests (chat, delegations, workspace files), stop duplicating bodies in `delegations.jsonl`; store `context_refs[]` + hashes; index-time metadata for replay/retrieval. Pairs with **BL-353** wire log. **Phase 5+** (after RAG corpus); see § BL-356. From T-04 observability pass (2026-06-11). |
@@ -308,7 +308,7 @@ Phase 1 deferred executor conversation carry-over to here (BL-155); see P1-130 `
 
 **Status:** `partial` — 2026-06-13; expanded 2026-06-11 (T-04 full-delegate audit gaps).
 
-**Target phase:** **Phase 6+7 partial shipped** (P6 helpers/tokens, P7 executor step events + compile provenance). **Remaining:** backend-complete interception + replay-grade full completeness → **BL-367**, **BL-371**.
+**Target phase:** **Phase 6+7+8 partial shipped** (P6 helpers/tokens, P7 executor step events + compile provenance, P8 Aider inner-loop + thinking tokens). **Remaining:** write-always storage + replay-grade full completeness → **BL-367** (Phase 9).
 
 **Problem:** Today we audit **intent** more than **reality**. A full `delegate_to_agent` / `mcp-coder delegate` run appends one `delegations.jsonl` row — but most **wire traffic** is missing or only inferable.
 
@@ -1178,7 +1178,7 @@ Delegation `58bb9846` failed; host recovered silently with duplicate spec tree.
 | BL-350 | P6-ISS-006 | **Phase 7 (shipped, partial)** | P7-002 delivered executor step events + bounded loop; continuation/escalation follow-ons remain |
 | BL-368 | P6-ISS-002 | **Phase 7 (shipped)** | P7-001 delivered unified LlmGateway for owned callsites |
 | BL-333 | P6-ISS-007, P6-ISS-009 | Phase 7+ | Extend reasoning capture (builder/architect); cross-session persistence |
-| BL-367 | Phase 6 exit decision | **Phase 8** | Full-capture substrate — verbosity as display-only filter |
+| BL-367 | Phase 6 exit decision | **Phase 9** | Full-capture substrate — verbosity as display-only filter (Phase 8 closes Aider capture gaps first) |
 | BL-357 / AGENTIC_LOOP_LOGGING | P6-ISS-010 | Phase 7+ | Novelty filter / curation pipeline (bootstrap: log raw first) |
 | BL-321 | P6-ISS-011 | Phase 7+ | Escalation heuristic on reasoning capture signal |
 
@@ -1190,7 +1190,7 @@ Delegation `58bb9846` failed; host recovered silently with duplicate spec tree.
 | BL-309e | P4-ISS-004, P4-ISS-018 | Phase 5 | **yes** if long delegates common | Delegation timeout storms; 217s engine_run on full-file replace; document `MCP_CODER_DELEGATION_TIMEOUT_S` in templates |
 | BL-328 | P4-ISS-007 | Phase 5+ | optional | Spec v2 retry after implement failure — **partially dogfooded** P4-EXIT (`prior_failed_attempts` on stats v2–v3); failure-driven versioned retry workflow still thin |
 | BL-330 | P4-ISS-002 | Phase 5+ | optional | Inspect-tool calls not auditable in `server.jsonl` |
-| BL-335 | P4-ISS-014, P4-ISS-015, **P5-ISS-001**, **P6-002/P6-008** | **done** | **partial** | Helpers + executor tokens live post-Phase 6 (dogfood `f9cb07fc`). Helpers: `owned_completion`; executor: `aider_output_parse`. Per-step executor audit still needs **BL-350**. |
+| BL-335 | P4-ISS-014, P4-ISS-015, **P5-ISS-001**, **P6-002/P6-008** | **done** | **partial** | Helpers + executor tokens live post-Phase 6 (dogfood `f9cb07fc`). Helpers: `owned_completion`; executor: `aider_output_parse` (text-parsing hack). **Phase 8 upgrade:** `ObservableModel` (P8-001) gives exact per-call tokens from `ModelResponse` — `aider_output_parse` flagged for deprecation. |
 | BL-336 | P4-ISS-003 | Phase 5+ | optional | `judgment_checklist` nested under `response_to_cursor` in JSONL only |
 | BL-337 | P4-ISS-005 | Phase 5+ | optional | `config_deprecated` noise in `server.jsonl` (e.g. `MCP_CODER_FALLBACK_SESSION` in consumer `mcp.json`) |
 | BL-338 | P4-ISS-016, P4-ISS-020 | **Phase 5** | **yes** before BL-321 | Executor `edit_format` / constraint blindness on cheap models (gpt-4o-mini); model-selection guidance or auto-escalation |
@@ -1459,7 +1459,7 @@ delegate_to_agent(backend=…)
 | **BL-368** | **Unified LlmGateway completion proxy** — single LLM boundary | **Phase 7 shipped (P7-001)** for owned callsites; backend-internal interception strategy tracked in BL-371 |
 | **BL-369** | **CLI gateway bootstrap hardening** | Carry from P7-ISS-005; remove ad-hoc CLI self-heal and initialize gateway in shared bootstrap |
 | **BL-370** | **Host transcript byte-range provenance** | Carry from P7-ISS-006; add `byte_start`/`byte_end` alongside `source_path`/`last_source_line` for replay fidelity |
-| **BL-371** | **Backend-specific interception strategy for full in/out capture** | Carry from P7-ISS-007; define per-backend interception matrix (native hooks + guaranteed fallback), Phase 8 planning item; may shift full-complete logging milestone to Phase 9 |
+| BL-371 | **Backend-specific interception strategy for full in/out capture** | **Phase 8 (active):** Aider interception via `ObservableModel` (P8-001) + `InterceptionProfile` contract per adapter (P8-002) locked at master session 2026-06-13. Non-Python backends (Claude Code, Codex, OpenCode) → Phase 10+ HTTP proxy. See notes/llm-interception-strategies.md. |
 | **BL-334** | **Backend prompt customization** (system prefix + edit-format control) | See § BL-334 |
 | **BL-340** | **Cursor SDK execution backend** (beside Aider) | See § Execution backends — BL-340 |
 
@@ -1510,7 +1510,7 @@ delegate_to_agent(backend=…)
 
 ### BL-367: Full-capture substrate — LlmGateway proxy + verbosity as display-only filter
 
-**Status:** `idea` — 2026-06-13. **Target phase: Phase 8** (after Phase 7 TBD and after BL-350 executor loop ownership).
+**Status:** `idea` — 2026-06-13. **Target phase: Phase 9** (after Phase 8 closes Aider inner-loop capture gaps).
 
 **Origin:** Phase 6 exit review. Phase 6 shipped the observability seam and helper traces — but verbosity still controls **what gets written to disk**, meaning at `lean` or `standard` verbosity, prompt bodies and executor turns are permanently lost. This is the wrong direction: training-data quality, forensic replay, and debugging all require that **nothing is ever silently dropped at write time**.
 
@@ -1612,7 +1612,7 @@ delegate_to_agent(backend=…)
 - guaranteed fallback capture path that always works
 - explicit confidence tier per backend
 
-**Planning note:** This is a Phase 8 architecture item. Depending on results, "full complete logging" milestone may shift to Phase 9 for cross-backend parity.
+**Planning note:** This is a Phase 8 architecture item. **Phase 8 resolution:** Aider interception via `ObservableModel` subclass (P8-001) + `InterceptionProfile` contract per adapter (P8-002). Non-Python backends (Claude Code, Codex, OpenCode) deferred to Phase 10+ via HTTP proxy base-URL pattern. Full-complete logging milestone moves to Phase 9 (write-always storage).
 
 ---
 

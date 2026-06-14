@@ -67,4 +67,17 @@ def get_engine(backend: str | None = None, **kwargs: object) -> ExecutionEngine:
   engine_cls = _REGISTRY.get(key)
   if engine_cls is None:
     raise UnknownBackendError(key, list_backends())
-  return engine_cls(**kwargs)  # type: ignore[arg-type]
+  engine = engine_cls(**kwargs)  # type: ignore[arg-type]
+  profile = engine.interception_profile
+  if not profile.thinking_captured:
+    from core.observability import get_observability
+
+    get_observability().warn(
+      "interception_thinking_not_captured",
+      {
+        "backend": engine.backend_id,
+        "strategy": profile.strategy,
+        "known_gaps": list(profile.known_gaps),
+      },
+    )
+  return engine

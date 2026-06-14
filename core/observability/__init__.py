@@ -8,6 +8,7 @@ from core.observability.context import (
     bind_delegation_trace_scope,
     clear_delegation_context,
     delegation_context,
+    executor_step_context,
     role_context,
 )
 from core.observability.local import LocalObservability
@@ -28,6 +29,7 @@ __all__ = [
     "bind_delegation_trace_scope",
     "clear_delegation_context",
     "delegation_context",
+    "executor_step_context",
     "get_observability",
     "reset_observability",
     "role_context",

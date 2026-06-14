@@ -10,7 +10,7 @@
 
 This document is the **delivery plan**: what to build, in what order, and how we validate each step. Vision and rationale live in [IDEA.md](./IDEA.md) · doc map: [VISION_DOCS.md](./VISION_DOCS.md). Implementation happens in focused coding sessions once a phase (or sub-step) is agreed.
 
-**Status:** Phase 1 **complete** (P1-199). Phase 2 **complete** (P2-499). Phase 3 **complete** (P3-499). Phase 4 **complete** (2026-06-09). Phase 5 **complete** (2026-06-13). Phase 6 **complete** (2026-06-13). Phase 7 **complete** (2026-06-13; optional capstone met). **Next:** Phase 8 — full 100% capture substrate (BL-367), with backend interception strategy planning (BL-371). See § Phase 8 below.
+**Status:** Phase 1 **complete** (P1-199). Phase 2 **complete** (P2-499). Phase 3 **complete** (P3-499). Phase 4 **complete** (2026-06-09). Phase 5 **complete** (2026-06-13). Phase 6 **complete** (2026-06-13). Phase 7 **complete** (2026-06-13; optional capstone met). Phase 8 **active** (master session complete 2026-06-13; workers pending). **Next:** P8-001 — `ObservableModel` Aider inner-loop capture. See [PHASE8_MVP.md](./PHASE8_MVP.md).
 
 ---
 
@@ -51,7 +51,8 @@ This document is the **delivery plan**: what to build, in what order, and how we
 | **5** | **RAG + retrieval integration** — retrieval contract, delegation RAG → builder, workspace-file corpus, RAG toolset (CLI+MCP) | [PHASE5_MVP.md](./PHASE5_MVP.md) **complete** 2026-06-13 |
 | **6** | **Observability substrate + reasoning buffer** — `core/observability/` adapter seam; live tokens; trace files; reasoning hot buffer; training opt-in (POC/MVP of AGENTIC_LOOP_LOGGING product) | [PHASE6_MVP.md](./PHASE6_MVP.md) **complete** 2026-06-13 |
 | **7** *(complete)* | **Executor loop ownership + unified LLM boundary** — own every executor turn (BL-350); `LlmGateway` proxy for all LLM calls (BL-368); compile provenance bundle; per-turn trace events | Closed 2026-06-13 — see `PHASE7_MVP.md` |
-| **8** *(planned)* | **Full 100% capture substrate** — write-always trace storage; verbosity as display filter only; context package blobs; systematic delegation replay from disk (BL-367) | Requires Phase 7 prerequisites |
+| **8** *(active)* | **Backend interception: full Aider visibility** — `ObservableModel` subclass captures every Aider inner-loop LLM call + thinking tokens; backend interception contract; CLI bootstrap hardening | [PHASE8_MVP.md](./PHASE8_MVP.md) — master session complete 2026-06-13 |
+| **9** *(planned)* | **Write-always storage + replay** — verbosity as display filter only; context package blobs; `mcp-coder replay <id>`; storage GC first slice (BL-367) | Requires Phase 8 prerequisites |
 | **8+** | Interactive/long-running sessions, curation pipeline, novelty filter, cross-session reasoning, multi-host, ensemble | BL-333, BL-351, BL-354, BL-357, BL-160, BL-007 |
 
 **Principle (Phase 3+ attribution):** MCP reports `files_changed` from **delegation-scoped workspace manifest delta** — git-agnostic, backend-agnostic. User git is complementary; optional `git_tracked` metadata later (trivial).

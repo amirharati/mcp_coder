@@ -8,9 +8,11 @@ from typing import Any
 from core.config.role_models import ROLE_EXECUTOR
 from core.observability.context import (
     CLI_FALLBACK_ROLE,
+    _backend_call_active,
     delegation_id_var,
     role_var,
     session_dir_var,
+    step_index_var,
     workspace_var,
 )
 from core.usage.litellm_tokens import _coerce_int, _tokens_from_usage_mapping
@@ -361,6 +363,44 @@ def _extract_from_success(
             pass
 
 
+def _is_cache_warm_probe(kwargs: dict[str, Any]) -> bool:
+    return kwargs.get("max_tokens") == 1
+
+
+def _record_cache_warm_backend_call(
+    kwargs: dict[str, Any],
+    response_obj: Any,
+    start_time: Any,
+    end_time: Any,
+) -> None:
+    try:
+        from core.observability import get_observability
+
+        model = kwargs.get("model")
+        if not model and response_obj is not None:
+            model = getattr(response_obj, "model", None)
+        model_str = str(model) if model else None
+
+        usage_raw = None
+        if response_obj is not None:
+            usage_raw = getattr(response_obj, "usage", None)
+        if usage_raw is None:
+            usage_raw = kwargs.get("usage")
+        usage = _tokens_from_usage_mapping(usage_raw)
+
+        get_observability().record_backend_llm_call(
+            call_type="cache_warm",
+            model=model_str,
+            step_index=step_index_var.get(),
+            usage=usage,
+            duration_ms=_duration_ms(start_time, end_time),
+            prompt_text=_extract_prompt_text(kwargs),
+            response_text=_extract_response_parts(response_obj)[0],
+        )
+    except Exception:
+        pass
+
+
 def litellm_success_handler(
     kwargs: dict[str, Any],
     response_obj: Any,
@@ -373,6 +413,14 @@ def litellm_success_handler(
     try:
         if _gateway_call_active.get():
             return  # Gateway already recorded this call synchronously — skip.
+
+        if _is_cache_warm_probe(kwargs) and delegation_id_var.get():
+            _record_cache_warm_backend_call(kwargs, response_obj, start_time, end_time)
+            return
+
+        if _backend_call_active.get():
+            return  # ObservableModel owns inner-loop capture — skip Route A duplicate.
+
         _extract_from_success(kwargs, response_obj, start_time, end_time)
     except Exception:
         # Observability must never break completions.

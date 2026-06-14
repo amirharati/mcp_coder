@@ -405,3 +405,53 @@ class LocalObservability(ObservabilityBackend):
             response_obj=response_obj,
             duration_ms=duration_ms,
         )
+
+    def record_backend_llm_call(
+        self,
+        *,
+        call_type: str,
+        model: str | None,
+        step_index: int | None = None,
+        thinking_text: str | None = None,
+        thinking_tokens: int | None = None,
+        usage: dict[str, Any] | None = None,
+        duration_ms: int | None = None,
+        prompt_text: str | None = None,
+        response_text: str | None = None,
+    ) -> None:
+        from core.config.observability import resolve_observability_verbosity
+        from core.observability.context import (
+            delegation_id_var,
+            session_dir_var,
+            step_index_var,
+            workspace_var,
+        )
+        from core.observability.trace import append_trace_record, build_backend_llm_call_record
+
+        delegation_id = delegation_id_var.get()
+        session_dir = session_dir_var.get()
+        workspace = workspace_var.get()
+        if not delegation_id or not session_dir or not workspace:
+            return
+
+        resolved_step = step_index if step_index is not None else step_index_var.get()
+        verbosity = resolve_observability_verbosity(workspace)
+        record = build_backend_llm_call_record(
+            delegation_id=delegation_id,
+            step_index=resolved_step,
+            call_type=call_type,
+            model=model,
+            verbosity=verbosity,
+            duration_ms=duration_ms,
+            thinking_text=thinking_text,
+            thinking_tokens=thinking_tokens,
+            usage=usage,
+            prompt_text=prompt_text,
+            response_text=response_text,
+        )
+        append_trace_record(
+            record,
+            session_dir=session_dir,
+            delegation_id=delegation_id,
+            workspace=workspace,
+        )

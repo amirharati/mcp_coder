@@ -243,3 +243,18 @@ class NullObservability(ObservabilityBackend):
         duration_ms: int,
     ) -> dict[str, Any]:
         return {"input": None, "output": None, "total": None, "source": "null"}
+
+    def record_backend_llm_call(
+        self,
+        *,
+        call_type: str,
+        model: str | None,
+        step_index: int | None = None,
+        thinking_text: str | None = None,
+        thinking_tokens: int | None = None,
+        usage: dict[str, Any] | None = None,
+        duration_ms: int | None = None,
+        prompt_text: str | None = None,
+        response_text: str | None = None,
+    ) -> None:
+        pass

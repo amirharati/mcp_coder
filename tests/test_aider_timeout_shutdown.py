@@ -33,9 +33,12 @@ def mock_aider_slow_coder(monkeypatch):
     fake_coders.Coder = mock_coder_cls
     fake_models = MagicMock()
     fake_models.Model.return_value = MagicMock()
+    mock_observable_cls = MagicMock()
+    mock_observable_cls.return_value = MagicMock()
 
     monkeypatch.setitem(sys.modules, "aider.coders", fake_coders)
     monkeypatch.setitem(sys.modules, "aider.models", fake_models)
+    monkeypatch.setattr("core.engine.observable_model.ObservableModel", mock_observable_cls)
 
     monkeypatch.setattr("core.engine.aider_engine.create_delegation_io", lambda: (mock_io, mock_buffer))
     monkeypatch.setattr("core.engine.aider_engine.snapshot_git_dirty", lambda ws: set())

@@ -11,6 +11,22 @@ from pathlib import Path
 from core.observability.stats import collect_observability_stats
 
 
+def _print_interception_profiles() -> None:
+    from core.engine import get_engine, list_backends
+
+    for backend_id in list_backends():
+        engine = get_engine(backend_id)
+        profile = engine.interception_profile
+        print(f"Backend: {backend_id}")
+        print(f"  interception.strategy:      {profile.strategy}")
+        print(f"  interception.thinking:      {str(profile.thinking_captured).lower()}")
+        verified = ", ".join(profile.verified_call_sites) or "(none)"
+        print(f"  interception.verified:      {verified}")
+        gaps = "; ".join(profile.known_gaps) or "(none)"
+        print(f"  interception.known_gaps:      {gaps}")
+        print()
+
+
 def _resolve_workspace(raw: str | None) -> Path:
     if raw:
         return Path(raw).resolve()
@@ -51,6 +67,9 @@ def _cmd_stats(args: argparse.Namespace) -> int:
     print(f"training files:           {traces['training_file_count']}")
     print(f"training bytes:           {traces['training_total_bytes']}")
     print(f"executor turns:           {traces.get('executor_turns', 0)}")
+    if args.verbose:
+        print()
+        _print_interception_profiles()
     return 0
 
 
@@ -61,6 +80,11 @@ def main_maintenance(argv: list[str] | None = None) -> int:
     stats_p = sub.add_parser("stats", help="Report RAG rows, trace files, and JSONL disk usage")
     stats_p.add_argument("--workspace", default=None, help="Repo root (default: cwd)")
     stats_p.add_argument("--json", action="store_true", help="JSON output")
+    stats_p.add_argument(
+        "--verbose",
+        action="store_true",
+        help="Include backend interception profiles",
+    )
 
     args = parser.parse_args(argv)
     if args.command == "stats":

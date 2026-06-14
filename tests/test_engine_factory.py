@@ -4,6 +4,7 @@ from core.engine import AiderEngine, get_engine, list_backends
 from core.engine.aider_engine import BACKEND_ID
 from core.engine.base import ExecutionEngine, ExecutionResult
 from core.engine.factory import UnknownBackendError, register_engine
+from core.engine.interception_profile import InterceptionProfile
 
 
 def test_list_backends_includes_aider():
@@ -28,6 +29,15 @@ def test_register_engine_custom():
         @property
         def backend_id(self) -> str:
             return "dummy_test"
+
+        @property
+        def interception_profile(self) -> InterceptionProfile:
+            return InterceptionProfile(
+                strategy="callback",
+                verified_call_sites=("tests/dummy.py:1",),
+                known_gaps=(),
+                thinking_captured=True,
+            )
 
         def run(self, prompt, target_files, *, workspace_path):
             return ExecutionResult(success=True, output="ok")

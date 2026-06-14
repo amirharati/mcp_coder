@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import concurrent.futures
+import contextvars
 import os
 from pathlib import Path
 from typing import Any
@@ -26,6 +27,7 @@ from core.engine.base import BackendRunRequest, ExecutionEngine, ExecutionResult
 from core.engine.capabilities import AIDER_CAPABILITIES, BackendCapabilities
 from core.engine.factory import register_engine
 from core.engine.git_diff import snapshot_git_dirty, snapshot_mtimes
+from core.engine.interception_profile import AIDER_INTERCEPTION_PROFILE, InterceptionProfile
 from core.workspace.snapshot import begin_delegation_snapshot, resolve_delegation_attribution
 from core.engine.stdio_isolation import isolated_stdio, merged_capture
 
@@ -145,6 +147,10 @@ class AiderEngine(ExecutionEngine):
     def model_name(self) -> str:
         return self._model_name
 
+    @property
+    def interception_profile(self) -> InterceptionProfile:
+        return AIDER_INTERCEPTION_PROFILE
+
     def capabilities(self) -> BackendCapabilities:
         return AIDER_CAPABILITIES
 
@@ -169,7 +175,8 @@ class AiderEngine(ExecutionEngine):
         edit_paths_rel: paths used for cache key, git snapshot, and audit.
         """
         from aider.coders import Coder
-        from aider.models import Model
+
+        from core.engine.observable_model import ObservableModel
 
         prev_cwd = os.getcwd()
         executor_reused = False
@@ -184,7 +191,7 @@ class AiderEngine(ExecutionEngine):
                 str(Path(workspace_path) / f) if not Path(f).is_absolute() else f
                 for f in fnames_rel
             ]
-            model = Model(self._model_name)
+            model = ObservableModel(self._model_name)
             before_git = snapshot_git_dirty(workspace_path)
             before_mtimes = snapshot_mtimes(workspace_path, edit_paths_rel)
             snapshot_session = begin_delegation_snapshot(
@@ -237,8 +244,9 @@ class AiderEngine(ExecutionEngine):
                     return coder, io, partial, captured, executor_reused_local, executor_recreated_local
 
             timeout_s = timeout_s if timeout_s is not None else delegation_timeout_seconds()
+            ctx = contextvars.copy_context()
             pool = concurrent.futures.ThreadPoolExecutor(max_workers=1)
-            future = pool.submit(_run_coder)
+            future = pool.submit(ctx.run, _run_coder)
             pool_shutdown = False
             try:
                 coder, io, partial, captured, executor_reused, executor_recreated = (

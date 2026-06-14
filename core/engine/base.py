@@ -7,6 +7,7 @@ from typing import TYPE_CHECKING, Any
 if TYPE_CHECKING:
     from core.context.package import ContextPackage
     from core.engine.capabilities import BackendCapabilities
+    from core.engine.interception_profile import InterceptionProfile
 
 
 @dataclass
@@ -49,6 +50,11 @@ class ExecutionEngine(ABC):
     @abstractmethod
     def backend_id(self) -> str:
         """Stable id stored in delegation logs and the MCP `backend` argument."""
+
+    @property
+    @abstractmethod
+    def interception_profile(self) -> "InterceptionProfile":
+        """Declare how this backend's LLM calls are intercepted for observability."""
 
     @property
     def model_name(self) -> str | None:

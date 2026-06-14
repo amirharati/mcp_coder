@@ -1,4 +1,8 @@
-"""Parse token usage from Aider stdout (P2-ISS-003 fallback)."""
+"""Parse token usage from Aider stdout (P2-ISS-003 fallback).
+
+Deprecated (P8-001): aider_output_parse fallback superseded by backend_llm_call usage
+for inner turns. Kept for backward compat until master removes the overlay.
+"""
 
 from __future__ import annotations
 

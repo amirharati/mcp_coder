@@ -92,6 +92,7 @@ from core.observability import (
     CONTEXT_MODE_HOST_TRANSCRIPT,
     bind_delegation_trace_scope,
     delegation_context,
+    executor_step_context,
     get_observability,
     role_context,
 )
@@ -259,7 +260,8 @@ def _bounded_executor_loop(
         )
 
         step_t0 = time.perf_counter()
-        step_result = step_fn(step_timeout_s)
+        with executor_step_context(step_idx):
+            step_result = step_fn(step_timeout_s)
         step_ms = int((time.perf_counter() - step_t0) * 1000)
         executor_turns += 1
 
