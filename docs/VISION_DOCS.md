@@ -75,7 +75,7 @@ Use this page so **main vision** ([IDEA.md](./IDEA.md)) is not lost when editing
 - **Phase 4.5 (planning handoff done 2026-06-13):** Stack literacy gate — tutorials, inspect, gap analysis — [PHASE4.5_MVP.md](./PHASE4.5_MVP.md). Phase 5 scope locked. Pending items → BL-362, BL-363.
 - **Phase 5 (closed 2026-06-13):** RAG + retrieval integration (BL-002 compile-push) — [PHASE5_MVP.md](./PHASE5_MVP.md). Defaults on. Carried: BL-364, P5-005.
 - **Phase 6 (closed 2026-06-13):** Observability substrate + reasoning buffer — `core/observability/` seam; live tokens (BL-335); helper trace files; lean JSONL; reasoning hot buffer; training opt-in — POC/MVP of AGENTIC_LOOP_LOGGING. See [PHASE6_MVP.md](./PHASE6_MVP.md) · [PHASE6_ISSUES.md](./PHASE6_ISSUES.md) (frozen).
-- **Phase 7 (planned, scope defined):** Executor loop ownership (**BL-350**) — per-turn LLM I/O, non-LLM actions, reasoning tokens; unified **LlmGateway** proxy (**BL-368**) — all calls through one path; compile provenance bundle — builder/architect/validation I/O in trace. PM doc: `PHASE7_MVP.md` (to be created).
+- **Phase 7 (active, PM doc ready):** Executor loop ownership (**BL-350**) — per-turn LLM I/O, non-LLM actions, reasoning tokens; unified **LlmGateway** proxy (**BL-368**) — all calls through one path; compile provenance bundle — builder/architect/validation I/O in trace. PM doc: [PHASE7_MVP.md](./PHASE7_MVP.md) · Issues: [PHASE7_ISSUES.md](./PHASE7_ISSUES.md) · Bootstrap: [notes/phase7-master-session-bootstrap.md](./notes/phase7-master-session-bootstrap.md).
 - **Phase 8 (planned, scope defined):** Full 100% capture substrate (**BL-367**) — write-always storage, context package blobs, systematic `replay` CLI, storage GC first slice. Verbosity becomes display filter only. PM doc: `PHASE8_MVP.md` (to be created).
 - **Phase 8+:** Supervised loop control / escalation (BL-351), curation pipeline, novelty filter, cross-session reasoning, training export (AGENTIC_LOOP_LOGGING months 2+), multi-host, ensemble (BL-007).
 - **Executor:** Aider-first; OpenCode/other hosts very low priority.
@@ -86,6 +86,7 @@ Use this page so **main vision** ([IDEA.md](./IDEA.md)) is not lost when editing
 |------|--------|
 | 2026-06-13 | **Phase 6 closed** — PHASE6_MVP + PHASE6_ISSUES frozen; BL-368, BL-367; Phase 7 direction (BL-350 + BL-368 → BL-367) |
 | 2026-06-13 | **Phase 7 + Phase 8 scoped** — full 100% capture prerequisites mapped; Phase 7 = proxy + loop ownership; Phase 8 = write-always + blobs + replay; scope in PHASES.md § Phase 7 / § Phase 8 |
+| 2026-06-13 | **Phase 7 PM docs created** — PHASE7_MVP.md + PHASE7_ISSUES.md + notes/phase7-master-session-bootstrap.md; design decisions pending master session |
 | 2026-06-13 | Phase 6 planning locked — PHASE6_MVP.md + phase6-master-session-bootstrap.md created; P6-001…P6-005 milestones; `ObservabilityBackend` seam + BL-335 + BL-333 + BL-353 + training opt-in |
 | 2026-06-13 | Phase 5 closed — recommended exit; RAG defaults on; PHASE5_ISSUES frozen → BL-335, BL-364 |
 | 2026-06-13 | Phase 5 planning locked — PHASE5_MVP.md + PHASE5_ISSUES.md created; PHASE4.5_ISSUES.md frozen; BL-360–363 added to BACKLOG; rag-gap-analysis.md § MVP promoted to locked |
