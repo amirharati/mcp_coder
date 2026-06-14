@@ -27,8 +27,11 @@ mcp-coder keeps state in two places:
     project.json                    workspace path + timestamps
     workspace_history.db            SQLite: file snapshots, diffs, checkpoints
     delegation_rag.db               SQLite FTS5: full-text search over delegations
+    workspace_rag.db                SQLite FTS5: per-file summaries (Phase 5)
     sessions/<mcp_session_id>/
-      delegations.jsonl             one JSONL record per delegation ← the audit trail
+      delegations.jsonl             one lean JSONL record per delegation ← audit trail
+      traces/
+        <delegation_id>.jsonl       helper LLM I/O for that delegation (Phase 6)
 ```
 
 The split is intentional: specs and config belong in your repo (versioned, shared). History and logs belong outside (large, machine-specific, no git noise).
@@ -89,11 +92,13 @@ Each Cursor chat maps to an **mcp session** — a UUID directory under `projects
 - **`always_new`** — a new session UUID every time the MCP server starts (i.e. every time Cursor launches it for a workspace). Delegations from different chats go into different session dirs.
 - **`align_host`** — mcp-coder tries to reuse a session that matches the current Cursor chat session. Consecutive delegations from the same chat share an Aider `Coder` instance (faster — no re-init).
 
-Inside each session dir there is one file:
+Inside each session dir:
 
 ```
 sessions/<mcp_session_id>/
-  delegations.jsonl     one JSON line per delegation, appended in order
+  delegations.jsonl         one lean JSON line per delegation, appended in order
+  traces/
+    <delegation_id>.jsonl   helper LLM trace for that run (written if verbosity ≥ standard)
 ```
 
 To find all session dirs for a project and see how many delegations each has:
@@ -139,7 +144,9 @@ tail -1 <path/to/delegations.jsonl> | python3 -m json.tool | head -80
 | `outcome` | string | `success`, `partial`, `needs_input`, `error` |
 | `files_requested` | list | `target_files` from MCP call |
 | `files_changed` | list | Files actually created/modified/deleted (from snapshot diff) |
-| `context_refs` | list | RAG retrieval hits when `rag_retrieval` ran (empty if validation blocked) |
+| `context_refs` | list | RAG retrieval hits — **pointer-only** `{kind, id, corpus, score}`; bodies in `delegation_rag.db` |
+| `response_to_cursor` | dict | Lean digest of executor output: `{output_sha256, output_bytes, output_preview, success, files_changed}` |
+| `trace_ref` | string | Relative path to the helper LLM trace file, e.g. `"traces/<id>.jsonl"` |
 
 ### `mcp_request` — what the planner sent
 
@@ -205,20 +212,30 @@ Example (abbreviated):
 "model_roles": {
   "executor": {
     "role": "executor",
-    "model": "openrouter/anthropic/claude-sonnet-4",
-    "tokens": {"input": null, "output": null, "total": null, "source": "executor"},
-    "duration_ms": 8240
+    "model": "openrouter/openai/gpt-4o-mini",
+    "tokens": {"input": 5400, "output": 107, "total": 5507, "source": "aider_output_parse"},
+    "duration_ms": 7089
   },
   "context_builder": {
     "role": "context_builder",
-    "model": "openrouter/google/gemini-2.5-flash",
-    "tokens": {"input": null, "output": null, "total": null, "source": "context_builder_llm"},
-    "duration_ms": 680
+    "model": "openrouter/openai/gpt-4o-mini",
+    "tokens": {"input": 1843, "output": 231, "total": 2074, "source": "owned_completion"},
+    "duration_ms": 1565
+  },
+  "architect_pass": {
+    "role": "architect_pass",
+    "tokens": {"input": 1358, "output": 169, "total": 1527, "source": "owned_completion"},
+    "duration_ms": 1139
+  },
+  "spec_validation": {
+    "role": "spec_validation",
+    "tokens": {"input": 1238, "output": 3, "total": 1241, "source": "owned_completion"},
+    "duration_ms": 735
   }
 }
 ```
 
-> `tokens` are currently `null` for most paths — BL-335, a known gap. The models ran; counting is a pending fix.
+`source` tells you how tokens were counted: `owned_completion` = helpers measured directly via `litellm.completion` (Phase 6, always accurate); `aider_output_parse` = parsed from Aider's output summary (best-effort).
 
 ### `context.delegation_pipeline` — phase audit (JSONL)
 
@@ -255,7 +272,7 @@ mcp-coder view delegations              # merged JSONL for cwd workspace
 mcp-coder view delegations --no-open    # serve at http://127.0.0.1:8765/ without opening a tab
 ```
 
-Good for browsing many delegations without `tail` + `python -m json.tool`. Today the list view is structured; **expanded detail is still mostly raw JSON** — structured pipeline/model-role sections are planned (**P4.5-ISS-006** / **BL-343**). Until then, use `context.delegation_pipeline` and `model_roles` in the JSON block, or ask Cursor via MCP history tools (§7).
+Good for browsing many delegations. The list shows outcome, files, and timing. Expand a card to **enrich** it — the viewer lazily resolves `context_refs` from the RAG DBs and loads the trace file, so you see helper LLM summaries and resolved snippets without reading raw JSONL. For full JSON, `tail -1 delegations.jsonl | python3 -m json.tool` still works.
 
 ### List recent delegations
 
@@ -303,7 +320,72 @@ You don't normally need to query it directly — the CLI and MCP tools cover the
 
 ---
 
-## 7. Ask Cursor instead (via MCP tools)
+## 7. Trace files — helper LLM I/O
+
+Every delegation that runs the helper pipeline (builder, architect, spec_validation) writes a **trace file** alongside `delegations.jsonl`:
+
+```
+sessions/<id>/traces/<delegation_id>.jsonl
+```
+
+Each trace file has one JSON line per event:
+
+| Line | Type | Content |
+|------|------|---------|
+| 1 | `trace_header` | `version_tags`: git SHA, model versions, config fingerprint, pipeline flags |
+| 2+ | `llm_call` | One line per helper call: `role`, `tokens`, `duration_ms`, `prompt_preview`, `response_preview` |
+
+Example `llm_call` line (at default `standard` verbosity — previews only):
+
+```json
+{
+  "type": "llm_call",
+  "role": "spec_validation",
+  "model": "openrouter/openai/gpt-4o-mini",
+  "tokens": {"input": 1238, "output": 3, "total": 1241},
+  "duration_ms": 735,
+  "prompt_preview": "## Role: spec validator\n\nCompare the task spec…",
+  "response_preview": "## Validation OK"
+}
+```
+
+**Verbosity tiers** (`observability_verbosity` in `config.yaml`):
+
+| Tier | Trace content | Use when |
+|------|--------------|----------|
+| `lean` | Hashes + token counts only | Minimal disk use |
+| `standard` *(default)* | Previews (≤500 chars) | Normal debugging |
+| `full` | Full prompt and response bodies | Deep inspection |
+
+> **Note:** verbosity currently controls what is *written* to the trace file. Full capture regardless of verbosity is planned for Phase 8 (BL-367).
+
+The JSONL row points to its trace via `trace_ref`. The delegation viewer resolves it lazily on card expand.
+
+---
+
+## 8. Storage stats
+
+```bash
+mcp-coder maintenance stats              # stats for cwd workspace
+mcp-coder maintenance stats --workspace /path/to/project
+```
+
+Sample output:
+
+```
+JSONL records:          23
+Trace files:             2  (9743 B)
+delegation_rag.db:      23 rows
+workspace_rag.db:        8 rows
+workspace_history.db:   23 snapshots
+capture_for_training:   false
+```
+
+Use this after a run to confirm trace files are being written and the DBs are growing as expected.
+
+---
+
+## 9. Ask Cursor instead (via MCP tools)
 
 During active work you rarely need the CLI — the planner has direct access:
 
@@ -318,7 +400,7 @@ These call `list_delegations`, `get_delegation_diff`, `get_file_history`, `get_c
 
 ---
 
-## 8. What to look for in your first JSONL record
+## 10. What to look for in your first JSONL record
 
 After T-01's delegation, open your record and check:
 

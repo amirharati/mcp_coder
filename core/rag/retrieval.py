@@ -114,3 +114,21 @@ def context_refs_to_dict(refs: list[ContextRef]) -> list[dict[str, Any]]:
             }
         )
     return out
+
+
+def context_refs_to_lean_dict(refs: list[ContextRef]) -> list[dict[str, Any]]:
+    """Pointer-only serialization for delegations.jsonl — no body content.
+
+    Bodies (snippet, metadata, source_line_range) stay in delegation_rag.db.
+    Use context_refs_to_dict for full serialization (MCP tool responses, search CLI).
+    """
+    out: list[dict[str, Any]] = []
+    for ref in refs:
+        out.append({
+            "kind": ref.kind,
+            "id": ref.id,
+            "corpus": ref.corpus,
+            "sha256": ref.sha256,
+            "score": round(ref.score, 4) if ref.score is not None else None,
+        })
+    return out

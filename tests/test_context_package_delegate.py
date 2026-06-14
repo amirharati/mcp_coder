@@ -230,7 +230,8 @@ def test_jsonl_has_context_package_and_adapter_in(tmp_path, monkeypatch):
     record = json.loads(Path(payload["log_path"]).read_text(encoding="utf-8").strip())
 
     ctx = record["context"]
-    assert "context_package" in ctx, "JSONL context must include context_package"
+    assert "context_package_hash" in ctx, "JSONL context must include context_package_hash (not the full blob)"
+    assert isinstance(ctx["context_package_hash"], str)
     assert "adapter_in" in ctx, "JSONL context must include adapter_in"
     assert "fnames" in ctx["adapter_in"]
     assert "read_paths_in_prompt" in ctx["adapter_in"]

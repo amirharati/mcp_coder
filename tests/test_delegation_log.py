@@ -68,6 +68,17 @@ def test_append_delegation_record(tmp_path, monkeypatch):
     assert parsed["session_id"] == storage.mcp_session_id
     assert parsed["context_refs"] == []
 
+    # Slice 1: response_to_cursor is now a digest, not the raw response
+    rtc = parsed["response_to_cursor"]
+    assert isinstance(rtc, dict)
+    assert set(rtc.keys()) >= {"output_sha256", "output_bytes", "output_preview", "success", "files_changed"}
+    assert len(rtc["output_sha256"]) == 64  # valid sha256 hex
+    assert len(rtc["output_preview"]) <= 201  # 200 chars + optional ellipsis
+    assert "output" not in rtc
+
+    # Slice 4: trace_ref absent when not passed
+    assert "trace_ref" not in parsed
+
     pointer = tmp_path / "workspace" / ".mcp-coder" / "session.json"
     assert pointer.is_file()
 
@@ -174,3 +185,105 @@ def test_delegation_log_path_returns_latest_session(tmp_path, monkeypatch):
     append_delegation_record(record)
     assert delegation_log_path() == storage.log_path
     assert project_key(tmp_path / "workspace") == storage.project_key
+
+
+def test_response_to_cursor_digest(tmp_path, monkeypatch):
+    import hashlib
+
+    storage = _storage_for(tmp_path, monkeypatch)
+    long_output = "x" * 300
+    response = {"success": True, "output": long_output, "files_changed": ["a.py"]}
+    record = build_delegation_record(
+        delegation_id="digest-id",
+        timestamp_start="t0",
+        timestamp_end="t1",
+        duration_ms=1,
+        mcp_request={},
+        backend="aider",
+        model=None,
+        success=True,
+        error=None,
+        response_to_cursor=response,
+        files_requested=[],
+        files_changed=["a.py"],
+        context_block={},
+        timing={},
+        tokens={},
+        project_key=storage.project_key,
+        mcp_session_id=storage.mcp_session_id,
+        session_dir=storage.session_dir,
+        log_path=storage.log_path,
+        session_action="new",
+        session_reason="policy_always_new",
+        session_policy="always_new",
+    )
+    rtc = record["response_to_cursor"]
+    assert set(rtc.keys()) == {"output_sha256", "output_bytes", "output_preview", "success", "files_changed"}
+    assert rtc["output_sha256"] == hashlib.sha256(long_output.encode()).hexdigest()
+    assert rtc["output_bytes"] == 300
+    # preview truncated at 200 + ellipsis
+    assert rtc["output_preview"] == "x" * 200 + "…"
+    assert len(rtc["output_preview"]) == 201
+    assert rtc["success"] is True
+    assert rtc["files_changed"] == ["a.py"]
+    assert "output" not in rtc
+
+
+def test_trace_ref_included_when_passed(tmp_path, monkeypatch):
+    storage = _storage_for(tmp_path, monkeypatch)
+    record = build_delegation_record(
+        delegation_id="trace-id",
+        timestamp_start="t0",
+        timestamp_end="t1",
+        duration_ms=1,
+        mcp_request={},
+        backend="aider",
+        model=None,
+        success=True,
+        error=None,
+        response_to_cursor={},
+        files_requested=[],
+        files_changed=[],
+        context_block={},
+        timing={},
+        tokens={},
+        project_key=storage.project_key,
+        mcp_session_id=storage.mcp_session_id,
+        session_dir=storage.session_dir,
+        log_path=storage.log_path,
+        session_action="new",
+        session_reason="policy_always_new",
+        session_policy="always_new",
+        trace_ref="traces/trace-id.jsonl",
+    )
+    assert record["trace_ref"] == "traces/trace-id.jsonl"
+
+
+def test_trace_ref_absent_when_none(tmp_path, monkeypatch):
+    storage = _storage_for(tmp_path, monkeypatch)
+    record = build_delegation_record(
+        delegation_id="no-trace-id",
+        timestamp_start="t0",
+        timestamp_end="t1",
+        duration_ms=1,
+        mcp_request={},
+        backend="aider",
+        model=None,
+        success=True,
+        error=None,
+        response_to_cursor={},
+        files_requested=[],
+        files_changed=[],
+        context_block={},
+        timing={},
+        tokens={},
+        project_key=storage.project_key,
+        mcp_session_id=storage.mcp_session_id,
+        session_dir=storage.session_dir,
+        log_path=storage.log_path,
+        session_action="new",
+        session_reason="policy_always_new",
+        session_policy="always_new",
+        trace_ref=None,
+    )
+    assert "trace_ref" not in record

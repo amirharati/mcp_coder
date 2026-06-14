@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import hashlib
 import json
 import os
 import sys
@@ -22,6 +23,29 @@ TOOL_NAME = "delegate_to_agent"
 CONTEXT_MODE_FALLBACK = "fallback"
 CONTEXT_MODE_HOST_TRANSCRIPT = "host_transcript"
 PROMPT_PREVIEW_CHARS = 500
+
+# delegations.jsonl record schema (lean — see D-P6-3)
+# Each line is a delegation audit row. Bodies live in:
+#   - Aider output:    response_digest.output_sha256 (full text → Cursor received it)
+#   - RAG hit bodies:  delegation_rag.db (join on context_refs[].id)
+#   - LLM I/O bodies:  trace_ref path → sessions/.../traces/<delegation_id>.jsonl
+#   - Context package: context_package_hash (reconstruct from spec + candidate_files)
+
+
+def _slim_response_to_cursor(response: dict[str, Any]) -> dict[str, Any]:
+    output: str = response.get("output") or ""
+    output_bytes = len(output.encode("utf-8"))
+    output_sha256 = hashlib.sha256(output.encode("utf-8")).hexdigest()
+    preview = output[:200]
+    if len(output) > 200:
+        preview += "…"
+    return {
+        "output_sha256": output_sha256,
+        "output_bytes": output_bytes,
+        "output_preview": preview,
+        "success": response.get("success"),
+        "files_changed": response.get("files_changed", []),
+    }
 
 
 def utc_now_iso() -> str:
@@ -149,6 +173,7 @@ def build_delegation_record(
     auto_merge_spec_read: bool | None = None,
     model_roles: dict[str, Any] | None = None,
     context_refs: list[dict[str, Any]] | None = None,
+    trace_ref: str | None = None,
 ) -> dict[str, Any]:
     session_dir_str = str(Path(session_dir).resolve())
     log_path_str = str(Path(log_path).resolve())
@@ -177,7 +202,7 @@ def build_delegation_record(
         "model": model,
         "success": success,
         "error": error,
-        "response_to_cursor": response_to_cursor,
+        "response_to_cursor": _slim_response_to_cursor(response_to_cursor),
         "files_requested": files_requested,
         "files_changed": files_changed,
         "files_unexpected": files_unexpected if files_unexpected is not None else [],
@@ -234,6 +259,8 @@ def build_delegation_record(
         record["auto_merge_spec_read"] = auto_merge_spec_read
     if model_roles:
         record["model_roles"] = model_roles
+    if trace_ref is not None:
+        record["trace_ref"] = trace_ref
     return record
 
 

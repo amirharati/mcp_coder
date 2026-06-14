@@ -26,6 +26,7 @@ from core.config.rag import (
 )
 from core.config.spec_validation import spec_validation_enabled
 from core.config.models import resolve_model_name
+from core.config.observability import resolve_observability_verbosity
 from core.config.role_models import (
     ROLE_CONTEXT_BUILDER,
     ROLE_EXECUTOR,
@@ -51,7 +52,6 @@ from core.context.package import (
     TIER_READ_EXCERPT,
     TIER_READ_FULL,
     ContextPackage,
-    summarize_context_package,
 )
 from core.context.summary import assemble_prompt, estimate_tokens, prompt_metadata, sha256_hex
 from core.context.transcript_policy import POLICY_DUMP, resolve_host_transcript_policy
@@ -102,7 +102,7 @@ from core.rag.builder_retrieval import (
     run_builder_workspace_file_retrieval,
     run_merged_builder_rag_retrieval,
 )
-from core.rag.retrieval import ContextRef, context_refs_to_dict
+from core.rag.retrieval import ContextRef, context_refs_to_dict, context_refs_to_lean_dict
 
 OUTPUT_MAX_CHARS = 16_000
 
@@ -645,6 +645,7 @@ def delegate_to_agent(
             and use_context_package()
         )
         context_package: ContextPackage | None = None
+        context_package_hash: str | None = None
         executor_prompt = prompt  # overridden if context package path is taken
 
         planner_target_files = list(target_files)
@@ -1112,6 +1113,10 @@ def delegate_to_agent(
         resolved_model = model or resolve_model_name()
 
         # Build context_block from executor_prompt (legacy: same as prompt; package: translated prompt)
+        if context_package is not None:
+            from core.context.package_cache import compute_context_package_cache_key
+            context_package_hash = compute_context_package_cache_key(context_package)
+
         context_block = prompt_metadata(
             executor_prompt,
             context_summary=context_summary,
@@ -1125,7 +1130,8 @@ def delegate_to_agent(
                 for e in context_package.entries
                 if e.tier in (TIER_READ_FULL, TIER_READ_EXCERPT) and e.payload is not None
             ]
-            context_block["context_package"] = summarize_context_package(context_package)
+            if context_package_hash is not None:
+                context_block["context_package_hash"] = context_package_hash
             pkg_meta = context_package.metadata
             if pkg_meta.get("context_builder_enabled"):
                 candidate_files = pkg_meta.get("candidate_files") or {}
@@ -1535,6 +1541,13 @@ def delegate_to_agent(
                 buffer_size=obs.resolve_reasoning_buffer_size(ws),
             )
 
+        _obs_verbosity = resolve_observability_verbosity(ws)
+        _trace_ref = (
+            f"traces/{delegation_id}.jsonl"
+            if _obs_verbosity in ("standard", "full")
+            else None
+        )
+
         record = obs.build_delegation_record(
             delegation_id=delegation_id,
             timestamp_start=timestamp_start,
@@ -1587,8 +1600,9 @@ def delegate_to_agent(
             auto_merge_spec_read=auto_merge_spec_read,
             model_roles=model_roles_payload,
             context_refs=(
-                context_refs_to_dict(rag_retrieval_refs) if rag_retrieval_on else None
+                context_refs_to_lean_dict(rag_retrieval_refs) if rag_retrieval_on else None
             ),
+            trace_ref=_trace_ref,
         )
         log_path = obs.append_delegation_record(record, ws=ws)
         obs.log_delegation_sent(
@@ -1599,12 +1613,6 @@ def delegate_to_agent(
             log_path=log_path,
             error=error,
         )
-
-        context_package_hash = None
-        if context_package is not None:
-            from core.context.package_cache import compute_context_package_cache_key
-
-            context_package_hash = compute_context_package_cache_key(context_package)
 
         pipeline_flags_runtime = {
             "context_builder_llm_enabled": (

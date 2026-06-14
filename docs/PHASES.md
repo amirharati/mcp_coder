@@ -10,7 +10,7 @@
 
 This document is the **delivery plan**: what to build, in what order, and how we validate each step. Vision and rationale live in [IDEA.md](./IDEA.md) · doc map: [VISION_DOCS.md](./VISION_DOCS.md). Implementation happens in focused coding sessions once a phase (or sub-step) is agreed.
 
-**Status:** Phase 1 **complete** (P1-199). Phase 2 **complete** (P2-499). Phase 3 **complete** (P3-499). Phase 4 **complete** (2026-06-09). Phase 5 **complete** (2026-06-13). Phase 6 **active** — planning locked 2026-06-13. **Active:** Phase 6 implementation.
+**Status:** Phase 1 **complete** (P1-199). Phase 2 **complete** (P2-499). Phase 3 **complete** (P3-499). Phase 4 **complete** (2026-06-09). Phase 5 **complete** (2026-06-13). Phase 6 **complete** (2026-06-13). **Next:** Phase 7 planning — executor loop ownership (BL-350) + LlmGateway proxy (BL-368) → full-capture substrate (BL-367, Phase 8).
 
 ---
 
@@ -49,8 +49,9 @@ This document is the **delivery plan**: what to build, in what order, and how we
 | **4** | **Context builder + manager** — smart assembly, cheap LLM file picker, janitor, verify, internal pipeline | [PHASE4_MVP.md](./PHASE4_MVP.md) **complete** 2026-06-09; carried gaps → BACKLOG § Phase 4 exit |
 | **4.5** | **Full stack onboarding** — Phases 1–4 tutorials, architecture docs, live inspection, gap analysis; no new arc number | [PHASE4.5_MVP.md](./PHASE4.5_MVP.md) **active** |
 | **5** | **RAG + retrieval integration** — retrieval contract, delegation RAG → builder, workspace-file corpus, RAG toolset (CLI+MCP) | [PHASE5_MVP.md](./PHASE5_MVP.md) **complete** 2026-06-13 |
-| **6** | **Observability substrate + reasoning buffer** — `core/observability/` adapter seam; live tokens; trace files; reasoning hot buffer; training opt-in (POC/MVP of AGENTIC_LOOP_LOGGING product) | [PHASE6_MVP.md](./PHASE6_MVP.md) **active** |
-| **6+** | Interactive/long-running sessions, supervised loop control, escalation hooks, multi-host, product UX, ensemble | BL-350, BL-354, BL-160, BL-201/202, BL-007, BL-152, BL-340 |
+| **6** | **Observability substrate + reasoning buffer** — `core/observability/` adapter seam; live tokens; trace files; reasoning hot buffer; training opt-in (POC/MVP of AGENTIC_LOOP_LOGGING product) | [PHASE6_MVP.md](./PHASE6_MVP.md) **complete** 2026-06-13 |
+| **7** *(planned)* | **Executor visibility + unified LLM boundary** — own executor loop (BL-350); `LlmGateway` proxy (BL-368); path toward full-capture logging (BL-367 Phase 8) | BACKLOG § Phase 6 exit |
+| **7+** | Interactive/long-running sessions, supervised loop control, escalation hooks, multi-host, product UX, ensemble | BL-350, BL-354, BL-160, BL-201/202, BL-007, BL-152, BL-340 |
 
 **Principle (Phase 3+ attribution):** MCP reports `files_changed` from **delegation-scoped workspace manifest delta** — git-agnostic, backend-agnostic. User git is complementary; optional `git_tracked` metadata later (trivial).
 
@@ -747,4 +748,5 @@ Both projects can be developed in parallel. Phase 1 does not require the proxy o
 - [x] Phase 4 complete — context builder + manager + pipeline (P4-499 exit 2026-06-09); [PHASE4_MVP.md](./PHASE4_MVP.md).
 - [x] Phase 4.5 — stack literacy gate; tutorials, inspect, gap analysis; [PHASE4.5_MVP.md](./PHASE4.5_MVP.md).
 - [x] Phase 5 — RAG + retrieval (P5-001…P5-004, P5-006); recommended exit met 2026-06-13; [PHASE5_MVP.md](./PHASE5_MVP.md).
-- [ ] **Phase 6 — Active** — Observability substrate + reasoning buffer; planning locked 2026-06-13; [PHASE6_MVP.md](./PHASE6_MVP.md). Start: P6-001 (`core/observability/` adapter seam).
+- [x] Phase 6 — observability substrate + reasoning buffer (P6-001…P6-008); recommended exit + post-dogfood fixes met 2026-06-13; [PHASE6_MVP.md](./PHASE6_MVP.md).
+- [ ] **Phase 7 — Planning** — executor loop ownership (BL-350) + LlmGateway proxy (BL-368); see BACKLOG § Phase 6 exit.

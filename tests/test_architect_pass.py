@@ -3,16 +3,14 @@
 from __future__ import annotations
 
 import json
-import sys
-from contextlib import contextmanager
-from io import StringIO
 from pathlib import Path
-from unittest.mock import MagicMock, patch
+from unittest.mock import patch
 
 from core.config.architect_pass import architect_pass_enabled
 from core.context.architect_prompt import build_architect_pass_prompt
 from core.context.file_picker import CandidateFilesResult
 from core.engine.architect_pass_llm import ArchitectPassLlmResult, run_architect_pass_llm
+from core.engine.owned_helper_llm import OwnedHelperCompletion
 from core.engine.base import ExecutionResult
 from core.engine.capabilities import AIDER_CAPABILITIES
 from core.specs.read import read_task_spec
@@ -96,25 +94,15 @@ def _make_mock_engine(fake_result: ExecutionResult, captured: dict | None = None
 
 
 def _run_architect_llm(tmp_path, response: str):
-    mock_model_cls = MagicMock()
-    mock_model_cls.return_value.simple_send_with_retries.return_value = response
-    fake_models = MagicMock()
-    fake_models.Model = mock_model_cls
-    fake_aider = MagicMock()
-    fake_aider.models = fake_models
-
-    @contextmanager
-    def _fake_iso():
-        yield StringIO(), StringIO()
-
-    modules = {
-        "aider": fake_aider,
-        "aider.models": fake_models,
-    }
-    with patch.dict(sys.modules, modules):
-        with patch("core.engine.architect_pass_llm.provider_hint_for_model", return_value=None):
-            with patch("core.engine.architect_pass_llm.isolated_stdio", _fake_iso):
-                return run_architect_pass_llm("prompt", workspace_path=tmp_path)
+    completion = OwnedHelperCompletion(
+        text=response,
+        model="openrouter/test/flash",
+        tokens={"input": 10, "output": 5, "total": 15, "source": "owned_completion"},
+        duration_ms=42,
+    )
+    with patch("core.engine.architect_pass_llm.provider_hint_for_model", return_value=None):
+        with patch("core.engine.architect_pass_llm.run_owned_helper_completion", return_value=completion):
+            return run_architect_pass_llm("prompt", workspace_path=tmp_path)
 
 
 def _phase_status(phases: list[dict], phase_name: str) -> str | None:

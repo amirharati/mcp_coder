@@ -105,6 +105,7 @@ class NullObservability(ObservabilityBackend):
         auto_merge_spec_read: bool | None = None,
         model_roles: dict[str, Any] | None = None,
         context_refs: list[dict[str, Any]] | None = None,
+        trace_ref: str | None = None,
     ) -> dict[str, Any]:
         return {"delegation_id": delegation_id, "type": "delegation"}
 

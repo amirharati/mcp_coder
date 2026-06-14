@@ -10,6 +10,7 @@ from core.rag.index import index_delegation_after_delegate
 from core.rag.retrieval import (
     CORPUS_DELEGATION,
     context_refs_to_dict,
+    context_refs_to_lean_dict,
     retrieve,
 )
 
@@ -166,3 +167,37 @@ def test_context_refs_to_dict_json_round_trip(tmp_path, monkeypatch):
     assert restored[0]["id"] == did
     assert restored[0]["source_line_range"] is None
     assert "score" in restored[0]
+
+
+def test_context_refs_to_lean_dict(tmp_path, monkeypatch):
+    home = tmp_path / "home"
+    ws = tmp_path / "ws"
+    ws.mkdir()
+    monkeypatch.setenv("MCP_CODER_HOME", str(home))
+
+    did = str(uuid.uuid4())
+    _index(
+        ws,
+        did=did,
+        summary="lean dict test summary",
+        task="lean dict task",
+        timestamp_end="2026-06-01T00:00:00Z",
+    )
+
+    refs = retrieve(ws, "lean dict", corpus=CORPUS_DELEGATION, k=5)
+    assert len(refs) >= 1
+
+    lean = context_refs_to_lean_dict(refs)
+    assert isinstance(lean, list)
+    item = lean[0]
+
+    # Required pointer fields present
+    assert set(item.keys()) == {"kind", "id", "corpus", "sha256", "score"}
+    assert item["kind"] == CORPUS_DELEGATION
+    assert item["id"] == did
+    assert item["corpus"] == CORPUS_DELEGATION
+
+    # Body fields must be absent
+    assert "snippet" not in item
+    assert "metadata" not in item
+    assert "source_line_range" not in item

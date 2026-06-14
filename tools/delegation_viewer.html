@@ -141,12 +141,23 @@
       font-size: 0.78rem;
       margin: 0;
     }
-    .path-line {
-      font-family: ui-monospace, monospace;
-      font-size: 0.8rem;
-      word-break: break-all;
-      color: var(--accent);
+    .source-tag {
+      display: inline-block;
+      font-size: 0.68rem;
+      text-transform: uppercase;
+      letter-spacing: 0.04em;
+      color: var(--muted);
+      margin-bottom: 0.35rem;
     }
+    .ref-card {
+      background: var(--bg);
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      padding: 0.55rem 0.65rem;
+      margin-bottom: 0.45rem;
+    }
+    .ref-meta { font-size: 0.75rem; color: var(--muted); margin-bottom: 0.25rem; }
+    .loading { color: var(--muted); font-style: italic; }
   </style>
 </head>
 <body>
@@ -177,6 +188,8 @@
   <script>
     let records = [];
     let sourcePath = "";
+    let serverMode = false;
+    const enrichCache = new Map();
 
     function esc(s) {
       const d = document.createElement("div");
@@ -193,6 +206,155 @@
       if (!workspace) return rel;
       const sep = workspace.endsWith("/") ? "" : "/";
       return workspace + sep + rel;
+    }
+
+    function formatOutputLocal(r) {
+      const response = r.response_to_cursor || {};
+      if (r.error) return { text: r.error, source: "error" };
+      if (response.output) return { text: response.output, source: "legacy_jsonl" };
+      if (response.output_preview) {
+        const bits = [response.output_preview];
+        if (response.output_sha256) bits.push(`sha256: ${response.output_sha256}`);
+        if (response.output_bytes != null) bits.push(`${response.output_bytes} bytes`);
+        return { text: bits.join("\n"), source: "digest_preview" };
+      }
+      return { text: "—", source: "none" };
+    }
+
+    function sourceLabel(source) {
+      const labels = {
+        legacy_jsonl: "full output (legacy JSONL)",
+        digest_preview: "digest preview (lean JSONL)",
+        trace_executor: "executor trace file",
+        trace_any_role: "trace file",
+        error: "error",
+        inline_jsonl: "inline (legacy JSONL)",
+        "delegation_rag.db": "delegation_rag.db",
+        "workspace_rag.db": "workspace_rag.db",
+        unresolved: "unresolved pointer",
+        none: "not available",
+      };
+      return labels[source] || source;
+    }
+
+    function renderContextRefs(refs) {
+      if (!refs || !refs.length) return "<div class='meta'>—</div>";
+      return refs
+        .map((ref) => {
+          const pointer = ref.pointer || ref;
+          const title = `${pointer.kind || "?"} · ${pointer.id || "?"} · score ${pointer.score ?? "?"}`;
+          const snippet = ref.snippet ? `<pre>${esc(ref.snippet)}</pre>` : "";
+          const err = ref.error ? `<div class='meta'>${esc(ref.error)}</div>` : "";
+          const meta = ref.metadata && Object.keys(ref.metadata).length
+            ? `<div class='ref-meta'>${esc(JSON.stringify(ref.metadata))}</div>`
+            : "";
+          return `<div class='ref-card'><div class='ref-meta'><strong>${esc(title)}</strong> · ${esc(sourceLabel(ref.source || "inline_jsonl"))}</div>${meta}${snippet}${err}</div>`;
+        })
+        .join("");
+    }
+
+    function renderTrace(trace) {
+      if (!trace || !trace.found) {
+        return `<div class='meta'>${trace && trace.trace_ref ? esc(trace.trace_ref) + " (not found on disk)" : "—"}</div>`;
+      }
+      const head = `<div class='path-line'>${esc(trace.path || trace.trace_ref || "")}</div>`;
+      const calls = (trace.llm_calls || [])
+        .map((c) => {
+          const bits = [
+            `${c.role || "?"} · ${c.model || "?"}`,
+            c.tokens ? `tokens ${JSON.stringify(c.tokens)}` : null,
+            c.duration_ms != null ? `${c.duration_ms}ms` : null,
+          ].filter(Boolean);
+          const preview = c.response_preview ? `<pre>${esc(c.response_preview)}</pre>` : "";
+          return `<div class='ref-card'><div class='ref-meta'>${esc(bits.join(" · "))}</div>${preview}</div>`;
+        })
+        .join("");
+      return head + (calls || "<div class='meta'>no llm_call lines</div>");
+    }
+
+    function renderStorageLinks(links) {
+      if (!links) return "—";
+      const rows = [
+        ["trace_ref", links.trace_ref],
+        ["context_package_hash", links.context_package_hash],
+        ["workspace_snapshot_db", links.workspace_snapshot_db],
+        ["delegation_rag.db", links.delegation_rag_db],
+        ["workspace_rag.db", links.workspace_rag_db],
+      ].filter(([, v]) => v);
+      if (!rows.length) return "—";
+      return rows
+        .map(([k, v]) => `<div><span class='meta'>${esc(k)}</span><div class='path-line'>${esc(v)}</div></div>`)
+        .join("");
+    }
+
+    function renderDiffSummary(diff) {
+      if (!diff) return "—";
+      const created = (diff.created || []).length;
+      const modified = (diff.modified || []).length;
+      const deleted = (diff.deleted || []).length;
+      return `<div class='meta'>${created} created · ${modified} modified · ${deleted} deleted</div>`;
+    }
+
+    async function fetchEnrichment(record) {
+      const key = record.delegation_id || JSON.stringify(record).slice(0, 80);
+      if (enrichCache.has(key)) return enrichCache.get(key);
+      if (!serverMode) return null;
+      const res = await fetch("/api/delegation/enrich", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(record),
+      });
+      const payload = await res.json();
+      if (!res.ok) throw new Error(payload.error || res.statusText);
+      enrichCache.set(key, payload);
+      return payload;
+    }
+
+    function applyEnrichment(card, record, enriched) {
+      const output = enriched?.output || formatOutputLocal(record);
+      const outEl = card.querySelector("[data-output]");
+      const outSrc = card.querySelector("[data-output-source]");
+      if (outEl) outEl.textContent = output.text || "—";
+      if (outSrc) outSrc.textContent = sourceLabel(output.source);
+
+      const refsEl = card.querySelector("[data-context-refs]");
+      if (refsEl) {
+        const refs = enriched?.context_refs_resolved?.length
+          ? enriched.context_refs_resolved
+          : (record.context_refs || []).map((pointer) => ({
+              pointer,
+              source: pointer.snippet ? "inline_jsonl" : "unresolved",
+              snippet: pointer.snippet,
+              metadata: pointer.metadata || {},
+            }));
+        refsEl.innerHTML = renderContextRefs(refs);
+      }
+
+      const traceEl = card.querySelector("[data-trace]");
+      if (traceEl) traceEl.innerHTML = renderTrace(enriched?.trace || { trace_ref: record.trace_ref, found: false });
+
+      const linksEl = card.querySelector("[data-storage-links]");
+      if (linksEl) linksEl.innerHTML = renderStorageLinks(enriched?.storage_links);
+
+      const diffEl = card.querySelector("[data-diff-summary]");
+      if (diffEl) diffEl.innerHTML = renderDiffSummary(enriched?.delegation_diff);
+    }
+
+    async function onCardOpen(card, record) {
+      if (!serverMode) {
+        applyEnrichment(card, record, null);
+        return;
+      }
+      const status = card.querySelector("[data-enrich-status]");
+      if (status) status.textContent = "Resolving pointers from DBs and trace files…";
+      try {
+        const enriched = await fetchEnrichment(record);
+        applyEnrichment(card, record, enriched);
+        if (status) status.textContent = "";
+      } catch (err) {
+        applyEnrichment(card, record, null);
+        if (status) status.textContent = `Enrichment failed: ${err.message}`;
+      }
     }
 
     function renderStats(data) {
@@ -215,6 +377,15 @@
         const blob = JSON.stringify(r).toLowerCase();
         return blob.includes(q);
       });
+    }
+
+    function toggleCard(card, idx) {
+      const opening = !card.classList.contains("open");
+      card.classList.toggle("open");
+      if (opening) {
+        const record = filtered()[idx];
+        if (record) onCardOpen(card, record);
+      }
     }
 
     function renderList() {
@@ -246,8 +417,8 @@
             ? `engine ${r.timing.engine_run_ms ?? "?"}ms · total ${r.duration_ms ?? "?"}ms`
             : `${r.duration_ms ?? "?"}ms`;
           return `
-          <article class="card" data-idx="${i}">
-            <div class="card-head" onclick="this.parentElement.classList.toggle('open')">
+          <article class="card" data-idx="${i}" data-delegation-id="${esc(id)}">
+            <div class="card-head" onclick="toggleCard(this.parentElement, ${i})">
               <span class="badge ${r.success ? "ok" : "fail"}">${r.success ? "ok" : "fail"}</span>
               <div>
                 <div><strong>${esc(short)}…</strong> · ${esc(r.model || "?")} · ${esc(timing)}</div>
@@ -264,7 +435,16 @@
               </div>
               <div class="section"><h3>Files</h3><div class="chips">${chips || "—"}</div></div>
               <div class="section"><h3>Context preview</h3><pre>${esc((r.context && r.context.prompt_preview) || "—")}</pre></div>
-              <div class="section"><h3>Output / error</h3><pre>${esc(r.error || (r.response_to_cursor && r.response_to_cursor.output) || "—")}</pre></div>
+              <div class="section">
+                <h3>Output / error</h3>
+                <div class="source-tag" data-output-source>${esc(sourceLabel(formatOutputLocal(r).source))}</div>
+                <pre data-output>${esc(formatOutputLocal(r).text)}</pre>
+                <div class="meta loading" data-enrich-status></div>
+              </div>
+              <div class="section"><h3>Context refs</h3><div data-context-refs class="meta loading">Expand to resolve…</div></div>
+              <div class="section"><h3>Trace file</h3><div data-trace class="meta loading">Expand to load…</div></div>
+              <div class="section"><h3>Workspace diff</h3><div data-diff-summary class="meta loading">Expand to load…</div></div>
+              <div class="section"><h3>Storage links</h3><div data-storage-links class="meta loading">Expand to load…</div></div>
               <div class="section"><h3>Full record</h3><pre>${esc(JSON.stringify(r, null, 2))}</pre></div>
             </div>
           </article>`;
@@ -281,6 +461,7 @@
     function loadRecords(data, path) {
       records = data;
       sourcePath = path || "";
+      enrichCache.clear();
       renderStats(records);
       renderList();
     }
@@ -289,6 +470,7 @@
       const res = await fetch("/api/delegations");
       const payload = await res.json();
       if (!res.ok) throw new Error(payload.error || res.statusText);
+      serverMode = true;
       document.getElementById("serverMode").hidden = false;
       document.getElementById("fileInput").closest("label").hidden = true;
       document.getElementById("serverPath").textContent = payload.path;
@@ -298,6 +480,7 @@
     document.getElementById("fileInput").addEventListener("change", async (e) => {
       const file = e.target.files[0];
       if (!file) return;
+      serverMode = false;
       const text = await file.text();
       const lines = text.split("\n").filter((l) => l.trim());
       const parsed = lines.map((l) => JSON.parse(l)).reverse();

@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import sqlite3
 from pathlib import Path
+from typing import Any
 
 from core.rag.models import WorkspaceFileIndexRow
 from core.storage.paths import normalize_workspace, workspace_rag_db_path
@@ -84,6 +85,29 @@ class WorkspaceRagDB:
                 (path,),
             ).fetchone()
         return str(row[0]) if row and row[0] else None
+
+    def get_file(self, path: str) -> dict[str, Any] | None:
+        """Return indexed workspace file row for viewer / pointer resolution."""
+        if not self.db_path.is_file():
+            return None
+        with self._connect() as conn:
+            conn.row_factory = sqlite3.Row
+            row = conn.execute(
+                """
+                SELECT path, sha256, llm_summary, symbol_list, searchable_text, indexed_at
+                FROM workspace_file_index WHERE path = ?
+                """,
+                (path,),
+            ).fetchone()
+        if not row:
+            return None
+        return {
+            "path": row["path"],
+            "sha256": row["sha256"],
+            "llm_summary": row["llm_summary"],
+            "symbol_list": row["symbol_list"],
+            "indexed_at": row["indexed_at"],
+        }
 
     def list_paths(self) -> set[str]:
         if not self.db_path.is_file():

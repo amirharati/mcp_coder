@@ -173,7 +173,7 @@ Phase 1 deferred executor conversation carry-over to here (BL-155); see P1-130 `
 | BL-350 | **Supervised executor loop — inspect mid-run, inject context, capture thinking** | Today: one `coder.run(prompt)` black box; context fixed at start; post-hoc gateway only. **Later:** three implementation routes (see § BL-350) — outer mcp-coder loop (preferred), stream-and-react early stop, or Aider `Coder` subclass / owned run loop (fragile). Enables dynamic context (file Z, RAG, BL-348/349), per-step audit in `delegation_pipeline`, and **reasoning/thinking token capture** (BL-333, BL-335). High ROI; composes BL-161/160a. **Phase 5+**. From P4.5-ISS-013. |
 | BL-351 | **Simulated interactive + escalate to host (Cursor human intervention)** | Today: `InputOutput(yes=True)` auto-approves all Aider prompts (blind); “add files to chat” → implement failure; no structured handoff back to Cursor mid-delegate. **Later:** supervisor answers executor prompts via **cheap LLM + rules** (add read / expand spec / continue) instead of blind yes; when uncertain → **pause delegation** and return `needs_input` / `clarification_needed` to **Cursor planner** for human decision, then resume (BL-350 outer loop or custom IO). High leverage for scope expansion + trust. **Phase 5+**. From P4.5-ISS-014. |
 | BL-352 | **Multi-language symbol scan + outlines (C/C++, Go, Rust, …)** | Today: symbol scan hardcoded to 9 extensions (`SCAN_EXTENSIONS` in `file_picker.py`); repo-map/excerpt regex is Python `def`/`class` only — C/C++/Go/Rust/Java/etc. work via **spec contract** but not **auto-discovery** or useful outlines. **Later:** expand/configurable scan globs; per-language outline heuristics (or tie to BL-348 index); goal = “works for money cases” on polyglot/monorepo repos without hand-listing every path. **Phase 5+**. From P4.5-ISS-015. |
-| BL-353 | **LLM boundary observability — full pass-through logging** | Backend-neutral tap on every LLM send/receive (all roles + executor multi-turn); correlate with compile + disk audit. **High ROI** for gap-finding, RAG/context direction, eval/training. **Phase 6 — P6-002/P6-003** (LiteLLM callback + trace files); foundation tokens (**BL-335** = P6-002). From T-04 tutorial pass (2026-06-11). |
+| BL-353 | **LLM boundary observability — full pass-through logging** | **Phase 6 partial** (P6-002…P6-008): helper traces, tokens, lean JSONL. **Remaining:** executor multi-turn, full replay → **BL-350**, **BL-367**. |
 | BL-354 | **Executor context tools (pull) — RAG/history/read during backend loop** | **Dual model:** keep **compile-push (A)** as default; **also** expose read-only mcp-coder tools inside the executor loop (Aider today ignores planner MCP). LLM-driven `rag_search`, `workspace_search`, history, excerpts beside edit tools. **Phase 5+** (pairs with BL-002 usage); see § BL-354. From T-04 pass (2026-06-11). |
 | BL-355 | **Optional host CLI toolchain — `rg`, docs, `mcp-coder doctor`** | Today: **ripgrep** optional (Python fallback in file picker); **git** soft-required for diffs/snapshots; tutorials use **jq** / **grep** for inspection. **Later:** curated optional-deps list, `setup`/`doctor` hints (`brew install ripgrep`), perf notes when fallback is used. **Phase 5+** DX; see § BL-355. From T-04 playground (2026-06-11). |
 | BL-356 | **RAG-backed context audit refs — lean JSONL + digest provenance** | As **BL-002** indexes digests (chat, delegations, workspace files), stop duplicating bodies in `delegations.jsonl`; store `context_refs[]` + hashes; index-time metadata for replay/retrieval. Pairs with **BL-353** wire log. **Phase 5+** (after RAG corpus); see § BL-356. From T-04 observability pass (2026-06-11). |
@@ -308,7 +308,7 @@ Phase 1 deferred executor conversation carry-over to here (BL-155); see P1-130 `
 
 **Status:** `idea` — 2026-06-11; **expanded** 2026-06-11 (T-04 full-delegate audit gaps — helper inputs, transcript line provenance, compile bundle, RAG transition).
 
-**Target phase:** **Phase 6 — P6-002/P6-003** umbrella; **BL-335** (tokens) = P6-002 first; trace files = P6-003.
+**Target phase:** **Phase 6 partial** (P6-002…P6-008 shipped: helper traces, tokens, lean JSONL). **Remaining:** executor multi-turn, compile bundle, full replay → **BL-350**, **BL-368**, **BL-367**.
 
 **Problem:** Today we audit **intent** more than **reality**. A full `delegate_to_agent` / `mcp-coder delegate` run appends one `delegations.jsonl` row — but most **wire traffic** is missing or only inferable.
 
@@ -876,7 +876,7 @@ By design today: `project_key` = SHA-256(resolved path).
 | Richer code intel (AST, deps) | **BL-348** | Beyond file-summary RAG |
 | CLI/MCP DX polish | **BL-365** | Legacy `rag` vs `search`; workspace stats |
 | Recall / cost / embeddings | **BL-366** (P5-005) | Deferred capstone |
-| Live token audit | **BL-335** | Blocks cost comparison |
+| Live token audit | **BL-335** | **done** (partial) — delegation-level; inner-loop → BL-350 |
 | Validation-block observability | **BL-364** | Empty `context_refs` confusing |
 
 #### Corpus decisions
@@ -1169,13 +1169,28 @@ Delegation `58bb9846` failed; host recovered silently with duplicate spec tree.
 
 **Phase 4 closed** with core Waves 1–4 shipped. Open issues below moved to backlog for **Phase 5 planning review** — pull into a phase milestone when ready; items marked **mandatory** block informed multi-model routing (BL-162 Stage 2), reasoning capture (BL-333), or cost-aware RAG (BL-002).
 
+### Phase 6 exit (2026-06-13)
+
+**Phase 6 closed** with recommended exit + P6-006…P6-008 post-dogfood fixes. Open/carried issues from [PHASE6_ISSUES.md](./PHASE6_ISSUES.md) → backlog for **Phase 7+** planning.
+
+| ID | Source | Pull by | Summary |
+|----|--------|---------|---------|
+| BL-350 | P6-ISS-006 | **Phase 7** | Executor inner loop opaque — tool calls, retries, multi-turn not in trace |
+| BL-368 | P6-ISS-002 | **Phase 7** | Unified `LlmGateway` completion proxy — replace Route A/B dual path |
+| BL-333 | P6-ISS-007, P6-ISS-009 | Phase 7+ | Extend reasoning capture (builder/architect); cross-session persistence |
+| BL-367 | Phase 6 exit decision | **Phase 8** | Full-capture substrate — verbosity as display-only filter |
+| BL-357 / AGENTIC_LOOP_LOGGING | P6-ISS-010 | Phase 7+ | Novelty filter / curation pipeline (bootstrap: log raw first) |
+| BL-321 | P6-ISS-011 | Phase 7+ | Escalation heuristic on reasoning capture signal |
+
+**Partial shipped:** **BL-353** — helper wire log + trace files + lean JSONL pointers (P6-002…P6-008). **Not shipped:** executor multi-turn, compile bundle bodies, systematic full replay.
+
 | ID | Source | Pull by | Mandatory? | Summary |
 |----|--------|---------|------------|---------|
 | BL-309 | P4-ISS-006 | Phase 5+ | recommended | Executor leaves bad partial state → v2 retry (SEARCH/REPLACE quality); see § BL-309 |
 | BL-309e | P4-ISS-004, P4-ISS-018 | Phase 5 | **yes** if long delegates common | Delegation timeout storms; 217s engine_run on full-file replace; document `MCP_CODER_DELEGATION_TIMEOUT_S` in templates |
 | BL-328 | P4-ISS-007 | Phase 5+ | optional | Spec v2 retry after implement failure — **partially dogfooded** P4-EXIT (`prior_failed_attempts` on stats v2–v3); failure-driven versioned retry workflow still thin |
 | BL-330 | P4-ISS-002 | Phase 5+ | optional | Inspect-tool calls not auditable in `server.jsonl` |
-| BL-335 | P4-ISS-014, P4-ISS-015, **P5-ISS-001** | **Phase 5+** | **partial** | Extractor shipped P5-001; **live dogfood still null** — delegate `712a04d9` (2026-06-13, `mcp_coder_phase1_e2e`): all `model_roles.*.tokens` null on OpenRouter Gemini helpers + gpt-4o-mini executor. See § BL-335 replicate. |
+| BL-335 | P4-ISS-014, P4-ISS-015, **P5-ISS-001**, **P6-002/P6-008** | **done** | **partial** | Helpers + executor tokens live post-Phase 6 (dogfood `f9cb07fc`). Helpers: `owned_completion`; executor: `aider_output_parse`. Per-step executor audit still needs **BL-350**. |
 | BL-336 | P4-ISS-003 | Phase 5+ | optional | `judgment_checklist` nested under `response_to_cursor` in JSONL only |
 | BL-337 | P4-ISS-005 | Phase 5+ | optional | `config_deprecated` noise in `server.jsonl` (e.g. `MCP_CODER_FALLBACK_SESSION` in consumer `mcp.json`) |
 | BL-338 | P4-ISS-016, P4-ISS-020 | **Phase 5** | **yes** before BL-321 | Executor `edit_format` / constraint blindness on cheap models (gpt-4o-mini); model-selection guidance or auto-escalation |
@@ -1183,23 +1198,13 @@ Delegation `58bb9846` failed; host recovered silently with duplicate spec tree.
 
 #### BL-335: Per-role token audit in delegation JSONL
 
-**Status:** `partial` — extractor shipped **P5-001** (`core/usage/litellm_tokens.py`, unit-tested). **Live path still broken** — **P5-ISS-001 carried**. **Phase 6 milestone: P6-002** (LiteLLM callback + live fix).
+**Status:** `done` (partial) — **P6-002/P6-008** closed live null-token gap for helpers; executor via `aider_output_parse`. **Remaining:** per-step executor token audit inside Aider inner loop → **BL-350**.
 
-**Problem:** All `model_roles` blocks (`executor`, `context_builder`, `architect_pass`, `spec_validation`) report `tokens: null` / `cost_est_usd: null` on live delegates. Preflight cost works; top-level `usage.actual` may have executor numbers (`aider_output_parse`) but is **not** copied into `model_roles.executor`.
+**Shipped (Phase 6):** LiteLLM callback + `owned_helper_llm.py` Route B; dogfood v3 `f9cb07fc` — all four `model_roles.*.tokens` non-null.
 
-**Replicate (2026-06-13):**
+**Historical replicate (pre-P6, Phase 5):** delegation `712a04d9` — all tokens null (fixed by Phase 6).
 
-1. Workspace: `mcp_coder_phase1_e2e` with helper LLMs enabled (`context_builder`, `spec_validation`, `architect_pass` in config).
-2. Delegate implement via MCP (any spec); models from `mcp_coder/.env` e.g. `openrouter/google/gemini-2.5-flash` (helpers), `openrouter/openai/gpt-4o-mini` (executor).
-3. Open latest `~/.mcp-coder/projects/<key>/sessions/<id>/delegations.jsonl`.
-4. **Expected bug:** every `model_roles.<role>.tokens.input` / `.output` is `null`.
-5. **Reference record:** delegation `712a04d9-772c-4d17-92d3-b5c31906b2d6`, session `1432fc02-c6b1-4452-aa28-261ce77f896b` (Phase 5 RAG dogfood — RAG/context_refs OK, tokens not).
-
-**Why mandatory later:** BL-162 Stage 2 (tiered escalation), BL-333 (reasoning trace + cost flywheel), BL-002 RAG cost budgeting (P5-005), and BL-353 observability all need per-role usage.
-
-**Fix sketch:** (a) LiteLLM callback / response object for OpenRouter+Gemini helper calls (`context_builder_llm`, `architect_pass_llm`, `spec_validation_llm`); (b) merge top-level `usage.actual` into `model_roles.executor` when Aider parse succeeds; (c) verify on same replicate path above.
-
-**Target:** **Phase 5+** (P5-005 capstone or Phase 6 BL-353 foundation) — does not block Phase 5 recommended exit (RAG dogfood passed).
+**Why mandatory later:** BL-162 Stage 2, BL-333, BL-002 RAG cost budgeting, BL-353 observability — per-role usage now available at delegation level; inner-loop granularity needs BL-350.
 
 #### BL-336: Top-level JSONL audit fields for judgment loop
 
@@ -1440,7 +1445,7 @@ delegate_to_agent(backend=…)
 | BL-504 | Global `~/.mcp-coder/config.yaml` defaults | Per-repo `config.yaml` shipped P1-130 |
 | BL-506 | Generic `transcript.md` watch folder (non-Cursor hosts) |
 | **BL-333** | **Reasoning trace capture + cross-delegation context feed** | See § BL-333 + [REASONING_TRACE_REUSE.md](./OTEHR_RELATED_IDEAS/REASONING_TRACE_REUSE.md); wire capture is part of umbrella **BL-353** |
-| **BL-353** | **LLM boundary observability — full pass-through logging** | See § BL-353 + [AGENTIC_LOOP_LOGGING.md](./OTEHR_RELATED_IDEAS/AGENTIC_LOOP_LOGGING.md); **Phase 6 (TBD)** |
+| **BL-353** | **LLM boundary observability — full pass-through logging** | See § BL-353 + [AGENTIC_LOOP_LOGGING.md](./OTEHR_RELATED_IDEAS/AGENTIC_LOOP_LOGGING.md); **Phase 6 partial** — executor multi-turn → BL-350 |
 | **BL-354** | **Executor context tools (pull)** — RAG/history/read during backend loop | See § BL-354; dual with compile-push (A); **Phase 5+** |
 | **BL-355** | **Optional host CLI toolchain** — `rg`, doctor, recommended deps | See § BL-355; **Phase 5+** DX |
 | **BL-356** | **RAG-backed context audit refs** — lean JSONL, digest provenance | See § BL-356; pairs with BL-002 + BL-353; **Phase 5+** |
@@ -1450,12 +1455,14 @@ delegate_to_agent(backend=…)
 | **BL-364** | **Blocked-delegate skip reasons in JSONL** | See table; **Phase 5+** |
 | **BL-365** | **RAG toolset DX** — unified CLI, workspace stats | See § BL-365; **Phase 5+** |
 | **BL-366** | **RAG evaluation (P5-005)** — recall, cost, embeddings | See § BL-366; **Phase 5+** |
+| **BL-367** | **Full-capture substrate** — LlmGateway proxy + verbosity as display-only filter | See § BL-367; **Phase 8** target; prerequisite: BL-350 + BL-368 |
+| **BL-368** | **Unified LlmGateway completion proxy** — single LLM boundary | See § BL-368; **Phase 7**; from P6-ISS-002 |
 | **BL-334** | **Backend prompt customization** (system prefix + edit-format control) | See § BL-334 |
 | **BL-340** | **Cursor SDK execution backend** (beside Aider) | See § Execution backends — BL-340 |
 
 ### BL-333: Reasoning trace capture + cross-delegation context feed
 
-**Status:** `idea` — 2026-06-09. **Phase 6 milestone: P6-004** (reasoning capture + session hot buffer → builder brief injection).
+**Status:** `partial` — **P6-004 shipped** (executor reasoning capture + session hot buffer → builder brief). **Remaining:** builder/architect reasoning accumulation, cross-session persistence (P6-ISS-007, P6-ISS-009).
 **Full design + motivation:** [docs/OTEHR_RELATED_IDEAS/REASONING_TRACE_REUSE.md](./OTEHR_RELATED_IDEAS/REASONING_TRACE_REUSE.md)
 
 **One-liner:** High-end reasoning models emit a hidden `reasoning_content` trace per call which Aider discards (`remove_reasoning_content()`). Capture it once and it powers **three axes**: (1) **model upgrade/escalation** signal inside the MCP loop (or suggestion-only), (2) **transfer intelligence** — feed traces as context into later *cheaper* calls so a mid-tier model inherits the expensive thinking, (3) **training data** — `(task, context, trace, outcome)` tuples for distillation and for replacing hand-written modules (picker, builder, validation) with learned e2e components. "Reason once expensively, propagate downhill" + a data flywheel.
@@ -1498,6 +1505,73 @@ delegate_to_agent(backend=…)
 
 ---
 
+### BL-367: Full-capture substrate — LlmGateway proxy + verbosity as display-only filter
+
+**Status:** `idea` — 2026-06-13. **Target phase: Phase 8** (after Phase 7 TBD and after BL-350 executor loop ownership).
+
+**Origin:** Phase 6 exit review. Phase 6 shipped the observability seam and helper traces — but verbosity still controls **what gets written to disk**, meaning at `lean` or `standard` verbosity, prompt bodies and executor turns are permanently lost. This is the wrong direction: training-data quality, forensic replay, and debugging all require that **nothing is ever silently dropped at write time**.
+
+#### The architectural shift
+
+| Phase 6 (current) | BL-367 target |
+|-------------------|---------------|
+| `verbosity: lean` → writes hashes only; previews lost | Always write 100% to disk at the capture boundary |
+| `verbosity: standard` → writes 500-char previews; bodies lost | Verbosity = display/export filter only (viewer, CLI, RAG promotion) |
+| `verbosity: full` → writes bodies | Same result, but now the **default** for storage |
+| Executor inner loop: opaque (no data) | Executor loop owned → every turn captured |
+| Helpers via `litellm.completion` Route B | All LLM calls through unified `LlmGateway` proxy |
+
+**Why "capture everything first, filter after":** the AGENTIC_LOOP_LOGGING bootstrap sequence says *log everything raw — no filtering — until you have enough data to train a classifier*. Filtering before that destroys signal you didn't know you needed. Storage cost for one heavy user is trivial (~10–18 MB/day raw; see [AGENTIC_LOOP_LOGGING.md](./OTEHR_RELATED_IDEAS/AGENTIC_LOOP_LOGGING.md) §Storage). The current verbosity tiers remain useful as **retention / promotion policy** (what gets indexed into RAG, what gets exported for training) — not as a capture gate.
+
+#### What this requires
+
+| Piece | Blocker | BL ref |
+|-------|---------|--------|
+| Unified `LlmGateway` completion proxy | Single boundary for every LLM call (helpers + executor), replacing LiteLLM callback shim | **BL-368** |
+| Executor loop ownership | See every Aider turn, tool call, retry — not just outer litellm callback hits | **BL-350** |
+| Write-always trace store | Trace file always written (not gated on verbosity); verbosity flag only controls viewer output and RAG promotion | small refactor of `core/observability/trace.py` + config |
+| Context package blob storage | Store full package (not just hash) so any delegation is fully replayable from disk alone | new `session_dir/context_packages/<hash>.json` sidecar |
+| Systematic replay path | Given a `delegation_id`, reconstruct exact prompt + context from local store without needing Cursor chat | ties together all the above |
+
+#### Non-goals (still deferred)
+
+- Novelty filter / curation / classifier → BL-357 / P6-ISS-010
+- Cross-session reasoning accumulation → P6-ISS-009
+- Training dataset export UI → AGENTIC_LOOP_LOGGING product scope
+- HTTP proxy / network tap → out of scope
+
+#### Verbosity after BL-367
+
+| Tier | Storage | Viewer | RAG promotion | Training export |
+|------|---------|--------|---------------|-----------------|
+| `lean` | 100% captured | Hashes + counts only | No | No |
+| `standard` | 100% captured | Previews (500 chars) | Summaries | No |
+| `full` | 100% captured | Full bodies | Full bodies | Opt-in tuples |
+
+**Composes:** **BL-350** (executor loop), **BL-353** (wire log — BL-367 is its graduation), **BL-356** (lean JSONL — pointers still valid; bodies now always on disk), **BL-333** (reasoning capture — same proxy), **BL-368** (LlmGateway design). Design refs: [AGENTIC_LOOP_LOGGING.md](./OTEHR_RELATED_IDEAS/AGENTIC_LOOP_LOGGING.md) §Bootstrap sequence.
+
+---
+
+### BL-368: Unified LlmGateway completion proxy
+
+**Status:** `idea` — 2026-06-13. **Target phase: Phase 7.** From **P6-ISS-002** (frozen at Phase 6 exit).
+
+**Origin:** Phase 6 shipped two capture paths — LiteLLM `success_callback` (Route A, executor + shim) and `owned_helper_llm.py` + `record_owned_completion()` (Route B, helpers). Both work but are transitional. Long-term: **one completion proxy** at the LLM boundary for every send/receive.
+
+**Goal:** Replace per-backend capture hacks with `LlmGateway` (or equivalent) in `core/observability/` — single boundary for helpers, executor, `test-model`, and future backends. Scope broader than logging: tokens, trace bodies, reasoning, budget caps, redaction, rate limits.
+
+**Prerequisite for:** **BL-367** (full-capture substrate — proxy must exist before capture-everything-always makes sense).
+
+**Acceptance sketch:**
+- All owned LLM calls route through proxy (no direct `litellm.completion` scattered in engine modules)
+- Executor path: proxy tap even when still using Aider adapter (until BL-350 owns loop)
+- `NullObservability` / tests can swap proxy for no-op
+- Callback becomes thin shim or removed once proxy covers all paths
+
+**Related:** **BL-350** (executor loop — proxy alone cannot see inner Aider turns), **BL-353** (umbrella wire log — partial shipped Phase 6), **BL-367** (Phase 8 full capture), [AGENTIC_LOOP_LOGGING.md](./OTEHR_RELATED_IDEAS/AGENTIC_LOOP_LOGGING.md).
+
+---
+
 ## Done
 
 | ID | Item | Completed |
@@ -1517,6 +1591,8 @@ delegate_to_agent(backend=…)
 
 | Date | Change |
 |------|--------|
+| 2026-06-13 | **Phase 6 closed** — PHASE6_MVP + PHASE6_ISSUES frozen; P6-ISS-002 → BL-368; Phase 6 exit table added; BL-335 done (partial); BL-353 partial |
+| 2026-06-13 | BL-368 added — unified LlmGateway completion proxy (P6-ISS-002); Phase 7 target |
 | 2026-06-13 | Phase 6 planning locked — BL-335 → P6-002, BL-353 → P6-002/003, BL-333 → P6-004; phase refs updated |
 | 2026-06-13 | BL-365–366 added — RAG toolset DX gaps + P5-005 evaluation capstone; BL-002 § gaps table + shipped CLI/MCP reference; BL-363 guide sync note |
 | 2026-06-13 | BL-360–363 added — code layout refactor, always-review mode, T-06/T-07 tutorials, arch sub-pages (from Phase 4.5 handoff); BL-002 status updated to `active`; Phase 5 planning locked in PHASE5_MVP.md |

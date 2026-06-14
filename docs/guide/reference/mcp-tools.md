@@ -76,7 +76,7 @@
 | `prior_failed_attempts` | `list` | Past failures on the same spec (surface for planner adjustment) |
 | `auto_merged_read_paths` | `list[str]` | Read paths auto-added from spec `files_read` |
 | `suggested_edit_paths` | `list[str]` | Symbol-scan hits in edit dirs (audit hint, not in contract) |
-| `model_roles` | `dict` | Per-role model + token counts (tokens often `null` — BL-335) |
+| `model_roles` | `dict` | Per-role model + token counts — live counts for all 4 roles since Phase 6; `source` field indicates measurement method (`owned_completion` for helpers, `aider_output_parse` for executor) |
 | `context_refs` | `list` | RAG retrieval hits (delegation + workspace-file) when `rag_retrieval` ran |
 | `usage` | `dict` | Token estimate + preflight info |
 | `verify_result` | `dict` | `auto_verify` outcome (command, exit_code, passed) |
@@ -85,9 +85,10 @@
 
 ### What gets written to disk
 
-- One record appended to `~/.mcp-coder/projects/<key>/sessions/<id>/delegations.jsonl`
+- One **lean** record (~12 KB) appended to `~/.mcp-coder/projects/<key>/sessions/<id>/delegations.jsonl` — pointers and hashes, bodies stored separately
+- Helper LLM trace written to `sessions/<id>/traces/<delegation_id>.jsonl` (at `standard`/`full` verbosity)
 - Spec report appended to `.mcp-coder/specs/reports/<spec-name>-report.md`
-- Workspace history row + checkpoint in `workspace_history.db`
+- Workspace history row + checkpoint + file diffs in `workspace_history.db`
 - Delegation indexed in `delegation_rag.db` (FTS5)
 - Changed files incrementally re-indexed in `workspace_rag.db` when `workspace_file_rag` is on
 
@@ -251,5 +252,6 @@ Cursor's agent reads `use-mcp-coder.mdc` (synced by `mcp-coder setup`) which ins
 
 | Date | Change |
 |------|--------|
+| 2026-06-13 | Phase 6 — `model_roles` tokens now live (not null); lean JSONL note; trace file in disk-writes list |
 | 2026-06-13 | Phase 5 — `workspace_search`, `context_refs`; builder RAG wired; validation-block note |
 | 2026-06-12 | Initial version — all 7 tools, parameter tables, response fields, Cursor call rules |

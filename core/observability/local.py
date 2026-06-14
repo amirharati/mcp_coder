@@ -258,6 +258,7 @@ class LocalObservability(ObservabilityBackend):
         auto_merge_spec_read: bool | None = None,
         model_roles: dict[str, Any] | None = None,
         context_refs: list[dict[str, Any]] | None = None,
+        trace_ref: str | None = None,
     ) -> dict[str, Any]:
         return build_delegation_record(
             delegation_id=delegation_id,
@@ -311,6 +312,7 @@ class LocalObservability(ObservabilityBackend):
             auto_merge_spec_read=auto_merge_spec_read,
             model_roles=model_roles,
             context_refs=context_refs,
+            trace_ref=trace_ref,
         )
 
     def append_delegation_record(

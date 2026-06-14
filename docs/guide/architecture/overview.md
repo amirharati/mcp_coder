@@ -1,7 +1,7 @@
 # Architecture overview
 
 **Status:** Living — update as shipped decisions change.  
-**Scope:** Phases 1–5 as implemented. Phase 5+ / observability items in backlog (see § Known gaps).  
+**Scope:** Phases 1–6 as implemented. Phase 7+ items in backlog (see § Known gaps).  
 **How to use:** Read as a structural reference after [how-it-works.md](../how-it-works.md). That doc is the *operator* mental model; this one is the *layer map and design decisions*. Deeper per-subsystem docs live alongside this file.
 
 ---
@@ -49,6 +49,21 @@
    └──────────────┘
           │
           ▼
+   ┌──────────────────────────────────────────┐
+   │ Observability  (Phase 6)                 │
+   │ core/observability/                      │
+   │                                          │
+   │ ObservabilityBackend (base.py)           │
+   │   LocalObservability (local.py)          │
+   │   NullObservability  (null.py)           │
+   │                                          │
+   │ LiteLLM callback → token capture         │
+   │ owned_completion → helper Route B        │
+   │ trace.py → per-delegation trace files    │
+   │ stats.py → maintenance stats             │
+   └──────────────────────────────────────────┘
+          │
+          ▼
 ┌───────────────────────────────────────────────────────────────────┐
 │  Storage (two scopes)                                             │
 │                                                                   │
@@ -57,7 +72,9 @@
 │                                                                   │
 │  ~/.mcp-coder/projects/<sha256>/  OUTSIDE repo                    │
 │    workspace_history.db    delegation_rag.db    workspace_rag.db  │
-│    sessions/<id>/delegations.jsonl                                │
+│    sessions/<id>/                                                 │
+│      delegations.jsonl    lean audit row (~12 KB, pointers only)  │
+│      traces/<id>.jsonl    helper LLM I/O trace (per delegation)   │
 └───────────────────────────────────────────────────────────────────┘
 ```
 
@@ -135,8 +152,11 @@ delegate_to_agent()
   ├── auto_verify*      core/verify/ → run command, update outcome
   │
   └── audit
-        ├── core/logging/delegation_log.py → append delegations.jsonl
-        ├── core/workspace/history_db.py → checkpoint row
+        ├── core/observability/local.py → build_delegation_record()
+        │     delegation_log.py → append delegations.jsonl (lean row)
+        │     trace.py → sessions/.../traces/<id>.jsonl (helper LLM I/O)
+        │     training_capture.py → -training.json (opt-in)
+        ├── core/workspace/history_db.py → checkpoint row + diffs
         └── core/rag/ → index delegation + incremental workspace files (FTS5)
 ```
 
@@ -181,7 +201,7 @@ Four distinct LLM calls aside from the executor:
 | `architect` | `architect_pass` | `context_builder` tier | Spec + brief + picker | `## Architect plan` | No |
 | `review` | (mode=review) | `review` role | Spec + target files | Q&A text | No |
 
-All use LiteLLM directly (comes in via Aider's transitive dep). All audited in `model_roles`. Builder input prompt and raw completions are **not currently logged** in JSONL (BL-353 gap).
+All use LiteLLM directly via `owned_helper_llm.py` (Phase 6, Route B — `litellm.completion` + `record_owned_completion()`). All audited in `model_roles` with **live token counts** (fixed Phase 6 / P6-008). Prompts and responses are written to the per-delegation **trace file** at `standard` verbosity (previews) or `full` (bodies). Full bodies in JSONL are not stored — trace file is the body store.
 
 ---
 
@@ -232,10 +252,11 @@ Full layout: [storage-layout.md](./storage-layout.md) (pending) and [`notes/stor
 
 | Gap | Where it hurts | Backlog |
 |-----|----------------|---------|
-| **Token counts null** for builder/architect/validation | `model_roles` audit incomplete; cost estimates unreliable | BL-335 |
-| **Helper LLM inputs not logged** | Can't replay or audit what builder saw | BL-353 |
+| **Executor inner loop opaque** | Aider multi-turn edits, retries, tool calls not captured | BL-350 / P6-ISS-006 |
+| **Verbosity controls what's written, not what's shown** | At `lean`/`standard`, prompt bodies lost permanently — should capture 100%, filter display | **BL-367** (Phase 8) |
+| **No unified LlmGateway proxy** | LiteLLM callback is a shim; helper helpers use Route B; still two paths | P6-ISS-002 |
+| **Context package blob not stored** | Only hash kept; can't replay exact prompt package from disk | BL-367 prereq |
 | **Validation block → empty `context_refs`** | Looks like RAG regression when spec blocks | BL-364 |
-| **`delegations.jsonl` carries full bodies opt-in** | Grows with `prompt_full`; lean-refs partial (`context_refs` shipped) | BL-356 |
 | **Single executor backend (Aider)** | `opencode_engine.py` stub exists; no second backend | BL-340 |
 | **Session policy heuristics** | `align_host` matching is fragile (slug-based) | BL-317 |
 | **Embeddings / recall metric** | FTS-only retrieval; no measured recall | P5-005 deferred |
@@ -255,12 +276,13 @@ Full layout: [storage-layout.md](./storage-layout.md) (pending) and [`notes/stor
 
 | Area | Note |
 |------|------|
-| **LLM wire logging** | LiteLLM pass-through tap for all roles; per-delegation trace files (BL-353) |
-| **Lean JSONL refs** | Expand `context_refs[]`; drop inline bodies once corpora mature (BL-356) |
+| **Full-capture substrate** | LlmGateway proxy + verbosity as display-only filter; capture 100% raw, filter at read time (BL-367, Phase 8) |
+| **Executor loop ownership** | Own every Aider turn so trace files cover the full agentic loop (BL-350) |
+| **Lean JSONL refs** | Expand `context_refs[]`; drop remaining inline bodies once corpora mature (BL-356) |
+| **Storage lifecycle** | Retention, promote-then-prune, gc (BL-357) |
 | **Executor-pull tools** | `mcp-coder search --format plain` pre-shapes BL-354 |
 | **Workflow turns** | Named modes beyond implement/review: digest, polish, refactor (BL-359) |
 | **Alternate backends** | Cursor-SDK executor (BL-340) |
-| **Storage lifecycle** | Retention, promote-then-prune, gc (BL-357) |
 
 ---
 
@@ -284,5 +306,6 @@ Full layout: [storage-layout.md](./storage-layout.md) (pending) and [`notes/stor
 
 | Date | Change |
 |------|--------|
+| 2026-06-13 | Phase 6 — `core/observability/` seam + trace files; storage map updated; known gaps and future direction refreshed; helper LLM note updated (tokens live, not null) |
 | 2026-06-13 | Phase 5 — `rag_retrieval`, `workspace_rag.db`, `workspace_search`; gaps table refresh |
 | 2026-06-12 | Initial version — layer map, 8 locked decisions, delegation lifecycle, context compiler, helper LLMs, sessions, storage paths, known gaps |

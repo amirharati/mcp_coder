@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import sqlite3
 from pathlib import Path
+from typing import Any
 
 from core.rag.models import DelegationIndexRow
 from core.storage.paths import delegation_rag_db_path, normalize_workspace
@@ -97,6 +98,36 @@ class DelegationRagDB:
                 (delegation_id,),
             ).fetchone()
         return row is not None
+
+    def get_delegation(self, delegation_id: str) -> dict[str, Any] | None:
+        """Return indexed delegation row for viewer / pointer resolution."""
+        if not self.db_path.is_file():
+            return None
+        with self._connect() as conn:
+            conn.row_factory = sqlite3.Row
+            row = conn.execute(
+                """
+                SELECT delegation_id, workspace_path, timestamp_end, spec_path,
+                       spec_report_path, checkpoint_summary, task_preview,
+                       delegate_mode, outcome, files_changed, searchable_text
+                FROM delegation_index WHERE delegation_id = ?
+                """,
+                (delegation_id,),
+            ).fetchone()
+        if not row:
+            return None
+        return {
+            "delegation_id": row["delegation_id"],
+            "workspace_path": row["workspace_path"],
+            "timestamp_end": row["timestamp_end"],
+            "spec_path": row["spec_path"],
+            "spec_report_path": row["spec_report_path"],
+            "checkpoint_summary": row["checkpoint_summary"],
+            "task_preview": row["task_preview"],
+            "delegate_mode": row["delegate_mode"],
+            "outcome": row["outcome"],
+            "files_changed": row["files_changed"],
+        }
 
     def row_count(self) -> int:
         if not self.db_path.is_file():

@@ -3,16 +3,14 @@
 from __future__ import annotations
 
 import json
-import sys
-from contextlib import contextmanager
-from io import StringIO
 from pathlib import Path
-from unittest.mock import MagicMock, patch
+from unittest.mock import patch
 
 from core.config.spec_validation import spec_validation_enabled
 from core.context.spec_validation_prompt import build_spec_validation_prompt
 from core.engine.base import ExecutionResult
 from core.engine.capabilities import AIDER_CAPABILITIES
+from core.engine.owned_helper_llm import OwnedHelperCompletion
 from core.engine.spec_validation_llm import (
     SpecValidationLlmResult,
     parse_spec_validation_output,
@@ -102,25 +100,15 @@ def _make_mock_engine(fake_result: ExecutionResult, captured: dict | None = None
 
 
 def _run_spec_validation_llm(tmp_path, response: str) -> SpecValidationLlmResult:
-    mock_model_cls = MagicMock()
-    mock_model_cls.return_value.simple_send_with_retries.return_value = response
-    fake_models = MagicMock()
-    fake_models.Model = mock_model_cls
-    fake_aider = MagicMock()
-    fake_aider.models = fake_models
-
-    @contextmanager
-    def _fake_iso():
-        yield StringIO(), StringIO()
-
-    modules = {
-        "aider": fake_aider,
-        "aider.models": fake_models,
-    }
-    with patch.dict(sys.modules, modules):
-        with patch("core.engine.spec_validation_llm.provider_hint_for_model", return_value=None):
-            with patch("core.engine.spec_validation_llm.isolated_stdio", _fake_iso):
-                return run_spec_validation_llm("prompt", workspace_path=tmp_path)
+    completion = OwnedHelperCompletion(
+        text=response,
+        model="openrouter/test/flash",
+        tokens={"input": 10, "output": 5, "total": 15, "source": "owned_completion"},
+        duration_ms=42,
+    )
+    with patch("core.engine.spec_validation_llm.provider_hint_for_model", return_value=None):
+        with patch("core.engine.spec_validation_llm.run_owned_helper_completion", return_value=completion):
+            return run_spec_validation_llm("prompt", workspace_path=tmp_path)
 
 
 def _host_hint_with_transcript(tmp_path: Path) -> HostSessionHint:

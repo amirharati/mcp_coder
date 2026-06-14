@@ -13,6 +13,8 @@ from pathlib import Path
 from typing import Any
 from urllib.parse import urlparse
 
+from core.cli.delegation_view_enrich import enrich_delegation_record
+
 _REPO_ROOT = Path(__file__).resolve().parents[2]
 VIEWER_HTML = _REPO_ROOT / "tools" / "delegation_viewer.html"
 
@@ -144,6 +146,32 @@ class ViewerHandler(BaseHTTPRequestHandler):
         self.send_header("Content-Length", str(len(body)))
         self.end_headers()
         self.wfile.write(body)
+
+    def _read_json_body(self) -> dict[str, Any]:
+        length = int(self.headers.get("Content-Length", "0"))
+        if length <= 0:
+            return {}
+        raw = self.rfile.read(length)
+        payload = json.loads(raw.decode("utf-8"))
+        if not isinstance(payload, dict):
+            raise ValueError("JSON body must be an object")
+        return payload
+
+    def do_POST(self) -> None:
+        parsed = urlparse(self.path)
+        if parsed.path == "/api/delegation/enrich":
+            try:
+                record = self._read_json_body()
+                if not record:
+                    self._send_json({"error": "empty body"}, 400)
+                    return
+                self._send_json(enrich_delegation_record(record))
+            except (json.JSONDecodeError, ValueError) as exc:
+                self._send_json({"error": str(exc)}, 400)
+            except Exception as exc:
+                self._send_json({"error": f"enrich failed: {exc}"}, 500)
+            return
+        self.send_error(404)
 
     def do_GET(self) -> None:
         parsed = urlparse(self.path)

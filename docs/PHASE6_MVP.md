@@ -9,12 +9,12 @@
 
 # Phase 6 — Observability substrate + reasoning buffer
 
-**Status:** **Active** — planning locked 2026-06-13
+**Status:** **Frozen** — closed 2026-06-13 (recommended exit + P6-006…P6-008 post-dogfood fixes)
 **Purpose:** Build a clean central observability layer (`core/observability/`) as the POC/MVP of the AGENTIC_LOOP_LOGGING separate-product vision; fix live token accounting (BL-335); capture reasoning tokens + session hot buffer; lay training-data schema foundations.
-**PM board:** this file · **Issues:** [PHASE6_ISSUES.md](./PHASE6_ISSUES.md) (to be created at first worker session)
+**PM board:** this file · **Issues:** [PHASE6_ISSUES.md](./PHASE6_ISSUES.md) (frozen)
 **Phase 5 (closed):** [PHASE5_MVP.md](./PHASE5_MVP.md)
 **Design notes:** [notes/phase6-master-session-bootstrap.md](./notes/phase6-master-session-bootstrap.md) · [OTEHR_RELATED_IDEAS/AGENTIC_LOOP_LOGGING.md](./OTEHR_RELATED_IDEAS/AGENTIC_LOOP_LOGGING.md) · [OTEHR_RELATED_IDEAS/REASONING_TRACE_REUSE.md](./OTEHR_RELATED_IDEAS/REASONING_TRACE_REUSE.md)
-**Backlog:** [BACKLOG.md](./BACKLOG.md) § BL-335, BL-353, BL-333, BL-334, BL-357, BL-366
+**Backlog:** [BACKLOG.md](./BACKLOG.md) § Phase 6 exit — BL-350, BL-353 (partial), BL-333, BL-368, BL-367, BL-357
 
 ---
 
@@ -149,6 +149,75 @@ The `ObservabilityBackend` adapter seam (D-P6-1) is what makes this extractable.
 
 ---
 
+### P6-006 — Fix `contextvars` propagation into `ThreadPoolExecutor` worker threads *(bug fix)*
+
+**Status:** **done** (2026-06-13)
+
+**Goal:** Close P6-ISS-012. Helper LLM calls (`context_builder`, `architect_pass`, `spec_validation`) run inside `concurrent.futures.ThreadPoolExecutor`. Python does not copy `contextvars` into new threads; `delegation_id_var`, `role_var`, `workspace_var` are all `None` in the worker. As a result the LiteLLM callback cannot correlate helper completions → helper token counts are null and trace files contain no helper records.
+
+**Fix:** In each affected module, capture `ctx = copy_context()` in the calling thread and use `pool.submit(ctx.run, _call)` instead of `pool.submit(_call)`. One-liner change per file; no architectural impact.
+
+**Acceptance:**
+- `model_roles.context_builder.tokens`, `.architect_pass.tokens`, `.spec_validation.tokens` non-null on a live delegate (closes P6-ISS-003 in conjunction with a dogfood run)
+- Trace file for each delegation contains helper LLM records (role = `context_builder`, `architect_pass`, `spec_validation`) at `standard` verbosity
+- All existing tests pass; new test verifies `delegation_id_var` is visible inside a `ThreadPoolExecutor` worker when `ctx.run` is used
+
+**Files touched:** `core/engine/context_builder_llm.py`, `core/engine/architect_pass_llm.py`, `core/engine/spec_validation_llm.py` · optional new test in `tests/test_contextvars_threadpool.py`
+
+---
+
+### P6-007 — JSONL lean record: replace blobs with digests + pointers *(storage cleanup)*
+
+**Status:** **done** (2026-06-13)
+
+**Goal:** Reduce `delegations.jsonl` per-record size from ~24 KB to ~3 KB by applying the lean-refs pattern (D-P6-3) to the three biggest bloat sources identified in the P6-ISS-013/014/015/016 storage analysis. Target: clean, human-readable audit trail where each JSONL line is a routing table, not a dump.
+
+**Closes:** P6-ISS-013, P6-ISS-014, P6-ISS-015, P6-ISS-016
+
+**Changes (four slices):**
+
+1. **`response_to_cursor` → digest** (P6-ISS-013, 33%): Replace full body with `response_digest: {output_sha256, output_bytes, output_preview (≤200 chars), success, files_changed}`. Full output already in Cursor's chat and optionally in trace files.
+
+2. **`context_refs` → pointer-only** (P6-ISS-014, 19%): Remove `snippet`, `metadata`, `source_line_range` from each ref. Keep `{kind, id, corpus, sha256, score}`. Bodies already indexed in `delegation_rag.db`; retrievable via `rag_search` / `get_checkpoint_detail`.
+
+3. **`context.context_package` → hash** (P6-ISS-015): Remove inline blob; store `context.context_package_hash` only (already computed in `mcp_server.py`). Package reconstructable from spec + candidate files.
+
+4. **Add `trace_ref` pointer** (P6-ISS-016): When trace file is written, set `trace_ref: "traces/<delegation_id>.jsonl"` (relative to `session_dir`) on the JSONL record.
+
+**Acceptance:**
+- `delegation_rag.db` bodies still populated (rag_search still works)
+- `mcp-coder view delegations` still renders (viewer reads whatever fields exist)
+- `mcp-coder maintenance stats` reports same DB row counts as before
+- Average JSONL record ≤ 4 KB (measurable via `wc -c` per line on a real log)
+- Existing tests updated; full suite green
+- `delegations.jsonl` schema comment updated in `delegation_log.py`
+
+**Files touched:** `core/logging/delegation_log.py`, `core/rag/retrieval.py` (`context_refs_to_dict` slim variant), `server/mcp_server.py` (response_digest + trace_ref wire), `tests/`
+
+---
+
+### P6-008 — Owned helper completion: synchronous tokens + trace capture *(Route B)*
+
+**Status:** **done** (2026-06-13)
+
+**Goal:** Close P6-ISS-017 and unblock P6-ISS-003 live dogfood. Dogfood v2 proved P6-006 (contextvars) was necessary but insufficient: helper one-shots use Aider `Model.simple_send_with_retries`, which does **not** trigger LiteLLM's global `success_callback`. Result: `model_roles.*.tokens` stay `unavailable` and no trace files are written (0 project-wide) despite `trace_ref` on JSONL rows.
+
+**Fix (Route B — first slice toward P6-ISS-002 LlmGateway):** Replace Aider `Model` in the three **owned** helper modules with direct `litellm.completion`, then synchronously record tokens + trace via a new `record_owned_completion()` in `core/observability/`. Keep `ThreadPoolExecutor` + `copy_context()` from P6-006. Executor stays on Aider (opaque loop unchanged).
+
+**Closes:** P6-ISS-017 · unblocks P6-ISS-003 when dogfood re-run passes
+
+**Acceptance:**
+- After live delegate with helpers enabled: `model_roles.context_builder.tokens`, `.architect_pass.tokens`, `.spec_validation.tokens` all non-null in JSONL
+- `sessions/<id>/traces/<delegation_id>.jsonl` exists with ≥3 `llm_call` lines (spec_validation, architect_pass, context_builder) + `trace_header`
+- `maintenance stats` reports `trace files ≥ 1` for workspace after delegate
+- Unit tests mock `litellm.completion` — no live API
+- Full pytest suite green
+- **Out of scope:** executor trace via owned loop (BL-350); `workspace_summarizer_llm.py`; switching executor off Aider
+
+**Files touched:** `core/observability/owned_completion.py` (new), `core/observability/litellm_callback.py` (expose record API), `core/engine/owned_helper_llm.py` (new shared runner), `context_builder_llm.py`, `architect_pass_llm.py`, `spec_validation_llm.py`, `tests/`
+
+---
+
 ## Explicitly NOT Phase 6
 
 | Item | Reason |
@@ -187,9 +256,38 @@ Opt-out env vars follow existing pattern: `MCP_CODER_OBS_VERBOSITY`, `MCP_CODER_
 
 ---
 
-## § Results (fill at exit)
+## § Results (exit 2026-06-13)
 
-*(To be completed when Phase 6 closes.)*
+### Shipped
+
+P6-001…P6-008: `core/observability/` adapter seam; LiteLLM callback + owned helper completion (Route B); per-delegation trace files; reasoning hot buffer; training opt-in schema; lean JSONL (digests + pointers); viewer enrich; `maintenance stats`. **727 tests** at exit.
+
+### Dogfood
+
+- Workspace: `mcp_coder_phase1_e2e`
+- Canonical v3: delegation `f9cb07fc`, session `4c2dac56` — all 4-role tokens non-null; trace file (header + 3 helper `llm_call` lines); lean JSONL ~12 KB
+
+### North-star acceptance
+
+| Criterion | Status |
+|-----------|--------|
+| `model_roles.*.tokens` non-null | **PASS** (v3, post-P6-008) |
+| Per-delegation trace file (helpers) | **PASS** |
+| `reasoning_summary` when model emits | **PASS** (infrastructure; gpt-4o-mini did not emit in dogfood) |
+| Hot buffer → builder brief | **PASS** (wired) |
+| `capture_for_training` tuple | **PASS** (opt-in, off by default) |
+
+### Architectural decision (exit)
+
+**Capture 100% at boundary; verbosity = display filter only** — logged as **BL-367** (Phase 8). Phase 7 path: **BL-368** (LlmGateway proxy) + **BL-350** (executor loop ownership).
+
+### Carried
+
+- P6-ISS-002 → **BL-368** (unified LlmGateway proxy)
+- P6-ISS-006 → **BL-350** (executor inner loop)
+- P6-ISS-007, P6-ISS-009 → **BL-333** (reasoning scope + cross-session)
+- P6-ISS-010 → AGENTIC_LOOP_LOGGING curation / **BL-357**
+- P6-ISS-011 → **BL-321** (escalation heuristic)
 
 ---
 
@@ -197,6 +295,12 @@ Opt-out env vars follow existing pattern: `MCP_CODER_OBS_VERBOSITY`, `MCP_CODER_
 
 | Date | Change |
 |------|--------|
+| 2026-06-13 | **Phase 6 closed** — recommended exit + P6-006…P6-008; dogfood v3 PASS; issues frozen → BACKLOG § Phase 6 exit |
+| 2026-06-13 | P6-008 done — Route B owned helper completion; P6-ISS-017 closed |
+| 2026-06-13 | P6-008 tasked — owned helper `litellm.completion` + synchronous trace/token capture (Route B); closes P6-ISS-017, unblocks P6-ISS-003 dogfood |
+| 2026-06-13 | P6-007 done — JSONL lean refs + digests; P6-ISS-013…016 closed |
+| 2026-06-13 | P6-006 done — contextvars ThreadPoolExecutor fix; P6-ISS-012 closed |
+| 2026-06-13 | P6-006 + P6-007 tasked — contextvars ThreadPoolExecutor fix + JSONL lean record (response_digest, context_refs pointers, context_package hash, trace_ref); closes P6-ISS-012…016 |
 | 2026-06-13 | P6-005 done — version tags on trace headers, training tuple (opt-in), `maintenance stats` CLI, retention stub |
 | 2026-06-13 | P6-004 done — executor reasoning capture + hot buffer + builder `## Prior reasoning`; **recommended exit** met (code) |
 | 2026-06-13 | P6-003 done — per-delegation trace files + verbosity tiers; P6-ISS-004/005 closed |

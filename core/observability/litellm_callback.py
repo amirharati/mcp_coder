@@ -375,6 +375,79 @@ def litellm_success_handler(
         pass
 
 
+def record_owned_completion(
+    *,
+    role: str,
+    model: str | None,
+    messages: list[dict[str, Any]],
+    response_obj: Any,
+    duration_ms: int,
+    reasoning_text: str | None = None,
+) -> dict[str, Any]:
+    """Synchronous token + trace capture for owned litellm.completion calls.
+
+    Uses contextvars (delegation_id, session_dir, workspace) already bound by mcp_server.
+    Returns token dict for helper_llm_pipeline model_roles.
+    """
+    unavailable = {"input": None, "output": None, "total": None, "source": "unavailable"}
+    if response_obj is None:
+        return unavailable
+
+    usage_raw = getattr(response_obj, "usage", None)
+    usage = _tokens_from_usage_mapping(usage_raw)
+    reasoning = None
+    if usage_raw is not None:
+        reasoning = _coerce_int(
+            getattr(usage_raw, "reasoning_tokens", None)
+            if not isinstance(usage_raw, dict)
+            else usage_raw.get("reasoning_tokens")
+        )
+
+    model_str = str(model) if model else None
+    if not model_str:
+        response_model = getattr(response_obj, "model", None)
+        if response_model:
+            model_str = str(response_model)
+
+    delegation_id = delegation_id_var.get()
+    kwargs = {"messages": messages, "model": model}
+    call_index: int | None = None
+
+    if delegation_id:
+        trace_key = (delegation_id, role)
+        call_index = _bump_call_index(trace_key)
+        _record_usage(
+            trace_key,
+            model=model_str,
+            usage=usage,
+            reasoning_tokens=reasoning,
+            duration_ms=duration_ms,
+        )
+        try:
+            _append_trace_for_completion(
+                delegation_id=delegation_id,
+                role=role,
+                call_index=call_index,
+                model=model_str,
+                duration_ms=duration_ms,
+                usage=usage,
+                kwargs=kwargs,
+                response_obj=response_obj,
+            )
+        except Exception:
+            pass
+
+    if usage is None:
+        return unavailable
+
+    return {
+        "input": usage.get("input"),
+        "output": usage.get("output"),
+        "total": usage.get("total"),
+        "source": "owned_completion",
+    }
+
+
 class _McpCoderLiteLLMLogger:
     """Sync success hook compatible with LiteLLM CustomLogger / callable callbacks."""
 

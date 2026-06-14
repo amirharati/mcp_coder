@@ -4,8 +4,6 @@ from __future__ import annotations
 
 import json
 import sys
-from contextlib import contextmanager
-from io import StringIO
 from pathlib import Path
 from unittest.mock import MagicMock, patch
 
@@ -23,30 +21,21 @@ from core.engine.context_builder_llm import (
     _strip_redundant_builder_header,
     run_context_builder_llm,
 )
+from core.engine.owned_helper_llm import OwnedHelperCompletion
 from server.mcp_server import delegate_to_agent
 
 
 def _run_builder_llm(tmp_path, response: str) -> BuilderLlmResult:
-    """Invoke run_context_builder_llm with a faked Model (no aider install required)."""
-    mock_model_cls = MagicMock()
-    mock_model_cls.return_value.simple_send_with_retries.return_value = response
-    fake_models = MagicMock()
-    fake_models.Model = mock_model_cls
-    fake_aider = MagicMock()
-    fake_aider.models = fake_models
-
-    @contextmanager
-    def _fake_iso():
-        yield StringIO(), StringIO()
-
-    modules = {
-        "aider": fake_aider,
-        "aider.models": fake_models,
-    }
-    with patch.dict(sys.modules, modules):
-        with patch("core.engine.context_builder_llm.provider_hint_for_model", return_value=None):
-            with patch("core.engine.context_builder_llm.isolated_stdio", _fake_iso):
-                return run_context_builder_llm("prompt", workspace_path=tmp_path)
+    """Invoke run_context_builder_llm with a faked owned completion (no network)."""
+    completion = OwnedHelperCompletion(
+        text=response,
+        model="openrouter/test/flash",
+        tokens={"input": 10, "output": 5, "total": 15, "source": "owned_completion"},
+        duration_ms=42,
+    )
+    with patch("core.engine.context_builder_llm.provider_hint_for_model", return_value=None):
+        with patch("core.engine.context_builder_llm.run_owned_helper_completion", return_value=completion):
+            return run_context_builder_llm("prompt", workspace_path=tmp_path)
 
 
 STEP_SPEC = """\

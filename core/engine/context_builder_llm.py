@@ -7,9 +7,7 @@ pipeline can fall back to the mechanical brief.
 
 from __future__ import annotations
 
-import concurrent.futures
 import re
-import time
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
@@ -17,7 +15,7 @@ from typing import Any
 from core.config.providers import apply_provider_env
 from core.config.models import provider_hint_for_model
 from core.config.role_models import ROLE_CONTEXT_BUILDER, resolve_role_model_name
-from core.engine.stdio_isolation import isolated_stdio, merged_capture
+from core.engine.owned_helper_llm import run_owned_helper_completion
 
 _ERROR_MARKERS = (
     "litellm.",
@@ -122,36 +120,23 @@ def run_context_builder_llm(
             tokens=_unavailable_tokens(),
         )
 
-    from aider.models import Model
-
     messages = [{"role": "user", "content": prompt}]
-    t0 = time.perf_counter()
 
-    def _call() -> tuple[str, str, Any]:
-        with isolated_stdio() as (stdout_cap, stderr_cap):
-            model = Model(resolved)
-            reply = model.simple_send_with_retries(messages)
-            captured = merged_capture(stdout_cap, stderr_cap)
-            text = (reply or "").strip()
-            if captured.strip() and not text:
-                text = captured.strip()
-            return text, captured, model
-
-    try:
-        with concurrent.futures.ThreadPoolExecutor(max_workers=1) as pool:
-            text, captured, model_obj = pool.submit(_call).result()
-    except Exception as exc:
+    completion = run_owned_helper_completion(messages, model=resolved)
+    if completion.error:
         return BuilderLlmResult(
             success=False,
             brief="",
             model=resolved,
-            error=f"{type(exc).__name__}: {exc}",
-            tokens=_unavailable_tokens(),
-            duration_ms=int((time.perf_counter() - t0) * 1000),
+            error=completion.error,
+            tokens=completion.tokens,
+            duration_ms=completion.duration_ms,
         )
 
-    duration_ms = int((time.perf_counter() - t0) * 1000)
-    output = text or captured
+    text = completion.text
+    duration_ms = completion.duration_ms
+    tokens = completion.tokens
+    output = text
 
     if not output.strip():
         return BuilderLlmResult(
@@ -159,7 +144,7 @@ def run_context_builder_llm(
             brief="",
             model=resolved,
             error="Empty builder response from model",
-            tokens=_unavailable_tokens(),
+            tokens=tokens,
             duration_ms=duration_ms,
         )
 
@@ -174,7 +159,7 @@ def run_context_builder_llm(
                 brief="",
                 model=resolved,
                 error=output.strip()[:2000],
-                tokens=_unavailable_tokens(),
+                tokens=tokens,
                 duration_ms=duration_ms,
             )
         return BuilderLlmResult(
@@ -185,7 +170,7 @@ def run_context_builder_llm(
                 "Builder response contained no markdown headings (reasoning leak?): "
                 f"{output.strip()[:200]}"
             ),
-            tokens=_unavailable_tokens(),
+            tokens=tokens,
             duration_ms=duration_ms,
         )
 
@@ -196,7 +181,7 @@ def run_context_builder_llm(
             brief="",
             model=resolved,
             error=finalize_error,
-            tokens=_unavailable_tokens(),
+            tokens=tokens,
             duration_ms=duration_ms,
         )
 
@@ -205,12 +190,6 @@ def run_context_builder_llm(
         brief=narrative,
         model=resolved,
         error=None,
-        tokens=_extract_builder_tokens(model_obj),
+        tokens=tokens,
         duration_ms=duration_ms,
     )
-
-
-def _extract_builder_tokens(model_obj: Any) -> dict[str, Any]:
-    from core.usage.litellm_tokens import extract_litellm_model_tokens
-
-    return extract_litellm_model_tokens(model_obj, role_source="context_builder_llm")

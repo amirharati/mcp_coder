@@ -7,23 +7,20 @@ from types import SimpleNamespace
 import pytest
 
 from core.config.role_models import ROLE_CONTEXT_BUILDER
-from core.engine.architect_pass_llm import _extract_architect_tokens
-from core.engine.context_builder_llm import _extract_builder_tokens
-from core.engine.spec_validation_llm import _extract_validation_tokens
 from core.usage.litellm_tokens import extract_litellm_model_tokens
 
 
 @pytest.mark.parametrize(
-    ("extractor", "role_source"),
+    "role_source",
     [
-        (_extract_builder_tokens, "context_builder_llm"),
-        (_extract_architect_tokens, "architect_pass"),
-        (_extract_validation_tokens, "spec_validation"),
+        "context_builder_llm",
+        "architect_pass",
+        "spec_validation",
     ],
 )
-def test_extract_tokens_from_model_attrs(extractor, role_source):
+def test_extract_tokens_from_model_attrs(role_source):
     model = SimpleNamespace(total_tokens=150, tokens_sent=100, tokens_received=50)
-    tokens = extractor(model)
+    tokens = extract_litellm_model_tokens(model, role_source=role_source)
     assert tokens == {
         "input": 100,
         "output": 50,
@@ -33,14 +30,14 @@ def test_extract_tokens_from_model_attrs(extractor, role_source):
 
 
 @pytest.mark.parametrize(
-    ("extractor", "role_source"),
+    "role_source",
     [
-        (_extract_builder_tokens, "context_builder_llm"),
-        (_extract_architect_tokens, "architect_pass"),
-        (_extract_validation_tokens, "spec_validation"),
+        "context_builder_llm",
+        "architect_pass",
+        "spec_validation",
     ],
 )
-def test_extract_tokens_from_usage_dict(extractor, role_source):
+def test_extract_tokens_from_usage_dict(role_source):
     model = SimpleNamespace(
         total_tokens=None,
         tokens_sent=None,
@@ -51,7 +48,7 @@ def test_extract_tokens_from_usage_dict(extractor, role_source):
             "total_tokens": 2453,
         },
     )
-    tokens = extractor(model)
+    tokens = extract_litellm_model_tokens(model, role_source=role_source)
     assert tokens["input"] == 2400
     assert tokens["output"] == 53
     assert tokens["total"] == 2453
@@ -84,7 +81,7 @@ def test_extract_tokens_unavailable_when_model_empty():
 
 
 def test_extract_tokens_unavailable_for_none_model():
-    tokens = _extract_builder_tokens(None)
+    tokens = extract_litellm_model_tokens(None, role_source="context_builder_llm")
     assert tokens["source"] == "unavailable"
     assert tokens["total"] is None
 

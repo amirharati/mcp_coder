@@ -19,6 +19,7 @@
 | [`rag`](#rag) | Search / index delegation FTS5 (`delegation_rag.db`) |
 | [`search`](#search) | Unified search: `delegations` \| `files` (Phase 5 toolset) |
 | [`index-workspace`](#index-workspace) | Build / refresh `workspace_rag.db` file summaries |
+| [`maintenance`](#maintenance) | Storage stats — JSONL records, trace files, DB row counts |
 
 > **Bare invocation at a terminal** prints help; it does **not** start the MCP server. The stdio server starts only when Cursor launches the process (stdin is not a TTY), or when you explicitly pass `--mcp`.
 
@@ -371,7 +372,35 @@ mcp-coder index-workspace [--workspace PATH] [--changed-only] [--limit N] [--jso
 | `MCP_CODER_WORKSPACE_FILE_RAG_K` | server | Max file hits in builder (default 5) |
 | `MCP_CODER_SESSION_POLICY` | server | `always_new` or `align_host` |
 
+| `MCP_CODER_OBSERVABILITY_VERBOSITY` | server | `lean` \| `standard` \| `full` — trace file content depth (default `standard`) |
+| `MCP_CODER_CAPTURE_FOR_TRAINING` | server | `1` = write `traces/<id>-training.json` opt-in tuples (off by default) |
+
 `.env` files at workspace root and mcp-coder repo root are loaded automatically on server start.
+
+---
+
+## `maintenance`
+
+Storage health and stats for the current workspace.
+
+```
+mcp-coder maintenance stats [--workspace PATH]
+```
+
+Prints a summary of all storage artifacts for the workspace:
+
+```
+JSONL records:          23       (across all sessions)
+Trace files:             2       9743 B
+delegation_rag.db:      23 rows
+workspace_rag.db:        8 rows
+workspace_history.db:   23 snapshots
+capture_for_training:   false
+```
+
+Use after a delegation to confirm trace files are being written and DB row counts are incrementing. Useful for validating observability config (`observability_verbosity`, `capture_for_training`).
+
+> **Note:** Trace files are written under `sessions/<id>/traces/` only when `observability_verbosity` is `standard` or `full` (the default). At `lean`, only the `trace_ref` pointer is set in the JSONL row; no trace file is created.
 
 ---
 
@@ -379,7 +408,8 @@ mcp-coder index-workspace [--workspace PATH] [--changed-only] [--limit N] [--jso
 
 | Path | Contents |
 |------|----------|
-| `~/.mcp-coder/projects/<key>/sessions/<id>/delegations.jsonl` | Audit log — one record per delegation |
+| `~/.mcp-coder/projects/<key>/sessions/<id>/delegations.jsonl` | Audit log — one lean record per delegation |
+| `~/.mcp-coder/projects/<key>/sessions/<id>/traces/<id>.jsonl` | Helper LLM trace — written at `standard`/`full` verbosity |
 | `~/.mcp-coder/projects/<key>/workspace_history.db` | SQLite — snapshots + checkpoints + file deltas |
 | `~/.mcp-coder/projects/<key>/delegation_rag.db` | SQLite FTS5 — delegation summaries |
 | `~/.mcp-coder/projects/<key>/workspace_rag.db` | SQLite FTS5 — workspace-file summaries |
@@ -394,5 +424,6 @@ mcp-coder index-workspace [--workspace PATH] [--changed-only] [--limit N] [--jso
 
 | Date | Change |
 |------|--------|
+| 2026-06-13 | Phase 6 — `maintenance stats` added; observability env vars; trace file storage path; lean JSONL note |
 | 2026-06-13 | Phase 5 — `search`, `index-workspace`; RAG defaults on; env vars for corpus toggles |
 | 2026-06-12 | Initial version — all commands with full flag tables, examples, env vars, storage paths |
