@@ -10,7 +10,7 @@
 
 This document is the **delivery plan**: what to build, in what order, and how we validate each step. Vision and rationale live in [IDEA.md](./IDEA.md) · doc map: [VISION_DOCS.md](./VISION_DOCS.md). Implementation happens in focused coding sessions once a phase (or sub-step) is agreed.
 
-**Status:** Phase 1 **complete** (P1-199). Phase 2 **complete** (P2-499). Phase 3 **complete** (P3-499). Phase 4 **complete** (2026-06-09). Phase 5 **complete** (2026-06-13). Phase 6 **complete** (2026-06-13). **Next:** Phase 7 planning — executor loop ownership (BL-350) + LlmGateway proxy (BL-368) → full-capture substrate (BL-367, Phase 8).
+**Status:** Phase 1 **complete** (P1-199). Phase 2 **complete** (P2-499). Phase 3 **complete** (P3-499). Phase 4 **complete** (2026-06-09). Phase 5 **complete** (2026-06-13). Phase 6 **complete** (2026-06-13). **Next:** Phase 7 — executor loop ownership (BL-350) + LlmGateway proxy (BL-368). Phase 8 — full 100% capture substrate (BL-367). See § Phase 7 and § Phase 8 below.
 
 ---
 
@@ -50,8 +50,9 @@ This document is the **delivery plan**: what to build, in what order, and how we
 | **4.5** | **Full stack onboarding** — Phases 1–4 tutorials, architecture docs, live inspection, gap analysis; no new arc number | [PHASE4.5_MVP.md](./PHASE4.5_MVP.md) **active** |
 | **5** | **RAG + retrieval integration** — retrieval contract, delegation RAG → builder, workspace-file corpus, RAG toolset (CLI+MCP) | [PHASE5_MVP.md](./PHASE5_MVP.md) **complete** 2026-06-13 |
 | **6** | **Observability substrate + reasoning buffer** — `core/observability/` adapter seam; live tokens; trace files; reasoning hot buffer; training opt-in (POC/MVP of AGENTIC_LOOP_LOGGING product) | [PHASE6_MVP.md](./PHASE6_MVP.md) **complete** 2026-06-13 |
-| **7** *(planned)* | **Executor visibility + unified LLM boundary** — own executor loop (BL-350); `LlmGateway` proxy (BL-368); path toward full-capture logging (BL-367 Phase 8) | BACKLOG § Phase 6 exit |
-| **7+** | Interactive/long-running sessions, supervised loop control, escalation hooks, multi-host, product UX, ensemble | BL-350, BL-354, BL-160, BL-201/202, BL-007, BL-152, BL-340 |
+| **7** *(planned)* | **Executor loop ownership + unified LLM boundary** — own every executor turn (BL-350); `LlmGateway` proxy for all LLM calls (BL-368); compile provenance bundle; per-turn trace events | BACKLOG § Phase 6 exit — to be planned |
+| **8** *(planned)* | **Full 100% capture substrate** — write-always trace storage; verbosity as display filter only; context package blobs; systematic delegation replay from disk (BL-367) | Requires Phase 7 prerequisites |
+| **8+** | Interactive/long-running sessions, curation pipeline, novelty filter, cross-session reasoning, multi-host, ensemble | BL-333, BL-351, BL-354, BL-357, BL-160, BL-007 |
 
 **Principle (Phase 3+ attribution):** MCP reports `files_changed` from **delegation-scoped workspace manifest delta** — git-agnostic, backend-agnostic. User git is complementary; optional `git_tracked` metadata later (trivial).
 
@@ -733,6 +734,154 @@ Both projects can be developed in parallel. Phase 1 does not require the proxy o
 
 ---
 
+## Phase 7: Executor loop ownership + unified LLM boundary *(planned)*
+
+**Status:** Not started — to be planned after Phase 6 exit.
+**PM doc:** (to be created: `PHASE7_MVP.md`)
+**Backlog inputs:** BL-350, BL-368, BL-333, BL-353 (remainder)
+
+### One-line goal
+
+Own every executor turn and route all LLM calls through a single proxy — so Phase 8 can capture 100% with no bypass paths.
+
+### What Phase 7 owns
+
+#### A — Unified LlmGateway proxy (BL-368)
+
+Replace the current dual-path capture (Route A LiteLLM callback + Route B `owned_helper_llm.py`) with one `LlmGateway` in `core/observability/`:
+
+- All owned LLM calls (helpers, `test-model`, future backends) route through it
+- Executor path: proxy tap even while still using Aider adapter
+- Scope beyond logging: tokens, trace bodies, reasoning, budget caps, redaction, rate limits
+- `NullObservability` / tests can swap proxy for no-op
+- Callback becomes thin shim or removed once proxy covers all paths
+
+#### B — Executor loop ownership (BL-350)
+
+Break the `coder.run(prompt)` black box into an owned loop:
+
+- **Per-turn LLM I/O** — every executor prompt + response logged as `llm_call` trace event
+- **Non-LLM actions** — file edits, shell calls, lint retries between turns logged as `tool_call` / `action` events
+- **Step index + parent_call_id** — turn sequence reconstructable from trace alone
+- **Reasoning tokens** per executor turn (when model emits) — captured before Aider strips them (BL-333 extend)
+- Preferred route: outer loop (Route A) — `compile → run(bounded sub-task) → inspect → recompile → run`; Aider `Coder` subclass (Route C) only if Route A insufficient
+
+#### C — Compile provenance bundle (BL-353 remainder)
+
+Store what went into each pipeline phase — not just flags:
+
+- `mechanical_brief`, `builder_input`, `builder_output`, `architect_input`, `architect_output`, `validation_input`, `validation_output`, `final_executor_prompt` — hashes + bodies in trace
+- Host transcript provenance: `source_path`, byte range, `last_source_line` — enough to slice Cursor JSONL for replay
+- RAG hits already covered by lean `context_refs` + DB join (Phase 6 done)
+
+### What Phase 7 does NOT own
+
+| Item | Why deferred |
+|------|-------------|
+| Write-always trace storage (verbosity gate removed) | Needs proxy first — Phase 8 |
+| Context package blob sidecar | Phase 8 |
+| Systematic delegation replay from disk | Phase 8 (needs all captures in place) |
+| Novelty filter / curation | After raw corpus exists — Phase 8+ |
+| Cross-session reasoning persistence (BL-333) | After dogfood shows same-session working well |
+| Host escalation / blind yes=True replacement (BL-351) | Phase 8+ |
+
+### Phase 7 acceptance (dogfood)
+
+After a live `delegate_to_agent` call:
+
+1. **Every executor LLM turn** is a `llm_call` line in `traces/<id>.jsonl` — prompt + response bodies + tokens.
+2. **Non-LLM actions** (file writes, lint runs) appear as `tool_call` / `action` events in the same trace.
+3. **All LLM calls** (helpers + executor) pass through `LlmGateway` — one code path, one capture point.
+4. **Compile bundle** fields (`builder_input`, `architect_output`, `final_executor_prompt`) are present in trace or sidecar.
+5. `mcp-coder maintenance stats` shows executor turns counted per delegation.
+
+---
+
+## Phase 8: Full 100% capture substrate *(planned)*
+
+**Status:** Not started — requires Phase 7 prerequisites.
+**PM doc:** (to be created: `PHASE8_MVP.md`)
+**Backlog inputs:** BL-367, BL-357 (first slice)
+
+### One-line goal
+
+Capture 100% at the LLM boundary; verbosity controls only what you *see*, never what gets *written*.
+
+### What Phase 8 owns
+
+#### A — Write-always trace storage (BL-367 core)
+
+Remove verbosity from the write gate:
+
+- Trace file written for every delegation unconditionally
+- At all verbosity tiers, full prompt and response bodies always written to disk
+- `lean` / `standard` / `full` become viewer/CLI/export display filters only
+- RAG promotion gated on verbosity (not raw storage)
+
+#### B — Context package blob sidecar (BL-367 C1)
+
+Store the exact assembled context package per delegation:
+
+```
+sessions/<id>/context_packages/<context_package_hash>.json
+```
+
+- Deduplication by hash — same package reused across delegations stored once
+- Combined with trace file + JSONL row: any delegation is fully replayable from disk without Cursor chat
+
+#### C — Systematic replay path (BL-367 E1–E5)
+
+CLI / viewer capability to reconstruct a delegation entirely from local store:
+
+```
+mcp-coder replay <delegation_id>
+```
+
+Shows, from disk alone: full executor prompt, every executor turn, non-LLM actions, code diff, RAG context. No Cursor required.
+
+#### D — Storage lifecycle first slice (BL-357)
+
+Now that everything is captured, add retention policy enforcement:
+
+- TTL per tier (hot / warm / cold)
+- Promote-then-prune: don't delete until promoted artifact exists
+- `mcp-coder maintenance gc [--dry-run]`
+- Trace compression (gzip) for warm storage
+
+### What Phase 8 does NOT own
+
+| Item | Why deferred |
+|------|-------------|
+| Novelty / curation pipeline | AGENTIC_LOOP_LOGGING months 2+ |
+| Training dataset export UI | Separate product scope |
+| Cross-session reasoning (BL-333) | Needs corpus to validate |
+| Embeddings for RAG (BL-366) | Measure FTS recall first |
+| HTTP proxy / network tap | Out of scope |
+| Multi-host / non-Cursor hosts | Later arc |
+
+### Phase 8 acceptance (dogfood)
+
+After a live `delegate_to_agent` call at any verbosity setting:
+
+1. **Full prompt and response bodies** written to `traces/<id>.jsonl` — not truncated, not gated on verbosity.
+2. **Context package blob** stored at `context_packages/<hash>.json` under session dir.
+3. `mcp-coder replay <delegation_id>` reconstructs the full delegation from disk — no Cursor.
+4. `mcp-coder maintenance gc --dry-run` reports what would be pruned by retention policy.
+5. Viewer verbosity toggle affects display only — underlying data unchanged.
+
+### Why this order matters
+
+```
+Phase 6 — seam + helpers + tokens + lean JSONL  → observability skeleton
+Phase 7 — proxy + executor loop                 → no bypass paths, all turns captured
+Phase 8 — write-always + blobs + replay         → 100% captured, replayable from disk
+Phase 8+ — curation, novelty, training export   → smart pipeline on top of complete data
+```
+
+Skipping Phase 7 and trying to do Phase 8 directly fails: if any LLM call bypasses the proxy (Aider inner turns today), you still have holes even with write-always storage.
+
+---
+
 ## Next action (planning)
 
 - [x] Phase 1 tasks tracked in [PHASE1_MVP.md](./PHASE1_MVP.md); gaps in [PHASE1_ISSUES.md](./PHASE1_ISSUES.md); backlog in [BACKLOG.md](./BACKLOG.md).
@@ -749,4 +898,5 @@ Both projects can be developed in parallel. Phase 1 does not require the proxy o
 - [x] Phase 4.5 — stack literacy gate; tutorials, inspect, gap analysis; [PHASE4.5_MVP.md](./PHASE4.5_MVP.md).
 - [x] Phase 5 — RAG + retrieval (P5-001…P5-004, P5-006); recommended exit met 2026-06-13; [PHASE5_MVP.md](./PHASE5_MVP.md).
 - [x] Phase 6 — observability substrate + reasoning buffer (P6-001…P6-008); recommended exit + post-dogfood fixes met 2026-06-13; [PHASE6_MVP.md](./PHASE6_MVP.md).
-- [ ] **Phase 7 — Planning** — executor loop ownership (BL-350) + LlmGateway proxy (BL-368); see BACKLOG § Phase 6 exit.
+- [ ] **Phase 7 — Scope defined** — executor loop ownership (BL-350) + LlmGateway proxy (BL-368) + compile provenance bundle; see § Phase 7 above; needs `PHASE7_MVP.md`.
+- [ ] **Phase 8 — Scope defined** — write-always trace storage + context package blobs + systematic replay + storage lifecycle; see § Phase 8 above; needs `PHASE8_MVP.md`.
