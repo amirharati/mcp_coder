@@ -7,7 +7,7 @@
 
 # Phase 8 issue tracker
 
-**Status:** Active — master session complete 2026-06-13; workers pending.
+**Status:** Active — implementation complete; only carried follow-up remains (P8-ISS-004).
 **Purpose:** Gaps found during Phase 8 implementation and dogfood.
 **Milestone board:** [PHASE8_MVP.md](./PHASE8_MVP.md)
 **Phase 7 issues (frozen):** [PHASE7_ISSUES.md](./PHASE7_ISSUES.md)
@@ -20,11 +20,11 @@ Status: `open` | `done` | `wontfix` | `carried`
 
 | ID | Status | Priority | Title | Resolution |
 |----|--------|----------|-------|------------|
-| P8-ISS-001 | open | medium | `owned_completion.py` dead code — deferred from P7-ISS-002 | P7-ISS-002 noted this as cleanup for Phase 8. Delete or formally deprecate `owned_completion.py` now that `LlmGateway` is the canonical path. Handle in P8-001 scope. |
-| P8-ISS-002 | open | high | Double-recording risk: Route A `success_callback` fires for Aider inner-loop calls AND `ObservableModel` will also fire — same root cause as P7-ISS-001 for helpers | P8-001 added `_backend_call_active` dedup guard and unit tests. **Still open until live dogfood:** verify streaming path does not clear dedup context too early (send_completion returns wrapper before stream exhaustion), causing Route A to re-emit `llm_call` duplicates in real runs. |
-| P8-ISS-003 | open | medium | Streaming response capture: `send_completion()` returns a stream iterator when `stream=True` — full body not available until stream is exhausted | **Locked in P8-001 spec (D-P8-6):** transparent stream iterator wrapper — accumulate on exhaustion; do not require `--no-stream`. Worker must verify in tests + dogfood. |
+| P8-ISS-001 | done | medium | `owned_completion.py` dead code — deferred from P7-ISS-002 | Resolved in P8-005: removed `core/observability/owned_completion.py` shim after confirming no production imports depended on it. |
+| P8-ISS-002 | done | high | Double-recording risk: Route A `success_callback` fires for Aider inner-loop calls AND `ObservableModel` will also fire — same root cause as P7-ISS-001 for helpers | Resolved in P8-006: introduced streamed-call ownership registry keyed by delegation/role/model/message hash and callback-side ownership checks. Live validation `1defb5f7-b2be-4952-99e4-f9cbd01d2da2` shows one `backend_llm_call` and no hash-matching duplicate executor `llm_call`. |
+| P8-ISS-003 | done | medium | Streaming response capture: `send_completion()` returns a stream iterator when `stream=True` — full body not available until stream is exhausted | Resolved in P8-006: transparent stream wrapper now guarantees single backend record, preserves incremental yielding, and cleans ownership on exhaustion/error/close. Unit coverage expanded in `tests/test_observable_model_p8_001.py` and full suite passed. |
 | P8-ISS-004 | carried | low | Thinking token availability: need to verify litellm passes thinking blocks through to `ModelResponse` for all providers we use (Anthropic extended thinking, OpenRouter reasoning) | **Live dogfood status:** complex Sonnet run (`86fe232f-3bdd-4d04-a9e3-bdcbd3d8ce63`) produced no `thinking_text`/`thinking_tokens` fields on `backend_llm_call`. Not a Phase 8 blocker, but keep open as a follow-up check on a known thinking-enabled model/path and capture settings. |
-| P8-ISS-005 | open | low | `aider_output_parse` token counting hack becomes redundant after P8-001 | Phase 6 shipped `aider_output_parse` to extract token counts from Aider's text output (a fragile hack). `ObservableModel` gives exact per-call tokens directly from the `ModelResponse`. Flag for deprecation in P8-001 or Phase 8 cleanup pass. |
+| P8-ISS-005 | done | low | `aider_output_parse` token counting hack becomes redundant after P8-001 | Resolved in P8-005: token precedence clarified and codified (`callback/backend capture` → `aider attrs` → `aider_output_parse` last-resort fallback). Added tests for precedence and non-regression. |
 | P8-ISS-006 | done | high | Live dogfood showed **zero** `backend_llm_call` events (A1 hard fail) | **Resolved by P8-001a.** `aider_engine` now submits `ctx.run` into threadpool (`copy_context` propagation). Re-dogfood delegation `70d63f1a-c7fc-4633-ac6d-dd3f2285e3f7` confirms `backend_llm_call` appears in trace with `call_type: executor_turn` and `step_index: 1`. |
 
 ---
@@ -33,6 +33,7 @@ Status: `open` | `done` | `wontfix` | `carried`
 
 | Date | Finding |
 |------|---------|
+| 2026-06-14 | Final P8-006 dogfood delegation `1defb5f7-b2be-4952-99e4-f9cbd01d2da2` confirms streaming dedup hardening: `backend_llm_call` present (`call_type: executor_turn`, `step_index: 1`) and no hash-matching duplicate executor `llm_call`. |
 | 2026-06-14 | A5-focused complex dogfood delegation `86fe232f-3bdd-4d04-a9e3-bdcbd3d8ce63` confirms `backend_llm_call` capture on `openrouter/anthropic/claude-sonnet-4`, but no `thinking_text`/`thinking_tokens` fields were emitted. This is treated as provider/path behavior, not capture failure. |
 | 2026-06-14 | Joint dogfood delegation `334072d7-2a19-46a2-853b-7a12dc481f3f` (model `openrouter/anthropic/claude-sonnet-4`) confirms `backend_llm_call` capture remains live after P8-001a (`call_type: executor_turn`, `step_index: 1`). `maintenance stats --verbose` prints Aider interception profile as expected (P8-002 validation). |
 | 2026-06-14 | Live dogfood delegation `dda44d00-d18e-44db-b82b-2a5b816dec9c` (workspace `mcp_coder_phase1_e2e`) produced **no** `backend_llm_call` events. Trace counts: `trace_header=1`, `action=1`, `llm_call=1`, `tool_call=2`, `compile_event=1`. Confirmed P8-ISS-006 root issue. |
@@ -48,6 +49,8 @@ Status: `open` | `done` | `wontfix` | `carried`
 
 | Date | Change |
 |------|--------|
+| 2026-06-14 | P8-006 delivered: closed P8-ISS-002 (streaming dedup) and P8-ISS-003 (streaming capture hardening) after tests + final dogfood validation. |
+| 2026-06-14 | P8-005 delivered: closed P8-ISS-001 (removed `owned_completion.py`) and P8-ISS-005 (demoted `aider_output_parse` to last-resort fallback with tested precedence). |
 | 2026-06-14 | P8-ISS-004 set to `carried` (follow-up): Sonnet/OpenRouter dogfood did not expose reasoning fields; revisit with known thinking-enabled model/path so this signal is not lost. |
 | 2026-06-14 | Joint dogfood + CLI validation confirms P8-002 acceptance (`maintenance stats --verbose` shows interception profile block). |
 | 2026-06-14 | P8-ISS-006 closed after P8-001a + re-dogfood success (`70d63f1a-c7fc-4633-ac6d-dd3f2285e3f7`). |

@@ -10,6 +10,7 @@ from core.observability.context import (
     CLI_FALLBACK_ROLE,
     _backend_call_active,
     delegation_id_var,
+    is_backend_stream_call_active,
     role_var,
     session_dir_var,
     step_index_var,
@@ -367,6 +368,18 @@ def _is_cache_warm_probe(kwargs: dict[str, Any]) -> bool:
     return kwargs.get("max_tokens") == 1
 
 
+def _is_backend_stream_owned_call(kwargs: dict[str, Any], response_obj: Any) -> bool:
+    model = kwargs.get("model")
+    if not model and response_obj is not None:
+        model = getattr(response_obj, "model", None)
+    return is_backend_stream_call_active(
+        delegation_id=delegation_id_var.get(),
+        role=role_var.get() or CLI_FALLBACK_ROLE,
+        model=str(model) if model else None,
+        messages=kwargs.get("messages"),
+    )
+
+
 def _record_cache_warm_backend_call(
     kwargs: dict[str, Any],
     response_obj: Any,
@@ -417,6 +430,9 @@ def litellm_success_handler(
         if _is_cache_warm_probe(kwargs) and delegation_id_var.get():
             _record_cache_warm_backend_call(kwargs, response_obj, start_time, end_time)
             return
+
+        if _is_backend_stream_owned_call(kwargs, response_obj):
+            return  # ObservableModel owns this streamed inner-loop call until stream cleanup.
 
         if _backend_call_active.get():
             return  # ObservableModel owns inner-loop capture — skip Route A duplicate.
@@ -650,5 +666,7 @@ def reset_callback_state_for_tests() -> None:
     _registered = False
     _last_delegation_id = None
     from core.observability.reasoning_buffer import clear_all_session_reasoning
+    from core.observability.context import clear_backend_stream_calls_for_tests
 
+    clear_backend_stream_calls_for_tests()
     clear_all_session_reasoning()

@@ -5,7 +5,7 @@ from __future__ import annotations
 import pytest
 
 from core.engine.aider_engine import _extract_tokens
-from core.usage.aider_tokens import parse_aider_output_tokens
+from core.usage.aider_tokens import parse_aider_output_tokens, resolve_executor_tokens
 
 
 @pytest.mark.parametrize(
@@ -51,7 +51,6 @@ def test_output_parse_used_when_coder_unavailable():
     assert tokens["source"] == "unavailable"
 
     output = "Applied edits.\nTokens: 2.4k sent, 53 received.\n"
-    parsed = parse_aider_output_tokens(output)
-    assert parsed is not None
-    assert parsed["source"] == "aider_output_parse"
-    assert parsed["total"] == 2453
+    resolved = resolve_executor_tokens(coder_tokens=tokens, output=output)
+    assert resolved["source"] == "aider_output_parse"
+    assert resolved["total"] == 2453

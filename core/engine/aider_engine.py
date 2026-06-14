@@ -318,13 +318,12 @@ class AiderEngine(ExecutionEngine):
                 before_mtimes=before_mtimes,
                 delegation_id=delegation_id,
             )
-            tokens = _extract_tokens(coder, partial)
-            if tokens.get("source") == "unavailable" and output:
-                from core.usage.aider_tokens import parse_aider_output_tokens
+            from core.usage.aider_tokens import resolve_executor_tokens
 
-                parsed = parse_aider_output_tokens(output)
-                if parsed:
-                    tokens = parsed
+            tokens = resolve_executor_tokens(
+                coder_tokens=_extract_tokens(coder, partial),
+                output=output,
+            )
             success, error = infer_run_success(
                 io=io,
                 output=output,

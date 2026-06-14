@@ -11,6 +11,7 @@ import pytest
 from core.config.observability import VERBOSITY_FULL, VERBOSITY_LEAN, VERBOSITY_STANDARD
 from core.config.role_models import ROLE_EXECUTOR
 from core.observability.context import (
+    backend_stream_call_count_for_tests,
     bind_delegation_trace_scope,
     delegation_context,
     executor_step_context,
@@ -31,6 +32,12 @@ def _storage_for(tmp_path, monkeypatch):
     monkeypatch.delenv("MCP_CODER_LOG_DIR", raising=False)
     monkeypatch.delenv("MCP_CODER_MIRROR_LOGS_TO_WORKSPACE", raising=False)
     return prepare_delegation_storage(workspace)
+
+
+def _trace_records(path):
+    if not path.exists():
+        return []
+    return [json.loads(row) for row in path.read_text().splitlines() if row.strip()]
 
 
 def _mock_sync_response(
@@ -235,8 +242,9 @@ def test_observable_model_stream_records_on_exhaustion(
                 chunks = list(wrapped)
 
     assert len(chunks) == 1
+    assert backend_stream_call_count_for_tests() == 0
     trace_path = storage.session_dir / "traces" / f"{delegation_id}.jsonl"
-    lines = [json.loads(row) for row in trace_path.read_text().splitlines() if row.strip()]
+    lines = _trace_records(trace_path)
     backend = [line for line in lines if line.get("type") == TRACE_TYPE_BACKEND_LLM_CALL]
     assert len(backend) == 1
     assert backend[0]["response_hash"]
@@ -282,6 +290,183 @@ def test_litellm_callback_skips_when_backend_call_active(tmp_path, monkeypatch):
         lines = [json.loads(row) for row in trace_path.read_text().splitlines() if row.strip()]
         llm_calls = [line for line in lines if line.get("type") == "llm_call"]
         assert llm_calls == []
+
+
+def test_stream_callback_while_active_writes_only_backend_record(
+    tmp_path, monkeypatch, observable_model_module
+):
+    reset_callback_state_for_tests()
+    storage = _storage_for(tmp_path, monkeypatch)
+    monkeypatch.setenv("MCP_CODER_OBS_VERBOSITY", VERBOSITY_LEAN)
+    delegation_id = "stream-dedup-active"
+    messages = [{"role": "user", "content": "stream please"}]
+    kwargs = {"model": "test/model", "messages": messages}
+    response = _mock_sync_response(content="hello")
+    chunk = SimpleNamespace(
+        model="test/model",
+        usage=SimpleNamespace(prompt_tokens=10, completion_tokens=5, total_tokens=15),
+        choices=[SimpleNamespace(delta=SimpleNamespace(content="hello"))],
+    )
+
+    def stream_iter():
+        yield chunk
+
+    def fake_send_completion(_self, _messages, _functions, _stream, _temperature=None):
+        litellm_success_handler(kwargs, response, None, None)
+        return "hash", stream_iter()
+
+    ObservableModel = observable_model_module.ObservableModel
+    model = ObservableModel("test/model")
+
+    with patch("core.engine.observable_model.Model.send_completion", fake_send_completion):
+        with delegation_context(delegation_id):
+            bind_delegation_trace_scope(
+                workspace=str(tmp_path / "workspace"),
+                session_dir=storage.session_dir,
+            )
+            with role_context(ROLE_EXECUTOR), executor_step_context(1):
+                _, wrapped = model.send_completion(messages, None, True)
+                chunks = list(wrapped)
+
+    assert chunks == [chunk]
+    assert backend_stream_call_count_for_tests() == 0
+    trace_path = storage.session_dir / "traces" / f"{delegation_id}.jsonl"
+    lines = _trace_records(trace_path)
+    backend = [line for line in lines if line.get("type") == TRACE_TYPE_BACKEND_LLM_CALL]
+    llm_calls = [line for line in lines if line.get("type") == "llm_call"]
+    assert len(backend) == 1
+    assert llm_calls == []
+
+
+def test_stream_callback_after_send_return_writes_only_backend_record(
+    tmp_path, monkeypatch, observable_model_module
+):
+    reset_callback_state_for_tests()
+    storage = _storage_for(tmp_path, monkeypatch)
+    monkeypatch.setenv("MCP_CODER_OBS_VERBOSITY", VERBOSITY_LEAN)
+    delegation_id = "stream-dedup-after-return"
+    messages = [{"role": "user", "content": "stream after return"}]
+    kwargs = {"model": "test/model", "messages": messages}
+    response = _mock_sync_response(content="hello")
+    chunk = SimpleNamespace(
+        model="test/model",
+        usage=SimpleNamespace(prompt_tokens=10, completion_tokens=5, total_tokens=15),
+        choices=[SimpleNamespace(delta=SimpleNamespace(content="hello"))],
+    )
+
+    def stream_iter():
+        yield chunk
+
+    ObservableModel = observable_model_module.ObservableModel
+    model = ObservableModel("test/model")
+
+    with patch(
+        "core.engine.observable_model.Model.send_completion",
+        return_value=("hash", stream_iter()),
+    ):
+        with delegation_context(delegation_id):
+            bind_delegation_trace_scope(
+                workspace=str(tmp_path / "workspace"),
+                session_dir=storage.session_dir,
+            )
+            with role_context(ROLE_EXECUTOR), executor_step_context(1):
+                _, wrapped = model.send_completion(messages, None, True)
+                assert backend_stream_call_count_for_tests() == 1
+                litellm_success_handler(kwargs, response, None, None)
+                chunks = list(wrapped)
+
+    assert chunks == [chunk]
+    assert backend_stream_call_count_for_tests() == 0
+    trace_path = storage.session_dir / "traces" / f"{delegation_id}.jsonl"
+    lines = _trace_records(trace_path)
+    backend = [line for line in lines if line.get("type") == TRACE_TYPE_BACKEND_LLM_CALL]
+    llm_calls = [line for line in lines if line.get("type") == "llm_call"]
+    assert len(backend) == 1
+    assert llm_calls == []
+
+
+def test_stream_error_cleans_dedup_state(tmp_path, monkeypatch, observable_model_module):
+    reset_callback_state_for_tests()
+    storage = _storage_for(tmp_path, monkeypatch)
+    monkeypatch.setenv("MCP_CODER_OBS_VERBOSITY", VERBOSITY_LEAN)
+    delegation_id = "stream-error-cleanup"
+    messages = [{"role": "user", "content": "stream then error"}]
+    chunk = SimpleNamespace(
+        model="test/model",
+        usage=None,
+        choices=[SimpleNamespace(delta=SimpleNamespace(content="partial"))],
+    )
+
+    def stream_iter():
+        yield chunk
+        raise RuntimeError("provider stream failed")
+
+    ObservableModel = observable_model_module.ObservableModel
+    model = ObservableModel("test/model")
+
+    with patch(
+        "core.engine.observable_model.Model.send_completion",
+        return_value=("hash", stream_iter()),
+    ):
+        with delegation_context(delegation_id):
+            bind_delegation_trace_scope(
+                workspace=str(tmp_path / "workspace"),
+                session_dir=storage.session_dir,
+            )
+            with role_context(ROLE_EXECUTOR), executor_step_context(1):
+                _, wrapped = model.send_completion(messages, None, True)
+                assert next(wrapped) is chunk
+                assert backend_stream_call_count_for_tests() == 1
+                with pytest.raises(RuntimeError, match="provider stream failed"):
+                    next(wrapped)
+
+    assert backend_stream_call_count_for_tests() == 0
+
+
+def test_stream_close_cleans_dedup_state_without_buffering(
+    tmp_path, monkeypatch, observable_model_module
+):
+    reset_callback_state_for_tests()
+    storage = _storage_for(tmp_path, monkeypatch)
+    monkeypatch.setenv("MCP_CODER_OBS_VERBOSITY", VERBOSITY_LEAN)
+    delegation_id = "stream-close-cleanup"
+    messages = [{"role": "user", "content": "stream then close"}]
+    chunk = SimpleNamespace(
+        model="test/model",
+        usage=None,
+        choices=[SimpleNamespace(delta=SimpleNamespace(content="partial"))],
+    )
+
+    def stream_iter():
+        yield chunk
+        yield SimpleNamespace(
+            model="test/model",
+            usage=None,
+            choices=[SimpleNamespace(delta=SimpleNamespace(content="unread"))],
+        )
+
+    ObservableModel = observable_model_module.ObservableModel
+    model = ObservableModel("test/model")
+
+    with patch(
+        "core.engine.observable_model.Model.send_completion",
+        return_value=("hash", stream_iter()),
+    ):
+        with delegation_context(delegation_id):
+            bind_delegation_trace_scope(
+                workspace=str(tmp_path / "workspace"),
+                session_dir=storage.session_dir,
+            )
+            with role_context(ROLE_EXECUTOR), executor_step_context(1):
+                _, wrapped = model.send_completion(messages, None, True)
+                assert next(wrapped) is chunk
+                wrapped.close()
+
+    assert backend_stream_call_count_for_tests() == 0
+    trace_path = storage.session_dir / "traces" / f"{delegation_id}.jsonl"
+    lines = _trace_records(trace_path)
+    backend = [line for line in lines if line.get("type") == TRACE_TYPE_BACKEND_LLM_CALL]
+    assert backend == []
 
 
 def test_litellm_callback_records_cache_warm_backend_call(tmp_path, monkeypatch):

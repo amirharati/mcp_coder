@@ -4,8 +4,10 @@ from __future__ import annotations
 
 from contextlib import contextmanager
 from contextvars import ContextVar, Token
+import hashlib
+import json
 from pathlib import Path
-from typing import Iterator
+from typing import Any, Iterator
 
 delegation_id_var: ContextVar[str | None] = ContextVar("delegation_id", default=None)
 role_var: ContextVar[str | None] = ContextVar("role", default=None)
@@ -19,6 +21,75 @@ step_index_var: ContextVar[int | None] = ContextVar("step_index", default=None)
 _backend_call_active: ContextVar[bool] = ContextVar("_backend_call_active", default=False)
 
 CLI_FALLBACK_ROLE = "cli_test"
+
+_BackendStreamKey = tuple[str | None, str | None, str | None, str]
+_backend_stream_calls: set[_BackendStreamKey] = set()
+
+
+def _stable_call_hash(messages: Any) -> str:
+    try:
+        payload = json.dumps(messages, sort_keys=True, default=str, separators=(",", ":"))
+    except (TypeError, ValueError):
+        payload = repr(messages)
+    return hashlib.sha256(payload.encode("utf-8")).hexdigest()
+
+
+def backend_stream_call_key(
+    *,
+    delegation_id: str | None,
+    role: str | None,
+    model: str | None,
+    messages: Any,
+) -> _BackendStreamKey:
+    """Build a stable key shared by ObservableModel and LiteLLM callbacks."""
+    return delegation_id, role, str(model) if model else None, _stable_call_hash(messages)
+
+
+def register_backend_stream_call(
+    *,
+    delegation_id: str | None,
+    role: str | None,
+    model: str | None,
+    messages: Any,
+) -> _BackendStreamKey:
+    """Mark one streamed backend call as owned until its iterator is closed."""
+    key = backend_stream_call_key(
+        delegation_id=delegation_id,
+        role=role,
+        model=model,
+        messages=messages,
+    )
+    _backend_stream_calls.add(key)
+    return key
+
+
+def clear_backend_stream_call(key: _BackendStreamKey | None) -> None:
+    if key is not None:
+        _backend_stream_calls.discard(key)
+
+
+def is_backend_stream_call_active(
+    *,
+    delegation_id: str | None,
+    role: str | None,
+    model: str | None,
+    messages: Any,
+) -> bool:
+    key = backend_stream_call_key(
+        delegation_id=delegation_id,
+        role=role,
+        model=model,
+        messages=messages,
+    )
+    return key in _backend_stream_calls
+
+
+def backend_stream_call_count_for_tests() -> int:
+    return len(_backend_stream_calls)
+
+
+def clear_backend_stream_calls_for_tests() -> None:
+    _backend_stream_calls.clear()
 
 
 @contextmanager

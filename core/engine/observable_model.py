@@ -8,8 +8,12 @@ from typing import Any, Iterator
 from aider.models import Model
 
 from core.observability.context import (
+    CLI_FALLBACK_ROLE,
     _backend_call_active,
+    clear_backend_stream_call,
     delegation_id_var,
+    register_backend_stream_call,
+    role_var,
     step_index_var,
 )
 from core.usage.litellm_tokens import _coerce_int, _tokens_from_usage_mapping
@@ -169,13 +173,16 @@ class _StreamCaptureWrapper:
         model: str | None,
         messages: Any,
         t0: float,
+        stream_key: Any,
     ) -> None:
         self._inner = iter(inner)
         self._model = model
         self._messages = messages
         self._t0 = t0
+        self._stream_key = stream_key
         self._chunks: list[Any] = []
         self._recorded = False
+        self._cleaned = False
 
     def __iter__(self) -> "_StreamCaptureWrapper":
         return self
@@ -188,8 +195,31 @@ class _StreamCaptureWrapper:
         except StopIteration:
             if not self._recorded:
                 self._recorded = True
-                self._finalize()
+                try:
+                    self._finalize()
+                finally:
+                    self._cleanup()
             raise
+        except BaseException:
+            self._cleanup()
+            raise
+
+    def close(self) -> None:
+        close = getattr(self._inner, "close", None)
+        try:
+            if callable(close):
+                close()
+        finally:
+            self._cleanup()
+
+    def __del__(self) -> None:
+        self._cleanup()
+
+    def _cleanup(self) -> None:
+        if self._cleaned:
+            return
+        self._cleaned = True
+        clear_backend_stream_call(self._stream_key)
 
     def _finalize(self) -> None:
         duration_ms = int((time.perf_counter() - self._t0) * 1000)
@@ -268,6 +298,15 @@ class ObservableModel(Model):
         t0 = time.perf_counter()
         active_token = _backend_call_active.set(True)
         model_name = getattr(self, "name", None) or str(getattr(self, "model", "")) or None
+        stream_key = None
+        stream_handoff = False
+        if stream:
+            stream_key = register_backend_stream_call(
+                delegation_id=delegation_id_var.get(),
+                role=role_var.get() or CLI_FALLBACK_ROLE,
+                model=model_name,
+                messages=messages,
+            )
         try:
             hash_obj, result = super().send_completion(
                 messages, functions, stream, temperature
@@ -275,12 +314,21 @@ class ObservableModel(Model):
             duration_ms = int((time.perf_counter() - t0) * 1000)
 
             if stream or _is_streaming_result(result):
+                if stream_key is None:
+                    stream_key = register_backend_stream_call(
+                        delegation_id=delegation_id_var.get(),
+                        role=role_var.get() or CLI_FALLBACK_ROLE,
+                        model=model_name,
+                        messages=messages,
+                    )
                 wrapped = _StreamCaptureWrapper(
                     result,
                     model=model_name,
                     messages=messages,
                     t0=t0,
+                    stream_key=stream_key,
                 )
+                stream_handoff = True
                 return hash_obj, wrapped
 
             _record_backend_call(
@@ -292,4 +340,6 @@ class ObservableModel(Model):
             )
             return hash_obj, result
         finally:
+            if not stream_handoff:
+                clear_backend_stream_call(stream_key)
             _backend_call_active.reset(active_token)

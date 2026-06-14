@@ -10,7 +10,7 @@
 
 This document is the **delivery plan**: what to build, in what order, and how we validate each step. Vision and rationale live in [IDEA.md](./IDEA.md) · doc map: [VISION_DOCS.md](./VISION_DOCS.md). Implementation happens in focused coding sessions once a phase (or sub-step) is agreed.
 
-**Status:** Phase 1 **complete** (P1-199). Phase 2 **complete** (P2-499). Phase 3 **complete** (P3-499). Phase 4 **complete** (2026-06-09). Phase 5 **complete** (2026-06-13). Phase 6 **complete** (2026-06-13). Phase 7 **complete** (2026-06-13; optional capstone met). Phase 8 **active** (master session complete 2026-06-13; workers pending). **Next:** P8-001 — `ObservableModel` Aider inner-loop capture. See [PHASE8_MVP.md](./PHASE8_MVP.md).
+**Status:** Phase 1 **complete** (P1-199). Phase 2 **complete** (P2-499). Phase 3 **complete** (P3-499). Phase 4 **complete** (2026-06-09). Phase 5 **complete** (2026-06-13). Phase 6 **complete** (2026-06-13). Phase 7 **complete** (2026-06-13; optional capstone met). Phase 8 **complete** (2026-06-14; P8-001..P8-006 delivered, with thinking-token provider-path follow-up carried). **Next:** Phase 9 — write-always storage + replay substrate. See [PHASE8_MVP.md](./PHASE8_MVP.md).
 
 ---
 
@@ -51,7 +51,7 @@ This document is the **delivery plan**: what to build, in what order, and how we
 | **5** | **RAG + retrieval integration** — retrieval contract, delegation RAG → builder, workspace-file corpus, RAG toolset (CLI+MCP) | [PHASE5_MVP.md](./PHASE5_MVP.md) **complete** 2026-06-13 |
 | **6** | **Observability substrate + reasoning buffer** — `core/observability/` adapter seam; live tokens; trace files; reasoning hot buffer; training opt-in (POC/MVP of AGENTIC_LOOP_LOGGING product) | [PHASE6_MVP.md](./PHASE6_MVP.md) **complete** 2026-06-13 |
 | **7** *(complete)* | **Executor loop ownership + unified LLM boundary** — own every executor turn (BL-350); `LlmGateway` proxy for all LLM calls (BL-368); compile provenance bundle; per-turn trace events | Closed 2026-06-13 — see `PHASE7_MVP.md` |
-| **8** *(active)* | **Backend interception: full Aider visibility** — `ObservableModel` subclass captures every Aider inner-loop LLM call + thinking tokens; backend interception contract; CLI bootstrap hardening | [PHASE8_MVP.md](./PHASE8_MVP.md) — master session complete 2026-06-13 |
+| **8** *(complete)* | **Backend interception: full Aider visibility** — `ObservableModel` captures Aider inner-loop calls; backend interception contract; CLI bootstrap hardening; transcript byte-range provenance; streaming dedup hardening | [PHASE8_MVP.md](./PHASE8_MVP.md) **complete** 2026-06-14 |
 | **9** *(planned)* | **Write-always storage + replay** — verbosity as display filter only; context package blobs; `mcp-coder replay <id>`; storage GC first slice (BL-367) | Requires Phase 8 prerequisites |
 | **8+** | Interactive/long-running sessions, curation pipeline, novelty filter, cross-session reasoning, multi-host, ensemble | BL-333, BL-351, BL-354, BL-357, BL-160, BL-007 |
 
@@ -798,17 +798,17 @@ After a live `delegate_to_agent` call:
 
 ---
 
-## Phase 8: Full 100% capture substrate *(planned)*
+## Phase 9: Full 100% capture substrate *(planned)*
 
-**Status:** Not started — requires Phase 7 prerequisites.
-**PM doc:** (to be created: `PHASE8_MVP.md`)
+**Status:** Planned — requires Phase 8 prerequisites (now complete).
+**PM doc:** (to be created: `PHASE9_MVP.md`)
 **Backlog inputs:** BL-367, BL-357 (first slice)
 
 ### One-line goal
 
 Capture 100% at the LLM boundary; verbosity controls only what you *see*, never what gets *written*.
 
-### What Phase 8 owns
+### What Phase 9 owns
 
 #### A — Write-always trace storage (BL-367 core)
 
@@ -849,7 +849,7 @@ Now that everything is captured, add retention policy enforcement:
 - `mcp-coder maintenance gc [--dry-run]`
 - Trace compression (gzip) for warm storage
 
-### What Phase 8 does NOT own
+### What Phase 9 does NOT own
 
 | Item | Why deferred |
 |------|-------------|
@@ -860,7 +860,7 @@ Now that everything is captured, add retention policy enforcement:
 | HTTP proxy / network tap | Out of scope |
 | Multi-host / non-Cursor hosts | Later arc |
 
-### Phase 8 acceptance (dogfood)
+### Phase 9 acceptance (dogfood)
 
 After a live `delegate_to_agent` call at any verbosity setting:
 
@@ -875,11 +875,11 @@ After a live `delegate_to_agent` call at any verbosity setting:
 ```
 Phase 6 — seam + helpers + tokens + lean JSONL  → observability skeleton
 Phase 7 — proxy + executor loop                 → no bypass paths, all turns captured
-Phase 8 — write-always + blobs + replay         → 100% captured, replayable from disk
-Phase 8+ — curation, novelty, training export   → smart pipeline on top of complete data
+Phase 9 — write-always + blobs + replay         → 100% captured, replayable from disk
+Phase 9+ — curation, novelty, training export   → smart pipeline on top of complete data
 ```
 
-Skipping Phase 7 and trying to do Phase 8 directly fails: if any LLM call bypasses the proxy (Aider inner turns today), you still have holes even with write-always storage.
+Skipping Phase 8 and trying to do Phase 9 directly fails: if any inner/backend calls are still invisible, write-always storage still preserves holes.
 
 ---
 
@@ -900,4 +900,4 @@ Skipping Phase 7 and trying to do Phase 8 directly fails: if any LLM call bypass
 - [x] Phase 5 — RAG + retrieval (P5-001…P5-004, P5-006); recommended exit met 2026-06-13; [PHASE5_MVP.md](./PHASE5_MVP.md).
 - [x] Phase 6 — observability substrate + reasoning buffer (P6-001…P6-008); recommended exit + post-dogfood fixes met 2026-06-13; [PHASE6_MVP.md](./PHASE6_MVP.md).
 - [x] **Phase 7 complete** — executor loop ownership (BL-350) + LlmGateway proxy (BL-368) + compile provenance bundle shipped; see `PHASE7_MVP.md` (closed 2026-06-13).
-- [ ] **Phase 8 — Scope defined** — write-always trace storage + context package blobs + systematic replay + storage lifecycle; see § Phase 8 above; needs `PHASE8_MVP.md`.
+- [ ] **Phase 9 — Scope defined** — write-always trace storage + context package blobs + systematic replay + storage lifecycle; see § Phase 9 above; needs `PHASE9_MVP.md`.

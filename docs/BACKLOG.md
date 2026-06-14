@@ -1190,7 +1190,7 @@ Delegation `58bb9846` failed; host recovered silently with duplicate spec tree.
 | BL-309e | P4-ISS-004, P4-ISS-018 | Phase 5 | **yes** if long delegates common | Delegation timeout storms; 217s engine_run on full-file replace; document `MCP_CODER_DELEGATION_TIMEOUT_S` in templates |
 | BL-328 | P4-ISS-007 | Phase 5+ | optional | Spec v2 retry after implement failure — **partially dogfooded** P4-EXIT (`prior_failed_attempts` on stats v2–v3); failure-driven versioned retry workflow still thin |
 | BL-330 | P4-ISS-002 | Phase 5+ | optional | Inspect-tool calls not auditable in `server.jsonl` |
-| BL-335 | P4-ISS-014, P4-ISS-015, **P5-ISS-001**, **P6-002/P6-008** | **done** | **partial** | Helpers + executor tokens live post-Phase 6 (dogfood `f9cb07fc`). Helpers: `owned_completion`; executor: `aider_output_parse` (text-parsing hack). **Phase 8 upgrade:** `ObservableModel` (P8-001) gives exact per-call tokens from `ModelResponse` — `aider_output_parse` flagged for deprecation. |
+| BL-335 | P4-ISS-014, P4-ISS-015, **P5-ISS-001**, **P6-002/P6-008** | **done** | **done** | Helpers + executor tokens now resolved with authoritative precedence after Phase 8 cleanup: callback/backend capture → Aider attrs → stdout parse last-resort fallback. `owned_completion.py` shim removed; parser fallback demoted and tested (P8-005). |
 | BL-336 | P4-ISS-003 | Phase 5+ | optional | `judgment_checklist` nested under `response_to_cursor` in JSONL only |
 | BL-337 | P4-ISS-005 | Phase 5+ | optional | `config_deprecated` noise in `server.jsonl` (e.g. `MCP_CODER_FALLBACK_SESSION` in consumer `mcp.json`) |
 | BL-338 | P4-ISS-016, P4-ISS-020 | **Phase 5** | **yes** before BL-321 | Executor `edit_format` / constraint blindness on cheap models (gpt-4o-mini); model-selection guidance or auto-escalation |
@@ -1455,11 +1455,11 @@ delegate_to_agent(backend=…)
 | **BL-364** | **Blocked-delegate skip reasons in JSONL** | See table; **Phase 5+** |
 | **BL-365** | **RAG toolset DX** — unified CLI, workspace stats | See § BL-365; **Phase 5+** |
 | **BL-366** | **RAG evaluation (P5-005)** — recall, cost, embeddings | See § BL-366; **Phase 5+** |
-| **BL-367** | **Full-capture substrate** — LlmGateway proxy + verbosity as display-only filter | See § BL-367; **Phase 8** target; prerequisite: BL-350 + BL-368 |
+| **BL-367** | **Full-capture substrate** — write-always storage + replay | See § BL-367; **Phase 9** target; prerequisite: Phase 8 complete |
 | **BL-368** | **Unified LlmGateway completion proxy** — single LLM boundary | **Phase 7 shipped (P7-001)** for owned callsites; backend-internal interception strategy tracked in BL-371 |
-| **BL-369** | **CLI gateway bootstrap hardening** | Carry from P7-ISS-005; remove ad-hoc CLI self-heal and initialize gateway in shared bootstrap |
-| **BL-370** | **Host transcript byte-range provenance** | Carry from P7-ISS-006; add `byte_start`/`byte_end` alongside `source_path`/`last_source_line` for replay fidelity |
-| BL-371 | **Backend-specific interception strategy for full in/out capture** | **Phase 8 (active):** Aider interception via `ObservableModel` (P8-001) + `InterceptionProfile` contract per adapter (P8-002) locked at master session 2026-06-13. Non-Python backends (Claude Code, Codex, OpenCode) → Phase 10+ HTTP proxy. See notes/llm-interception-strategies.md. |
+| **BL-369** | **CLI gateway bootstrap hardening** | **Done (Phase 8 / P8-003):** shared `ensure_observability_bootstrap()` path for server + CLI entry points |
+| **BL-370** | **Host transcript byte-range provenance** | **Done (Phase 8 / P8-004):** `validation_input` compile events include `byte_start`/`byte_end` alongside `source_path`/`last_source_line` |
+| BL-371 | **Backend-specific interception strategy for full in/out capture** | **Phase 8 delivered for Aider (P8-001 + P8-002 + P8-006 hardening).** Remaining: non-Python backends (Claude Code, Codex, OpenCode) via Phase 10+ HTTP proxy. |
 | **BL-334** | **Backend prompt customization** (system prefix + edit-format control) | See § BL-334 |
 | **BL-340** | **Cursor SDK execution backend** (beside Aider) | See § Execution backends — BL-340 |
 
@@ -1577,7 +1577,7 @@ delegate_to_agent(backend=…)
 
 ### BL-369: CLI gateway bootstrap hardening
 
-**Status:** `idea` — 2026-06-13. Carry from P7-ISS-005.
+**Status:** `done` — 2026-06-14. Carry from P7-ISS-005.
 
 **Problem:** Some CLI paths self-heal `LlmGateway` initialization ad hoc. This works but is inconsistent and fragile if new CLI entry points are added.
 
@@ -1585,25 +1585,25 @@ delegate_to_agent(backend=…)
 
 **Scope sketch:** lazy `set_llm_gateway(LlmGateway(get_observability()))` in a shared bootstrap path; remove command-local fallback branches.
 
-**Target phase:** Phase 8 planning / DX polish.
+**Shipped:** P8-003 (`core/observability/bootstrap.py`) with server + `test-model` bootstrap wiring and tests.
 
 ---
 
 ### BL-370: Host transcript byte-range provenance
 
-**Status:** `idea` — 2026-06-13. Carry from P7-ISS-006.
+**Status:** `done` — 2026-06-14. Carry from P7-ISS-006.
 
 **Problem:** `validation_input` compile provenance includes `source_path` / `last_source_line`, but not precise `byte_start` / `byte_end`, limiting replay slicing precision.
 
 **Goal:** Extend host transcript resolution metadata so compile events can include exact byte ranges for replay-grade provenance.
 
-**Target phase:** Phase 8 replay fidelity work.
+**Shipped:** P8-004 — transcript loader computes `source_byte_start`/`source_byte_end`; `validation_input` compile events emit byte ranges for replay slicing.
 
 ---
 
 ### BL-371: Backend-specific interception strategy for full in/out capture
 
-**Status:** `idea` — 2026-06-13. Carry from P7-ISS-007.
+**Status:** `partial` — 2026-06-14. Carry from P7-ISS-007.
 
 **Problem:** Phase 7 achieved owned-callsite gateway capture + executor outer-loop events, but not uniform backend-internal interception across all present/future backends.
 

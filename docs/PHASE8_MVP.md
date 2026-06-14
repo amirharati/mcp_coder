@@ -9,7 +9,7 @@
 
 # Phase 8 — Backend interception: full Aider visibility
 
-**Status:** Active — master session complete 2026-06-13; P8-001 done (capture + attribution + cache-warm validated in live dogfood; thinking fields carried as follow-up). P8-002 done. P8-003 done. P8-004 done.
+**Status:** Complete — master session complete 2026-06-13; P8-001..P8-004 delivered and validated. Streaming hardening follow-up (P8-006) completed; only carried provider-path follow-up remains for thinking field availability (P8-ISS-004).
 **Purpose:** Capture every Aider LLM sub-call (including thinking tokens) with exact attribution — so Phase 9 can make an honest "100% captured" claim when it flips the write-always gate.
 **PM board:** this file · **Issues:** [PHASE8_ISSUES.md](./PHASE8_ISSUES.md)
 **Phase 7 (closed):** [PHASE7_MVP.md](./PHASE7_MVP.md) (frozen) · [PHASE7_ISSUES.md](./PHASE7_ISSUES.md) (frozen)
@@ -222,6 +222,7 @@ Phase 8 fixes all three. It is **passive observation only** — no control, no i
 
 | Date | Change |
 |------|--------|
+| 2026-06-14 | P8-006 hardening validated in final dogfood (`1defb5f7-b2be-4952-99e4-f9cbd01d2da2`): streaming dedup issue closed, streaming capture issue closed. Phase 8 delivery marked complete with one carried follow-up (P8-ISS-004). |
 | 2026-06-14 | P8-004 delivered: transcript loader now computes source byte ranges; `validation_input` compile events include `byte_start`/`byte_end`; tests green (808 passed, 1 skipped). Milestone moved to `done`. |
 | 2026-06-14 | P8-003 delivered: added `core/observability/bootstrap.py`, wired `mcp_server` and `test_model`, removed command-local gateway self-heal; tests green (804 passed, 1 skipped). Milestone moved to `done`. |
 | 2026-06-14 | A5 complex dogfood (`86fe232f-3bdd-4d04-a9e3-bdcbd3d8ce63`) confirmed backend capture with no reasoning fields on Sonnet/OpenRouter path. P8-ISS-004 carried as provider-path follow-up (non-blocking). P8-001 moved to `done`. |

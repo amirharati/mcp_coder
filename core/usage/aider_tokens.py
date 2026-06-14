@@ -1,7 +1,12 @@
-"""Parse token usage from Aider stdout (P2-ISS-003 fallback).
+"""Parse token usage from Aider stdout (P2-ISS-003 last-resort fallback).
 
-Deprecated (P8-001): aider_output_parse fallback superseded by backend_llm_call usage
-for inner turns. Kept for backward compat until master removes the overlay.
+Token precedence for executor delegations (P8-005):
+1. ``litellm_callback`` accumulator / ``backend_llm_call`` trace (authoritative inner-loop capture)
+2. Aider ``Coder`` attrs on the run result (``aider_coder`` / ``aider_usage``)
+3. ``parse_aider_output_tokens`` stdout line parse (``aider_output_parse``) — compatibility only
+
+``model_roles`` overlay in ``mcp_server`` prefers callback accumulation over engine
+``ExecutionResult.tokens``. Engine-level resolution uses :func:`resolve_executor_tokens`.
 """
 
 from __future__ import annotations
@@ -28,7 +33,10 @@ def _parse_token_count(raw: str, suffix: str | None) -> int:
 
 
 def parse_aider_output_tokens(text: str) -> dict[str, Any] | None:
-    """Parse 'Tokens: 2.4k sent, 53 received' from Aider stdout. Returns None if no match."""
+    """Parse 'Tokens: 2.4k sent, 53 received' from Aider stdout.
+
+    Last-resort fallback only — returns None when the summary line is absent.
+    """
     if not text:
         return None
     match = _TOKENS_LINE_RE.search(text)
@@ -42,3 +50,17 @@ def parse_aider_output_tokens(text: str) -> dict[str, Any] | None:
         "total": input_tokens + output_tokens,
         "source": "aider_output_parse",
     }
+
+
+def resolve_executor_tokens(
+    *,
+    coder_tokens: dict[str, Any],
+    output: str,
+) -> dict[str, Any]:
+    """Resolve executor token dict from engine attrs, with stdout parse as last resort."""
+    if coder_tokens.get("source") != "unavailable":
+        return coder_tokens
+    parsed = parse_aider_output_tokens(output)
+    if parsed:
+        return parsed
+    return coder_tokens
