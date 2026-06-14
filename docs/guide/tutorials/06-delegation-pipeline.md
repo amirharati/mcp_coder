@@ -220,14 +220,14 @@ When off or executor failed: `auto_verify` → `skipped`, `detail: disabled_or_n
 
 | Flag | Default | Phases affected |
 |------|---------|-----------------|
-| `context_builder` | **on** | Phases 3–6 (picker, assemble, architect, builder) |
-| `context_builder_llm` | **on** | Phase 6 only (builder brief) |
+| `context_builder` | **on** | Phases 3–7 (picker, assemble, architect, builder) |
+| `context_builder_llm` | **on** | Phases 6–7 (builder brief) |
 | `builder_history_rag` | **on** | Phase 3b — delegation hits in builder |
 | `workspace_file_rag` | **on** | `workspace_rag.db` + search |
 | `workspace_file_hints` | **on** | File hits in picker + brief |
 | `architect_pass` | **off** | Phase 5 (architect plan LLM) |
 | `spec_validation` | **off** | Phase 2 |
-| `host_transcript` | `none` | Phases 2, 5, 6 (helper LLMs see transcript when `dump`) |
+| `host_transcript` | `none` | Phases 2, 5–7 (helper LLMs see transcript when `dump`) |
 | `auto_verify` | **off** | Phase 10 |
 | `edit_scope` | `discover` | Phase 8 (`strict` → auto-revert violations) |
 | `MCP_CODER_CONTEXT_BUDGET_ENABLED` | `1` | Phase 4 budget degradation |

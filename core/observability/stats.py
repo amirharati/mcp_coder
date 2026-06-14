@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 from pathlib import Path
 from typing import Any
 
@@ -33,6 +34,30 @@ def _count_jsonl_lines(path: Path) -> int:
     return count
 
 
+def _count_executor_turns_in_trace_file(path: Path) -> int:
+    """Count executor-turn llm_call records in one trace JSONL file."""
+    count = 0
+    try:
+        with path.open(encoding="utf-8") as fh:
+            for raw in fh:
+                raw = raw.strip()
+                if not raw:
+                    continue
+                try:
+                    rec = json.loads(raw)
+                    if (
+                        rec.get("type") == "llm_call"
+                        and rec.get("role") == "executor"
+                        and rec.get("executor_turn") is True
+                    ):
+                        count += 1
+                except (json.JSONDecodeError, AttributeError):
+                    pass
+    except OSError:
+        pass
+    return count
+
+
 def collect_observability_stats(workspace: str | Path) -> dict[str, Any]:
     """Disk usage and row counts for observability + RAG artifacts."""
     ws = normalize_workspace(workspace)
@@ -50,6 +75,7 @@ def collect_observability_stats(workspace: str | Path) -> dict[str, Any]:
     trace_bytes = 0
     training_files = 0
     training_bytes = 0
+    executor_turns = 0
     session_count = 0
 
     sessions = sessions_root(ws)
@@ -75,6 +101,7 @@ def collect_observability_stats(workspace: str | Path) -> dict[str, Any]:
                 elif artifact.suffix == ".jsonl":
                     trace_files += 1
                     trace_bytes += artifact.stat().st_size
+                    executor_turns += _count_executor_turns_in_trace_file(artifact)
 
     legacy_log = legacy_workspace_log_path(ws)
     legacy_bytes = legacy_log.stat().st_size if legacy_log.is_file() else 0
@@ -108,6 +135,7 @@ def collect_observability_stats(workspace: str | Path) -> dict[str, Any]:
             "total_bytes": trace_bytes,
             "training_file_count": training_files,
             "training_total_bytes": training_bytes,
+            "executor_turns": executor_turns,
         },
         "rag_enabled": rag_enabled(ws),
     }

@@ -1,4 +1,4 @@
-"""Owned helper LLM completion via litellm.completion (P6-008, Route B)."""
+"""Owned helper LLM completion via LlmGateway (P6-008 Route B, P7-001)."""
 
 from __future__ import annotations
 
@@ -9,9 +9,8 @@ from dataclasses import dataclass
 from typing import Any
 
 from core.config.providers import apply_provider_env
-from core.engine.stdio_isolation import isolated_stdio, merged_capture
 from core.observability.context import CLI_FALLBACK_ROLE, role_var
-from core.observability.owned_completion import record_owned_completion
+from core.observability.gateway import get_llm_gateway
 
 
 @dataclass
@@ -33,43 +32,26 @@ def run_owned_helper_completion(
     model: str,
     max_tokens: int = 4096,
 ) -> OwnedHelperCompletion:
-    """ThreadPoolExecutor + copy_context + litellm.completion + record_owned_completion."""
+    """ThreadPoolExecutor + copy_context + gateway.complete()."""
     apply_provider_env()
     t0 = time.perf_counter()
 
     def _call() -> OwnedHelperCompletion:
-        with isolated_stdio() as (stdout_cap, stderr_cap):
-            import litellm
-
-            litellm.suppress_debug_info = True
-            response = litellm.completion(
-                model=model,
-                messages=messages,
-                max_tokens=max_tokens,
-            )
-            captured = merged_capture(stdout_cap, stderr_cap)
-            try:
-                text = (response.choices[0].message.content or "").strip()
-            except (AttributeError, IndexError, TypeError):
-                text = ""
-            if captured.strip() and not text:
-                text = captured.strip()
-
-            duration_ms = int((time.perf_counter() - t0) * 1000)
-            role = role_var.get() or CLI_FALLBACK_ROLE
-            tokens = record_owned_completion(
-                role=role,
-                model=model,
-                messages=messages,
-                response_obj=response,
-                duration_ms=duration_ms,
-            )
-            return OwnedHelperCompletion(
-                text=text,
-                model=model,
-                tokens=tokens,
-                duration_ms=duration_ms,
-            )
+        gw = get_llm_gateway()
+        role = role_var.get() or CLI_FALLBACK_ROLE
+        result = gw.complete(
+            model=model,
+            messages=messages,
+            max_tokens=max_tokens,
+            role=role,
+        )
+        return OwnedHelperCompletion(
+            text=result.text,
+            model=result.model,
+            tokens=result.tokens,
+            duration_ms=result.duration_ms,
+            error=result.error,
+        )
 
     try:
         _ctx = contextvars.copy_context()

@@ -28,6 +28,24 @@ SPEC_VALIDATION_BLOCK_OUTPUT = (
 LogWarnFn = Callable[[str, dict[str, Any]], None]
 
 
+def _helper_provenance(
+    *,
+    input_prompt: str,
+    output_text: str | None = None,
+    error_text: str | None = None,
+    raw_output: str | None = None,
+) -> dict[str, Any]:
+    """Minimal provenance bundle for compile_event emission (P7-003)."""
+    prov: dict[str, Any] = {"input_prompt": input_prompt}
+    if output_text:
+        prov["output_text"] = output_text
+    elif error_text:
+        prov["output_text"] = error_text
+    elif raw_output:
+        prov["output_text"] = raw_output
+    return prov
+
+
 def merge_brief(mechanical_brief: str, llm_brief: str) -> str:
     """Prepend LLM narrative; keep mechanical brief (incl. accurate ## Paths) below."""
     return (
@@ -57,10 +75,10 @@ def apply_builder_llm(
     mcp_session_id: str | None = None,
     log_warn: LogWarnFn | None = None,
     rag_refs: list["ContextRef"] | None = None,
-) -> tuple[ContextPackage, bool, str | None, dict[str, Any] | None]:
+) -> tuple[ContextPackage, bool, str | None, dict[str, Any] | None, dict[str, Any]]:
     """Run the cheap-LLM brief pass; fall back to the mechanical brief on failure.
 
-    Returns (package, builder_brief_applied, builder_llm_error, builder_record).
+    Returns (package, builder_brief_applied, builder_llm_error, builder_record, provenance).
     Only ContextPackage.brief is ever mutated (D-P4-10).
     """
     from core.context.builder_history import BuilderHistoryContext, gather_builder_history
@@ -118,7 +136,12 @@ def apply_builder_llm(
 
     if llm_result.success:
         context_package.brief = merge_brief(mechanical_brief, llm_result.brief)
-        return context_package, True, None, builder_record
+        provenance = _helper_provenance(
+            input_prompt=prompt,
+            output_text=llm_result.brief,
+            raw_output=llm_result.raw_output,
+        )
+        return context_package, True, None, builder_record, provenance
 
     if log_warn is not None:
         log_warn(
@@ -129,7 +152,12 @@ def apply_builder_llm(
                 "error": llm_result.error,
             },
         )
-    return context_package, False, llm_result.error, builder_record
+    provenance = _helper_provenance(
+        input_prompt=prompt,
+        error_text=llm_result.error,
+        raw_output=llm_result.raw_output,
+    )
+    return context_package, False, llm_result.error, builder_record, provenance
 
 
 def apply_architect_pass(
@@ -144,8 +172,8 @@ def apply_architect_pass(
     timing: dict[str, int | float] | None = None,
     delegation_id: str | None = None,
     log_warn: LogWarnFn | None = None,
-) -> tuple[str | None, str | None, dict[str, Any] | None]:
-    """Run architect pass and return (architect_plan, error, model_record)."""
+) -> tuple[str | None, str | None, dict[str, Any] | None, dict[str, Any]]:
+    """Run architect pass and return (architect_plan, error, model_record, provenance)."""
     from core.context.architect_prompt import build_architect_pass_prompt
     from core.engine.architect_pass_llm import run_architect_pass_llm
 
@@ -174,7 +202,12 @@ def apply_architect_pass(
     )
 
     if llm_result.success:
-        return llm_result.plan, None, architect_record
+        provenance = _helper_provenance(
+            input_prompt=prompt,
+            output_text=llm_result.plan,
+            raw_output=llm_result.raw_output,
+        )
+        return llm_result.plan, None, architect_record, provenance
 
     if log_warn is not None:
         log_warn(
@@ -185,7 +218,12 @@ def apply_architect_pass(
                 "error": llm_result.error,
             },
         )
-    return None, llm_result.error, architect_record
+    provenance = _helper_provenance(
+        input_prompt=prompt,
+        error_text=llm_result.error,
+        raw_output=llm_result.raw_output,
+    )
+    return None, llm_result.error, architect_record, provenance
 
 
 def apply_spec_validation(
@@ -206,10 +244,11 @@ def apply_spec_validation(
     str | None,
     dict[str, Any] | None,
     dict[str, Any] | None,
+    dict[str, Any],
 ]:
     """Run pre-delegate spec validation LLM.
 
-    Returns (blocked, clarifications, ran, passed, error, audit_dict, model_record).
+    Returns (blocked, clarifications, ran, passed, error, audit_dict, model_record, provenance).
     On LLM/parse failure: not blocked, ran=False, audit includes error.
     """
     from core.context.spec_validation_prompt import build_spec_validation_prompt
@@ -255,7 +294,12 @@ def apply_spec_validation(
         }
         if llm_result.error:
             audit["error"] = llm_result.error
-        return False, None, False, None, llm_result.error, audit, model_record
+        provenance = _helper_provenance(
+            input_prompt=prompt,
+            error_text=llm_result.error,
+            raw_output=llm_result.raw_output,
+        )
+        return False, None, False, None, llm_result.error, audit, model_record, provenance
 
     if llm_result.passed is True:
         audit = {
@@ -264,7 +308,12 @@ def apply_spec_validation(
             "clarifications_count": 0,
             "duration_ms": llm_result.duration_ms,
         }
-        return False, None, True, True, None, audit, model_record
+        provenance = _helper_provenance(
+            input_prompt=prompt,
+            raw_output=llm_result.raw_output,
+            output_text=llm_result.raw_output,
+        )
+        return False, None, True, True, None, audit, model_record, provenance
 
     clarifications = llm_result.clarifications
     audit = {
@@ -273,4 +322,10 @@ def apply_spec_validation(
         "clarifications_count": len(clarifications),
         "duration_ms": llm_result.duration_ms,
     }
-    return True, clarifications, True, False, None, audit, model_record
+    output_text = llm_result.raw_output or "\n".join(f"- {c}" for c in clarifications)
+    provenance = _helper_provenance(
+        input_prompt=prompt,
+        output_text=output_text,
+        raw_output=llm_result.raw_output,
+    )
+    return True, clarifications, True, False, None, audit, model_record, provenance

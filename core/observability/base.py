@@ -259,3 +259,20 @@ class ObservabilityBackend(ABC):
     @abstractmethod
     def should_log_full_prompt(self) -> bool:
         """Return whether full executor prompt should be stored in JSONL."""
+
+    @abstractmethod
+    def record_llm_call(
+        self,
+        *,
+        role: str,
+        model: str | None,
+        messages: list[dict[str, Any]],
+        response_obj: Any,
+        duration_ms: int,
+    ) -> dict[str, Any]:
+        """
+        Synchronously record token usage and write llm_call trace event.
+        Uses contextvars (delegation_id, session_dir, workspace) already set by mcp_server.
+        Returns token dict: {"input": int|None, "output": int|None, "total": int|None, "source": str}.
+        Must never raise — observability must not break completions.
+        """

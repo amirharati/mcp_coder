@@ -17,6 +17,7 @@ from core.observability.context import (
     delegation_context,
     role_context,
 )
+from core.observability.gateway import reset_llm_gateway
 from core.observability.litellm_callback import (
     get_accumulated_usage,
     record_owned_completion,
@@ -59,8 +60,10 @@ def _mock_response(
 @pytest.fixture(autouse=True)
 def _reset_state():
     reset_callback_state_for_tests()
+    reset_llm_gateway()
     yield
     reset_callback_state_for_tests()
+    reset_llm_gateway()
 
 
 def test_record_owned_completion_writes_trace(tmp_path, monkeypatch):
@@ -149,25 +152,30 @@ def test_run_owned_helper_completion_returns_tokens(tmp_path, monkeypatch):
     monkeypatch.setenv("OPENROUTER_API_KEY", "sk-test")
     response = _mock_response(text="hello")
 
+    from core.observability.gateway import GatewayCompletion, set_llm_gateway
+    from unittest.mock import MagicMock
+
+    mock_gw = MagicMock()
+    mock_gw.complete.return_value = GatewayCompletion(
+        text="hello",
+        model="openrouter/test/flash",
+        tokens={"input": 50, "output": 10, "total": 60, "source": "owned_completion"},
+        duration_ms=12,
+    )
+    set_llm_gateway(mock_gw)
+
     with patch("litellm.completion", return_value=response):
-        with patch("core.engine.owned_helper_llm.record_owned_completion") as record:
-            record.return_value = {
-                "input": 50,
-                "output": 10,
-                "total": 60,
-                "source": "owned_completion",
-            }
-            with role_context(ROLE_CONTEXT_BUILDER):
-                result = run_owned_helper_completion(
-                    [{"role": "user", "content": "ping"}],
-                    model="openrouter/test/flash",
-                )
+        with role_context(ROLE_CONTEXT_BUILDER):
+            result = run_owned_helper_completion(
+                [{"role": "user", "content": "ping"}],
+                model="openrouter/test/flash",
+            )
 
     assert result.text == "hello"
     assert result.error is None
     assert result.tokens["source"] == "owned_completion"
     assert result.tokens["total"] == 60
-    record.assert_called_once()
+    mock_gw.complete.assert_called_once()
 
 
 def test_builder_llm_integration_with_owned_completion(tmp_path, monkeypatch):

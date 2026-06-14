@@ -98,6 +98,7 @@ class SpecValidationLlmResult:
     error: str | None = None
     tokens: dict[str, Any] = field(default_factory=lambda: {"source": "unavailable"})
     duration_ms: int = 0
+    raw_output: str = ""
 
 
 def _unavailable_tokens() -> dict[str, Any]:
@@ -150,6 +151,7 @@ def run_spec_validation_llm(
             error="Empty validation response from model",
             tokens=tokens,
             duration_ms=duration_ms,
+            raw_output=output,
         )
 
     passed, clarifications, parse_error = parse_spec_validation_output(output)
@@ -162,6 +164,7 @@ def run_spec_validation_llm(
             error=parse_error,
             tokens=tokens,
             duration_ms=duration_ms,
+            raw_output=output,
         )
 
     return SpecValidationLlmResult(
@@ -172,4 +175,5 @@ def run_spec_validation_llm(
         error=None,
         tokens=tokens,
         duration_ms=duration_ms,
+        raw_output=output,
     )

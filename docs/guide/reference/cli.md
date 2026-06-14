@@ -400,7 +400,7 @@ capture_for_training:   false
 
 Use after a delegation to confirm trace files are being written and DB row counts are incrementing. Useful for validating observability config (`observability_verbosity`, `capture_for_training`).
 
-> **Note:** Trace files are written under `sessions/<id>/traces/` only when `observability_verbosity` is `standard` or `full` (the default). At `lean`, only the `trace_ref` pointer is set in the JSONL row; no trace file is created.
+> **Note:** Trace files are written under `sessions/<id>/traces/` for delegations across verbosity tiers. `lean` writes minimal hash/size style records; `standard` adds previews; `full` adds bodies.
 
 ---
 
@@ -409,7 +409,7 @@ Use after a delegation to confirm trace files are being written and DB row count
 | Path | Contents |
 |------|----------|
 | `~/.mcp-coder/projects/<key>/sessions/<id>/delegations.jsonl` | Audit log — one lean record per delegation |
-| `~/.mcp-coder/projects/<key>/sessions/<id>/traces/<id>.jsonl` | Helper LLM trace — written at `standard`/`full` verbosity |
+| `~/.mcp-coder/projects/<key>/sessions/<id>/traces/<id>.jsonl` | Per-delegation trace events (`llm_call`, `tool_call`, `action`, `compile_event`) |
 | `~/.mcp-coder/projects/<key>/workspace_history.db` | SQLite — snapshots + checkpoints + file deltas |
 | `~/.mcp-coder/projects/<key>/delegation_rag.db` | SQLite FTS5 — delegation summaries |
 | `~/.mcp-coder/projects/<key>/workspace_rag.db` | SQLite FTS5 — workspace-file summaries |
@@ -424,6 +424,7 @@ Use after a delegation to confirm trace files are being written and DB row count
 
 | Date | Change |
 |------|--------|
+| 2026-06-13 | Phase 7 sync — trace path note updated (all tiers), event-type description updated, maintenance stats sample now includes executor turns |
 | 2026-06-13 | Phase 6 — `maintenance stats` added; observability env vars; trace file storage path; lean JSONL note |
 | 2026-06-13 | Phase 5 — `search`, `index-workspace`; RAG defaults on; env vars for corpus toggles |
 | 2026-06-12 | Initial version — all commands with full flag tables, examples, env vars, storage paths |

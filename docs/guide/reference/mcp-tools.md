@@ -86,7 +86,7 @@
 ### What gets written to disk
 
 - One **lean** record (~12 KB) appended to `~/.mcp-coder/projects/<key>/sessions/<id>/delegations.jsonl` — pointers and hashes, bodies stored separately
-- Helper LLM trace written to `sessions/<id>/traces/<delegation_id>.jsonl` (at `standard`/`full` verbosity)
+- Per-delegation trace events written to `sessions/<id>/traces/<delegation_id>.jsonl` (`llm_call`, `tool_call`, `action`, `compile_event`)
 - Spec report appended to `.mcp-coder/specs/reports/<spec-name>-report.md`
 - Workspace history row + checkpoint + file diffs in `workspace_history.db`
 - Delegation indexed in `delegation_rag.db` (FTS5)

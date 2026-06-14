@@ -72,6 +72,63 @@ def delegation_timeout_seconds() -> float:
     return 120.0
 
 
+# ── Bounded executor outer-loop limits (P7-002, D-P7-2/Q6) ──────────────────
+
+
+def resolve_executor_hard_max() -> int:
+    """Hard ceiling for executor steps: always 20 regardless of env."""
+    return 20
+
+
+def resolve_executor_max_steps() -> int:
+    """Max executor steps per delegation (default 10, clamped to [1, hard_max]).
+
+    Override via MCP_CODER_EXECUTOR_MAX_STEPS.
+    """
+    hard_max = resolve_executor_hard_max()
+    raw = os.environ.get("MCP_CODER_EXECUTOR_MAX_STEPS", "").strip()
+    if raw:
+        try:
+            v = int(raw)
+            if v >= 1:
+                return min(v, hard_max)
+        except ValueError:
+            pass
+    return min(10, hard_max)
+
+
+def resolve_executor_step_timeout_s() -> float:
+    """Per-step timeout in seconds (default 300).
+
+    Override via MCP_CODER_EXECUTOR_STEP_TIMEOUT_S.
+    """
+    raw = os.environ.get("MCP_CODER_EXECUTOR_STEP_TIMEOUT_S", "").strip()
+    if raw:
+        try:
+            v = float(raw)
+            if v > 0:
+                return v
+        except ValueError:
+            pass
+    return 300.0
+
+
+def resolve_executor_total_timeout_s() -> float:
+    """Total delegation timeout across all steps in seconds (default 1800).
+
+    Override via MCP_CODER_EXECUTOR_TOTAL_TIMEOUT_S.
+    """
+    raw = os.environ.get("MCP_CODER_EXECUTOR_TOTAL_TIMEOUT_S", "").strip()
+    if raw:
+        try:
+            v = float(raw)
+            if v > 0:
+                return v
+        except ValueError:
+            pass
+    return 1800.0
+
+
 def create_delegation_io() -> tuple[Any, io.StringIO]:
     """
   InputOutput for headless delegation (~ aider --yes-always --no-auto-commits).

@@ -9,7 +9,7 @@
 
 # Phase 7 — Executor loop ownership + unified LLM boundary
 
-**Status:** **Active** — master session in progress
+**Status:** **Frozen** — closed 2026-06-13 (optional capstone exit met: P7-001 + P7-002 + P7-003)
 **Purpose:** Own every executor turn and route all LLM calls through a single proxy (`LlmGateway`) — so Phase 8 can capture 100% with no bypass paths remaining.
 **PM board:** this file · **Issues:** [PHASE7_ISSUES.md](./PHASE7_ISSUES.md)
 **Phase 6 (closed):** [PHASE6_MVP.md](./PHASE6_MVP.md) (frozen) · [PHASE6_ISSUES.md](./PHASE6_ISSUES.md) (frozen)
@@ -53,15 +53,15 @@ These are the prerequisites Phase 8 needs before it can safely say "write 100% o
 
 ## Locked design decisions
 
-*(To be filled in during master session — see bootstrap notes for open questions)*
+*(Resolved in master session 2026-06-13 — see [notes/phase7-master-session-bootstrap.md](./notes/phase7-master-session-bootstrap.md) for Q1–Q6 reasoning.)*
 
 | ID | Decision |
 |----|----------|
-| D-P7-1 | *(pending — LlmGateway location and interface)* |
-| D-P7-2 | *(pending — executor loop route: outer loop vs Aider subclass)* |
-| D-P7-3 | *(pending — trace event schema for executor turns)* |
-| D-P7-4 | *(pending — non-LLM action event types)* |
-| D-P7-5 | *(pending — compile provenance: trace events vs sidecar file)* |
+| D-P7-1 | **LlmGateway lives in `core/observability/gateway.py`.** It wraps `litellm.completion` directly and calls `ObservabilityBackend.record_llm_call()` synchronously post-completion. Engine modules import from `core/observability/gateway.py` — the dependency arrow is inward (engine → observability → litellm), never outward. Option B (`core/engine/gateway.py`) was rejected because it would require observability to import from engine for token recording — wrong direction. Option C (no new class) was rejected because it defers the single-boundary problem rather than solving it. A `NullLlmGateway` (or `NullObservability.record_llm_call()` no-op) allows tests to swap out all I/O with zero file side effects. |
+| D-P7-2 | **Executor loop ownership uses Route A (outer loop).** mcp-coder owns `compile → run(bounded sub-task) → inspect → recompile → run`. Each sub-run is bounded to a step budget. **Step budget defaults:** `executor_max_steps = 10` (config default), hard ceiling `executor_hard_max = 20` (cannot be exceeded via config), `executor_step_timeout_s = 300` (5 min per step), `executor_total_timeout_s = 1800` (30 min total). Route C (Aider `Coder` subclass) is explicitly deferred — it violates the thin-adapter principle and makes BL-340 (Cursor SDK backend) harder. It is only acceptable as an emergency fallback if Route A cannot produce per-turn trace fidelity after P7-002 dogfood. |
+| D-P7-3 | **Executor turns use `event_type: "llm_call"` (same as helpers) with `role: "executor"`.** They are distinguished from helper events by the `role` value. Two additional required fields on executor `llm_call` events: `step_index` (int, 1-based, monotonic per delegation — resets each delegation) and `executor_turn: true` (explicit boolean flag for query convenience). Helper events omit `step_index` and `executor_turn`. `delegation_id` serves as the parent-call link (already present on every event; no separate `parent_call_id` field needed). This schema lets consumers filter executor turns with a single field check without parsing role strings differently. |
+| D-P7-4 | **Two non-LLM event types: `tool_call` and `action`.** Both carry `delegation_id`, `step_index`, `timestamp`. `tool_call` fields: `tool` (enum: `file_write` \| `shell_exec`), and type-specific payload (`path` + `bytes_written` for file writes; `command` + `args` + `exit_code` for shell). `action` fields: `kind` (enum: `lint_retry` \| `auto_confirm` \| `scope_expansion_check` \| `executor_stall`) + free-text `detail`. Do NOT collapse into one type — query patterns and Phase 8 replay semantics differ: `tool_call` events are replayable operations; `action` events are informational state transitions. |
+| D-P7-5 | **Compile provenance events (`event_type: "compile_event"`) go into the same `traces/<delegation_id>.jsonl` file** alongside `llm_call`, `tool_call`, and `action` events. One file per delegation. Verbosity controls body storage: `lean` = hashes only; `standard` = hash + byte count + ≤200-char brief; `full` = full body. The compile events carry a `stage` field: `mechanical_brief`, `builder_input`, `builder_output`, `architect_input`, `architect_output`, `validation_input`, `validation_output`, `final_executor_prompt`. Phase 8 may add a separate content-addressed blob sidecar for the context package — that is a different artifact and a Phase 8 design decision; do not anticipate it here. |
 
 ---
 
@@ -69,7 +69,7 @@ These are the prerequisites Phase 8 needs before it can safely say "write 100% o
 
 ### P7-001 — LlmGateway proxy: unified completion boundary *(BL-368)*
 
-**Status:** `open`
+**Status:** `done` — shipped 2026-06-13; spec [docs/tasks/P7-001-llmgateway-proxy-v1.md](../tasks/P7-001-llmgateway-proxy-v1.md) § Results
 
 **Goal:** Replace the dual-path capture (Route A callback + Route B `owned_completion`) with a single `LlmGateway` in `core/observability/`. All owned LLM calls — helpers, `test-model`, future backends — route through it. The LiteLLM callback becomes a thin shim or is removed. This is the prerequisite for P7-002 (executor turns via owned loop).
 
@@ -99,7 +99,7 @@ These are the prerequisites Phase 8 needs before it can safely say "write 100% o
 
 ### P7-002 — Executor loop ownership: per-turn trace events *(BL-350)*
 
-**Status:** `open`
+**Status:** `done` — shipped 2026-06-13; spec [docs/tasks/P7-002-executor-loop-ownership-v1.md](../tasks/P7-002-executor-loop-ownership-v1.md) § Results
 
 **Goal:** Break Aider's `coder.run(prompt)` black box into an owned loop that emits a trace event for every executor LLM turn and every non-LLM action (file edit, shell call, lint retry). Preferred route: **outer loop (Route A)** — `compile → run(bounded sub-task) → inspect → recompile → run`; Aider `Coder` subclass (Route C) only if Route A is insufficient for per-turn capture.
 
@@ -138,7 +138,7 @@ These are the prerequisites Phase 8 needs before it can safely say "write 100% o
 
 ### P7-003 — Compile provenance bundle *(BL-353 remainder)*
 
-**Status:** `open`
+**Status:** `done` — shipped 2026-06-13; spec [docs/tasks/P7-003-compile-provenance-bundle-v1.md](../tasks/P7-003-compile-provenance-bundle-v1.md) § Results
 
 **Goal:** Store what went into each pipeline phase — not just flags. At `standard` verbosity, the trace file should contain hashes + brief summaries of each pipeline stage's input/output. At `full` verbosity, full bodies.
 
@@ -192,9 +192,11 @@ Pipeline stage provenance events in `traces/<delegation_id>.jsonl`:
 
 *(To be determined during master session / worker implementation)*
 
-Likely additions:
-- `executor_max_steps` — max outer-loop iterations per delegation (default TBD)
-- `executor_step_timeout` — per-step timeout (default TBD)
+Likely additions (locked defaults from D-P7-2):
+- `executor_max_steps` — max outer-loop iterations per delegation (default `10`)
+- `executor_hard_max` — hard ceiling, not overridable by config (fixed `20`)
+- `executor_step_timeout_s` — per-step timeout in seconds (default `300`)
+- `executor_total_timeout_s` — total delegation timeout in seconds (default `1800`)
 
 Existing toggles carry forward unchanged from Phase 6.
 
@@ -202,7 +204,15 @@ Existing toggles carry forward unchanged from Phase 6.
 
 ## § Results
 
-*(To be filled at Phase 7 exit)*
+**P7-001 (2026-06-13):** `LlmGateway` shipped — helpers + `test-model --via litellm` route through `gateway.complete()`; `_gateway_call_active` dedup guard fixes double-recording (P7-ISS-001). 735 pytest green. Route A callback retained for Aider executor shim. Minimum Phase 7 exit tier met.
+
+**P7-001 dogfood (2026-06-14):** e2e delegation `6b60aae2-9cd7-4fa9-b943-8490ded071f4` — helper tokens non-null (`owned_completion`); trace header + 3 `llm_call` lines (no duplicates); `balances.py` docstring shipped; 20 pytest green. **PASS.**
+
+**P7-002 (2026-06-13):** executor loop ownership shipped — bounded outer loop, executor `llm_call` events (`step_index`, `executor_turn`), `tool_call`/`action` events, and `maintenance stats` executor turn count. Full suite: 767 passed, 1 skipped. Dogfood `42321f57-315e-4275-a086-5d08c861f028` confirmed executor trace events and `executor_turns`.
+
+**P7-003 (2026-06-13):** compile provenance bundle shipped — `compile_event` lines for validation/builder/architect/mechanical/final prompt stages in same trace JSONL with lean/standard/full behavior. Full suite: 776 passed, 1 skipped. Dogfood `40b4f69d-8ab8-4b33-ade0-c2d521ab5123` confirmed all 8 stages at standard verbosity.
+
+**Carry to backlog before Phase 8 planning:** P7-ISS-005 (CLI gateway bootstrap), P7-ISS-006 (validation byte-range provenance), P7-ISS-007 (backend-specific interception strategy; full-complete logging milestone may shift to Phase 9 depending on Phase 8 design outcomes).
 
 ---
 
@@ -210,4 +220,11 @@ Existing toggles carry forward unchanged from Phase 6.
 
 | Date | Change |
 |------|--------|
+| 2026-06-13 | **Phase 7 closed/frozen** — optional capstone exit met (P7-001..003); open issues carried to backlog (P7-ISS-005/006/007) |
+| 2026-06-13 | P7-003 done — compile provenance `compile_event` bundle shipped; optional capstone tier met; dogfood `40b4f69d-8ab8-4b33-ade0-c2d521ab5123` |
+| 2026-06-13 | P7-002 done — executor loop ownership shipped; executor step events + `maintenance stats` executor_turns; dogfood `42321f57-315e-4275-a086-5d08c861f028` |
+| 2026-06-13 | P7-003 tasked — worker spec added at docs/tasks/P7-003-compile-provenance-bundle-v1.md |
+| 2026-06-13 | P7-002 tasked — worker spec added at docs/tasks/P7-002-executor-loop-ownership-v1.md |
+| 2026-06-13 | P7-001 done — LlmGateway proxy shipped; BL-368 minimum exit tier met; 735 pytest green |
+| 2026-06-13 | Master session complete — D-P7-1…D-P7-5 locked; P7-001 status → tasked; config defaults locked (D-P7-2); spec at docs/tasks/P7-001-llmgateway-proxy-v1.md |
 | 2026-06-13 | Created — Phase 7 PM board; milestones P7-001…P7-003 sketched; design decisions pending master session |

@@ -31,7 +31,7 @@ mcp-coder keeps state in two places:
     sessions/<mcp_session_id>/
       delegations.jsonl             one lean JSONL record per delegation ← audit trail
       traces/
-        <delegation_id>.jsonl       helper LLM I/O for that delegation (Phase 6)
+        <delegation_id>.jsonl       per-delegation trace events (helper + executor + compile provenance)
 ```
 
 The split is intentional: specs and config belong in your repo (versioned, shared). History and logs belong outside (large, machine-specific, no git noise).
@@ -98,7 +98,7 @@ Inside each session dir:
 sessions/<mcp_session_id>/
   delegations.jsonl         one lean JSON line per delegation, appended in order
   traces/
-    <delegation_id>.jsonl   helper LLM trace for that run (written if verbosity ≥ standard)
+    <delegation_id>.jsonl   per-delegation trace events (`llm_call`/`tool_call`/`action`/`compile_event`)
 ```
 
 To find all session dirs for a project and see how many delegations each has:
@@ -146,7 +146,7 @@ tail -1 <path/to/delegations.jsonl> | python3 -m json.tool | head -80
 | `files_changed` | list | Files actually created/modified/deleted (from snapshot diff) |
 | `context_refs` | list | RAG retrieval hits — **pointer-only** `{kind, id, corpus, score}`; bodies in `delegation_rag.db` |
 | `response_to_cursor` | dict | Lean digest of executor output: `{output_sha256, output_bytes, output_preview, success, files_changed}` |
-| `trace_ref` | string | Relative path to the helper LLM trace file, e.g. `"traces/<id>.jsonl"` |
+| `trace_ref` | string | Relative path to the per-delegation trace file, e.g. `"traces/<id>.jsonl"` |
 
 ### `mcp_request` — what the planner sent
 
@@ -320,9 +320,9 @@ You don't normally need to query it directly — the CLI and MCP tools cover the
 
 ---
 
-## 7. Trace files — helper LLM I/O
+## 7. Trace files — helper + executor + compile provenance
 
-Every delegation that runs the helper pipeline (builder, architect, spec_validation) writes a **trace file** alongside `delegations.jsonl`:
+Every delegation writes a per-delegation **trace file** alongside `delegations.jsonl`:
 
 ```
 sessions/<id>/traces/<delegation_id>.jsonl
@@ -333,7 +333,7 @@ Each trace file has one JSON line per event:
 | Line | Type | Content |
 |------|------|---------|
 | 1 | `trace_header` | `version_tags`: git SHA, model versions, config fingerprint, pipeline flags |
-| 2+ | `llm_call` | One line per helper call: `role`, `tokens`, `duration_ms`, `prompt_preview`, `response_preview` |
+| 2+ | `llm_call` / `tool_call` / `action` / `compile_event` | Helper calls, executor step calls, non-LLM actions, and compile provenance events |
 
 Example `llm_call` line (at default `standard` verbosity — previews only):
 
@@ -375,6 +375,7 @@ Sample output:
 ```
 JSONL records:          23
 Trace files:             2  (9743 B)
+executor turns:          5
 delegation_rag.db:      23 rows
 workspace_rag.db:        8 rows
 workspace_history.db:   23 snapshots

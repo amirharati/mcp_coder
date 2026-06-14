@@ -161,6 +161,7 @@ class AiderEngine(ExecutionEngine):
         spec_path: str | None = None,
         contract_paths: list[str] | None = None,
         timestamp_start: str | None = None,
+        timeout_s: float | None = None,
     ) -> ExecutionResult:
         """Core Aider execution shared by run() and run_context().
 
@@ -235,7 +236,7 @@ class AiderEngine(ExecutionEngine):
                     captured = merged_capture(out_buffer, stdout_cap, stderr_cap)
                     return coder, io, partial, captured, executor_reused_local, executor_recreated_local
 
-            timeout_s = delegation_timeout_seconds()
+            timeout_s = timeout_s if timeout_s is not None else delegation_timeout_seconds()
             pool = concurrent.futures.ThreadPoolExecutor(max_workers=1)
             future = pool.submit(_run_coder)
             pool_shutdown = False
@@ -383,6 +384,7 @@ class AiderEngine(ExecutionEngine):
         spec_path: str | None = None,
         contract_paths: list[str] | None = None,
         timestamp_start: str | None = None,
+        timeout_s: float | None = None,
     ) -> ExecutionResult:
         apply_provider_env()
         config_error = provider_hint_for_model(self._model_name)
@@ -405,6 +407,7 @@ class AiderEngine(ExecutionEngine):
             spec_path=spec_path,
             contract_paths=contract_paths or target_files,
             timestamp_start=timestamp_start,
+            timeout_s=timeout_s,
         )
 
     def run_context(
@@ -417,6 +420,7 @@ class AiderEngine(ExecutionEngine):
         delegation_id: str | None = None,
         spec_path: str | None = None,
         timestamp_start: str | None = None,
+        timeout_s: float | None = None,
     ) -> ExecutionResult:
         apply_provider_env()
         config_error = provider_hint_for_model(self._model_name)
@@ -456,6 +460,7 @@ class AiderEngine(ExecutionEngine):
             spec_path=spec_path,
             contract_paths=contract_paths,
             timestamp_start=timestamp_start,
+            timeout_s=timeout_s,
         )
         result.prompt_used = req.prompt
         return result

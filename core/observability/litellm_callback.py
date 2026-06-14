@@ -368,7 +368,11 @@ def litellm_success_handler(
     end_time: Any,
 ) -> None:
     """LiteLLM success callback — accumulate usage per (delegation_id, role)."""
+    from core.observability.gateway import _gateway_call_active
+
     try:
+        if _gateway_call_active.get():
+            return  # Gateway already recorded this call synchronously — skip.
         _extract_from_success(kwargs, response_obj, start_time, end_time)
     except Exception:
         # Observability must never break completions.

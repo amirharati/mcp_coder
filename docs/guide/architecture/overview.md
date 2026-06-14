@@ -1,7 +1,7 @@
 # Architecture overview
 
 **Status:** Living — update as shipped decisions change.  
-**Scope:** Phases 1–6 as implemented. Phase 7+ items in backlog (see § Known gaps).  
+**Scope:** Phases 1–7 as implemented. Phase 8+ items in backlog (see § Known gaps).  
 **How to use:** Read as a structural reference after [how-it-works.md](../how-it-works.md). That doc is the *operator* mental model; this one is the *layer map and design decisions*. Deeper per-subsystem docs live alongside this file.
 
 ---
@@ -50,16 +50,15 @@
           │
           ▼
    ┌──────────────────────────────────────────┐
-   │ Observability  (Phase 6)                 │
+  │ Observability  (Phases 6–7)              │
    │ core/observability/                      │
    │                                          │
    │ ObservabilityBackend (base.py)           │
    │   LocalObservability (local.py)          │
    │   NullObservability  (null.py)           │
    │                                          │
-   │ LiteLLM callback → token capture         │
-   │ owned_completion → helper Route B        │
-   │ trace.py → per-delegation trace files    │
+  │ LlmGateway + LiteLLM callback shim       │
+  │ trace.py → per-delegation trace events   │
    │ stats.py → maintenance stats             │
    └──────────────────────────────────────────┘
           │
@@ -74,7 +73,7 @@
 │    workspace_history.db    delegation_rag.db    workspace_rag.db  │
 │    sessions/<id>/                                                 │
 │      delegations.jsonl    lean audit row (~12 KB, pointers only)  │
-│      traces/<id>.jsonl    helper LLM I/O trace (per delegation)   │
+│      traces/<id>.jsonl    helper + executor + compile events       │
 └───────────────────────────────────────────────────────────────────┘
 ```
 
@@ -154,7 +153,7 @@ delegate_to_agent()
   └── audit
         ├── core/observability/local.py → build_delegation_record()
         │     delegation_log.py → append delegations.jsonl (lean row)
-        │     trace.py → sessions/.../traces/<id>.jsonl (helper LLM I/O)
+        │     trace.py → sessions/.../traces/<id>.jsonl (helper + executor + compile events)
         │     training_capture.py → -training.json (opt-in)
         ├── core/workspace/history_db.py → checkpoint row + diffs
         └── core/rag/ → index delegation + incremental workspace files (FTS5)
@@ -201,7 +200,7 @@ Four distinct LLM calls aside from the executor:
 | `architect` | `architect_pass` | `context_builder` tier | Spec + brief + picker | `## Architect plan` | No |
 | `review` | (mode=review) | `review` role | Spec + target files | Q&A text | No |
 
-All use LiteLLM directly via `owned_helper_llm.py` (Phase 6, Route B — `litellm.completion` + `record_owned_completion()`). All audited in `model_roles` with **live token counts** (fixed Phase 6 / P6-008). Prompts and responses are written to the per-delegation **trace file** at `standard` verbosity (previews) or `full` (bodies). Full bodies in JSONL are not stored — trace file is the body store.
+Helper calls route via `LlmGateway` (P7-001) and remain audited in `model_roles` with live token counts. Executor step visibility is added via the P7 outer-loop trace events (`llm_call`, `tool_call`, `action`), and compile-stage provenance is captured as `compile_event` (P7-003). Full bodies are still stored in trace files (tier-dependent), not canonical JSONL rows.
 
 ---
 
@@ -252,9 +251,9 @@ Full layout: [storage-layout.md](./storage-layout.md) (pending) and [`notes/stor
 
 | Gap | Where it hurts | Backlog |
 |-----|----------------|---------|
-| **Executor inner loop opaque** | Aider multi-turn edits, retries, tool calls not captured | BL-350 / P6-ISS-006 |
+| **Executor continuation still conservative** | P7 outer loop ships step events, but multi-step retry/continue policy is still v1 and intentionally conservative | BL-350 follow-on |
 | **Verbosity controls what's written, not what's shown** | At `lean`/`standard`, prompt bodies lost permanently — should capture 100%, filter display | **BL-367** (Phase 8) |
-| **No unified LlmGateway proxy** | LiteLLM callback is a shim; helper helpers use Route B; still two paths | P6-ISS-002 |
+| **Backend-complete interception not finished** | Owned callsites use LlmGateway; backend-internal interception parity across present/future backends is still a planning item | BL-371 |
 | **Context package blob not stored** | Only hash kept; can't replay exact prompt package from disk | BL-367 prereq |
 | **Validation block → empty `context_refs`** | Looks like RAG regression when spec blocks | BL-364 |
 | **Single executor backend (Aider)** | `opencode_engine.py` stub exists; no second backend | BL-340 |
@@ -277,7 +276,7 @@ Full layout: [storage-layout.md](./storage-layout.md) (pending) and [`notes/stor
 | Area | Note |
 |------|------|
 | **Full-capture substrate** | LlmGateway proxy + verbosity as display-only filter; capture 100% raw, filter at read time (BL-367, Phase 8) |
-| **Executor loop ownership** | Own every Aider turn so trace files cover the full agentic loop (BL-350) |
+| **Executor loop ownership** | Phase 7 shipped bounded outer-loop events; follow-on is richer continuation/escalation policy (BL-350/BL-351) |
 | **Lean JSONL refs** | Expand `context_refs[]`; drop remaining inline bodies once corpora mature (BL-356) |
 | **Storage lifecycle** | Retention, promote-then-prune, gc (BL-357) |
 | **Executor-pull tools** | `mcp-coder search --format plain` pre-shapes BL-354 |
@@ -306,6 +305,7 @@ Full layout: [storage-layout.md](./storage-layout.md) (pending) and [`notes/stor
 
 | Date | Change |
 |------|--------|
+| 2026-06-13 | Phase 7 sync — scope updated to Phases 1–7; trace/event descriptions updated (executor + compile_event); known gaps adjusted to post-P7 state |
 | 2026-06-13 | Phase 6 — `core/observability/` seam + trace files; storage map updated; known gaps and future direction refreshed; helper LLM note updated (tokens live, not null) |
 | 2026-06-13 | Phase 5 — `rag_retrieval`, `workspace_rag.db`, `workspace_search`; gaps table refresh |
 | 2026-06-12 | Initial version — layer map, 8 locked decisions, delegation lifecycle, context compiler, helper LLMs, sessions, storage paths, known gaps |

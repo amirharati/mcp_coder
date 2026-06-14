@@ -50,6 +50,7 @@ def _cmd_stats(args: argparse.Namespace) -> int:
     print(f"trace bytes:              {traces['total_bytes']}")
     print(f"training files:           {traces['training_file_count']}")
     print(f"training bytes:           {traces['training_total_bytes']}")
+    print(f"executor turns:           {traces.get('executor_turns', 0)}")
     return 0
 
 

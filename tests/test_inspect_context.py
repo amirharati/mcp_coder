@@ -494,7 +494,7 @@ def test_delegate_uses_shared_helper_llm_pipeline(tmp_path, monkeypatch):
 
     def _fake_builder(**kwargs):
         pkg = kwargs["context_package"]
-        return pkg, True, None, {"model": "cheap-model", "role": "context_builder"}
+        return pkg, True, None, {"model": "cheap-model", "role": "context_builder"}, {}
 
     shared_builder = MagicMock(side_effect=_fake_builder)
     with patch("server.mcp_server.get_engine", return_value=engine), patch(

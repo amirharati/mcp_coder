@@ -232,3 +232,14 @@ class NullObservability(ObservabilityBackend):
 
     def should_log_full_prompt(self) -> bool:
         return False
+
+    def record_llm_call(
+        self,
+        *,
+        role: str,
+        model: str | None,
+        messages: list[dict[str, Any]],
+        response_obj: Any,
+        duration_ms: int,
+    ) -> dict[str, Any]:
+        return {"input": None, "output": None, "total": None, "source": "null"}

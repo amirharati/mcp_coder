@@ -68,6 +68,7 @@ class ArchitectPassLlmResult:
     error: str | None = None
     tokens: dict[str, Any] = field(default_factory=lambda: {"source": "unavailable"})
     duration_ms: int = 0
+    raw_output: str = ""
 
 
 def _unavailable_tokens() -> dict[str, Any]:
@@ -117,6 +118,7 @@ def run_architect_pass_llm(
             error="Empty architect response from model",
             tokens=tokens,
             duration_ms=duration_ms,
+            raw_output=output,
         )
 
     clean = _strip_reasoning_preamble(output)
@@ -130,6 +132,7 @@ def run_architect_pass_llm(
                 error=output.strip()[:2000],
                 tokens=tokens,
                 duration_ms=duration_ms,
+                raw_output=output,
             )
         return ArchitectPassLlmResult(
             success=False,
@@ -141,6 +144,7 @@ def run_architect_pass_llm(
             ),
             tokens=tokens,
             duration_ms=duration_ms,
+            raw_output=output,
         )
 
     plan, finalize_error = _finalize_architect_plan(clean)
@@ -152,6 +156,7 @@ def run_architect_pass_llm(
             error=finalize_error,
             tokens=tokens,
             duration_ms=duration_ms,
+            raw_output=output,
         )
 
     return ArchitectPassLlmResult(
@@ -161,4 +166,5 @@ def run_architect_pass_llm(
         error=None,
         tokens=tokens,
         duration_ms=duration_ms,
+        raw_output=output,
     )

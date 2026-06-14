@@ -319,7 +319,7 @@ Test files follow the module they cover: `test_file_picker.py` → `core/context
 | How is `files_changed` computed? | `core/workspace/snapshot.py` + `diff_util.py` |
 | How does the builder LLM work? | `core/engine/context_builder_llm.py` + `core/context/builder_prompt.py` |
 | Where do config flags live? | `core/config/*.py` — one file per feature |
-| Why are token counts `None`? | `core/usage/aider_tokens.py` (BL-335 — extraction not working yet) |
+| Why might token counts still be incomplete in some paths? | `core/usage/aider_tokens.py` + `core/observability/*` (BL-335/BL-350 follow-ons; helper tokens are live, executor internals still backend-dependent) |
 | What does a JSONL record look like? | `core/logging/delegation_log.py` + any `delegations.jsonl` file |
 | Where do Cursor rules get written? | `core/host/cursor_rules.py` |
 

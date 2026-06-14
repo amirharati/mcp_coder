@@ -95,6 +95,7 @@ class BuilderLlmResult:
     error: str | None = None
     tokens: dict[str, Any] = field(default_factory=lambda: {"source": "unavailable"})
     duration_ms: int = 0
+    raw_output: str = ""
 
 
 def _unavailable_tokens() -> dict[str, Any]:
@@ -146,6 +147,7 @@ def run_context_builder_llm(
             error="Empty builder response from model",
             tokens=tokens,
             duration_ms=duration_ms,
+            raw_output=output,
         )
 
     clean = _strip_reasoning_preamble(output)
@@ -161,6 +163,7 @@ def run_context_builder_llm(
                 error=output.strip()[:2000],
                 tokens=tokens,
                 duration_ms=duration_ms,
+                raw_output=output,
             )
         return BuilderLlmResult(
             success=False,
@@ -172,6 +175,7 @@ def run_context_builder_llm(
             ),
             tokens=tokens,
             duration_ms=duration_ms,
+            raw_output=output,
         )
 
     narrative, finalize_error = _finalize_builder_brief(clean)
@@ -183,6 +187,7 @@ def run_context_builder_llm(
             error=finalize_error,
             tokens=tokens,
             duration_ms=duration_ms,
+            raw_output=output,
         )
 
     return BuilderLlmResult(
@@ -192,4 +197,5 @@ def run_context_builder_llm(
         error=None,
         tokens=tokens,
         duration_ms=duration_ms,
+        raw_output=output,
     )

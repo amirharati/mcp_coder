@@ -15,6 +15,11 @@ from core.config.auto_verify import (
     resolve_verify_timeout_s,
 )
 from core.config.architect_pass import architect_pass_enabled
+from core.config.aider_runtime import (
+    resolve_executor_max_steps,
+    resolve_executor_step_timeout_s,
+    resolve_executor_total_timeout_s,
+)
 from core.config.context_builder import (
     context_builder_enabled,
     context_builder_llm_enabled,
@@ -32,6 +37,25 @@ from core.config.role_models import (
     ROLE_EXECUTOR,
     ROLE_REVIEW,
     resolve_role_model_name,
+)
+from core.engine.base import ExecutionResult
+from core.observability.trace import (
+    ACTION_EXECUTOR_STALL,
+    ACTION_SCOPE_EXPANSION_CHECK,
+    STAGE_ARCHITECT_INPUT,
+    STAGE_ARCHITECT_OUTPUT,
+    STAGE_BUILDER_INPUT,
+    STAGE_BUILDER_OUTPUT,
+    STAGE_FINAL_EXECUTOR_PROMPT,
+    STAGE_MECHANICAL_BRIEF,
+    STAGE_VALIDATION_INPUT,
+    STAGE_VALIDATION_OUTPUT,
+    TOOL_FILE_WRITE,
+    append_trace_record,
+    build_action_trace_record,
+    build_compile_event_record,
+    build_executor_llm_trace_record,
+    build_tool_call_trace_record,
 )
 from core.context.assemble import assemble_context
 from core.context.file_picker import CandidateFilesResult, pick_candidate_files
@@ -107,6 +131,221 @@ from core.rag.retrieval import ContextRef, context_refs_to_dict, context_refs_to
 OUTPUT_MAX_CHARS = 16_000
 
 obs = get_observability()
+from core.observability.gateway import LlmGateway, set_llm_gateway
+
+set_llm_gateway(LlmGateway(obs))
+
+
+def _emit_compile_event(
+    *,
+    delegation_id: str,
+    stage: str,
+    text_body: str | None,
+    workspace: str,
+    session_dir: "Path | str",
+    obs_verbosity: str,
+    source_path: str | None = None,
+    byte_start: int | None = None,
+    byte_end: int | None = None,
+    last_source_line: int | None = None,
+) -> None:
+    """Append one compile_event line; never raises (P7-003)."""
+    try:
+        record = build_compile_event_record(
+            delegation_id=delegation_id,
+            stage=stage,
+            verbosity=obs_verbosity,
+            text_body=text_body,
+            source_path=source_path,
+            byte_start=byte_start,
+            byte_end=byte_end,
+            last_source_line=last_source_line,
+        )
+        append_trace_record(
+            record,
+            session_dir=session_dir,
+            delegation_id=delegation_id,
+            workspace=workspace,
+        )
+    except Exception:
+        pass
+
+
+def _emit_compile_provenance_pair(
+    *,
+    delegation_id: str,
+    workspace: str,
+    session_dir: "Path | str",
+    obs_verbosity: str,
+    input_stage: str,
+    output_stage: str,
+    provenance: dict[str, Any],
+    source_path: str | None = None,
+    last_source_line: int | None = None,
+) -> None:
+    """Emit input/output compile events for a helper stage."""
+    input_prompt = provenance.get("input_prompt")
+    output_text = provenance.get("output_text")
+    if input_prompt:
+        _emit_compile_event(
+            delegation_id=delegation_id,
+            stage=input_stage,
+            text_body=str(input_prompt),
+            workspace=workspace,
+            session_dir=session_dir,
+            obs_verbosity=obs_verbosity,
+            source_path=source_path,
+            last_source_line=last_source_line,
+        )
+    if output_text:
+        _emit_compile_event(
+            delegation_id=delegation_id,
+            stage=output_stage,
+            text_body=str(output_text),
+            workspace=workspace,
+            session_dir=session_dir,
+            obs_verbosity=obs_verbosity,
+        )
+
+
+def _bounded_executor_loop(
+    *,
+    step_fn: "Any",
+    delegation_id: str,
+    session_dir: "Path | str",
+    workspace: str,
+    obs_verbosity: str,
+) -> "tuple[ExecutionResult, int]":
+    """Bounded outer executor loop (P7-002, D-P7-2, Route A).
+
+    step_fn(timeout_s: float | None) -> ExecutionResult
+    Returns (final_result, executor_turns) where executor_turns counts
+    steps with actual engine calls.
+    """
+    max_steps = resolve_executor_max_steps()
+    step_timeout_s = resolve_executor_step_timeout_s()
+    total_timeout_s = resolve_executor_total_timeout_s()
+    loop_t0 = time.perf_counter()
+    executor_turns = 0
+    last_output: str = ""
+    result: ExecutionResult | None = None
+
+    for step_idx in range(1, max_steps + 1):
+        elapsed = time.perf_counter() - loop_t0
+        if elapsed >= total_timeout_s:
+            result = ExecutionResult(
+                success=False,
+                output=f"Delegation total timeout exceeded ({total_timeout_s:.0f}s).",
+                error=(
+                    f"total_timeout ({total_timeout_s:.0f}s) exceeded "
+                    f"after {step_idx - 1} executor steps"
+                ),
+                error_class="timeout",
+                tokens={"source": "unavailable"},
+            )
+            break
+
+        # Emit scope_expansion_check before each executor step.
+        action_rec = build_action_trace_record(
+            delegation_id=delegation_id,
+            step_index=step_idx,
+            kind=ACTION_SCOPE_EXPANSION_CHECK,
+        )
+        append_trace_record(
+            action_rec,
+            session_dir=session_dir,
+            delegation_id=delegation_id,
+            workspace=workspace,
+        )
+
+        step_t0 = time.perf_counter()
+        step_result = step_fn(step_timeout_s)
+        step_ms = int((time.perf_counter() - step_t0) * 1000)
+        executor_turns += 1
+
+        # Emit executor llm_call trace record.
+        exec_llm_rec = build_executor_llm_trace_record(
+            delegation_id=delegation_id,
+            step_index=step_idx,
+            model=step_result.model,
+            duration_ms=step_ms,
+            tokens=step_result.tokens,
+            verbosity=obs_verbosity,
+            prompt_text=step_result.prompt_used,
+            response_text=step_result.output,
+        )
+        append_trace_record(
+            exec_llm_rec,
+            session_dir=session_dir,
+            delegation_id=delegation_id,
+            workspace=workspace,
+        )
+
+        # Emit tool_call record for each file changed in this step.
+        for fc in step_result.files_changed or []:
+            fc_abs = Path(workspace) / fc
+            bytes_written: int | None = None
+            try:
+                if fc_abs.is_file():
+                    bytes_written = fc_abs.stat().st_size
+            except OSError:
+                pass
+            tc_rec = build_tool_call_trace_record(
+                delegation_id=delegation_id,
+                step_index=step_idx,
+                tool=TOOL_FILE_WRITE,
+                path=fc,
+                bytes_written=bytes_written,
+            )
+            append_trace_record(
+                tc_rec,
+                session_dir=session_dir,
+                delegation_id=delegation_id,
+            )
+
+        # Emit executor_stall when no files changed and no output progression.
+        if (
+            not step_result.files_changed
+            and last_output
+            and step_result.output
+            and step_result.output.strip() == last_output.strip()
+        ):
+            stall_rec = build_action_trace_record(
+                delegation_id=delegation_id,
+                step_index=step_idx,
+                kind=ACTION_EXECUTOR_STALL,
+                detail="no files changed and no output progression",
+            )
+            append_trace_record(
+                stall_rec,
+                session_dir=session_dir,
+                delegation_id=delegation_id,
+            )
+
+        last_output = step_result.output or ""
+        result = step_result
+
+        # ── Stop conditions (in order) ───────────────────────────────────────
+        if step_result.success:
+            break  # normal completion — step produced complete output
+
+        # Any non-success result stops the loop in v1.
+        # The loop is infrastructure (safety rails + per-step tracing); explicit
+        # retry signals are not implemented yet in P7-002.
+        if not step_result.success:
+            break
+
+    if result is None:
+        # Safeguard: max_steps == 0 or total_timeout fired before loop body.
+        result = ExecutionResult(
+            success=False,
+            output="Executor loop did not run any steps.",
+            error="no_steps_executed",
+            error_class="internal",
+            tokens={"source": "unavailable"},
+        )
+
+    return result, executor_turns
 
 
 def use_context_package() -> bool:
@@ -144,7 +383,7 @@ def _apply_builder_llm(
     delegation_id: str,
     mcp_session_id: str,
     rag_refs: list[ContextRef] | None = None,
-) -> tuple["ContextPackage", bool, str | None, dict[str, Any] | None]:
+) -> tuple["ContextPackage", bool, str | None, dict[str, Any] | None, dict[str, Any]]:
     return _shared_apply_builder_llm(
         context_package=context_package,
         picker_result=picker_result,
@@ -172,7 +411,7 @@ def _apply_architect_pass(
     host_transcript: str | None,
     timing: dict[str, int | float],
     delegation_id: str,
-) -> tuple[str | None, str | None, dict[str, Any] | None]:
+) -> tuple[str | None, str | None, dict[str, Any] | None, dict[str, Any]]:
     return _shared_apply_architect_pass(
         context_package=context_package,
         spec_read=spec_read,
@@ -204,6 +443,7 @@ def _apply_spec_validation(
     str | None,
     dict[str, Any] | None,
     dict[str, Any] | None,
+    dict[str, Any],
 ]:
     return _shared_apply_spec_validation(
         spec_read=spec_read,
@@ -337,6 +577,8 @@ def _response_payload(
     spec_validation_ran: bool | None = None,
     spec_validation_passed: bool | None = None,
     delegation_pipeline: list[dict[str, Any]] | None = None,
+    executor_turns: int | None = None,
+    executor_stop_reason: str | None = None,
 ) -> dict[str, Any]:
     payload: dict[str, Any] = {
         "success": success,
@@ -427,6 +669,10 @@ def _response_payload(
         payload["spec_validation_passed"] = spec_validation_passed
     if delegation_pipeline is not None:
         payload["delegation_pipeline"] = delegation_pipeline
+    if executor_turns is not None:
+        payload["executor_turns"] = executor_turns
+    if executor_stop_reason is not None:
+        payload["executor_stop_reason"] = executor_stop_reason
     return payload
 
 
@@ -548,6 +794,7 @@ def delegate_to_agent(
             session_dir=storage.session_dir,
             mcp_session_id=storage.mcp_session_id,
         )
+        _compile_verbosity = resolve_observability_verbosity(ws)
 
         obs.emit(
             "session_acquired",
@@ -616,6 +863,7 @@ def delegate_to_agent(
         executor_reused = False
         executor_recreated = False
         workspace_snapshot: dict[str, Any] | None = None
+        _executor_turns: int = 0
         timing: dict[str, int] = {
             "context_load_ms": context_load_ms,
             "session_decision_ms": session_decision_ms + host_resolve_ms,
@@ -707,6 +955,9 @@ def delegate_to_agent(
         spec_validation_passed: bool | None = None
         spec_validation_audit: dict[str, Any] | None = None
         spec_validation_record: dict[str, Any] | None = None
+        spec_validation_provenance: dict[str, Any] = {}
+        builder_provenance: dict[str, Any] = {}
+        architect_provenance: dict[str, Any] = {}
         builder_history_rag_on = False
         workspace_file_hints_on = False
         rag_retrieval_on = False
@@ -729,6 +980,7 @@ def delegate_to_agent(
                     _spec_val_err,
                     spec_validation_audit,
                     spec_validation_record,
+                    spec_validation_provenance,
                 ) = _apply_spec_validation(
                     spec_read=spec_read,
                     workspace=ws,
@@ -737,6 +989,21 @@ def delegate_to_agent(
                     host_transcript=host_transcript_text,
                     timing=timing,
                     delegation_id=delegation_id,
+                )
+                _emit_compile_provenance_pair(
+                    delegation_id=delegation_id,
+                    workspace=ws,
+                    session_dir=storage.session_dir,
+                    obs_verbosity=_compile_verbosity,
+                    input_stage=STAGE_VALIDATION_INPUT,
+                    output_stage=STAGE_VALIDATION_OUTPUT,
+                    provenance=spec_validation_provenance,
+                    source_path=host_hint.host_transcript_path,
+                    last_source_line=(
+                        transcript_result.lines_parsed
+                        if transcript_result.lines_parsed > 0
+                        else None
+                    ),
                 )
                 if spec_validation_blocked:
                     pipeline_recorder.end("spec_validation", status="blocked")
@@ -773,6 +1040,7 @@ def delegate_to_agent(
             output = _SPEC_VALIDATION_BLOCK_OUTPUT
         else:
             executor_phase_started = False
+            _executor_turns = 0
             try:
                 t_engine = time.perf_counter()
                 if delegate_mode == DELEGATE_MODE_REVIEW:
@@ -905,6 +1173,14 @@ def delegate_to_agent(
                     else:
                         if pipeline_recorder is not None:
                             pipeline_recorder.end("context_assemble", status="ok")
+                        _emit_compile_event(
+                            delegation_id=delegation_id,
+                            stage=STAGE_MECHANICAL_BRIEF,
+                            text_body=context_package.brief,
+                            workspace=ws,
+                            session_dir=storage.session_dir,
+                            obs_verbosity=_compile_verbosity,
+                        )
 
                     architect_enabled = architect_pass_enabled(ws)
                     if architect_enabled:
@@ -914,6 +1190,7 @@ def delegate_to_agent(
                             architect_plan,
                             architect_pass_error,
                             architect_record,
+                            architect_provenance,
                         ) = _apply_architect_pass(
                             context_package=context_package,
                             spec_read=spec_read,
@@ -924,6 +1201,15 @@ def delegate_to_agent(
                             host_transcript=host_transcript_text,
                             timing=timing,
                             delegation_id=delegation_id,
+                        )
+                        _emit_compile_provenance_pair(
+                            delegation_id=delegation_id,
+                            workspace=ws,
+                            session_dir=storage.session_dir,
+                            obs_verbosity=_compile_verbosity,
+                            input_stage=STAGE_ARCHITECT_INPUT,
+                            output_stage=STAGE_ARCHITECT_OUTPUT,
+                            provenance=architect_provenance,
                         )
                         if architect_plan:
                             architect_plan_applied = True
@@ -956,6 +1242,7 @@ def delegate_to_agent(
                             builder_brief_applied,
                             builder_llm_error,
                             builder_record,
+                            builder_provenance,
                         ) = _apply_builder_llm(
                             context_package=context_package,
                             picker_result=picker_result,
@@ -968,6 +1255,15 @@ def delegate_to_agent(
                             delegation_id=delegation_id,
                             mcp_session_id=storage.mcp_session_id,
                             rag_refs=rag_retrieval_refs if rag_retrieval_on else None,
+                        )
+                        _emit_compile_provenance_pair(
+                            delegation_id=delegation_id,
+                            workspace=ws,
+                            session_dir=storage.session_dir,
+                            obs_verbosity=_compile_verbosity,
+                            input_stage=STAGE_BUILDER_INPUT,
+                            output_stage=STAGE_BUILDER_OUTPUT,
+                            provenance=builder_provenance,
                         )
                         if pipeline_recorder is not None:
                             if builder_llm_error:
@@ -1003,16 +1299,28 @@ def delegate_to_agent(
                     if pipeline_recorder is not None:
                         pipeline_recorder.start("executor")
                         executor_phase_started = True
-                    with role_context(ROLE_EXECUTOR):
-                        result = engine.run_context(
-                            context_package,
-                            workspace_path=ws,
-                            mcp_session_id=storage.mcp_session_id,
-                            host_transcript=host_transcript_text,
-                            delegation_id=delegation_id,
-                            spec_path=spec_rel_path,
-                            timestamp_start=timestamp_start,
-                        )
+                    _loop_obs_verbosity = resolve_observability_verbosity(ws)
+
+                    def _ctx_step_fn(timeout_s: float | None) -> ExecutionResult:
+                        with role_context(ROLE_EXECUTOR):
+                            return engine.run_context(
+                                context_package,
+                                workspace_path=ws,
+                                mcp_session_id=storage.mcp_session_id,
+                                host_transcript=host_transcript_text,
+                                delegation_id=delegation_id,
+                                spec_path=spec_rel_path,
+                                timestamp_start=timestamp_start,
+                                timeout_s=timeout_s,
+                            )
+
+                    result, _executor_turns = _bounded_executor_loop(
+                        step_fn=_ctx_step_fn,
+                        delegation_id=delegation_id,
+                        session_dir=storage.session_dir,
+                        workspace=ws,
+                        obs_verbosity=_loop_obs_verbosity,
+                    )
                     executor_prompt = result.prompt_used or context_package.brief
                 else:
                     if pipeline_recorder is not None:
@@ -1056,17 +1364,29 @@ def delegate_to_agent(
                     if pipeline_recorder is not None:
                         pipeline_recorder.start("executor")
                         executor_phase_started = True
-                    with role_context(ROLE_EXECUTOR):
-                        result = engine.run(
-                            prompt,
-                            effective_target_files,
-                            workspace_path=ws,
-                            mcp_session_id=storage.mcp_session_id,
-                            delegation_id=delegation_id,
-                            spec_path=spec_rel_path,
-                            contract_paths=legacy_contract,
-                            timestamp_start=timestamp_start,
-                        )
+                    _loop_obs_verbosity = resolve_observability_verbosity(ws)
+
+                    def _legacy_step_fn(timeout_s: float | None) -> ExecutionResult:
+                        with role_context(ROLE_EXECUTOR):
+                            return engine.run(
+                                prompt,
+                                effective_target_files,
+                                workspace_path=ws,
+                                mcp_session_id=storage.mcp_session_id,
+                                delegation_id=delegation_id,
+                                spec_path=spec_rel_path,
+                                contract_paths=legacy_contract,
+                                timestamp_start=timestamp_start,
+                                timeout_s=timeout_s,
+                            )
+
+                    result, _executor_turns = _bounded_executor_loop(
+                        step_fn=_legacy_step_fn,
+                        delegation_id=delegation_id,
+                        session_dir=storage.session_dir,
+                        workspace=ws,
+                        obs_verbosity=_loop_obs_verbosity,
+                    )
                 timing["engine_run_ms"] = int((time.perf_counter() - t_engine) * 1000)
 
                 success = result.success
@@ -1093,6 +1413,15 @@ def delegate_to_agent(
                         "executor",
                         status="ok" if success else "error",
                         detail=error[:200] if (error and not success) else None,
+                    )
+                if delegate_mode == DELEGATE_MODE_IMPLEMENT and executor_prompt:
+                    _emit_compile_event(
+                        delegation_id=delegation_id,
+                        stage=STAGE_FINAL_EXECUTOR_PROMPT,
+                        text_body=executor_prompt,
+                        workspace=ws,
+                        session_dir=storage.session_dir,
+                        obs_verbosity=_compile_verbosity,
                     )
 
             except UnknownBackendError as exc:
@@ -1122,6 +1451,8 @@ def delegate_to_agent(
             context_summary=context_summary,
             transcript_meta=transcript_meta,
         )
+        if _executor_turns > 0:
+            context_block["executor_turns"] = _executor_turns
         if spec_validation_audit is not None:
             context_block["spec_validation"] = spec_validation_audit
         if context_package is not None:
@@ -1518,7 +1849,9 @@ def delegate_to_agent(
             spec_validation_ran=spec_validation_ran,
             spec_validation_passed=spec_validation_passed,
             delegation_pipeline=delegation_pipeline_payload,
+            executor_turns=_executor_turns if _executor_turns > 0 else None,
         )
+
         if auto_merged_read_paths:
             mcp_request["auto_merged_read_paths"] = auto_merged_read_paths
             mcp_request["effective_target_files"] = effective_target_files

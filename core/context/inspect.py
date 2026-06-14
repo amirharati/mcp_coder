@@ -257,6 +257,7 @@ def inspect_context_package(
             val_error,
             _audit,
             val_record,
+            _val_provenance,
         ) = apply_spec_validation(
             spec_read=spec_read,
             workspace=ws_str,
@@ -373,7 +374,7 @@ def inspect_context_package(
         respect_workspace_flags=respect_workspace_flags,
     )
     if want_architect and spec_read is not None:
-        architect_plan, arch_error, arch_record = apply_architect_pass(
+        architect_plan, arch_error, arch_record, _arch_provenance = apply_architect_pass(
             context_package=package,
             spec_read=spec_read,
             picker_result=picker_result,
@@ -400,7 +401,7 @@ def inspect_context_package(
         )
     )
     if want_builder:
-        package, builder_applied, builder_error, builder_record = apply_builder_llm(
+        package, builder_applied, builder_error, builder_record, _builder_provenance = apply_builder_llm(
             context_package=package,
             picker_result=picker_result,
             workspace=ws_str,
