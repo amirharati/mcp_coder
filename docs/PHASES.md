@@ -10,7 +10,7 @@
 
 This document is the **delivery plan**: what to build, in what order, and how we validate each step. Vision and rationale live in [IDEA.md](./IDEA.md) · doc map: [VISION_DOCS.md](./VISION_DOCS.md). Implementation happens in focused coding sessions once a phase (or sub-step) is agreed.
 
-**Status:** Phase 1 **complete** (P1-199). Phase 2 **complete** (P2-499). Phase 3 **complete** (P3-499). Phase 4 **complete** (2026-06-09). Phase 5 **complete** (2026-06-13). Phase 6 **complete** (2026-06-13). Phase 7 **complete** (2026-06-13; optional capstone met). Phase 8 **complete** (2026-06-14; P8-001..P8-006 delivered, with thinking-token provider-path follow-up carried). **Next:** Phase 9 — write-always storage + replay substrate. See [PHASE8_MVP.md](./PHASE8_MVP.md).
+**Status:** Phase 1 **complete** (P1-199). Phase 2 **complete** (P2-499). Phase 3 **complete** (P3-499). Phase 4 **complete** (2026-06-09). Phase 5 **complete** (2026-06-13). Phase 6 **complete** (2026-06-13). Phase 7 **complete** (2026-06-13; optional capstone met). Phase 8 **complete** (2026-06-14; P8-001..P8-006 delivered, with thinking-token provider-path follow-up carried). **Next:** Phase 9 — write-always + universal proxy + replay. See [PHASE9_MVP.md](./PHASE9_MVP.md).
 
 ---
 
@@ -52,7 +52,7 @@ This document is the **delivery plan**: what to build, in what order, and how we
 | **6** | **Observability substrate + reasoning buffer** — `core/observability/` adapter seam; live tokens; trace files; reasoning hot buffer; training opt-in (POC/MVP of AGENTIC_LOOP_LOGGING product) | [PHASE6_MVP.md](./PHASE6_MVP.md) **complete** 2026-06-13 |
 | **7** *(complete)* | **Executor loop ownership + unified LLM boundary** — own every executor turn (BL-350); `LlmGateway` proxy for all LLM calls (BL-368); compile provenance bundle; per-turn trace events | Closed 2026-06-13 — see `PHASE7_MVP.md` |
 | **8** *(complete)* | **Backend interception: full Aider visibility** — `ObservableModel` captures Aider inner-loop calls; backend interception contract; CLI bootstrap hardening; transcript byte-range provenance; streaming dedup hardening | [PHASE8_MVP.md](./PHASE8_MVP.md) **complete** 2026-06-14 |
-| **9** *(planned)* | **Write-always storage + replay** — verbosity as display filter only; context package blobs; `mcp-coder replay <id>`; storage GC first slice (BL-367) | Requires Phase 8 prerequisites |
+| **9** *(active)* | **Write-always + universal proxy + replay** — `LocalLlmProxy` between litellm and provider captures raw HTTP before normalization; write-always storage; context package blobs; `mcp-coder replay <id>`; storage GC first slice | [PHASE9_MVP.md](./PHASE9_MVP.md) **active** |
 | **8+** | Interactive/long-running sessions, curation pipeline, novelty filter, cross-session reasoning, multi-host, ensemble | BL-333, BL-351, BL-354, BL-357, BL-160, BL-007 |
 
 **Principle (Phase 3+ attribution):** MCP reports `files_changed` from **delegation-scoped workspace manifest delta** — git-agnostic, backend-agnostic. User git is complementary; optional `git_tracked` metadata later (trivial).
@@ -798,67 +798,71 @@ After a live `delegate_to_agent` call:
 
 ---
 
-## Phase 9: Full 100% capture substrate *(planned)*
+## Phase 9: Write-always storage + universal proxy + replay *(active)*
 
-**Status:** Planned — requires Phase 8 prerequisites (now complete).
-**PM doc:** (to be created: `PHASE9_MVP.md`)
-**Backlog inputs:** BL-367, BL-357 (first slice)
+**Status:** Active — master session complete 2026-06-14; milestones scoped; workers not yet tasked.
+**PM doc:** [PHASE9_MVP.md](./PHASE9_MVP.md)
+**Backlog inputs:** BL-367, BL-357 (first slice), BL-507, BL-508
 
 ### One-line goal
 
-Capture 100% at the LLM boundary; verbosity controls only what you *see*, never what gets *written*.
+Capture every LLM byte at the HTTP boundary before litellm normalization, write it unconditionally, and make any delegation replayable from disk.
 
 ### What Phase 9 owns
 
-#### A — Write-always trace storage (BL-367 core)
+#### A — Write-always trace storage (BL-367 core, D-P9-8)
 
 Remove verbosity from the write gate:
 
 - Trace file written for every delegation unconditionally
 - At all verbosity tiers, full prompt and response bodies always written to disk
-- `lean` / `standard` / `full` become viewer/CLI/export display filters only
-- RAG promotion gated on verbosity (not raw storage)
+- `lean` / `standard` / `full` become viewer/CLI/export display filters and RAG promotion gates only
 
 #### B — Context package blob sidecar (BL-367 C1)
 
 Store the exact assembled context package per delegation:
 
 ```
-sessions/<id>/context_packages/<context_package_hash>.json
+sessions/<session_id>/context_packages/<context_package_hash>.json
 ```
 
 - Deduplication by hash — same package reused across delegations stored once
 - Combined with trace file + JSONL row: any delegation is fully replayable from disk without Cursor chat
 
-#### C — Systematic replay path (BL-367 E1–E5)
+#### C — Universal internal proxy (BL-508, D-P9-1..D-P9-7)
 
-CLI / viewer capability to reconstruct a delegation entirely from local store:
+`LocalLlmProxy` started at MCP server bootstrap. **All in-process LLM calls route through it** (LlmGateway helpers + AiderEngine via litellm). Proxy sits between litellm and the real provider — captures raw HTTP request + response before litellm normalization.
 
 ```
-mcp-coder replay <delegation_id>
+litellm → LocalLlmProxy → real provider (OpenRouter / Anthropic / OpenAI)
 ```
 
-Shows, from disk alone: full executor prompt, every executor turn, non-LLM actions, code diff, RAG context. No Cursor required.
+- Model-prefix routing table built from env vars (no separate config)
+- Attribution via active context store (`delegation_id_var` + `step_index_var`) — no header injection needed for in-process callers
+- Emits `proxy_llm_call` events cross-checked against `backend_llm_call` (Phase 8 `ObservableModel`)
+- Proves 100% coverage: any gap shows up as a `proxy_llm_call` with no matching `backend_llm_call`
+- Resolves BL-507: raw response at HTTP level reveals definitively whether thinking tokens are present before litellm touches them
+- Same proxy extended in Phase 10+ to out-of-process backends (Claude Code, Codex, OpenCode) by pointing their base URL at it — no new proxy code
 
-#### D — Storage lifecycle first slice (BL-357)
+#### D — Replay CLI (BL-367 E1–E5)
 
-Now that everything is captured, add retention policy enforcement:
+`mcp-coder replay <delegation_id>` reconstructs the full delegation from disk — context package, every executor turn and proxy-captured LLM call, outcome. No Cursor required.
 
-- TTL per tier (hot / warm / cold)
-- Promote-then-prune: don't delete until promoted artifact exists
-- `mcp-coder maintenance gc [--dry-run]`
-- Trace compression (gzip) for warm storage
+#### E — Storage GC first slice (BL-357)
+
+`mcp-coder maintenance gc [--dry-run]` + TTL config. Promote-then-prune policy. First pass: trace + blob pruning by age.
 
 ### What Phase 9 does NOT own
 
 | Item | Why deferred |
 |------|-------------|
-| Novelty / curation pipeline | AGENTIC_LOOP_LOGGING months 2+ |
+| Out-of-process backends (Claude Code / Codex / OpenCode) | Phase 10+ — just a base URL config change once proxy exists |
+| Inner loop control / BL-351 supervisor | Phase 10+ — visibility before intervention |
+| Full re-execution replay (sandboxed) | Phase 10+ |
+| Novelty / curation pipeline | After raw corpus exists |
 | Training dataset export UI | Separate product scope |
 | Cross-session reasoning (BL-333) | Needs corpus to validate |
 | Embeddings for RAG (BL-366) | Measure FTS recall first |
-| HTTP proxy / network tap | Out of scope |
-| Multi-host / non-Cursor hosts | Later arc |
 
 ### Phase 9 acceptance (dogfood)
 
@@ -866,20 +870,20 @@ After a live `delegate_to_agent` call at any verbosity setting:
 
 1. **Full prompt and response bodies** written to `traces/<id>.jsonl` — not truncated, not gated on verbosity.
 2. **Context package blob** stored at `context_packages/<hash>.json` under session dir.
-3. `mcp-coder replay <delegation_id>` reconstructs the full delegation from disk — no Cursor.
-4. `mcp-coder maintenance gc --dry-run` reports what would be pruned by retention policy.
-5. Viewer verbosity toggle affects display only — underlying data unchanged.
+3. **`proxy_llm_call` events** in trace for every LLM call — cross-check vs `backend_llm_call` shows no gaps.
+4. **BL-507 resolved** — proxy raw log answers whether thinking tokens are present at the HTTP boundary.
+5. `mcp-coder replay <delegation_id>` reconstructs the full delegation from disk — no Cursor.
+6. `mcp-coder maintenance gc --dry-run` reports what would be pruned by retention policy.
 
 ### Why this order matters
 
 ```
 Phase 6 — seam + helpers + tokens + lean JSONL  → observability skeleton
-Phase 7 — proxy + executor loop                 → no bypass paths, all turns captured
-Phase 9 — write-always + blobs + replay         → 100% captured, replayable from disk
-Phase 9+ — curation, novelty, training export   → smart pipeline on top of complete data
+Phase 7 — LlmGateway + executor loop            → no bypass paths, all turns captured
+Phase 8 — ObservableModel + interception proof  → Aider inner-loop visible
+Phase 9 — write-always + proxy + blobs + replay → 100% proven at HTTP boundary, replayable
+Phase 10+ — multi-backend + control             → same proxy, add backends + intervention
 ```
-
-Skipping Phase 8 and trying to do Phase 9 directly fails: if any inner/backend calls are still invisible, write-always storage still preserves holes.
 
 ---
 
@@ -899,5 +903,5 @@ Skipping Phase 8 and trying to do Phase 9 directly fails: if any inner/backend c
 - [x] Phase 4.5 — stack literacy gate; tutorials, inspect, gap analysis; [PHASE4.5_MVP.md](./PHASE4.5_MVP.md).
 - [x] Phase 5 — RAG + retrieval (P5-001…P5-004, P5-006); recommended exit met 2026-06-13; [PHASE5_MVP.md](./PHASE5_MVP.md).
 - [x] Phase 6 — observability substrate + reasoning buffer (P6-001…P6-008); recommended exit + post-dogfood fixes met 2026-06-13; [PHASE6_MVP.md](./PHASE6_MVP.md).
-- [x] **Phase 7 complete** — executor loop ownership (BL-350) + LlmGateway proxy (BL-368) + compile provenance bundle shipped; see `PHASE7_MVP.md` (closed 2026-06-13).
-- [ ] **Phase 9 — Scope defined** — write-always trace storage + context package blobs + systematic replay + storage lifecycle; see § Phase 9 above; needs `PHASE9_MVP.md`.
+- [x] **Phase 8 complete** — backend interception (P8-001..P8-006); `ObservableModel` + `InterceptionProfile` + bootstrap + byte-range provenance + streaming dedup; see `PHASE8_MVP.md` (closed 2026-06-14).
+- [ ] **Phase 9 — Active** — write-always storage + `LocalLlmProxy` (litellm → proxy → provider) + context blobs + replay CLI + GC first slice; see [PHASE9_MVP.md](./PHASE9_MVP.md).

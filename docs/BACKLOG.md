@@ -1455,12 +1455,13 @@ delegate_to_agent(backend=…)
 | **BL-364** | **Blocked-delegate skip reasons in JSONL** | See table; **Phase 5+** |
 | **BL-365** | **RAG toolset DX** — unified CLI, workspace stats | See § BL-365; **Phase 5+** |
 | **BL-366** | **RAG evaluation (P5-005)** — recall, cost, embeddings | See § BL-366; **Phase 5+** |
-| **BL-367** | **Full-capture substrate** — write-always storage + replay | See § BL-367; **Phase 9** target; prerequisite: Phase 8 complete |
+| **BL-367** | **Full-capture substrate** — write-always storage + replay | See § BL-367; **Phase 9** target; prerequisite: Phase 8 complete ✓ |
 | **BL-368** | **Unified LlmGateway completion proxy** — single LLM boundary | **Phase 7 shipped (P7-001)** for owned callsites; backend-internal interception strategy tracked in BL-371 |
 | **BL-369** | **CLI gateway bootstrap hardening** | **Done (Phase 8 / P8-003):** shared `ensure_observability_bootstrap()` path for server + CLI entry points |
 | **BL-370** | **Host transcript byte-range provenance** | **Done (Phase 8 / P8-004):** `validation_input` compile events include `byte_start`/`byte_end` alongside `source_path`/`last_source_line` |
 | BL-371 | **Backend-specific interception strategy for full in/out capture** | **Phase 8 delivered for Aider (P8-001 + P8-002 + P8-006 hardening).** Remaining: non-Python backends (Claude Code, Codex, OpenCode) via Phase 10+ HTTP proxy. |
-| **BL-507** | **Thinking token capture verification** — confirm `thinking_text`/`thinking_tokens` on `backend_llm_call` events with a known thinking-enabled model/provider path | **Carried from P8-ISS-004.** Phase 9+ follow-up. If still absent after provider check, add HTTP proxy as dual capture path. |
+| **BL-507** | **Thinking token capture verification** — confirm `thinking_text`/`thinking_tokens` on `backend_llm_call` events with a known thinking-enabled model/provider path | **Phase 9 resolution target (P9-003 proxy):** raw proxy response log will reveal definitively whether thinking tokens are present at HTTP boundary before litellm normalization. |
+| **BL-508** | **Universal internal HTTP proxy** — `LocalLlmProxy` between litellm and real provider; all in-process callers route through it; model-prefix routing from env vars | **Phase 9 (P9-003)**; same proxy extended to out-of-process backends (Claude Code, Codex, OpenCode) in Phase 10+ via base URL config |
 | **BL-334** | **Backend prompt customization** (system prefix + edit-format control) | See § BL-334 |
 | **BL-340** | **Cursor SDK execution backend** (beside Aider) | See § Execution backends — BL-340 |
 
@@ -1511,7 +1512,7 @@ delegate_to_agent(backend=…)
 
 ### BL-367: Full-capture substrate — LlmGateway proxy + verbosity as display-only filter
 
-**Status:** `idea` — 2026-06-13. **Target phase: Phase 9** (after Phase 8 closes Aider inner-loop capture gaps).
+**Status:** `idea` — 2026-06-13. **Target phase: Phase 9** (Phase 8 prerequisites now complete 2026-06-14). **Expanded scope (2026-06-14):** Phase 9 also adds `LocalLlmProxy` (BL-508) as the universal capture foundation alongside write-always storage and blobs.
 
 **Origin:** Phase 6 exit review. Phase 6 shipped the observability seam and helper traces — but verbosity still controls **what gets written to disk**, meaning at `lean` or `standard` verbosity, prompt bodies and executor turns are permanently lost. This is the wrong direction: training-data quality, forensic replay, and debugging all require that **nothing is ever silently dropped at write time**.
 
@@ -1631,6 +1632,28 @@ delegate_to_agent(backend=…)
 **Target:** Phase 9 (opportunistic check during write-always validation) or Phase 10 (if proxy is needed as dual capture path).
 
 **Related:** P8-ISS-004, notes/llm-interception-strategies.md § thinking blocks, BL-371, BL-353.
+
+---
+
+### BL-508: Universal internal HTTP proxy
+
+**Status:** `idea` → **Phase 9 (P9-003)** — 2026-06-14. Promoted from Phase 10+ to Phase 9 in master session.
+
+**Problem:** Phase 8's `ObservableModel` captures Aider inner-loop calls above litellm's normalization layer. Whatever litellm silently drops (thinking blocks, provider extensions) is permanently lost before we see it. There is no way to prove "100% captured" from user-space instrumentation alone.
+
+**Goal:** A local HTTP proxy (`LocalLlmProxy`) that sits between litellm and the real provider. All in-process LLM callers (LlmGateway helpers + AiderEngine via litellm) route through it. Proxy captures raw HTTP request + response before litellm normalization, emits `proxy_llm_call` events, and cross-checks against Phase 8 `backend_llm_call` events.
+
+**Architecture:**
+- Async HTTP server (aiohttp or httpx-based) on `localhost:PORT`
+- `api_base` globally overridden to `http://localhost:PORT` at bootstrap (`ensure_observability_bootstrap`)
+- Model-prefix routing table built from env vars (`openrouter/*` → OpenRouter, `anthropic/*` → Anthropic, etc.)
+- Attribution: reads `delegation_id_var` + `step_index_var` from active context store per request
+- Streaming: SSE tee — capture while forwarding (same pattern as `_StreamCaptureWrapper`)
+- Raw response body stored on `proxy_llm_call` event before litellm normalization
+
+**Phase 10+ extension:** Same proxy extended to out-of-process backends (Claude Code, Codex, OpenCode) by pointing their base URL at it — no new proxy code. See notes/llm-interception-strategies.md § Per-backend audit.
+
+**Related:** BL-371, BL-507, BL-350, BL-353, notes/llm-interception-strategies.md § Phase 9 proxy architecture.
 
 ---
 

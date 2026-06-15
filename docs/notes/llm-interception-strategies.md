@@ -4,7 +4,7 @@
 **Purpose:** Architectural reference for how to intercept LLM calls made by third-party backends (Aider, future CLI coders). Used in Phase 8 planning; applies to any future phase that extends capture depth or adds control.
 **Status:** Living design note — update as approaches are validated or discarded.
 **Related backlog:** BL-371 (backend interception matrix), BL-350 (executor loop ownership), BL-351 (supervisor / control)
-**Current phase context:** Phase 8 will pick one of these approaches for P8-001 (Aider inner-loop capture).
+**Current phase context:** Phase 8 used Approach 2a (`ObservableModel` subclass) for Aider inner-loop capture. Phase 9 adds a universal internal HTTP proxy (Approach 4) sitting between litellm and the real provider — captures raw bytes for all callers, validates Phase 8 coverage, and solves multi-backend capture in one architecture.
 
 ---
 
@@ -15,9 +15,9 @@ mcp-coder runs third-party backends (currently Aider) that make their own LLM ca
 | Phase | Goal |
 |-------|------|
 | Phase 7 (done) | Capture outer executor events; see every step from mcp-coder's loop |
-| **Phase 8** | Capture every Aider LLM sub-call including thinking tokens; define backend interception contract |
-| **Phase 9** | Write-always storage + blobs + replay — "100% log" now honest for primary backend |
-| **Phase 10+** | HTTP proxy for Claude Code / Codex / OpenCode; inner loop control (BL-351) |
+| Phase 8 (done) | Capture every Aider LLM sub-call including thinking tokens; define backend interception contract |
+| **Phase 9** | Universal internal HTTP proxy (litellm → proxy → provider) for ALL callers; write-always storage; replay; validate 100% coverage |
+| **Phase 10+** | Inner loop control (BL-351); extend proxy to non-Aider backends (Claude Code, Codex, OpenCode) |
 
 The four approaches below differ in **where** you tap into the call chain, which determines what you can see and what you can do.
 
@@ -277,7 +277,67 @@ Backend → http://localhost:PORT/v1/chat/completions
 - Harder to unit-test without running the proxy
 - Subprocess mode required when Python API benefits are lost
 
-**Best for:** Long-term multi-backend architecture; likely the right Phase 9+ foundation once the control story justifies the infrastructure.
+**Best for:** Long-term multi-backend architecture. **Phase 9 primary capture path** — proxy sits between litellm and the real provider, capturing raw HTTP before litellm normalization can drop any fields (thinking blocks, provider extensions). Runs alongside `ObservableModel` as cross-check; proxy is ground truth.
+
+---
+
+## Phase 9 proxy architecture (locked 2026-06-14)
+
+### Position in the stack
+
+```
+LlmGateway / AiderEngine / any future backend
+    ↓
+litellm  (request formatting, response normalization, ModelResponse — unchanged)
+    ↓  api_base overridden to http://localhost:PORT at bootstrap
+LocalLlmProxy  ← capture here: raw HTTP, sees everything before litellm touches it
+    ↓  model-prefix routing table → real upstream URL + API key swap
+OpenRouter / Anthropic / OpenAI / ...
+```
+
+litellm stays in the stack doing what it does well (request normalization, retry, `ModelResponse` wrapping). The proxy is purely a transparent HTTP pass-through that logs and routes.
+
+### What the proxy captures
+
+- Raw request body (OpenAI-compatible JSON sent by litellm)
+- Raw response body from the real upstream — **before litellm normalization**
+- Any field the upstream returns: thinking blocks, reasoning content, usage, provider extensions
+- The only upstream that can cause loss is the provider itself (e.g. OpenRouter stripping thinking blocks before we see them) — this is now provably attributable
+
+### Routing table
+
+The proxy builds its routing table from env vars at startup:
+
+```python
+ROUTING_TABLE = {
+    "openrouter/":  ("https://openrouter.ai/api/v1",    env["OPENROUTER_API_KEY"]),
+    "anthropic/":   ("https://api.anthropic.com/v1",     env["ANTHROPIC_API_KEY"]),
+    "openai/":      ("https://api.openai.com/v1",        env["OPENAI_API_KEY"]),
+    # ...
+}
+```
+
+Every caller points `api_base` at `localhost:PORT`. The proxy reads the `model` field in the request, matches the prefix, forwards to the real upstream with the real API key. Callers need no keys.
+
+### Attribution
+
+Phase 9 uses the active context store already in place (`delegation_id_var`, `step_index_var` from `core/observability/context.py`). The proxy reads these on each request — no header injection needed for in-process callers (LlmGateway, ObservableModel). For future out-of-process backends (Claude Code, Codex), header injection or timing correlation fills the gap (see § Attribution with the HTTP proxy below).
+
+### Lifecycle
+
+Per-session (started once at MCP server bootstrap alongside `ensure_observability_bootstrap()`). Lives for the duration of the MCP server process. All delegations in a session share the proxy; context store handles per-call attribution.
+
+### Dual capture during Phase 9
+
+Both `ObservableModel` (Phase 8) and the proxy run simultaneously:
+- `ObservableModel` → `backend_llm_call` event (in-process, fast, Python-level)
+- Proxy → `proxy_llm_call` event (HTTP-level, raw, ground truth)
+
+On any call where both fire: logged as a matched pair. Any call where only proxy fires: gap in `ObservableModel` coverage. By Phase 9 exit: if no gaps found, `ObservableModel` is proven complete. If gaps found: proxy captures them regardless. Either way, 100% coverage is achieved and evidenced.
+
+### BL-507 resolution
+
+The proxy captures the raw upstream response before litellm's normalization. If `thinking_text`/`thinking_tokens` appear in the raw response but not in the `ObservableModel` events, litellm is confirmed as the stripping layer — and the raw proxy log has the data. If they don't appear in the raw response either, OpenRouter is the cause — and the fix is direct-to-Anthropic routing, not a capture issue.
 
 ## The pretender pattern — install-time substitution (preferred)
 
@@ -362,7 +422,7 @@ Does mcp-coder already run Aider in an isolated venv it controls? If yes, packag
 
 **Base URL override:** `ANTHROPIC_BASE_URL` env var routes all LLM calls through a custom endpoint. This is the **universal capture path**.
 
-**Best interception (Phase 9):** Set `ANTHROPIC_BASE_URL` → local HTTP proxy. Proxy captures full request + response including thinking blocks. Works for all providers since they all go through `callModel()` → Anthropic SDK.
+**Best interception (Phase 10+ — out-of-process backends):** Set `ANTHROPIC_BASE_URL` → local HTTP proxy. Proxy captures full request + response including thinking blocks. Works for all providers since they all go through `callModel()` → Anthropic SDK.
 
 ---
 
@@ -376,7 +436,7 @@ Does mcp-coder already run Aider in an isolated venv it controls? If yes, packag
 
 **Base URL override:** `base_url` in `config.toml` — direct configuration.
 
-**Best interception (Phase 9):** `base_url` → local HTTP proxy implementing the Responses API (`/v1/responses`). Note: this is different from the Chat Completions format — proxy must implement the Responses API wire format.
+**Best interception (Phase 10+ — out-of-process backends):** `base_url` → local HTTP proxy implementing the Responses API (`/v1/responses`). Note: this is different from the Chat Completions format — proxy must implement the Responses API wire format.
 
 ---
 
@@ -393,11 +453,11 @@ Does mcp-coder already run Aider in an isolated venv it controls? If yes, packag
 
 **Base URL override:** Supports custom providers with configurable base URLs (OpenAI-compatible). Can define a provider pointing to a local proxy.
 
-**Best interception (Phase 9):** Register a custom provider in `opencode.json` pointing to a local HTTP proxy. Proxy captures request + response.
+**Best interception (Phase 10+ — out-of-process backends):** Register a custom provider in `opencode.json` pointing to a local HTTP proxy. Proxy captures request + response.
 
 ---
 
-### Universal pattern across all three (Phase 9)
+### Universal pattern across all three (Phase 10+ — out-of-process backends)
 
 All three non-Aider backends support **base URL configuration**:
 
@@ -409,12 +469,12 @@ All three non-Aider backends support **base URL configuration**:
 
 The hooks systems across all three are for **tool execution** (equivalent to `tool_call` events we already capture in Phase 7 outer loop). They do not expose LLM request/response bodies.
 
-**Phase 9 architecture therefore:** One local HTTP proxy implementing the provider APIs needed (Anthropic Messages API + OpenAI Chat Completions + OpenAI Responses API). Each backend is configured to route to it. Proxy captures full request + response, emits gateway events, forwards to real provider.
+**Phase 9 architecture:** One local HTTP proxy deployed for all in-process callers (LlmGateway + Aider via litellm). The same proxy is reused in Phase 10+ for these out-of-process backends — just point their base URL at it. No new proxy infrastructure needed.
 
 ```
-Phase 8:  Aider → subclass Model.send_completion()      Python, no infra
-Phase 9:  Claude Code + Codex + OpenCode                HTTP proxy via base_url config
-          (one proxy, three backends, zero backend-internals knowledge)
+Phase 9:  All in-process callers (LlmGateway + Aider) → proxy (litellm → proxy → provider)
+Phase 10+: Claude Code + Codex + OpenCode             → same proxy via base_url config
+           (one proxy, all backends, zero backend-internals knowledge)
 ```
 
 ---
@@ -438,27 +498,20 @@ Phase 9:  Claude Code + Codex + OpenCode                HTTP proxy via base_url 
 
 ```
 Phase 7  (done): LlmGateway owned paths + executor outer loop + compile events
-Phase 8  (next): Aider full interception via Model.send_completion() subclass + thinking tokens
-Phase 9        : Write-always storage + blobs + replay — "100% log" claim now honest
-Phase 10+      : HTTP proxy (Claude Code / Codex / OpenCode) + inner loop control (BL-351)
+Phase 8  (done): Aider full interception via Model.send_completion() subclass + thinking tokens
+Phase 9  (next): Universal internal proxy (litellm → proxy → provider) for ALL callers
+                 + write-always storage + blobs + replay — "100% log" claim proven by proxy cross-check
+Phase 10+      : Extend proxy to non-Aider backends (Claude Code / Codex / OpenCode) + inner loop control (BL-351)
 ```
 
 | Phase | Backend | Approach | Rationale |
 |-------|---------|----------|-----------|
-| **Phase 8** | Aider | **2a** — subclass `Model.send_completion()` | Python, verified, zero infra; closes primary backend gap so Phase 9 "100%" claim is honest |
-| **Phase 9** | — | Write-always storage, blobs, replay | Storage substrate; no new capture infra needed if Phase 8 done right |
-| **Phase 10+** | Claude Code | `ANTHROPIC_BASE_URL` → HTTP proxy | TypeScript; Python subclass not applicable |
-| **Phase 10+** | Codex | `base_url` in `config.toml` → HTTP proxy | Rust binary; OpenAI's own `codex-responses-api-proxy` crate confirms this pattern |
-| **Phase 10+** | OpenCode | Custom provider base URL → HTTP proxy | Bun/TS binary; no other option |
+| **Phase 8** (done) | Aider | **2a** — subclass `Model.send_completion()` | Python, verified, zero infra; closes primary backend gap |
+| **Phase 9** | All in-process callers | **4** — HTTP proxy between litellm and real provider | Raw HTTP capture; validates Phase 8; solves BL-507 (thinking tokens); universal architecture |
+| **Phase 10+** | Claude Code | `ANTHROPIC_BASE_URL` → same proxy | TypeScript; already supports base URL override |
+| **Phase 10+** | Codex | `base_url` in `config.toml` → same proxy | Rust binary; OpenAI's `codex-responses-api-proxy` confirms this pattern |
+| **Phase 10+** | OpenCode | Custom provider base URL → same proxy | Bun/TS binary; no other option |
 | **Phase 10+** | All | Inner loop control (BL-351) | Requires proxy in place + Phase 9 storage substrate |
-
-**Phase 8 pre-work (already done):**
-- ✓ `Model.send_completion()` confirmed as single seam for all Aider LLM calls
-- ✓ Cache-warming bypass (`warm_cache_worker`) identified as acceptable gap
-- ✓ All providers (OpenRouter, Anthropic, Gemini, Bedrock) route through this method
-- ✓ Thinking blocks in the `result` returned by `super().send_completion()`
-
-Approach 1 (Route A litellm callback) stays in place as a **cross-check and fallback** for any path that slips through.
 
 ---
 
@@ -531,14 +584,14 @@ The `messages` array in the request body grows with each turn. Message count del
 
 5. **Backend contract format (P8-002):** What does the per-adapter interception matrix look like? Options: (a) runtime-checked assertion in adapter base class, (b) documented JSON matrix per adapter, (c) Python `@dataclass InterceptionProfile` attached to each adapter.
 
-### Phase 9 (HTTP proxy)
+### Phase 9 (universal HTTP proxy)
 
-6. **Wire format coverage:** Proxy needs to implement at least two formats: Anthropic Messages API (Claude Code + OpenCode-Anthropic path) and OpenAI Responses API (`/v1/responses` for Codex). OpenChat Completions (`/v1/chat/completions`) for OpenCode-OpenAI path. Scope: implement all three, or prioritize and defer?
+6. **Wire format coverage:** The Phase 9 proxy handles in-process callers (LlmGateway + Aider via litellm), which all emit OpenAI Chat Completions format (`/v1/chat/completions`). Phase 10+ extensions to Codex (`/v1/responses`) and Anthropic-direct backends can be added to the same proxy then.
 
-7. **Proxy lifecycle:** How does the proxy server start/stop relative to delegations? Options: (a) long-lived process started with mcp-coder server, (b) per-delegation ephemeral process. Long-lived is simpler; ephemeral avoids port conflicts.
+7. **Proxy lifecycle (resolved):** Per-session — started once at MCP server bootstrap alongside `ensure_observability_bootstrap()`. All delegations share it; active context store handles per-call attribution.
 
-8. **Streaming passthrough:** Proxy must tee streaming SSE responses — capture while forwarding to the backend in real time. Non-trivial but well-understood pattern.
+8. **Streaming passthrough:** Proxy must tee streaming SSE responses — capture while forwarding to litellm in real time. Implement as an async generator that accumulates chunks and emits the `proxy_llm_call` event on stream end (same pattern as `_StreamCaptureWrapper` in `ObservableModel`).
 
-9. **Attribution timing race:** In Option B (timing correlation), if mcp-coder outer loop and proxy are in separate processes, clock skew could misattribute calls. Mitigate with: NTP sync check at startup, or prefer Option A (header injection) once backends support it.
+9. **Attribution for in-process callers (resolved):** Active context store (`delegation_id_var`, `step_index_var`) — no header injection needed. Out-of-process backends (Phase 10+) need header injection or timing correlation.
 
-10. **Proxy for owned helpers:** After Phase 9, do owned helper calls (currently routed through `LlmGateway` directly) also route through the proxy for uniformity? Or keep them on the in-process gateway path (lower latency, already tested)?
+10. **Owned helpers routing (open):** After Phase 9, do owned helper calls (currently through `LlmGateway` directly) also route through the proxy? Or keep them on the in-process gateway path? Decision can be deferred — proxy cross-check vs `LlmGateway` callback covers both paths during Phase 9 validation.
