@@ -108,6 +108,24 @@ Phase 9 proxy handles: LlmGateway helpers + AiderEngine (via litellm api_base ov
 
 Phase 10+ extends the same proxy to out-of-process backends (Claude Code, Codex, OpenCode) by pointing their base URL at it. No new proxy infrastructure — just base URL config per backend.
 
+### D-P9-8: Write-always is the new default
+
+Verbosity levels (`lean`/`standard`/`full`) control display, CLI output, and RAG promotion only. They never gate what is written to disk. Applies uniformly to all observers.
+
+### D-P9-9: Proxy is an observability observer — common writer
+
+The proxy is not a separate writer. It is a third observer, same as `ObservableModel` and `LiteLLMCallback`:
+
+```
+Observers (emit events):          Backend (single writer):
+  ObservableModel  ─┐
+  LiteLLMCallback  ─┤──► ObservabilityBackend.record_*(...)
+  LocalLlmProxy    ─┘       └─ LocalObservability  → traces/<id>.jsonl
+                               └─ NullObservability → no-op (tests)
+```
+
+`LocalLlmProxy` calls `get_observability().record_proxy_llm_call(...)` exactly as `ObservableModel` calls `record_backend_llm_call(...)` (Phase 8 pattern). `ObservabilityBackend` gains one new abstract method; `LocalObservability` and `NullObservability` implement it. Write-always (D-P9-8), verbosity filtering, and `NullObservability` in tests apply automatically. No separate write path, no file locking, no second schema. Comparison between `proxy_llm_call` and `backend_llm_call` is a single JSONL filter on the same file.
+
 ---
 
 ## What Phase 9 does NOT own

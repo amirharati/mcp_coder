@@ -65,6 +65,7 @@ The proxy also provides the universal architecture for Phase 10+ multi-backend c
 | D-P9-6 | **Dual capture during Phase 9.** `ObservableModel` (`backend_llm_call`) + proxy (`proxy_llm_call`) run simultaneously. Proxy is ground truth. Any call in proxy-only → gap in Phase 8 coverage identified. Phase 9 exit: gaps evidenced or absence of gaps proven. |
 | D-P9-7 | **Phase 9 proxy scope: in-process callers only.** LlmGateway helpers + AiderEngine via litellm. Phase 10+ extends to out-of-process backends by pointing their base URL at the same proxy — no new proxy code needed. |
 | D-P9-8 | **Write-always is the new default.** Verbosity levels (`lean`/`standard`/`full`) control display, CLI output, and RAG promotion only. They never gate what is written to disk. |
+| D-P9-9 | **Proxy is an observability observer, not a separate writer.** `LocalLlmProxy` calls `get_observability().record_proxy_llm_call()` — the same pattern as `ObservableModel` calling `record_backend_llm_call()` (Phase 8). `ObservabilityBackend` gains one new abstract method; `LocalObservability` and `NullObservability` implement it. No separate write path, no file locking, no second schema. Write-always (D-P9-8) and verbosity filtering apply to proxy events automatically. |
 
 ---
 
@@ -127,13 +128,14 @@ The proxy also provides the universal architecture for Phase 10+ multi-backend c
 **Goal:** Spin up `LocalLlmProxy` at MCP server bootstrap. All in-process LLM callers (LlmGateway helpers + AiderEngine via litellm) route through it. Proxy captures raw HTTP request + response before litellm normalization. Emits `proxy_llm_call` events into the trace. Cross-checks against `backend_llm_call` events from Phase 8.
 
 **Scope:**
-- `core/proxy/local_proxy.py` — async HTTP server (aiohttp or httpx-based); OpenAI Chat Completions format; model-prefix routing table from env vars; streaming SSE tee; raw body log
+- `core/proxy/local_proxy.py` — async HTTP server (aiohttp or httpx-based); OpenAI Chat Completions format; model-prefix routing table from env vars; streaming SSE tee; calls `get_observability().record_proxy_llm_call()` on completion
 - `core/proxy/routing.py` — routing table builder from env; `(model_prefix → upstream_url, api_key)` map
+- `core/observability/base.py` — new abstract `record_proxy_llm_call()` method (same pattern as `record_backend_llm_call()` added in P8-001)
+- `core/observability/local.py` + `null.py` — implement `record_proxy_llm_call()`
 - `core/observability/trace.py` — new `build_proxy_llm_call_record()` event builder
-- `core/observability/base.py` + `local.py` + `null.py` — `record_proxy_llm_call()` method
-- `core/observability/bootstrap.py` — `ensure_observability_bootstrap()` starts proxy; sets `LITELLM_API_BASE=http://localhost:PORT` in process env
-- `core/observability/context.py` — proxy reads `delegation_id_var` + `step_index_var` per-request
-- Cross-check logic: if `proxy_llm_call` fires with no matching `backend_llm_call` within window, emit a `coverage_gap` warning event
+- `core/observability/bootstrap.py` — `ensure_observability_bootstrap()` starts proxy; overrides `LITELLM_API_BASE` in process env
+- `core/observability/context.py` — proxy reads `delegation_id_var` + `step_index_var` per-request for attribution
+- Cross-check: after each delegation, `LocalObservability` can report any `proxy_llm_call` with no matching `backend_llm_call` (coverage gap detection)
 
 **Acceptance:**
 - After a delegation: `traces/<id>.jsonl` contains `proxy_llm_call` events for every LLM call
@@ -219,4 +221,5 @@ The proxy also provides the universal architecture for Phase 10+ multi-backend c
 
 | Date | Change |
 |------|--------|
+| 2026-06-14 | D-P9-9 added: proxy is an observability observer — calls `record_proxy_llm_call()` through common writer; no separate write path. P9-003 scope updated accordingly. |
 | 2026-06-14 | Created — Phase 9 PM board; milestones P9-001..P9-005 scoped; D-P9-1..D-P9-8 locked in master session; proxy added as Phase 9 centerpiece (was Phase 10+ in original plan) |
