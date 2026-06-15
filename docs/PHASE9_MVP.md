@@ -9,7 +9,7 @@
 
 # Phase 9 — Write-always storage + universal proxy + replay
 
-**Status:** Active — P9-001..P9-006 + P9-005 shipped; P9-007/P9-008/P9-009/P9-010 pending (attribution alignment, prompt_full gate, gzip raw_response, trace inspect CLI).
+**Status:** Active — P9-001..P9-006 shipped; P9-007/P9-008/P9-009/P9-010 spec_ready (attribution alignment, prompt_full gate, gzip raw_response, trace inspect CLI).
 **Purpose:** Prove "100% LLM call captured" by adding a universal internal HTTP proxy (litellm → proxy → provider) that captures raw bytes before any normalization layer; flip the write gate to always-on; add context package blobs and replay CLI.
 **PM board:** this file · **Issues:** [PHASE9_ISSUES.md](./PHASE9_ISSUES.md)
 **Phase 8 (frozen):** [PHASE8_MVP.md](./PHASE8_MVP.md) · [PHASE8_ISSUES.md](./PHASE8_ISSUES.md)
@@ -73,14 +73,18 @@ The proxy also provides the universal architecture for Phase 10+ multi-backend c
 
 ## Worker order
 
-| Order | Milestone | Spec | Notes |
-|-------|-----------|------|-------|
-| **1** | P9-001 | [docs/tasks/P9-001-write-always-storage-v1.md](../tasks/P9-001-write-always-storage-v1.md) | **Start here** — small flag flip, immediate data richness |
-| 2 | P9-002 | [docs/tasks/P9-002-context-package-blob-v1.md](../tasks/P9-002-context-package-blob-v1.md) | After P9-001; prereq for P9-004 |
-| 2 (parallel) | P9-003 | [docs/tasks/P9-003-universal-proxy-v1.md](../tasks/P9-003-universal-proxy-v1.md) | Independent infra; can run alongside P9-002 |
-| 3 | P9-004 | [docs/tasks/P9-004-replay-cli-v1.md](../tasks/P9-004-replay-cli-v1.md) | After P9-001 + P9-002 + P9-003 |
-| 4 | P9-005 | [docs/tasks/P9-005-storage-gc-v1.md](../tasks/P9-005-storage-gc-v1.md) | After P9-004 |
-| 5 | P9-006 | [docs/tasks/P9-006-compare-viewer-v1.md](../tasks/P9-006-compare-viewer-v1.md) | After P9-003 confirms proxy firing; Phase 9 validation instrument |
+| Order | Milestone | Spec | Status | Notes |
+|-------|-----------|------|--------|-------|
+| 1 | P9-001 | [P9-001](../tasks/P9-001-write-always-storage-v1.md) | done | |
+| 2 | P9-002 | [P9-002](../tasks/P9-002-context-package-blob-v1.md) | done | |
+| 2p | P9-003 | [P9-003](../tasks/P9-003-universal-proxy-v1.md) | done | |
+| 3 | P9-004 | [P9-004](../tasks/P9-004-replay-cli-v1.md) | done | |
+| 4 | P9-005 | [P9-005](../tasks/P9-005-storage-gc-v1.md) | done | |
+| 5 | P9-006 | [P9-006](../tasks/P9-006-compare-viewer-v1.md) | done | |
+| **6** | **P9-009** | [P9-009](../tasks/P9-009-proxy-gzip-fix-v1.md) | **spec_ready** | **Start here** — unblocks all dual-path analysis |
+| 7 | P9-007 | [P9-007](../tasks/P9-007-attribution-alignment-v1.md) | spec_ready | After P9-009; enables correct compare pairing |
+| 8 | P9-010 | [P9-010](../tasks/P9-010-trace-inspect-cli-v1.md) | spec_ready | After P9-009; enables field-level inspection |
+| 9 | P9-008 | [P9-008](../tasks/P9-008-prompt-full-write-always-v1.md) | spec_ready | Independent — can run any time |
 
 ---
 
@@ -215,7 +219,7 @@ The proxy also provides the universal architecture for Phase 10+ multi-backend c
 
 ### P9-007 — Attribution alignment: wire `call_index` through to `backend_llm_call`
 
-**Status:** `pending`
+**Status:** `spec_ready` · **Spec:** [docs/tasks/P9-007-attribution-alignment-v1.md](tasks/P9-007-attribution-alignment-v1.md)
 
 **Goal:** `backend_llm_call` events should carry the same `call_index` that `proxy_llm_call` carries from header injection, so `mcp-coder compare` can pair them as `matched` instead of `proxy_only + backend_only`.
 
@@ -241,7 +245,7 @@ The proxy also provides the universal architecture for Phase 10+ multi-backend c
 
 ### P9-008 — Remove `prompt_full` write gate from delegation row (BL-510)
 
-**Status:** `pending`
+**Status:** `spec_ready` · **Spec:** [docs/tasks/P9-008-prompt-full-write-always-v1.md](tasks/P9-008-prompt-full-write-always-v1.md)
 
 **Goal:** `prompt_full` in `delegations.jsonl` rows is currently gated by `MCP_CODER_LOG_FULL_PROMPT` env var — the only remaining write gate on audit data. Remove it so prompt is always written, consistent with D-P9-8 (write-always).
 
@@ -263,7 +267,7 @@ The proxy also provides the universal architecture for Phase 10+ multi-backend c
 
 ### P9-009 — Proxy raw_response gzip decompression (P9-ISS-006)
 
-**Status:** `pending`
+**Status:** `spec_ready` · **Spec:** [docs/tasks/P9-009-proxy-gzip-fix-v1.md](tasks/P9-009-proxy-gzip-fix-v1.md)
 
 **Goal:** Fix `proxy_llm_call.raw_response` so it contains readable JSON text, not garbled binary. This is required before any meaningful dual-path analysis or BL-507 re-verification can be done.
 
@@ -290,7 +294,7 @@ Our Phase 9 finding "thinking tokens NOT present at HTTP boundary" is **suspect*
 
 ### P9-010 — `mcp-coder trace inspect` CLI
 
-**Status:** `pending`
+**Status:** `spec_ready` · **Spec:** [docs/tasks/P9-010-trace-inspect-cli-v1.md](tasks/P9-010-trace-inspect-cli-v1.md)
 
 **Goal:** Add a CLI sub-command to dump and inspect specific events from a delegation trace file. Needed for the dual-path analysis workflow — currently requires writing custom Python to read the raw JSONL.
 
@@ -357,6 +361,7 @@ mcp-coder trace inspect <id> --type backend_llm_call --field response_body
 
 | Date | Change |
 |------|--------|
+| 2026-06-15 | P9-007/P9-008/P9-009/P9-010 worker specs written and moved to `spec_ready`. Worker order table updated with recommended implementation sequence (P9-009 first). |
 | 2026-06-15 | P9-009 + P9-010 added: proxy gzip fix (`raw_response` corrupted — blocks BL-507 re-verification) and `mcp-coder trace inspect` CLI (needed for dual-path analysis without custom Python). P9-ISS-006 opened. |
 | 2026-06-15 | P9-007 + P9-008 added: attribution alignment (wire `call_index` from `ObservableModel` through to `backend_llm_call` record) and prompt_full write-always (remove `MCP_CODER_LOG_FULL_PROMPT` gate) — both identified during post-P9 audit of "100% auditable log" goal. P9-ISS-004/P9-ISS-005 opened. |
 | 2026-06-15 | P9-005 **done**: added `mcp-coder maintenance gc` (`--dry-run`, `--format {human,json}`), TTL-only retention enforcement, training-sidecar block, blob prune by live delegation references, and blob counts in `maintenance stats`; focused `13 passed`; full suite `873 passed, 1 skipped`. Phase 9 milestones now fully complete. |
