@@ -46,6 +46,9 @@ A local OpenAI-compatible HTTP proxy started at MCP server bootstrap. **All LLM 
 ### E — Storage GC first slice
 `mcp-coder maintenance gc [--dry-run]` + TTL configuration. Promote-then-prune policy. First pass only — no archival, no global promotion store.
 
+### F — Comparison CLI + viewer dual-capture
+`mcp-coder compare <delegation_id>` side-by-side report: `backend_llm_call` vs `proxy_llm_call` per call, field diffs, wire latency (T3−T2), total latency (T4−T1), litellm overhead delta, unmatched events flagged. Viewer updated to group the two event types per call. This is the validation instrument for the whole phase — it proves proxy coverage and definitively answers BL-507 (thinking token presence at the HTTP boundary).
+
 ---
 
 ## Proxy architecture (locked decisions)
@@ -193,9 +196,10 @@ After a live `delegate_to_agent` call at any verbosity setting:
 1. Full prompt + response bodies written to `traces/<id>.jsonl` — not truncated, not gated on verbosity.
 2. Context package blob stored at `sessions/<id>/context_packages/<hash>.json`.
 3. `proxy_llm_call` events present in trace alongside `backend_llm_call` events — proxy and `ObservableModel` cross-check confirmed.
-4. BL-507 resolved: proxy raw response log reveals whether thinking tokens are present at the HTTP boundary (ruling out litellm as the stripping layer).
-5. `mcp-coder replay <delegation_id>` reconstructs the full delegation from disk — no Cursor.
-6. `mcp-coder maintenance gc --dry-run` reports what would be pruned.
+4. **`mcp-coder compare <delegation_id>`** shows side-by-side comparison: call count, field diffs, wire vs total latency, BL-507 answered (thinking_text column).
+5. BL-507 resolved: proxy raw response log reveals whether thinking tokens are present at the HTTP boundary (ruling out litellm as the stripping layer).
+6. `mcp-coder replay <delegation_id>` reconstructs the full delegation from disk — no Cursor.
+7. `mcp-coder maintenance gc --dry-run` reports what would be pruned.
 
 ---
 
@@ -206,3 +210,4 @@ P9-002 (blob) before P9-004 (replay) — replay needs the blob to be useful.
 P9-003 (proxy) can run in parallel with P9-002 since it's infrastructure, not storage format.
 P9-004 (replay) last among the capture milestones — it validates everything above works together.
 P9-005 (GC) last — only relevant once you have data worth managing.
+P9-006 (compare) after P9-003 — needs proxy events to be meaningful; it is the validation instrument for the whole phase.

@@ -9,7 +9,7 @@
 
 # Phase 9 — Write-always storage + universal proxy + replay
 
-**Status:** Active — master session complete 2026-06-14; milestones P9-001..P9-005 scoped; workers not yet tasked.
+**Status:** Active — master session complete 2026-06-14; milestones P9-001..P9-006 scoped; workers not yet tasked.
 **Purpose:** Prove "100% LLM call captured" by adding a universal internal HTTP proxy (litellm → proxy → provider) that captures raw bytes before any normalization layer; flip the write gate to always-on; add context package blobs and replay CLI.
 **PM board:** this file · **Issues:** [PHASE9_ISSUES.md](./PHASE9_ISSUES.md) (to be created)
 **Phase 8 (frozen):** [PHASE8_MVP.md](./PHASE8_MVP.md) · [PHASE8_ISSUES.md](./PHASE8_ISSUES.md)
@@ -29,9 +29,10 @@ After a live `delegate_to_agent` call at **any** verbosity setting:
 1. **Full prompt + response bodies** in `traces/<id>.jsonl` — unconditionally, not gated on verbosity.
 2. **Context package blob** at `sessions/<id>/context_packages/<hash>.json`.
 3. **`proxy_llm_call` events** in trace — proxy fired for every LLM call made by any in-process caller; cross-check vs `backend_llm_call` shows no gaps.
-4. **BL-507 resolved** — raw proxy log answers definitively whether thinking tokens are present at the HTTP boundary (ruling in or out litellm as stripping layer).
-5. **`mcp-coder replay <delegation_id>`** reconstructs full delegation from disk — context package + prompt + every turn — no Cursor required.
-6. **`mcp-coder maintenance gc --dry-run`** reports what would be pruned under the retention policy.
+4. **`mcp-coder compare <delegation_id>`** shows side-by-side: call count matches, field diffs visible, wire vs total latency, BL-507 answered (thinking_text present/absent at HTTP boundary).
+5. **BL-507 resolved** — raw proxy log answers definitively whether thinking tokens are present at the HTTP boundary (ruling in or out litellm as stripping layer).
+6. **`mcp-coder replay <delegation_id>`** reconstructs full delegation from disk — context package + prompt + every turn — no Cursor required.
+7. **`mcp-coder maintenance gc --dry-run`** reports what would be pruned under the retention policy.
 
 ---
 
@@ -78,7 +79,8 @@ The proxy also provides the universal architecture for Phase 10+ multi-backend c
 | 2 | P9-002 | [docs/tasks/P9-002-context-package-blob-v1.md](../tasks/P9-002-context-package-blob-v1.md) | After P9-001; prereq for P9-004 |
 | 2 (parallel) | P9-003 | [docs/tasks/P9-003-universal-proxy-v1.md](../tasks/P9-003-universal-proxy-v1.md) | Independent infra; can run alongside P9-002 |
 | 3 | P9-004 | [docs/tasks/P9-004-replay-cli-v1.md](../tasks/P9-004-replay-cli-v1.md) | After P9-001 + P9-002 + P9-003 |
-| 4 | P9-005 | [docs/tasks/P9-005-storage-gc-v1.md](../tasks/P9-005-storage-gc-v1.md) | After P9-004; last |
+| 4 | P9-005 | [docs/tasks/P9-005-storage-gc-v1.md](../tasks/P9-005-storage-gc-v1.md) | After P9-004 |
+| 5 | P9-006 | [docs/tasks/P9-006-compare-viewer-v1.md](../tasks/P9-006-compare-viewer-v1.md) | After P9-003 confirms proxy firing; Phase 9 validation instrument |
 
 ---
 
@@ -189,6 +191,28 @@ The proxy also provides the universal architecture for Phase 10+ multi-backend c
 
 ---
 
+### P9-006 — Comparison CLI + viewer dual-capture updates
+
+**Status:** `pending`
+
+**Goal:** `mcp-coder compare <delegation_id>` produces a side-by-side report of `backend_llm_call` vs `proxy_llm_call` events for each LLM call in a delegation — call count, field diffs, gaps, wire vs total latency. Viewer updated to group the two event types as a pair rather than showing them as separate items. This is the Phase 9 validation instrument that proves proxy coverage and surfaces any field discrepancies.
+
+**Scope:**
+- `core/cli/compare.py` — new `compare` subcommand; load `traces/<id>.jsonl`; group events by `(step_index, call_index)`; for each call: show `backend_llm_call` fields, `proxy_llm_call` fields, diff, and wire vs total latency
+- Output columns: `call_index`, `model`, `backend_usage`, `proxy_usage`, `thinking_text` (present/absent/value), `wire_latency` (T3−T2), `total_latency` (T4−T1), `litellm_overhead` (delta), `diff_summary`
+- Unmatched events flagged: proxy-only (gap in `ObservableModel`) and backend-only (gap in proxy)
+- `--format json` for machine-readable output
+- Viewer (`mcp-coder delegations show`) updated to group `backend_llm_call` + `proxy_llm_call` as a pair per call; highlight fields where proxy differs
+
+**Acceptance:**
+- `mcp-coder compare <id>` prints call-by-call comparison after a Phase 9 delegation
+- Any proxy-only or backend-only events are clearly flagged
+- `thinking_text` column shows `null` on both / `null` on backend only / value — answers BL-507
+- Wire latency and litellm overhead are visible per call
+- Viewer groups the two event types cleanly; diff fields highlighted
+
+---
+
 ## Explicitly NOT Phase 9
 
 | Item | Reason |
@@ -210,7 +234,7 @@ The proxy also provides the universal architecture for Phase 10+ multi-backend c
 | Tier | Criteria |
 |------|----------|
 | **Minimum** | P9-001: write-always + P9-003: proxy live and emitting `proxy_llm_call` events |
-| **Recommended** | + P9-002: context blob + P9-004: replay CLI |
+| **Recommended** | + P9-002: context blob + P9-004: replay CLI + P9-006: compare CLI |
 | **Optional capstone** | + P9-005: GC first slice |
 
 ---
@@ -225,6 +249,7 @@ The proxy also provides the universal architecture for Phase 10+ multi-backend c
 
 | Date | Change |
 |------|--------|
+| 2026-06-14 | P9-006 added: comparison CLI (`mcp-coder compare`) + viewer dual-capture grouping — Phase 9 validation instrument for proxy coverage and BL-507 resolution. Worker order table (5→6 milestones) and exit criteria updated. North-star acceptance item 4 added. |
 | 2026-06-14 | D-P9-10 added: attribution across HTTP boundary via extra_headers injection (primary) + timing fallback; boundary alignment is experimental — capture first, align later. P9-003 acceptance updated. |
 | 2026-06-14 | D-P9-9 added: proxy is an observability observer — calls `record_proxy_llm_call()` through common writer; no separate write path. P9-003 scope updated accordingly. |
 | 2026-06-14 | Created — Phase 9 PM board; milestones P9-001..P9-005 scoped; D-P9-1..D-P9-8 locked in master session; proxy added as Phase 9 centerpiece (was Phase 10+ in original plan) |
