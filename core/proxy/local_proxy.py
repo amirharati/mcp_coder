@@ -64,9 +64,11 @@ def _forward_headers(
         lower = key.lower()
         if lower in MCP_ATTRIBUTION_HEADERS_LOWER:
             continue
-        if lower in ("host", "content-length", "authorization", "x-api-key"):
+        if lower in ("host", "content-length", "authorization", "x-api-key", "accept-encoding"):
             continue
         forwarded[key] = value
+
+    forwarded["Accept-Encoding"] = "identity"
 
     if route.auth_prefix:
         forwarded[route.auth_header] = f"{route.auth_prefix}{api_key}"

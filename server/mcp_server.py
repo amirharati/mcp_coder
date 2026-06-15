@@ -1933,7 +1933,7 @@ def delegate_to_agent(
             host_context=host_context,
             executor_reused=executor_reused,
             executor_recreated=executor_recreated,
-            prompt_full=executor_prompt if obs.should_log_full_prompt() else None,
+            prompt_full=executor_prompt,
             spec_path=spec_rel_path,
             spec_report_path=spec_report_rel_path,
             spec_sha256=spec_sha256,

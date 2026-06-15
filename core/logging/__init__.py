@@ -8,7 +8,6 @@ from core.logging.delegation_log import (
     log_delegation_sent,
     log_stderr,
     log_verbose,
-    should_log_full_prompt,
 )
 from core.logging.server_log import get_server_log, server_log_emit
 
@@ -24,5 +23,4 @@ __all__ = [
     "log_stderr",
     "log_verbose",
     "server_log_emit",
-    "should_log_full_prompt",
 ]

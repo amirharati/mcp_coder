@@ -12,7 +12,6 @@ from core.logging.delegation_log import (
     log_delegation_sent,
     log_host_resolved,
     new_delegation_id,
-    should_log_full_prompt,
     utc_now_iso,
     workspace_path,
 )
@@ -383,9 +382,6 @@ class LocalObservability(ObservabilityBackend):
 
     def utc_now_iso(self) -> str:
         return utc_now_iso()
-
-    def should_log_full_prompt(self) -> bool:
-        return should_log_full_prompt()
 
     def record_llm_call(
         self,

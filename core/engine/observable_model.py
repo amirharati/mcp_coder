@@ -137,22 +137,29 @@ def _record_backend_call(
     duration_ms: int,
     messages: Any,
     result: Any,
+    call_index: int | None = None,
 ) -> None:
     try:
         from core.observability import get_observability
 
         thinking_text, thinking_tokens = extract_thinking_from_response(result)
-        get_observability().record_backend_llm_call(
-            call_type=call_type,
-            model=model,
-            step_index=step_index_var.get(),
-            thinking_text=thinking_text,
-            thinking_tokens=thinking_tokens or None,
-            usage=_extract_usage(result),
-            duration_ms=duration_ms,
-            prompt_text=_extract_prompt_text(messages),
-            response_text=_extract_response_text(result),
-        )
+        backend = get_observability()
+        payload = {
+            "call_type": call_type,
+            "model": model,
+            "step_index": step_index_var.get(),
+            "thinking_text": thinking_text,
+            "thinking_tokens": thinking_tokens or None,
+            "usage": _extract_usage(result),
+            "duration_ms": duration_ms,
+            "prompt_text": _extract_prompt_text(messages),
+            "response_text": _extract_response_text(result),
+        }
+        try:
+            backend.record_backend_llm_call(call_index=call_index, **payload)
+        except TypeError:
+            # Backward compatibility: older observability backends may not accept call_index yet.
+            backend.record_backend_llm_call(**payload)
     except Exception:
         pass
 
@@ -176,12 +183,14 @@ class _StreamCaptureWrapper:
         messages: Any,
         t0: float,
         stream_key: Any,
+        call_index: int | None = None,
     ) -> None:
         self._inner = iter(inner)
         self._model = model
         self._messages = messages
         self._t0 = t0
         self._stream_key = stream_key
+        self._call_index = call_index
         self._chunks: list[Any] = []
         self._recorded = False
         self._cleaned = False
@@ -232,6 +241,7 @@ class _StreamCaptureWrapper:
             duration_ms=duration_ms,
             messages=self._messages,
             result=assembled,
+            call_index=self._call_index,
         )
 
 
@@ -329,6 +339,7 @@ class ObservableModel(Model):
         stream_key = None
         stream_handoff = False
         self._inject_attribution_headers()
+        _ci = self._call_index
         if stream:
             stream_key = register_backend_stream_call(
                 delegation_id=delegation_id_var.get(),
@@ -356,6 +367,7 @@ class ObservableModel(Model):
                     messages=messages,
                     t0=t0,
                     stream_key=stream_key,
+                    call_index=_ci,
                 )
                 stream_handoff = True
                 return hash_obj, wrapped
@@ -366,6 +378,7 @@ class ObservableModel(Model):
                 duration_ms=duration_ms,
                 messages=messages,
                 result=result,
+                call_index=_ci,
             )
             return hash_obj, result
         finally:

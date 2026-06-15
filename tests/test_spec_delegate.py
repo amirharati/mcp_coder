@@ -137,7 +137,6 @@ def test_delegate_with_spec_writes_report_not_task(tmp_path, monkeypatch):
     task_before = task.read_text(encoding="utf-8")
 
     monkeypatch.setenv("MCP_CODER_HOME", str(home))
-    monkeypatch.setenv("MCP_CODER_LOG_FULL_PROMPT", "1")
     monkeypatch.setenv("MCP_CODER_USE_CONTEXT_PACKAGE", "0")
     monkeypatch.chdir(ws)
 

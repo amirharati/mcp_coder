@@ -9,7 +9,7 @@
 
 # Phase 9 — Write-always storage + universal proxy + replay
 
-**Status:** Active — P9-001..P9-006 shipped; P9-007/P9-008/P9-009/P9-010 spec_ready (attribution alignment, prompt_full gate, gzip raw_response, trace inspect CLI).
+**Status:** Complete — P9-001..P9-010 shipped (write-always storage, dual-capture proxy, replay/compare/trace inspect tooling, GC, and prompt_full write-always alignment).
 **Purpose:** Prove "100% LLM call captured" by adding a universal internal HTTP proxy (litellm → proxy → provider) that captures raw bytes before any normalization layer; flip the write gate to always-on; add context package blobs and replay CLI.
 **PM board:** this file · **Issues:** [PHASE9_ISSUES.md](./PHASE9_ISSUES.md)
 **Phase 8 (frozen):** [PHASE8_MVP.md](./PHASE8_MVP.md) · [PHASE8_ISSUES.md](./PHASE8_ISSUES.md)
@@ -81,10 +81,10 @@ The proxy also provides the universal architecture for Phase 10+ multi-backend c
 | 3 | P9-004 | [P9-004](../tasks/P9-004-replay-cli-v1.md) | done | |
 | 4 | P9-005 | [P9-005](../tasks/P9-005-storage-gc-v1.md) | done | |
 | 5 | P9-006 | [P9-006](../tasks/P9-006-compare-viewer-v1.md) | done | |
-| **6** | **P9-009** | [P9-009](../tasks/P9-009-proxy-gzip-fix-v1.md) | **spec_ready** | **Start here** — unblocks all dual-path analysis |
-| 7 | P9-007 | [P9-007](../tasks/P9-007-attribution-alignment-v1.md) | spec_ready | After P9-009; enables correct compare pairing |
-| 8 | P9-010 | [P9-010](../tasks/P9-010-trace-inspect-cli-v1.md) | spec_ready | After P9-009; enables field-level inspection |
-| 9 | P9-008 | [P9-008](../tasks/P9-008-prompt-full-write-always-v1.md) | spec_ready | Independent — can run any time |
+| 6 | P9-009 | [P9-009](../tasks/P9-009-proxy-gzip-fix-v1.md) | done | gzip/raw_response corruption fixed; focused `19 passed`, full suite `876 passed, 1 skipped` |
+| 7 | P9-007 | [P9-007](../tasks/P9-007-attribution-alignment-v1.md) | done | call_index wiring complete; focused `16 passed`, full suite `877 passed, 1 skipped` |
+| 8 | P9-010 | [P9-010](../tasks/P9-010-trace-inspect-cli-v1.md) | done | trace inspect CLI shipped; focused `10 passed`, full suite `887 passed, 1 skipped` |
+| 9 | P9-008 | [P9-008](../tasks/P9-008-prompt-full-write-always-v1.md) | done | prompt_full write gate removed; focused `21 passed`, full suite `887 passed, 1 skipped` |
 
 ---
 
@@ -219,7 +219,7 @@ The proxy also provides the universal architecture for Phase 10+ multi-backend c
 
 ### P9-007 — Attribution alignment: wire `call_index` through to `backend_llm_call`
 
-**Status:** `spec_ready` · **Spec:** [docs/tasks/P9-007-attribution-alignment-v1.md](tasks/P9-007-attribution-alignment-v1.md)
+**Status:** `done` — `ObservableModel` now propagates `call_index` through both non-streaming and streaming backend-record paths (`_record_backend_call` + `_StreamCaptureWrapper`); focused tests `16 passed`; full suite `877 passed, 1 skipped` · **Spec:** [docs/tasks/P9-007-attribution-alignment-v1.md](tasks/P9-007-attribution-alignment-v1.md)
 
 **Goal:** `backend_llm_call` events should carry the same `call_index` that `proxy_llm_call` carries from header injection, so `mcp-coder compare` can pair them as `matched` instead of `proxy_only + backend_only`.
 
@@ -245,7 +245,7 @@ The proxy also provides the universal architecture for Phase 10+ multi-backend c
 
 ### P9-008 — Remove `prompt_full` write gate from delegation row (BL-510)
 
-**Status:** `spec_ready` · **Spec:** [docs/tasks/P9-008-prompt-full-write-always-v1.md](tasks/P9-008-prompt-full-write-always-v1.md)
+**Status:** `done` — removed outer (`mcp_server.py`) and inner (`delegation_log.py`) `prompt_full` write gates; deprecated `should_log_full_prompt()` to no-op; removed observability interface/impl gate wiring; updated delegate tests; focused tests `21 passed`; full suite `887 passed, 1 skipped` · **Spec:** [docs/tasks/P9-008-prompt-full-write-always-v1.md](tasks/P9-008-prompt-full-write-always-v1.md)
 
 **Goal:** `prompt_full` in `delegations.jsonl` rows is currently gated by `MCP_CODER_LOG_FULL_PROMPT` env var — the only remaining write gate on audit data. Remove it so prompt is always written, consistent with D-P9-8 (write-always).
 
@@ -267,7 +267,7 @@ The proxy also provides the universal architecture for Phase 10+ multi-backend c
 
 ### P9-009 — Proxy raw_response gzip decompression (P9-ISS-006)
 
-**Status:** `spec_ready` · **Spec:** [docs/tasks/P9-009-proxy-gzip-fix-v1.md](tasks/P9-009-proxy-gzip-fix-v1.md)
+**Status:** `done` — `core/proxy/local_proxy.py` now strips incoming `accept-encoding` and forces upstream `Accept-Encoding: identity`; new header tests added; focused tests `19 passed`; full suite `876 passed, 1 skipped` · **Spec:** [docs/tasks/P9-009-proxy-gzip-fix-v1.md](tasks/P9-009-proxy-gzip-fix-v1.md)
 
 **Goal:** Fix `proxy_llm_call.raw_response` so it contains readable JSON text, not garbled binary. This is required before any meaningful dual-path analysis or BL-507 re-verification can be done.
 
@@ -294,7 +294,7 @@ Our Phase 9 finding "thinking tokens NOT present at HTTP boundary" is **suspect*
 
 ### P9-010 — `mcp-coder trace inspect` CLI
 
-**Status:** `spec_ready` · **Spec:** [docs/tasks/P9-010-trace-inspect-cli-v1.md](tasks/P9-010-trace-inspect-cli-v1.md)
+**Status:** `done` — added `mcp-coder trace inspect <delegation_id>` with `--workspace`, `--type`, `--event`, `--field`, `--format {human,json}`; unknown-id exit 1; focused tests `10 passed`; full suite `887 passed, 1 skipped` · **Spec:** [docs/tasks/P9-010-trace-inspect-cli-v1.md](tasks/P9-010-trace-inspect-cli-v1.md)
 
 **Goal:** Add a CLI sub-command to dump and inspect specific events from a delegation trace file. Needed for the dual-path analysis workflow — currently requires writing custom Python to read the raw JSONL.
 
@@ -361,6 +361,10 @@ mcp-coder trace inspect <id> --type backend_llm_call --field response_body
 
 | Date | Change |
 |------|--------|
+| 2026-06-15 | P9-008 **done**: removed `MCP_CODER_LOG_FULL_PROMPT` gate from production write path (`server/mcp_server.py` + `core/logging/delegation_log.py`), demoted `should_log_full_prompt()` to deprecated no-op, removed observability gate methods, and updated prompt_full tests; focused `21 passed`; full suite `887 passed, 1 skipped`. Phase 9 milestone set now complete. |
+| 2026-06-15 | P9-010 **done**: shipped `mcp-coder trace inspect` CLI + `main.py` wiring + focused test suite (`10 passed`); full suite `887 passed, 1 skipped`. |
+| 2026-06-15 | P9-007 **done**: wired `call_index` through `ObservableModel` backend recording for both sync and stream finalize paths; added call-index regression coverage; focused `16 passed`; full suite `877 passed, 1 skipped`. |
+| 2026-06-15 | P9-009 **done**: `_forward_headers()` now strips client `accept-encoding` and injects `Accept-Encoding: identity`; added proxy header tests (`test_forward_headers_*`); focused `19 passed`; full suite `876 passed, 1 skipped`. |
 | 2026-06-15 | P9-007/P9-008/P9-009/P9-010 worker specs written and moved to `spec_ready`. Worker order table updated with recommended implementation sequence (P9-009 first). |
 | 2026-06-15 | P9-009 + P9-010 added: proxy gzip fix (`raw_response` corrupted — blocks BL-507 re-verification) and `mcp-coder trace inspect` CLI (needed for dual-path analysis without custom Python). P9-ISS-006 opened. |
 | 2026-06-15 | P9-007 + P9-008 added: attribution alignment (wire `call_index` from `ObservableModel` through to `backend_llm_call` record) and prompt_full write-always (remove `MCP_CODER_LOG_FULL_PROMPT` gate) — both identified during post-P9 audit of "100% auditable log" goal. P9-ISS-004/P9-ISS-005 opened. |

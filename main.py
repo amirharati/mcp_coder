@@ -112,6 +112,36 @@ def main() -> None:
         help="Output format (default: human)",
     )
 
+    trace_p = sub.add_parser(
+        "trace",
+        help="Inspect delegation trace events",
+    )
+    trace_sub = trace_p.add_subparsers(dest="trace_command", required=True)
+    inspect_p = trace_sub.add_parser(
+        "inspect",
+        help="Dump events from a delegation trace",
+    )
+    inspect_p.add_argument("delegation_id")
+    inspect_p.add_argument("--workspace", default=None)
+    inspect_p.add_argument(
+        "--type",
+        default=None,
+        dest="event_type",
+        help="Filter to events of this type",
+    )
+    inspect_p.add_argument(
+        "--event",
+        type=int,
+        default=None,
+        help="Select Nth matching event (1-based)",
+    )
+    inspect_p.add_argument(
+        "--field",
+        default=None,
+        help="Print only this field from each event",
+    )
+    inspect_p.add_argument("--format", choices=("human", "json"), default="human")
+
     view_p = sub.add_parser(
         "view",
         help="Open browser UIs for inspection (subcommands: delegations, …)",
@@ -316,6 +346,12 @@ def main() -> None:
         if args.format:
             compare_argv.extend(["--format", args.format])
         raise SystemExit(main_compare(compare_argv))
+
+    if args.command == "trace":
+        from core.cli.trace_inspect import main_trace_inspect
+
+        trace_argv = sys.argv[sys.argv.index("trace") :]
+        raise SystemExit(main_trace_inspect(trace_argv))
 
     # Bare invocation from an interactive terminal: the stdio server would just
     # sit waiting for JSON-RPC on stdin (looks like a hang). Cursor runs us with

@@ -257,10 +257,6 @@ class ObservabilityBackend(ABC):
         """Return current UTC timestamp in ISO-8601 Z format."""
 
     @abstractmethod
-    def should_log_full_prompt(self) -> bool:
-        """Return whether full executor prompt should be stored in JSONL."""
-
-    @abstractmethod
     def record_llm_call(
         self,
         *,

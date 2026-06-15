@@ -154,7 +154,6 @@ def test_delegate_injects_transcript_when_dump_policy(tmp_path, monkeypatch):
     monkeypatch.setenv("MCP_CODER_HOST_TRANSCRIPT", "dump")
     monkeypatch.setenv("MCP_CODER_CURSOR_ROOT", str(cursor_root))
     monkeypatch.setenv("MCP_CODER_CURSOR_PROJECT_SLUG", "Users-test-repo")
-    monkeypatch.setenv("MCP_CODER_LOG_FULL_PROMPT", "1")
     monkeypatch.chdir(workspace)
 
     _fake_cursor_layout(

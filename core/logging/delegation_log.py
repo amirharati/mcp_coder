@@ -117,7 +117,8 @@ def log_brief() -> bool:
 
 
 def should_log_full_prompt() -> bool:
-    return os.environ.get("MCP_CODER_LOG_FULL_PROMPT", "").strip() in ("1", "true", "yes")
+    """Deprecated — always returns True. MCP_CODER_LOG_FULL_PROMPT is ignored."""
+    return True
 
 
 def build_delegation_record(
@@ -220,7 +221,7 @@ def build_delegation_record(
         "tokens": tokens,
         "context_refs": context_refs if context_refs is not None else [],
     }
-    if prompt_full is not None and should_log_full_prompt():
+    if prompt_full is not None:
         record["context"]["prompt_full"] = prompt_full
     if spec_path is not None:
         record["spec_path"] = spec_path

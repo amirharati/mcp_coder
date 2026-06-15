@@ -198,6 +198,7 @@ def test_observable_model_sync_records_backend_llm_call(
     assert result is response
     assert len(recorded) == 1
     assert recorded[0]["call_type"] == "executor_turn"
+    assert recorded[0]["call_index"] == 1
 
     trace_path = storage.session_dir / "traces" / f"{delegation_id}.jsonl"
     lines = [json.loads(row) for row in trace_path.read_text().splitlines() if row.strip()]
@@ -229,6 +230,14 @@ def test_observable_model_stream_records_on_exhaustion(
 
     ObservableModel = observable_model_module.ObservableModel
     model = ObservableModel("test/model")
+    recorded: list[dict] = []
+    original_record = observable_model_module._record_backend_call
+
+    def capture(**kwargs):
+        recorded.append(kwargs)
+        original_record(**kwargs)
+
+    monkeypatch.setattr(observable_model_module, "_record_backend_call", capture)
 
     with patch(
         "core.engine.observable_model.Model.send_completion",
@@ -250,6 +259,45 @@ def test_observable_model_stream_records_on_exhaustion(
     backend = [line for line in lines if line.get("type") == TRACE_TYPE_BACKEND_LLM_CALL]
     assert len(backend) == 1
     assert backend[0]["response_hash"]
+    assert len(recorded) == 1
+    assert recorded[0]["call_index"] == 1
+
+
+def test_observable_model_sync_call_index_increments_per_instance(
+    tmp_path, monkeypatch, observable_model_module
+):
+    storage = _storage_for(tmp_path, monkeypatch)
+    monkeypatch.setenv("MCP_CODER_OBS_VERBOSITY", VERBOSITY_LEAN)
+    delegation_id = "obs-sync-call-index-inc"
+    response = _mock_sync_response()
+
+    ObservableModel = observable_model_module.ObservableModel
+    model = ObservableModel("test/model")
+    recorded: list[dict] = []
+    original_record = observable_model_module._record_backend_call
+
+    def capture(**kwargs):
+        recorded.append(kwargs)
+        original_record(**kwargs)
+
+    monkeypatch.setattr(observable_model_module, "_record_backend_call", capture)
+
+    with patch(
+        "core.engine.observable_model.Model.send_completion",
+        return_value=("hash", response),
+    ):
+        with delegation_context(delegation_id):
+            bind_delegation_trace_scope(
+                workspace=str(tmp_path / "workspace"),
+                session_dir=storage.session_dir,
+            )
+            with executor_step_context(2):
+                model.send_completion([{"role": "user", "content": "edit foo"}], None, False)
+                model.send_completion([{"role": "user", "content": "edit bar"}], None, False)
+                model.send_completion([{"role": "user", "content": "edit baz"}], None, False)
+
+    assert len(recorded) == 3
+    assert [row.get("call_index") for row in recorded] == [1, 2, 3]
 
 
 def test_extract_thinking_from_response(observable_model_module):

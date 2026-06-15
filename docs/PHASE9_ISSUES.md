@@ -1,6 +1,6 @@
 # Phase 9 issues
 
-**Status:** Active — P9-ISS-004, P9-ISS-005, P9-ISS-006 open  
+**Status:** No open issues (`P9-ISS-001`..`P9-ISS-006` closed)  
 **Related PM board:** [PHASE9_MVP.md](./PHASE9_MVP.md)
 
 ---
@@ -211,8 +211,9 @@ Applied minimal null-safety fix: `_call_index(event)` now accepts `None` and ret
 
 **Milestone:** P9-007  
 **Severity:** high  
-**Status:** open  
-**Opened:** 2026-06-15
+**Status:** closed  
+**Opened:** 2026-06-15  
+**Closed:** 2026-06-15
 
 ### Summary
 
@@ -249,14 +250,31 @@ No schema changes needed.
 3. Regression tests for both streaming and non-streaming paths.
 4. Full suite green.
 
+### Resolution
+
+Worker implemented minimal wiring in `core/engine/observable_model.py`:
+- `_record_backend_call()` now accepts `call_index: int | None = None`
+- `send_completion()` captures `_ci` after header injection and passes it in both paths
+- `_StreamCaptureWrapper` now accepts/stores `call_index` and forwards it in `_finalize()`
+
+Regression coverage updated in `tests/test_observable_model_p8_001.py`:
+- non-streaming call records `call_index=1`
+- streaming finalize records `call_index=1`
+- sequential calls increment (`1,2,3`) on the same model instance
+
+Reported validation:
+- Focused: `pytest -q tests/test_observable_model_p8_001.py` → `16 passed`
+- Full suite: `pytest -q` → `877 passed, 1 skipped`
+
 ---
 
 ## P9-ISS-005 — `prompt_full` in `delegations.jsonl` still gated by `MCP_CODER_LOG_FULL_PROMPT` env var (BL-510)
 
 **Milestone:** P9-008  
 **Severity:** medium  
-**Status:** open  
-**Opened:** 2026-06-15
+**Status:** closed  
+**Opened:** 2026-06-15  
+**Closed:** 2026-06-15
 
 ### Summary
 
@@ -295,14 +313,38 @@ Update tests that assert `prompt_full` is absent without the env var.
 3. `should_log_full_prompt()` removed or demoted to no-op stub.
 4. Tests updated. Full suite green.
 
+### Resolution
+
+Worker implemented P9-008 within scoped files:
+- `server/mcp_server.py`
+  - removed outer `prompt_full` gate (`obs.should_log_full_prompt()`)
+  - now always passes `prompt_full=executor_prompt`
+- `core/logging/delegation_log.py`
+  - removed inner `prompt_full` gate (`and should_log_full_prompt()`)
+  - `prompt_full` now written whenever non-null
+  - retained `should_log_full_prompt()` as deprecated no-op returning `True`
+- `core/observability/base.py`, `core/observability/local.py`, `core/observability/null.py`
+  - removed obsolete `should_log_full_prompt` abstraction/implementations
+- `core/logging/__init__.py`
+  - removed `should_log_full_prompt` re-export
+- tests updated:
+  - `tests/test_host_cursor.py`
+  - `tests/test_spec_delegate.py`
+  - removed env-var dependency for prompt_full assertions
+
+Reported validation:
+- Focused: `pytest -q tests/test_host_cursor.py tests/test_spec_delegate.py` → `21 passed`
+- Full suite: `pytest -q` → `887 passed, 1 skipped`
+
 ---
 
 ## P9-ISS-006 — `proxy_llm_call.raw_response` is gzip-corrupted — BL-507 finding uncertain
 
 **Milestone:** P9-009  
 **Severity:** critical  
-**Status:** open  
-**Opened:** 2026-06-15
+**Status:** closed  
+**Opened:** 2026-06-15  
+**Closed:** 2026-06-15
 
 ### Summary
 
@@ -349,3 +391,22 @@ After P9-009 ships: run a fresh delegation with `claude-sonnet-4` (or any thinki
 2. Non-streaming and streaming (SSE) paths both verified.
 3. BL-507 re-verified: `raw_response` inspected for thinking block presence/absence.
 4. Full suite green.
+
+### Resolution
+
+Worker implemented P9-009 exactly within scoped files:
+- `core/proxy/local_proxy.py`
+  - `_forward_headers()` now strips incoming `accept-encoding`
+  - always injects `forwarded["Accept-Encoding"] = "identity"`
+- `tests/test_proxy_routing_p9_003.py`
+  - added `test_forward_headers_strips_accept_encoding`
+  - added `test_forward_headers_overrides_client_gzip`
+  - added `test_forward_headers_no_accept_encoding_in_input`
+
+Reported validation:
+- Focused tests: `pytest -q tests/test_proxy_routing_p9_003.py tests/test_proxy_local_p9_003.py` → `19 passed`
+- Full suite: `pytest -q` → `876 passed, 1 skipped`
+
+Outcome:
+- New traces should store readable UTF-8 `proxy_llm_call.raw_response` instead of gzip-corrupted replacement text.
+- Existing historical corrupted traces remain irrecoverable and should not be used for BL-507 conclusions.

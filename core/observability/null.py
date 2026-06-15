@@ -230,9 +230,6 @@ class NullObservability(ObservabilityBackend):
     def utc_now_iso(self) -> str:
         return "1970-01-01T00:00:00.000Z"
 
-    def should_log_full_prompt(self) -> bool:
-        return False
-
     def record_llm_call(
         self,
         *,

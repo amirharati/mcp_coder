@@ -4,7 +4,16 @@ from __future__ import annotations
 
 import pytest
 
-from core.proxy.routing import RouteResolutionError, resolve_route, upstream_url
+from core.proxy.local_proxy import _forward_headers
+from core.proxy.routing import ProviderRoute, RouteResolutionError, resolve_route, upstream_url
+
+
+def _dummy_route() -> ProviderRoute:
+    return ProviderRoute(
+        prefix="openrouter/",
+        base_url="https://openrouter.ai/api/v1",
+        api_key_env="OPENROUTER_API_KEY",
+    )
 
 
 def test_resolve_route_openrouter(monkeypatch):
@@ -45,6 +54,35 @@ def test_upstream_url_maps_v1_path(monkeypatch):
         upstream_url(route, "/v1/chat/completions")
         == "https://openrouter.ai/api/v1/chat/completions"
     )
+
+
+def test_forward_headers_strips_accept_encoding():
+    forwarded = _forward_headers(
+        {"Accept-Encoding": "br, gzip", "Content-Type": "application/json"},
+        _dummy_route(),
+        "api-key",
+    )
+    assert forwarded["Accept-Encoding"] == "identity"
+    assert "accept-encoding" not in forwarded
+
+
+def test_forward_headers_overrides_client_gzip():
+    forwarded = _forward_headers(
+        {"accept-encoding": "gzip", "X-Test": "yes"},
+        _dummy_route(),
+        "api-key",
+    )
+    assert forwarded["Accept-Encoding"] == "identity"
+    assert forwarded["X-Test"] == "yes"
+
+
+def test_forward_headers_no_accept_encoding_in_input():
+    forwarded = _forward_headers(
+        {"Content-Type": "application/json"},
+        _dummy_route(),
+        "api-key",
+    )
+    assert forwarded["Accept-Encoding"] == "identity"
 
 
 # ── OpenRouter fallback (P9-003b) ────────────────────────────────────────────
