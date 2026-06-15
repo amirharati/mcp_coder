@@ -9,7 +9,7 @@
 
 # Phase 9 — Write-always storage + universal proxy + replay
 
-**Status:** Active — P9-001..P9-006 complete; P9-005 pending.
+**Status:** Complete — P9-001..P9-006 + P9-005 complete (Phase 9 shipped).
 **Purpose:** Prove "100% LLM call captured" by adding a universal internal HTTP proxy (litellm → proxy → provider) that captures raw bytes before any normalization layer; flip the write gate to always-on; add context package blobs and replay CLI.
 **PM board:** this file · **Issues:** [PHASE9_ISSUES.md](./PHASE9_ISSUES.md)
 **Phase 8 (frozen):** [PHASE8_MVP.md](./PHASE8_MVP.md) · [PHASE8_ISSUES.md](./PHASE8_ISSUES.md)
@@ -173,7 +173,7 @@ The proxy also provides the universal architecture for Phase 10+ multi-backend c
 
 ### P9-005 — Storage GC first slice *(BL-357 first pass)*
 
-**Status:** `pending`
+**Status:** `done` — `maintenance gc` shipped (dry-run + apply), blob-aware stats added, focused `13 passed`, full suite `873 passed, 1 skipped`
 
 **Goal:** Add retention policy enforcement — TTL config, dry-run reporting, promote-then-prune safety. First pass only: no archival, no global promotion store.
 
@@ -249,6 +249,7 @@ The proxy also provides the universal architecture for Phase 10+ multi-backend c
 
 | Date | Change |
 |------|--------|
+| 2026-06-15 | P9-005 **done**: added `mcp-coder maintenance gc` (`--dry-run`, `--format {human,json}`), TTL-only retention enforcement, training-sidecar block, blob prune by live delegation references, and blob counts in `maintenance stats`; focused `13 passed`; full suite `873 passed, 1 skipped`. Phase 9 milestones now fully complete. |
 | 2026-06-15 | P9-003 **done**: dogfood delegation `dfe975e7` succeeded; trace contains `proxy_llm_call` (200, attributed, raw bodies) + `backend_llm_call` (executor_turn, full bodies) + `llm_call`; P9-ISS-002 closed; P9-003 moved to `done`. |
 | 2026-06-15 | P9-004 completed: added `mcp-coder replay <delegation_id>` (disk-only reconstruction from delegation row + trace + context blob), `--format json`, and graceful fallback statuses for missing blob/trace; focused tests `6 passed`; master validation run passed on known delegation and unknown-id exit behavior. |
 | 2026-06-15 | P9-006 **done**: P9-ISS-003 null-safety fix applied (`_call_index` accepts `None`); regression test added; focused `18 passed`; full suite `865 passed`; live compare on `dfe975e7` exit 0, JSON shape verified, unknown-id exit 1. Dogfood finding: pairing reveals call-index attribution gap between `proxy_llm_call` (has call_index from headers) and `backend_llm_call` (emitted via litellm callback, no call_index) — honest Phase 9 evidence for BL-507 analysis follow-up. |

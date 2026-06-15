@@ -1,6 +1,6 @@
 # Phase 9 issues
 
-**Status:** Active  
+**Status:** No open issues  
 **Related PM board:** [PHASE9_MVP.md](./PHASE9_MVP.md)
 
 ---
