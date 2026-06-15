@@ -99,6 +99,19 @@ def main() -> None:
         help="Output format (default: human)",
     )
 
+    compare_p = sub.add_parser(
+        "compare",
+        help="Compare backend_llm_call vs proxy_llm_call events for one delegation",
+    )
+    compare_p.add_argument("delegation_id", help="Delegation ID to compare")
+    compare_p.add_argument("--workspace", default=None, help="Repo root (default: cwd)")
+    compare_p.add_argument(
+        "--format",
+        choices=("human", "json"),
+        default="human",
+        help="Output format (default: human)",
+    )
+
     view_p = sub.add_parser(
         "view",
         help="Open browser UIs for inspection (subcommands: delegations, …)",
@@ -293,6 +306,16 @@ def main() -> None:
         if args.format:
             replay_argv.extend(["--format", args.format])
         raise SystemExit(main_replay(replay_argv))
+
+    if args.command == "compare":
+        from core.cli.compare import main_compare
+
+        compare_argv: list[str] = [args.delegation_id]
+        if args.workspace:
+            compare_argv.extend(["--workspace", args.workspace])
+        if args.format:
+            compare_argv.extend(["--format", args.format])
+        raise SystemExit(main_compare(compare_argv))
 
     # Bare invocation from an interactive terminal: the stdio server would just
     # sit waiting for JSON-RPC on stdin (looks like a hang). Cursor runs us with

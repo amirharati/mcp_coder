@@ -145,3 +145,62 @@ If code change is required, keep it minimal and scoped to routing/bootstrap/mode
 - Both in the same trace file ✅
 - P9-003 marked `done` on PHASE9_MVP.md ✅
 
+
+---
+
+## P9-ISS-003 — P9-006 compare CLI crashes on valid dual-capture delegation
+
+**Milestone:** P9-006  
+**Severity:** high  
+**Status:** closed  
+**Opened:** 2026-06-15  
+**Closed:** 2026-06-15
+
+### Summary
+
+`mcp-coder compare` crashes with `AttributeError` on a known valid dual-capture delegation (`dfe975e7-...`) during master dogfood validation, so P9-006 AC#1 is not met.
+
+### Evidence (master run)
+
+- Command:
+  - `mcp-coder compare dfe975e7-b30a-4f59-9410-7f18041e2782 --workspace ~/Dropbox/CodingProjects/personal_tools/mcp_coder_phase1_e2e`
+- Observed failure:
+  - `AttributeError: 'NoneType' object has no attribute 'get'`
+  - stack points to `core/cli/compare.py`:
+    - `_call_index(event)` called with `event=None`
+    - from `pair_dual_capture_events()` row assembly line:
+      `(_call_index(proxy) or _call_index(backend))`
+- Unknown-id behavior still correct:
+  - `mcp-coder compare unknown-delegation-id ...` exits `1` with clear message.
+
+### Root cause
+
+In `pair_dual_capture_events()`, row creation unconditionally calls `_call_index(proxy)` and `_call_index(backend)` even when either side is absent (`proxy_only` / `backend_only` pairing path), causing `NoneType` crash.
+
+### Impact
+
+- Compare command is not usable on real dual-capture traces.
+- Viewer enrich path may be at risk because it shares pairing helper.
+- P9-006 cannot be marked done until runtime dogfood passes.
+
+### Resolution
+
+Applied minimal null-safety fix: `_call_index(event)` now accepts `None` and returns `None` early instead of crashing on `.get()`. Added regression test `test_compare_fallback_backend_only_missing_call_index_no_crash`. Live compare on `dfe975e7` runs successfully (exit 0); null `call_index` rows render correctly in both human and JSON output. P9-ISS-003 closed.
+
+**Dogfood finding:** The live trace for `dfe975e7` yields `proxy_only + backend_only` (not `matched`) because `backend_llm_call` emitted via litellm callback carries no `call_index` while `proxy_llm_call` carries one from header injection. This is honest Phase 9 evidence — the attribution gap is visible and attributable. Flagged for BL-507 analysis follow-up.
+
+### Next action (was)
+
+~~Run a minimal follow-up fix (P9-006a):~~
+
+1. Make `_call_index(...)` / row assembly null-safe.
+2. Add regression test that reproduces this exact crash path and asserts no exception.
+3. Re-run focused tests + live dogfood compare on `dfe975e7`.
+
+### Exit criteria for this issue
+
+1. `mcp-coder compare dfe975e7-b30a-4f59-9410-7f18041e2782 ...` exits `0` and prints comparison output.
+2. JSON mode works on same delegation (`--format json`).
+3. Unknown-id behavior remains exit `1`.
+4. Focused compare/viewer tests green, including regression for null-side pairing.
+5. P9-006 status updated on `PHASE9_MVP.md` only after live validation passes.

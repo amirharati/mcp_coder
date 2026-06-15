@@ -9,7 +9,7 @@
 
 # Phase 9 — Write-always storage + universal proxy + replay
 
-**Status:** Active — P9-001, P9-002, P9-003, P9-004 complete; P9-005..P9-006 pending.
+**Status:** Active — P9-001..P9-006 complete; P9-005 pending.
 **Purpose:** Prove "100% LLM call captured" by adding a universal internal HTTP proxy (litellm → proxy → provider) that captures raw bytes before any normalization layer; flip the write gate to always-on; add context package blobs and replay CLI.
 **PM board:** this file · **Issues:** [PHASE9_ISSUES.md](./PHASE9_ISSUES.md)
 **Phase 8 (frozen):** [PHASE8_MVP.md](./PHASE8_MVP.md) · [PHASE8_ISSUES.md](./PHASE8_ISSUES.md)
@@ -193,7 +193,7 @@ The proxy also provides the universal architecture for Phase 10+ multi-backend c
 
 ### P9-006 — Comparison CLI + viewer dual-capture updates
 
-**Status:** `pending`
+**Status:** `done` — `mcp-coder compare` ships with pairing, gap detection, latency/overhead, BL-507 evidence; viewer enrichment updated; P9-ISS-003 null-safety fix applied; full suite `865 passed`; live dogfood on `dfe975e7` passed (exit 0, JSON shape verified, unknown-id exit 1)
 
 **Goal:** `mcp-coder compare <delegation_id>` produces a side-by-side report of `backend_llm_call` vs `proxy_llm_call` events for each LLM call in a delegation — call count, field diffs, gaps, wire vs total latency. Viewer updated to group the two event types as a pair rather than showing them as separate items. This is the Phase 9 validation instrument that proves proxy coverage and surfaces any field discrepancies.
 
@@ -251,6 +251,8 @@ The proxy also provides the universal architecture for Phase 10+ multi-backend c
 |------|--------|
 | 2026-06-15 | P9-003 **done**: dogfood delegation `dfe975e7` succeeded; trace contains `proxy_llm_call` (200, attributed, raw bodies) + `backend_llm_call` (executor_turn, full bodies) + `llm_call`; P9-ISS-002 closed; P9-003 moved to `done`. |
 | 2026-06-15 | P9-004 completed: added `mcp-coder replay <delegation_id>` (disk-only reconstruction from delegation row + trace + context blob), `--format json`, and graceful fallback statuses for missing blob/trace; focused tests `6 passed`; master validation run passed on known delegation and unknown-id exit behavior. |
+| 2026-06-15 | P9-006 **done**: P9-ISS-003 null-safety fix applied (`_call_index` accepts `None`); regression test added; focused `18 passed`; full suite `865 passed`; live compare on `dfe975e7` exit 0, JSON shape verified, unknown-id exit 1. Dogfood finding: pairing reveals call-index attribution gap between `proxy_llm_call` (has call_index from headers) and `backend_llm_call` (emitted via litellm callback, no call_index) — honest Phase 9 evidence for BL-507 analysis follow-up. |
+| 2026-06-15 | P9-006 worker delivered focused tests (`17 passed`) and compare/viewer implementation, but master dogfood failed on known delegation (`dfe975e7`) with runtime crash in `pair_dual_capture_events` (`NoneType` in `_call_index`). Opened P9-ISS-003; milestone set partial_done. |
 | 2026-06-15 | P9-003b worker completed: OpenRouter fallback route added to `resolve_route` — when `anthropic/` prefix present but `ANTHROPIC_API_KEY` missing, falls back to OpenRouter if key available. 6 new routing tests, full suite `847 passed, 1 skipped`. Proxy routing confirmed live: delegation `81642ee4` reaches OpenRouter (no API key error), 9 × `proxy_llm_call` with full attribution in trace. Remaining gate: 402 credits — dual-capture (both event types) needs successful delegation. |
 | 2026-06-15 | P9-003a worker completed: `_bootstrap_cli_env()` helper in `main.py` ensures `load_env_files()` + `apply_provider_env()` runs for both delegate shortcut and argparse path. Full suite `841 passed, 1 skipped`. |
 | 2026-06-15 | P9-003 worker delivered code + green suite (`838 passed, 1 skipped`), but required live dogfood dual-capture check failed to show `backend_llm_call` alongside `proxy_llm_call` (proxy path returns HTTP 400 missing `ANTHROPIC_API_KEY` in e2e env). Opened P9-ISS-002; milestone set `partial_done`. |

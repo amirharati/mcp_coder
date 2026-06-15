@@ -6,6 +6,7 @@ import json
 from pathlib import Path
 from typing import Any
 
+from core.cli.compare import pair_dual_capture_events
 from core.rag.db import DelegationRagDB
 from core.rag.retrieval import CORPUS_DELEGATION, CORPUS_WORKSPACE_FILES
 from core.rag.workspace_db import WorkspaceRagDB
@@ -137,6 +138,21 @@ def _resolve_context_ref(workspace: str | Path, ref: dict[str, Any]) -> dict[str
     return {"pointer": pointer, "source": "unresolved", "error": f"unknown corpus: {corpus}"}
 
 
+def _summarize_dual_capture(trace_lines: list[dict[str, Any]]) -> dict[str, Any] | None:
+    has_dual_capture = any(
+        line.get("type") in {"backend_llm_call", "proxy_llm_call"} for line in trace_lines
+    )
+    if not has_dual_capture:
+        return None
+    paired = pair_dual_capture_events(trace_lines)
+    return {
+        "summary": paired["summary"],
+        "calls": paired["calls"],
+        "gaps": paired["gaps"],
+        "bl507": paired["bl507"],
+    }
+
+
 def _summarize_trace(trace_lines: list[dict[str, Any]]) -> list[dict[str, Any]]:
     out: list[dict[str, Any]] = []
     for line in trace_lines:
@@ -191,6 +207,7 @@ def enrich_delegation_record(record: dict[str, Any]) -> dict[str, Any]:
             "trace_ref": trace_ref,
             "found": bool(trace_lines),
             "llm_calls": _summarize_trace(trace_lines),
+            "dual_capture_compare": _summarize_dual_capture(trace_lines),
         },
         "delegation_diff": delegation_diff,
         "storage_links": {

@@ -253,11 +253,45 @@
         .join("");
     }
 
+    function renderDualCaptureCompare(compare) {
+      if (!compare) return "";
+      const summary = compare.summary || {};
+      const head = `<div class='meta'>dual capture: matched ${summary.matched || 0} · proxy-only ${summary.proxy_only || 0} · backend-only ${summary.backend_only || 0} · field-diff ${summary.field_diff || 0}</div>`;
+      const rows = (compare.calls || [])
+        .map((row) => {
+          const statusClass = row.status === "matched" ? "ok" : "warn";
+          const bits = [
+            `step ${row.step_index ?? "?"} / call ${row.call_index ?? "?"}`,
+            row.status,
+            row.backend_model ? `backend ${row.backend_model}` : null,
+            row.proxy_model ? `proxy ${row.proxy_model}` : null,
+            row.proxy_status_code != null ? `status ${row.proxy_status_code}` : null,
+            row.wire_latency_ms != null ? `wire ${row.wire_latency_ms}ms` : null,
+            row.total_latency_ms != null ? `total ${row.total_latency_ms}ms` : null,
+            row.litellm_overhead_ms != null ? `overhead ${row.litellm_overhead_ms}ms` : null,
+          ].filter(Boolean);
+          const bl507 = row.bl507 || {};
+          const bl507Line = `BL-507 backend=${bl507.backend_thinking_present} proxy=${bl507.proxy_thinking_present}`;
+          const diffs = (row.field_diffs || []).length
+            ? `<div class='meta'>field diffs: ${esc((row.field_diffs || []).join(", "))}</div>`
+            : "";
+          return `<div class='ref-card ${statusClass}'><div class='ref-meta'>${esc(bits.join(" · "))}</div><div class='meta'>${esc(bl507Line)}</div>${diffs}</div>`;
+        })
+        .join("");
+      const bl507 = compare.bl507 || {};
+      const notes = (bl507.notes || [])
+        .map((note) => `<div class='meta'>${esc(note)}</div>`)
+        .join("");
+      const bl507Head = `<div class='meta'>BL-507 summary: proxy=${bl507.proxy_thinking_present} backend=${bl507.backend_thinking_present}</div>${notes}`;
+      return `<div class='section-subhead'>Dual-capture compare</div>${head}${rows || "<div class='meta'>no paired calls</div>"}${bl507Head}`;
+    }
+
     function renderTrace(trace) {
       if (!trace || !trace.found) {
         return `<div class='meta'>${trace && trace.trace_ref ? esc(trace.trace_ref) + " (not found on disk)" : "—"}</div>`;
       }
       const head = `<div class='path-line'>${esc(trace.path || trace.trace_ref || "")}</div>`;
+      const dual = renderDualCaptureCompare(trace.dual_capture_compare);
       const calls = (trace.llm_calls || [])
         .map((c) => {
           const bits = [
@@ -269,7 +303,10 @@
           return `<div class='ref-card'><div class='ref-meta'>${esc(bits.join(" · "))}</div>${preview}</div>`;
         })
         .join("");
-      return head + (calls || "<div class='meta'>no llm_call lines</div>");
+      const legacy = calls
+        ? `<div class='section-subhead'>Legacy llm_call summary</div>${calls}`
+        : "<div class='meta'>no llm_call lines</div>";
+      return head + (dual || "") + legacy;
     }
 
     function renderStorageLinks(links) {
