@@ -126,6 +126,31 @@ Observers (emit events):          Backend (single writer):
 
 `LocalLlmProxy` calls `get_observability().record_proxy_llm_call(...)` exactly as `ObservableModel` calls `record_backend_llm_call(...)` (Phase 8 pattern). `ObservabilityBackend` gains one new abstract method; `LocalObservability` and `NullObservability` implement it. Write-always (D-P9-8), verbosity filtering, and `NullObservability` in tests apply automatically. No separate write path, no file locking, no second schema. Comparison between `proxy_llm_call` and `backend_llm_call` is a single JSONL filter on the same file.
 
+### D-P9-10: Attribution across the HTTP boundary — experimental in Phase 9
+
+**The problem:** Python `contextvars` (`delegation_id_var`, `step_index_var`) do not cross the HTTP boundary. When litellm opens a TCP connection to the proxy, the proxy's async handler has no knowledge of the Python context that initiated the call.
+
+**Primary approach — `extra_headers` injection:**
+
+`ObservableModel` and `LlmGateway` already know `delegation_id` and `step_index` at call time (they read the context vars before calling litellm). Before handing off to litellm, they inject attribution headers:
+
+```python
+extra_params.setdefault('extra_headers', {}).update({
+    'X-Mcp-Delegation-Id': delegation_id,
+    'X-Mcp-Step-Index':    str(step_index),
+})
+```
+
+litellm forwards `extra_headers` in the outbound HTTP request. Proxy reads them, strips them before forwarding to the real upstream. Exact attribution.
+
+**Fallback — timing correlation:**
+
+If headers are absent on a given call path, the proxy timestamps the request. Outer-loop step events carry start/end times. Match by time window — sufficient for forensic analysis on sequential delegations.
+
+**Phase 9 stance — capture first, align later:**
+
+Boundary alignment is experimental. If some paths don't carry headers cleanly (e.g. `warm_cache_worker` background thread, future callers), the proxy still captures the raw data with `delegation_id: null` — nothing is lost, just unattributed. Alignment refinement is a follow-up, not a Phase 9 exit blocker. The proxy proves coverage counts regardless of attribution completeness.
+
 ---
 
 ## What Phase 9 does NOT own

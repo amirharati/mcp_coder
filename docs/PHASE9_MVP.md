@@ -66,6 +66,7 @@ The proxy also provides the universal architecture for Phase 10+ multi-backend c
 | D-P9-7 | **Phase 9 proxy scope: in-process callers only.** LlmGateway helpers + AiderEngine via litellm. Phase 10+ extends to out-of-process backends by pointing their base URL at the same proxy — no new proxy code needed. |
 | D-P9-8 | **Write-always is the new default.** Verbosity levels (`lean`/`standard`/`full`) control display, CLI output, and RAG promotion only. They never gate what is written to disk. |
 | D-P9-9 | **Proxy is an observability observer, not a separate writer.** `LocalLlmProxy` calls `get_observability().record_proxy_llm_call()` — the same pattern as `ObservableModel` calling `record_backend_llm_call()` (Phase 8). `ObservabilityBackend` gains one new abstract method; `LocalObservability` and `NullObservability` implement it. No separate write path, no file locking, no second schema. Write-always (D-P9-8) and verbosity filtering apply to proxy events automatically. |
+| D-P9-10 | **Attribution across the HTTP boundary via `extra_headers` injection (primary) + timing correlation (fallback).** Python `contextvars` do not cross the HTTP boundary — the proxy's async handler has no access to `delegation_id_var`/`step_index_var`. Primary fix: `ObservableModel` and `LlmGateway` inject `X-Mcp-Delegation-Id` + `X-Mcp-Step-Index` as litellm `extra_headers` before each call; proxy reads and strips them before forwarding. Fallback: timing correlation against outer-loop step events when headers are absent. **Boundary alignment is experimental in Phase 9** — if some call paths don't carry headers cleanly, raw proxy data is still captured and alignment can be refined post-hoc (message-hash join or timing). The proxy captures first; perfect attribution is a follow-up, not a Phase 9 exit blocker. |
 
 ---
 
@@ -135,6 +136,7 @@ The proxy also provides the universal architecture for Phase 10+ multi-backend c
 - `core/observability/trace.py` — new `build_proxy_llm_call_record()` event builder
 - `core/observability/bootstrap.py` — `ensure_observability_bootstrap()` starts proxy; overrides `LITELLM_API_BASE` in process env
 - `core/observability/context.py` — proxy reads `delegation_id_var` + `step_index_var` per-request for attribution
+- **Attribution (D-P9-10):** `ObservableModel` and `LlmGateway` inject `X-Mcp-Delegation-Id` + `X-Mcp-Step-Index` as litellm `extra_headers`; proxy reads + strips before forwarding. Timing correlation as fallback.
 - Cross-check: after each delegation, `LocalObservability` can report any `proxy_llm_call` with no matching `backend_llm_call` (coverage gap detection)
 
 **Acceptance:**
@@ -143,6 +145,7 @@ The proxy also provides the universal architecture for Phase 10+ multi-backend c
 - `proxy_llm_call` and `backend_llm_call` agree on call count (no gaps)
 - BL-507: if thinking blocks appear in raw response, they are present in `proxy_llm_call.raw_response`
 - Streaming delegations work — proxy tees SSE without blocking Aider
+- **Attribution experimental bar:** at least the main executor-turn calls carry `delegation_id` via headers; unattributed calls (if any) are flagged, not silently dropped — alignment refinement is a follow-up task, not a Phase 9 exit blocker
 
 ---
 
@@ -221,5 +224,6 @@ The proxy also provides the universal architecture for Phase 10+ multi-backend c
 
 | Date | Change |
 |------|--------|
+| 2026-06-14 | D-P9-10 added: attribution across HTTP boundary via extra_headers injection (primary) + timing fallback; boundary alignment is experimental — capture first, align later. P9-003 acceptance updated. |
 | 2026-06-14 | D-P9-9 added: proxy is an observability observer — calls `record_proxy_llm_call()` through common writer; no separate write path. P9-003 scope updated accordingly. |
 | 2026-06-14 | Created — Phase 9 PM board; milestones P9-001..P9-005 scoped; D-P9-1..D-P9-8 locked in master session; proxy added as Phase 9 centerpiece (was Phase 10+ in original plan) |
