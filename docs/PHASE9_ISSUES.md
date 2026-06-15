@@ -1,6 +1,6 @@
 # Phase 9 issues
 
-**Status:** No open issues  
+**Status:** Active — P9-ISS-004, P9-ISS-005 open  
 **Related PM board:** [PHASE9_MVP.md](./PHASE9_MVP.md)
 
 ---
@@ -204,3 +204,93 @@ Applied minimal null-safety fix: `_call_index(event)` now accepts `None` and ret
 3. Unknown-id behavior remains exit `1`.
 4. Focused compare/viewer tests green, including regression for null-side pairing.
 5. P9-006 status updated on `PHASE9_MVP.md` only after live validation passes.
+
+---
+
+## P9-ISS-004 — `backend_llm_call` events carry `call_index: null` — compare can't pair with `proxy_llm_call`
+
+**Milestone:** P9-007  
+**Severity:** high  
+**Status:** open  
+**Opened:** 2026-06-15
+
+### Summary
+
+`mcp-coder compare` shows all Aider inner-loop calls as `proxy_only + backend_only` instead of `matched`. Both event types are present and correct — the join is broken because `backend_llm_call.call_index` is always `null`.
+
+### Root cause
+
+`ObservableModel._inject_attribution_headers()` increments `self._call_index` (1, 2, 3…) and writes it to the `X-Mcp-Call-Index` request header. The proxy reads this header and stores it on `proxy_llm_call.call_index`. But `_record_backend_call()` — called immediately after — never reads `self._call_index` and never passes it to `record_backend_llm_call()`. The slot already exists in the schema (`call_index: int | None = None` in `base.py`, `local.py`, `trace.py`). It is a pure wiring gap.
+
+Same problem on the streaming path: `_StreamCaptureWrapper._finalize()` calls `_record_backend_call()` without `call_index`.
+
+### Evidence
+
+Live compare on delegation `dfe975e7`:
+```
+proxy_only  step=1 call=1   model=anthropic/claude-sonnet-4
+backend_only step=1 call=None model=openrouter/anthropic/claude-sonnet-4
+```
+Both are the same call. The proxy has `call_index=1` from the header; the backend record has `call_index=None`.
+
+### Fix (for P9-007)
+
+In `core/engine/observable_model.py`:
+1. Add `call_index: int | None = None` param to `_record_backend_call()` and pass it through to `record_backend_llm_call()`.
+2. In `ObservableModel.send_completion()`: after `_inject_attribution_headers()`, capture `_ci = self._call_index`. Pass `call_index=_ci` to both `_record_backend_call()` (non-streaming) and `_StreamCaptureWrapper(call_index=_ci, ...)`.
+3. In `_StreamCaptureWrapper`: store `call_index`, pass to `_record_backend_call()` in `_finalize()`.
+
+No schema changes needed.
+
+### Exit criteria
+
+1. `backend_llm_call` events in trace have non-null `call_index` matching Aider turn order (1, 2, 3…).
+2. `mcp-coder compare <id>` shows `matched` rows for inner-loop calls.
+3. Regression tests for both streaming and non-streaming paths.
+4. Full suite green.
+
+---
+
+## P9-ISS-005 — `prompt_full` in `delegations.jsonl` still gated by `MCP_CODER_LOG_FULL_PROMPT` env var (BL-510)
+
+**Milestone:** P9-008  
+**Severity:** medium  
+**Status:** open  
+**Opened:** 2026-06-15
+
+### Summary
+
+`build_delegation_record()` in `core/logging/delegation_log.py` line 223 still checks `should_log_full_prompt()` before writing `prompt_full` to the delegation row. This is the only remaining runtime write gate on audit data, violating D-P9-8 (write-always). The trace file already has the full prompt body (P9-001), but the delegation row convenience field is inconsistent.
+
+### Root cause
+
+```python
+# delegation_log.py line 223
+if prompt_full is not None and should_log_full_prompt():
+    record["context"]["prompt_full"] = prompt_full
+```
+
+`should_log_full_prompt()` returns `True` only when `MCP_CODER_LOG_FULL_PROMPT=1`. Without it, `prompt_full` is silently dropped from the row even when the caller provides a value.
+
+### Impact
+
+- Delegation rows written without `prompt_full` can't be used for inline audit without opening the trace file separately.
+- The data isn't lost (it's in the trace), but the row schema is inconsistent with D-P9-8.
+- `mcp-coder replay` already loads from the trace, so this is UX polish — not a data correctness issue.
+
+### Fix (for P9-008)
+
+In `core/logging/delegation_log.py`:
+- Change `if prompt_full is not None and should_log_full_prompt():` → `if prompt_full is not None:`
+- Deprecate `should_log_full_prompt()` (keep as no-op stub returning `True`, or remove if no external callers)
+
+Check `core/observability/base.py` + `local.py` + `null.py` for any abstract `should_log_full_prompt` method and remove it.
+
+Update tests that assert `prompt_full` is absent without the env var.
+
+### Exit criteria
+
+1. `prompt_full` written to delegation row unconditionally when caller provides it.
+2. `MCP_CODER_LOG_FULL_PROMPT` documented as deprecated / ignored.
+3. `should_log_full_prompt()` removed or demoted to no-op stub.
+4. Tests updated. Full suite green.

@@ -9,7 +9,7 @@
 
 # Phase 9 — Write-always storage + universal proxy + replay
 
-**Status:** Complete — P9-001..P9-006 + P9-005 complete (Phase 9 shipped).
+**Status:** Active — P9-001..P9-006 + P9-005 shipped; P9-007 (attribution alignment) + P9-008 (prompt_full write-always) pending.
 **Purpose:** Prove "100% LLM call captured" by adding a universal internal HTTP proxy (litellm → proxy → provider) that captures raw bytes before any normalization layer; flip the write gate to always-on; add context package blobs and replay CLI.
 **PM board:** this file · **Issues:** [PHASE9_ISSUES.md](./PHASE9_ISSUES.md)
 **Phase 8 (frozen):** [PHASE8_MVP.md](./PHASE8_MVP.md) · [PHASE8_ISSUES.md](./PHASE8_ISSUES.md)
@@ -213,6 +213,54 @@ The proxy also provides the universal architecture for Phase 10+ multi-backend c
 
 ---
 
+### P9-007 — Attribution alignment: wire `call_index` through to `backend_llm_call`
+
+**Status:** `pending`
+
+**Goal:** `backend_llm_call` events should carry the same `call_index` that `proxy_llm_call` carries from header injection, so `mcp-coder compare` can pair them as `matched` instead of `proxy_only + backend_only`.
+
+**Root cause (from P9-ISS-004):**
+`ObservableModel._inject_attribution_headers()` increments `self._call_index` and writes it to `X-Mcp-Call-Index` — the proxy reads this. But `_record_backend_call()` is called immediately after and never passes `call_index` to `get_observability().record_backend_llm_call()`. The parameter slot exists in the schema (`call_index: int | None = None` in `base.py`, `local.py`, `trace.py`) — it's a pure wiring gap.
+
+**Scope (minimal — no schema changes):**
+- `core/engine/observable_model.py`:
+  - Add `call_index: int | None = None` param to `_record_backend_call()`
+  - In `send_completion()`: capture `call_index = self._call_index` after `_inject_attribution_headers()`, pass it to `_record_backend_call(call_index=call_index)`
+  - In `_StreamCaptureWrapper.__init__()`: accept and store `call_index: int | None`
+  - In `_StreamCaptureWrapper._finalize()`: pass stored `call_index` to `_record_backend_call()`
+  - In `ObservableModel.send_completion()`: pass `call_index=self._call_index` when constructing `_StreamCaptureWrapper`
+- No changes to `base.py`, `local.py`, `trace.py` — schema already accepts `call_index`
+
+**Acceptance:**
+- After a live delegation, all `backend_llm_call` events in the trace have a non-null `call_index` matching their position in the Aider inner loop (1, 2, 3…)
+- `mcp-coder compare` on the same delegation shows `matched` rows instead of `proxy_only + backend_only` for inner-loop calls
+- Existing tests updated; new regression test verifies `call_index` is non-null on both streaming and non-streaming paths
+- Full suite green
+
+---
+
+### P9-008 — Remove `prompt_full` write gate from delegation row (BL-510)
+
+**Status:** `pending`
+
+**Goal:** `prompt_full` in `delegations.jsonl` rows is currently gated by `MCP_CODER_LOG_FULL_PROMPT` env var — the only remaining write gate on audit data. Remove it so prompt is always written, consistent with D-P9-8 (write-always).
+
+**Root cause (from P9-ISS-005):**
+`build_delegation_record()` in `core/logging/delegation_log.py` line 223 checks `should_log_full_prompt()` before writing `prompt_full`. This is a separate write path from trace files (already fixed in P9-001) but violates the same principle.
+
+**Scope:**
+- `core/logging/delegation_log.py`: remove `if ... and should_log_full_prompt():` conditional — write `prompt_full` unconditionally when the caller provides it (i.e. `if prompt_full is not None:`)
+- Deprecate `should_log_full_prompt()` function (keep as a no-op stub returning `True` for one release, or remove entirely if no external callers)
+- `core/observability/base.py` + `local.py` + `null.py`: if `should_log_full_prompt` is referenced as an abstract method, remove it
+- Update tests that assert `prompt_full` is absent when env var is not set
+
+**Acceptance:**
+- `prompt_full` appears unconditionally in `delegations.jsonl` rows when the server provides it (no env var needed)
+- `MCP_CODER_LOG_FULL_PROMPT` env var is documented as deprecated / ignored
+- Full suite green
+
+---
+
 ## Explicitly NOT Phase 9
 
 | Item | Reason |
@@ -236,6 +284,7 @@ The proxy also provides the universal architecture for Phase 10+ multi-backend c
 | **Minimum** | P9-001: write-always + P9-003: proxy live and emitting `proxy_llm_call` events |
 | **Recommended** | + P9-002: context blob + P9-004: replay CLI + P9-006: compare CLI |
 | **Optional capstone** | + P9-005: GC first slice |
+| **Full auditability** | + P9-007: attribution alignment (compare shows `matched`) + P9-008: prompt_full write-always |
 
 ---
 
@@ -249,6 +298,7 @@ The proxy also provides the universal architecture for Phase 10+ multi-backend c
 
 | Date | Change |
 |------|--------|
+| 2026-06-15 | P9-007 + P9-008 added: attribution alignment (wire `call_index` from `ObservableModel` through to `backend_llm_call` record) and prompt_full write-always (remove `MCP_CODER_LOG_FULL_PROMPT` gate) — both identified during post-P9 audit of "100% auditable log" goal. P9-ISS-004/P9-ISS-005 opened. |
 | 2026-06-15 | P9-005 **done**: added `mcp-coder maintenance gc` (`--dry-run`, `--format {human,json}`), TTL-only retention enforcement, training-sidecar block, blob prune by live delegation references, and blob counts in `maintenance stats`; focused `13 passed`; full suite `873 passed, 1 skipped`. Phase 9 milestones now fully complete. |
 | 2026-06-15 | P9-003 **done**: dogfood delegation `dfe975e7` succeeded; trace contains `proxy_llm_call` (200, attributed, raw bodies) + `backend_llm_call` (executor_turn, full bodies) + `llm_call`; P9-ISS-002 closed; P9-003 moved to `done`. |
 | 2026-06-15 | P9-004 completed: added `mcp-coder replay <delegation_id>` (disk-only reconstruction from delegation row + trace + context blob), `--format json`, and graceful fallback statuses for missing blob/trace; focused tests `6 passed`; master validation run passed on known delegation and unknown-id exit behavior. |
