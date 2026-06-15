@@ -145,7 +145,16 @@ litellm forwards `extra_headers` in the outbound HTTP request. Proxy reads them,
 
 **Fallback — timing correlation:**
 
-If headers are absent on a given call path, the proxy timestamps the request. Outer-loop step events carry start/end times. Match by time window — sufficient for forensic analysis on sequential delegations.
+If headers are absent on a given call path, the proxy timestamps the request (`request_received_at`) and response (`response_received_at`). `ObservableModel` timestamps its call start (`T1`) and end (`T4`). Join condition: `proxy.request_received_at` falls within `[backend.T1, backend.T4]` for matching `model`. Sufficient for sequential delegations.
+
+**Timestamps are always recorded on both events** — they enable post-hoc alignment and reveal latency breakdown:
+- `proxy`: `request_received_at` (T2) + `response_received_at` (T3) → pure wire latency (T3−T2)
+- `backend_llm_call`: `started_at` (T1) + `completed_at` (T4) → total latency including litellm overhead
+- Delta `(T4−T1) − (T3−T2)` = litellm formatting + normalization cost, visible for the first time
+
+**Independent capture, analysis-time alignment:**
+
+Both paths capture their own exact boundaries independently at runtime — proxy records wire-level boundaries (T2, T3); `ObservableModel` records Python-level boundaries (T1, T4). Neither path depends on the other at capture time. Alignment — joining the two event streams to compare what each saw and why they differ — is a post-hoc analysis concern, not a capture concern.
 
 **Phase 9 stance — capture first, align later:**
 
