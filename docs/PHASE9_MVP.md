@@ -193,6 +193,7 @@ The proxy also provides the universal architecture for Phase 10+ multi-backend c
 
 | Item | Reason |
 |------|--------|
+| Storage optimization / content-addressable dedup (BL-509) | Post-Phase 9 — write raw inline first, measure dedup ratio, optimize after |
 | Out-of-process backend base URL config (Claude Code / Codex / OpenCode) | Phase 10+ — just a config change once proxy exists |
 | Inner loop control / BL-351 supervisor | Phase 10+ — visibility before intervention |
 | Full re-execution replay (sandboxed) | Phase 10+ — needs isolation infra |

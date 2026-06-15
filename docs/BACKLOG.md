@@ -1462,6 +1462,7 @@ delegate_to_agent(backend=…)
 | BL-371 | **Backend-specific interception strategy for full in/out capture** | **Phase 8 delivered for Aider (P8-001 + P8-002 + P8-006 hardening).** Remaining: non-Python backends (Claude Code, Codex, OpenCode) via Phase 10+ HTTP proxy. |
 | **BL-507** | **Thinking token capture verification** — confirm `thinking_text`/`thinking_tokens` on `backend_llm_call` events with a known thinking-enabled model/provider path | **Phase 9 resolution target (P9-003 proxy):** raw proxy response log will reveal definitively whether thinking tokens are present at HTTP boundary before litellm normalization. |
 | **BL-508** | **Universal internal HTTP proxy** — `LocalLlmProxy` between litellm and real provider; all in-process callers route through it; model-prefix routing from env vars | **Phase 9 (P9-003)**; same proxy extended to out-of-process backends (Claude Code, Codex, OpenCode) in Phase 10+ via base URL config |
+| **BL-509** | **Content-addressable dedup for trace bodies** — replace repeated large text fields in trace events with sha256 refs; store blobs once in CAS store | Post-Phase 9 once corpus exists to measure dedup ratio; context package blob (P9-002) is the proof-of-concept |
 | **BL-334** | **Backend prompt customization** (system prefix + edit-format control) | See § BL-334 |
 | **BL-340** | **Cursor SDK execution backend** (beside Aider) | See § Execution backends — BL-340 |
 
@@ -1654,6 +1655,36 @@ delegate_to_agent(backend=…)
 **Phase 10+ extension:** Same proxy extended to out-of-process backends (Claude Code, Codex, OpenCode) by pointing their base URL at it — no new proxy code. See notes/llm-interception-strategies.md § Per-backend audit.
 
 **Related:** BL-371, BL-507, BL-350, BL-353, notes/llm-interception-strategies.md § Phase 9 proxy architecture.
+
+---
+
+### BL-509: Content-addressable deduplication for trace event bodies
+
+**Status:** `idea` — 2026-06-14. Surfaced during Phase 9 proxy planning.
+
+**Problem:** A large fraction of captured trace data is identical text repeated across events and delegations:
+- Same system prompt appears in every `proxy_llm_call` and `backend_llm_call` in a session
+- Same file contents appear in multiple context packages across delegations
+- Same response body appears in both the proxy event and the `ObservableModel` event for the **same call** (two copies of the same bytes)
+- Same RAG context passages included in multiple delegations
+
+Writing everything inline inflates trace files significantly. A single heavy delegation (large repo context + long response) can generate 100KB+ of redundant bytes across events.
+
+**Goal:** Content-addressable storage (CAS) for large text fields in trace events. Instead of inline text, store a sha256-keyed blob once and reference it by hash:
+
+```jsonl
+{"event_type": "proxy_llm_call", "request_body_ref": "sha256:abc123", "response_body_ref": "sha256:def456", ...}
+```
+
+Blobs stored at `sessions/<id>/blobs/<sha256>` (or a session-shared store). At analysis/replay time, dereference by hash. Two events referencing the same prompt body → one file on disk.
+
+**Precedent:** Context package blob (P9-002) already uses this pattern for full context packages. This generalizes it to individual fields in any trace event.
+
+**Phase 9 stance:** Phase 9 writes raw inline text (simple, no capture risk). This optimization is post-Phase 9 once we have real data to measure the dedup ratio. A quick 2-delegation comparison will reveal how repetitive the data actually is before committing to the refactor.
+
+**Target:** Phase 10 (storage optimization pass) or as a standalone BL pull once Phase 9 corpus exists.
+
+**Related:** BL-367 (write-always storage), P9-002 (context package blob precedent), BL-357 (storage lifecycle).
 
 ---
 
