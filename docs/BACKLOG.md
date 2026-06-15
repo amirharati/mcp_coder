@@ -1460,6 +1460,7 @@ delegate_to_agent(backend=…)
 | **BL-369** | **CLI gateway bootstrap hardening** | **Done (Phase 8 / P8-003):** shared `ensure_observability_bootstrap()` path for server + CLI entry points |
 | **BL-370** | **Host transcript byte-range provenance** | **Done (Phase 8 / P8-004):** `validation_input` compile events include `byte_start`/`byte_end` alongside `source_path`/`last_source_line` |
 | BL-371 | **Backend-specific interception strategy for full in/out capture** | **Phase 8 delivered for Aider (P8-001 + P8-002 + P8-006 hardening).** Remaining: non-Python backends (Claude Code, Codex, OpenCode) via Phase 10+ HTTP proxy. |
+| **BL-507** | **Thinking token capture verification** — confirm `thinking_text`/`thinking_tokens` on `backend_llm_call` events with a known thinking-enabled model/provider path | **Carried from P8-ISS-004.** Phase 9+ follow-up. If still absent after provider check, add HTTP proxy as dual capture path. |
 | **BL-334** | **Backend prompt customization** (system prefix + edit-format control) | See § BL-334 |
 | **BL-340** | **Cursor SDK execution backend** (beside Aider) | See § Execution backends — BL-340 |
 
@@ -1613,6 +1614,23 @@ delegate_to_agent(backend=…)
 - explicit confidence tier per backend
 
 **Planning note:** This is a Phase 8 architecture item. **Phase 8 resolution:** Aider interception via `ObservableModel` subclass (P8-001) + `InterceptionProfile` contract per adapter (P8-002). Non-Python backends (Claude Code, Codex, OpenCode) deferred to Phase 10+ via HTTP proxy base-URL pattern. Full-complete logging milestone moves to Phase 9 (write-always storage).
+
+---
+
+### BL-507: Thinking token capture verification
+
+**Status:** `deferred` — 2026-06-14. Carried from P8-ISS-004.
+
+**Problem:** Live dogfood of Phase 8 (`ObservableModel`) with `openrouter/anthropic/claude-sonnet-4` produced no `thinking_text`/`thinking_tokens` fields on `backend_llm_call` events, even for a complex task. Phase 8 capture infrastructure is correct (fields exist in schema and `extract_thinking_from_response()` is wired), but the provider/litellm path may not expose these fields for that model/route.
+
+**Goal:** Verify thinking field capture end-to-end:
+1. Identify a known thinking-enabled model+provider path (e.g. `claude-3-7-sonnet` with `thinking` budget enabled, or direct Anthropic API with extended thinking params).
+2. Run a delegation and confirm `thinking_text` and `thinking_tokens > 0` appear on `backend_llm_call` events in the trace.
+3. If absent: determine whether litellm is stripping the field, or whether the capture needs the HTTP proxy dual path (Phase 9/10 experiment).
+
+**Target:** Phase 9 (opportunistic check during write-always validation) or Phase 10 (if proxy is needed as dual capture path).
+
+**Related:** P8-ISS-004, notes/llm-interception-strategies.md § thinking blocks, BL-371, BL-353.
 
 ---
 

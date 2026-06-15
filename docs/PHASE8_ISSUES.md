@@ -7,9 +7,9 @@
 
 # Phase 8 issue tracker
 
-**Status:** Active — implementation complete; only carried follow-up remains (P8-ISS-004).
+**Status:** Frozen — Phase 8 closed 2026-06-14. All issues resolved or explicitly carried to backlog (P8-ISS-004 → BL-507).
 **Purpose:** Gaps found during Phase 8 implementation and dogfood.
-**Milestone board:** [PHASE8_MVP.md](./PHASE8_MVP.md)
+**Milestone board:** [PHASE8_MVP.md](./PHASE8_MVP.md) (frozen)
 **Phase 7 issues (frozen):** [PHASE7_ISSUES.md](./PHASE7_ISSUES.md)
 
 Status: `open` | `done` | `wontfix` | `carried`
@@ -23,7 +23,7 @@ Status: `open` | `done` | `wontfix` | `carried`
 | P8-ISS-001 | done | medium | `owned_completion.py` dead code — deferred from P7-ISS-002 | Resolved in P8-005: removed `core/observability/owned_completion.py` shim after confirming no production imports depended on it. |
 | P8-ISS-002 | done | high | Double-recording risk: Route A `success_callback` fires for Aider inner-loop calls AND `ObservableModel` will also fire — same root cause as P7-ISS-001 for helpers | Resolved in P8-006: introduced streamed-call ownership registry keyed by delegation/role/model/message hash and callback-side ownership checks. Live validation `1defb5f7-b2be-4952-99e4-f9cbd01d2da2` shows one `backend_llm_call` and no hash-matching duplicate executor `llm_call`. |
 | P8-ISS-003 | done | medium | Streaming response capture: `send_completion()` returns a stream iterator when `stream=True` — full body not available until stream is exhausted | Resolved in P8-006: transparent stream wrapper now guarantees single backend record, preserves incremental yielding, and cleans ownership on exhaustion/error/close. Unit coverage expanded in `tests/test_observable_model_p8_001.py` and full suite passed. |
-| P8-ISS-004 | carried | low | Thinking token availability: need to verify litellm passes thinking blocks through to `ModelResponse` for all providers we use (Anthropic extended thinking, OpenRouter reasoning) | **Live dogfood status:** complex Sonnet run (`86fe232f-3bdd-4d04-a9e3-bdcbd3d8ce63`) produced no `thinking_text`/`thinking_tokens` fields on `backend_llm_call`. Not a Phase 8 blocker, but keep open as a follow-up check on a known thinking-enabled model/path and capture settings. |
+| P8-ISS-004 | carried | low | Thinking token availability: need to verify litellm passes thinking blocks through to `ModelResponse` for all providers we use (Anthropic extended thinking, OpenRouter reasoning) | **Carried to BL-507.** Live dogfood status: complex Sonnet run (`86fe232f-3bdd-4d04-a9e3-bdcbd3d8ce63`) produced no `thinking_text`/`thinking_tokens` fields on `backend_llm_call`. Not a Phase 8 blocker — provider/path-dependent behavior. Revisit in Phase 9 with known thinking-enabled model/path. If still missing: add Phase 9 HTTP proxy as dual capture path. |
 | P8-ISS-005 | done | low | `aider_output_parse` token counting hack becomes redundant after P8-001 | Resolved in P8-005: token precedence clarified and codified (`callback/backend capture` → `aider attrs` → `aider_output_parse` last-resort fallback). Added tests for precedence and non-regression. |
 | P8-ISS-006 | done | high | Live dogfood showed **zero** `backend_llm_call` events (A1 hard fail) | **Resolved by P8-001a.** `aider_engine` now submits `ctx.run` into threadpool (`copy_context` propagation). Re-dogfood delegation `70d63f1a-c7fc-4633-ac6d-dd3f2285e3f7` confirms `backend_llm_call` appears in trace with `call_type: executor_turn` and `step_index: 1`. |
 
@@ -49,6 +49,7 @@ Status: `open` | `done` | `wontfix` | `carried`
 
 | Date | Change |
 |------|--------|
+| 2026-06-14 | Phase 8 closed. P8-ISS-004 carried to BL-507 (thinking token availability follow-up). Issue tracker frozen. |
 | 2026-06-14 | P8-006 delivered: closed P8-ISS-002 (streaming dedup) and P8-ISS-003 (streaming capture hardening) after tests + final dogfood validation. |
 | 2026-06-14 | P8-005 delivered: closed P8-ISS-001 (removed `owned_completion.py`) and P8-ISS-005 (demoted `aider_output_parse` to last-resort fallback with tested precedence). |
 | 2026-06-14 | P8-ISS-004 set to `carried` (follow-up): Sonnet/OpenRouter dogfood did not expose reasoning fields; revisit with known thinking-enabled model/path so this signal is not lost. |

@@ -9,7 +9,7 @@
 
 # Phase 8 — Backend interception: full Aider visibility
 
-**Status:** Complete — master session complete 2026-06-13; P8-001..P8-004 delivered and validated. Streaming hardening follow-up (P8-006) completed; only carried provider-path follow-up remains for thinking field availability (P8-ISS-004).
+**Status:** Frozen — Phase 8 closed 2026-06-14. P8-001..P8-006 delivered and validated; thinking-token provider-path follow-up carried to BL-507.
 **Purpose:** Capture every Aider LLM sub-call (including thinking tokens) with exact attribution — so Phase 9 can make an honest "100% captured" claim when it flips the write-always gate.
 **PM board:** this file · **Issues:** [PHASE8_ISSUES.md](./PHASE8_ISSUES.md)
 **Phase 7 (closed):** [PHASE7_MVP.md](./PHASE7_MVP.md) (frozen) · [PHASE7_ISSUES.md](./PHASE7_ISSUES.md) (frozen)
@@ -214,7 +214,28 @@ Phase 8 fixes all three. It is **passive observation only** — no control, no i
 
 ## § Results
 
-*(to be filled by workers)*
+**Phase 8 closed 2026-06-14. All milestones delivered.**
+
+| Milestone | Status | Key deliverable | Dogfood |
+|-----------|--------|-----------------|---------|
+| P8-001 | done | `ObservableModel` — Aider inner-loop `backend_llm_call` events | `70d63f1a` / `334072d7` |
+| P8-001a | done | Context propagation hotfix — `copy_context()` into threadpool | `70d63f1a` confirmed |
+| P8-002 | done | `InterceptionProfile` + `maintenance stats --verbose` | `334072d7` CLI check |
+| P8-003 | done | Shared `ensure_observability_bootstrap()` bootstrap | Unit + server smoke |
+| P8-004 | done | `byte_start`/`byte_end` on `validation_input` compile events | Unit tests |
+| P8-005 | done | Removed `owned_completion.py`; token precedence documented | Unit tests |
+| P8-006 | done | Streaming dedup ownership registry; single-write semantics | `1defb5f7` dogfood |
+
+**Test suite at close:** 817 passed, 1 skipped (Python 3.12 guard).
+
+**Carried to Phase 9 / backlog:**
+- **BL-507** — Thinking token availability: Sonnet/OpenRouter path produced no `thinking_text`/`thinking_tokens`. Revisit with known thinking-enabled model in Phase 9; if still absent, add HTTP proxy as dual capture path (see notes/llm-interception-strategies.md § Phase 10+ proxy).
+
+**Phase 9 prerequisites met:**
+- Every Aider inner-loop LLM call emits `backend_llm_call` with `delegation_id`/`step_index`
+- Streaming dedup is hardened (single-write semantics proven in dogfood)
+- Compile events carry byte-range provenance for replay slicing
+- All CLI entry points share a consistent bootstrap path
 
 ---
 
@@ -222,6 +243,7 @@ Phase 8 fixes all three. It is **passive observation only** — no control, no i
 
 | Date | Change |
 |------|--------|
+| 2026-06-14 | Phase 8 closed and frozen. § Results filled. P8-ISS-004 carried to BL-507. |
 | 2026-06-14 | P8-006 hardening validated in final dogfood (`1defb5f7-b2be-4952-99e4-f9cbd01d2da2`): streaming dedup issue closed, streaming capture issue closed. Phase 8 delivery marked complete with one carried follow-up (P8-ISS-004). |
 | 2026-06-14 | P8-004 delivered: transcript loader now computes source byte ranges; `validation_input` compile events include `byte_start`/`byte_end`; tests green (808 passed, 1 skipped). Milestone moved to `done`. |
 | 2026-06-14 | P8-003 delivered: added `core/observability/bootstrap.py`, wired `mcp_server` and `test_model`, removed command-local gateway self-heal; tests green (804 passed, 1 skipped). Milestone moved to `done`. |
