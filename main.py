@@ -86,6 +86,18 @@ def main() -> None:
         "delegate",
         help="Run delegation pipeline (full or --stop-after context for prepare-only)",
     )
+    replay_p = sub.add_parser(
+        "replay",
+        help="Replay one delegation from disk artifacts (JSONL + trace + context blob)",
+    )
+    replay_p.add_argument("delegation_id", help="Delegation ID to replay")
+    replay_p.add_argument("--workspace", default=None, help="Repo root (default: cwd)")
+    replay_p.add_argument(
+        "--format",
+        choices=("human", "json"),
+        default="human",
+        help="Output format (default: human)",
+    )
 
     view_p = sub.add_parser(
         "view",
@@ -271,6 +283,16 @@ def main() -> None:
         if maintenance_argv and maintenance_argv[0] == "--":
             maintenance_argv = maintenance_argv[1:]
         raise SystemExit(main_maintenance(maintenance_argv))
+
+    if args.command == "replay":
+        from core.cli.replay import main_replay
+
+        replay_argv: list[str] = [args.delegation_id]
+        if args.workspace:
+            replay_argv.extend(["--workspace", args.workspace])
+        if args.format:
+            replay_argv.extend(["--format", args.format])
+        raise SystemExit(main_replay(replay_argv))
 
     # Bare invocation from an interactive terminal: the stdio server would just
     # sit waiting for JSON-RPC on stdin (looks like a hang). Cursor runs us with

@@ -9,7 +9,7 @@
 
 # Phase 9 — Write-always storage + universal proxy + replay
 
-**Status:** Active — P9-001, P9-002, P9-003 complete; P9-004..P9-006 pending.
+**Status:** Active — P9-001, P9-002, P9-003, P9-004 complete; P9-005..P9-006 pending.
 **Purpose:** Prove "100% LLM call captured" by adding a universal internal HTTP proxy (litellm → proxy → provider) that captures raw bytes before any normalization layer; flip the write gate to always-on; add context package blobs and replay CLI.
 **PM board:** this file · **Issues:** [PHASE9_ISSUES.md](./PHASE9_ISSUES.md)
 **Phase 8 (frozen):** [PHASE8_MVP.md](./PHASE8_MVP.md) · [PHASE8_ISSUES.md](./PHASE8_ISSUES.md)
@@ -153,7 +153,7 @@ The proxy also provides the universal architecture for Phase 10+ multi-backend c
 
 ### P9-004 — Replay CLI (dry) *(BL-367 E1–E5)*
 
-**Status:** `pending`
+**Status:** `done` — replay command shipped (`core/cli/replay.py` + `main.py` wiring); focused tests `6 passed`; master dogfood validation passed on `dfe975e7` (human + JSON + unknown-id exit)
 
 **Goal:** `mcp-coder replay <delegation_id>` reconstructs the full delegation from disk: context package, prompt, every executor turn + backend call + proxy call, code diff. No re-execution. No Cursor required.
 
@@ -250,6 +250,7 @@ The proxy also provides the universal architecture for Phase 10+ multi-backend c
 | Date | Change |
 |------|--------|
 | 2026-06-15 | P9-003 **done**: dogfood delegation `dfe975e7` succeeded; trace contains `proxy_llm_call` (200, attributed, raw bodies) + `backend_llm_call` (executor_turn, full bodies) + `llm_call`; P9-ISS-002 closed; P9-003 moved to `done`. |
+| 2026-06-15 | P9-004 completed: added `mcp-coder replay <delegation_id>` (disk-only reconstruction from delegation row + trace + context blob), `--format json`, and graceful fallback statuses for missing blob/trace; focused tests `6 passed`; master validation run passed on known delegation and unknown-id exit behavior. |
 | 2026-06-15 | P9-003b worker completed: OpenRouter fallback route added to `resolve_route` — when `anthropic/` prefix present but `ANTHROPIC_API_KEY` missing, falls back to OpenRouter if key available. 6 new routing tests, full suite `847 passed, 1 skipped`. Proxy routing confirmed live: delegation `81642ee4` reaches OpenRouter (no API key error), 9 × `proxy_llm_call` with full attribution in trace. Remaining gate: 402 credits — dual-capture (both event types) needs successful delegation. |
 | 2026-06-15 | P9-003a worker completed: `_bootstrap_cli_env()` helper in `main.py` ensures `load_env_files()` + `apply_provider_env()` runs for both delegate shortcut and argparse path. Full suite `841 passed, 1 skipped`. |
 | 2026-06-15 | P9-003 worker delivered code + green suite (`838 passed, 1 skipped`), but required live dogfood dual-capture check failed to show `backend_llm_call` alongside `proxy_llm_call` (proxy path returns HTTP 400 missing `ANTHROPIC_API_KEY` in e2e env). Opened P9-ISS-002; milestone set `partial_done`. |
