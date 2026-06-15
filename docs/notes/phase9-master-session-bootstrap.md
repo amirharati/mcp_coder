@@ -130,18 +130,29 @@ Observers (emit events):          Backend (single writer):
 
 **The problem:** Python `contextvars` (`delegation_id_var`, `step_index_var`) do not cross the HTTP boundary. When litellm opens a TCP connection to the proxy, the proxy's async handler has no knowledge of the Python context that initiated the call.
 
-**Primary approach — `extra_headers` injection:**
+**Primary approach — `extra_headers` injection (three levels):**
 
-`ObservableModel` and `LlmGateway` already know `delegation_id` and `step_index` at call time (they read the context vars before calling litellm). Before handing off to litellm, they inject attribution headers:
+`ObservableModel` and `LlmGateway` read context vars before calling litellm and inject attribution headers. No litellm modification needed — `extra_headers` is a public litellm parameter. For `ObservableModel`, headers are injected via `self.extra_params['extra_headers']` before calling `super()`:
 
 ```python
-extra_params.setdefault('extra_headers', {}).update({
-    'X-Mcp-Delegation-Id': delegation_id,
-    'X-Mcp-Step-Index':    str(step_index),
-})
+self._call_index += 1
+self.extra_params['extra_headers'] = {
+    **old_headers,
+    'X-Mcp-Delegation-Id': delegation_id,       # outer: same for all calls in delegation
+    'X-Mcp-Step-Index':    str(step_index),      # executor step (context var)
+    'X-Mcp-Call-Index':    str(self._call_index), # Aider inner-loop turn counter
+}
 ```
 
-litellm forwards `extra_headers` in the outbound HTTP request. Proxy reads them, strips them before forwarding to the real upstream. Exact attribution.
+Three attribution levels and why each is needed:
+
+| Header | Level | Source | Why needed |
+|--------|-------|--------|------------|
+| `X-Mcp-Delegation-Id` | Outer | `delegation_id_var` context var | Ties all calls in a delegation together — easy, no ambiguity |
+| `X-Mcp-Step-Index` | Executor step | `step_index_var` context var | Which outer executor step initiated this |
+| `X-Mcp-Call-Index` | Aider inner turn | `ObservableModel._call_index` counter | **Critical:** Aider makes N LLM calls per delegation in its own loop; proxy sees them as N separate HTTP requests with no inherent turn label — this counter gives exact turn identity |
+
+The messages array length serves as a natural cross-check for call order (each Aider turn appends to the conversation, so message count monotonically increases).
 
 **Fallback — timing correlation:**
 
