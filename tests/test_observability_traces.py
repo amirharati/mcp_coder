@@ -109,7 +109,7 @@ def _reset_state():
     reset_callback_state_for_tests()
 
 
-def test_lean_verbosity_trace_has_hashes_not_bodies(tmp_path, monkeypatch):
+def test_lean_verbosity_trace_has_hashes_and_bodies_no_previews(tmp_path, monkeypatch):
     path = _fire_trace(tmp_path, monkeypatch, verbosity=VERBOSITY_LEAN)
     assert path.is_file()
     line = _trace_llm_calls(path)[0]
@@ -117,8 +117,10 @@ def test_lean_verbosity_trace_has_hashes_not_bodies(tmp_path, monkeypatch):
     assert line["verbosity"] == VERBOSITY_LEAN
     assert line["prompt_hash"]
     assert line["response_hash"]
-    assert "prompt_body" not in line
+    assert line["prompt_body"] == "Prompt body"
+    assert line["response_body"] == "Response body"
     assert "prompt_preview" not in line
+    assert "response_preview" not in line
     assert line["tokens"]["input"] == 100
 
 
@@ -136,8 +138,10 @@ def test_standard_verbosity_trace_has_previews_not_bodies(tmp_path, monkeypatch)
     assert "response_preview" in line
     assert len(line["prompt_preview"]) <= PREVIEW_MAX_CHARS
     assert len(line["response_preview"]) <= PREVIEW_MAX_CHARS
-    assert "prompt_body" not in line
-    assert "response_body" not in line
+    assert "prompt_body" in line
+    assert "response_body" in line
+    assert len(line["prompt_body"]) == 800
+    assert len(line["response_body"]) == 800
 
 
 def test_full_verbosity_trace_has_bodies(tmp_path, monkeypatch):

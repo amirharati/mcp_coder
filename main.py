@@ -8,6 +8,14 @@ import sys
 from pathlib import Path
 
 
+def _bootstrap_cli_env() -> None:
+    """Load repo .env and normalize provider env (shared by stdio server and delegate CLI)."""
+    from core.config import apply_provider_env, load_env_files
+
+    load_env_files()
+    apply_provider_env()
+
+
 def main() -> None:
     if len(sys.argv) > 1 and sys.argv[1] == "inspect-context":
         from core.cli.inspect_context import main_inspect_context
@@ -15,6 +23,7 @@ def main() -> None:
         raise SystemExit(main_inspect_context(sys.argv[2:]))
 
     if len(sys.argv) > 1 and sys.argv[1] == "delegate":
+        _bootstrap_cli_env()
         from core.cli.delegate import main_delegate
 
         raise SystemExit(main_delegate(sys.argv[2:]))
@@ -160,6 +169,13 @@ def main() -> None:
     )
     args = parser.parse_args()
 
+    if args.command == "delegate":
+        _bootstrap_cli_env()
+        from core.cli.delegate import main_delegate
+
+        delegate_argv = sys.argv[sys.argv.index("delegate") + 1 :]
+        raise SystemExit(main_delegate(delegate_argv))
+
     if args.command == "setup":
         from core.cli.setup import run_setup
 
@@ -278,8 +294,7 @@ def main() -> None:
     from core.specs.bootstrap import ensure_workspace_spec_layout
     from core.storage.paths import ensure_mcp_coder_home, mcp_coder_home, project_key
 
-    load_env_files()
-    apply_provider_env()
+    _bootstrap_cli_env()
     ensure_mcp_coder_home()
     ws = workspace_path()
     spec_layout = ensure_workspace_spec_layout(ws)

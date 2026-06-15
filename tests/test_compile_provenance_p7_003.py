@@ -34,7 +34,7 @@ def test_build_compile_event_record_lean_hash_only():
     assert "sha256" in rec
     assert "byte_count" in rec
     assert "brief" not in rec
-    assert "body" not in rec
+    assert rec["body"] == "mechanical brief content with sk-***"
 
 
 def test_build_compile_event_record_standard_includes_brief():
@@ -47,7 +47,8 @@ def test_build_compile_event_record_standard_includes_brief():
     )
     assert "brief" in rec
     assert len(rec["brief"]) <= 200
-    assert "body" not in rec
+    assert "body" in rec
+    assert len(rec["body"]) == 500
 
 
 def test_build_compile_event_record_full_includes_body():

@@ -1463,6 +1463,7 @@ delegate_to_agent(backend=…)
 | **BL-507** | **Thinking token capture verification** — confirm `thinking_text`/`thinking_tokens` on `backend_llm_call` events with a known thinking-enabled model/provider path | **Phase 9 resolution target (P9-003 proxy):** raw proxy response log will reveal definitively whether thinking tokens are present at HTTP boundary before litellm normalization. |
 | **BL-508** | **Universal internal HTTP proxy** — `LocalLlmProxy` between litellm and real provider; all in-process callers route through it; model-prefix routing from env vars | **Phase 9 (P9-003)**; same proxy extended to out-of-process backends (Claude Code, Codex, OpenCode) in Phase 10+ via base URL config |
 | **BL-509** | **Content-addressable dedup for trace bodies** — replace repeated large text fields in trace events with sha256 refs; store blobs once in CAS store | Post-Phase 9 once corpus exists to measure dedup ratio; context package blob (P9-002) is the proof-of-concept |
+| **BL-510** | **Remove `should_log_full_prompt` write gate from delegation row** — `MCP_CODER_LOG_FULL_PROMPT` env var gates `prompt_full` on `delegations.jsonl` row; should be unconditional like trace bodies per D-P9-8 | Phase 9 follow-up after P9-001 lands; separate write path from trace file |
 | **BL-334** | **Backend prompt customization** (system prefix + edit-format control) | See § BL-334 |
 | **BL-340** | **Cursor SDK execution backend** (beside Aider) | See § Execution backends — BL-340 |
 
@@ -1655,6 +1656,20 @@ delegate_to_agent(backend=…)
 **Phase 10+ extension:** Same proxy extended to out-of-process backends (Claude Code, Codex, OpenCode) by pointing their base URL at it — no new proxy code. See notes/llm-interception-strategies.md § Per-backend audit.
 
 **Related:** BL-371, BL-507, BL-350, BL-353, notes/llm-interception-strategies.md § Phase 9 proxy architecture.
+
+---
+
+### BL-510: Remove `should_log_full_prompt` write gate from delegation row
+
+**Status:** `idea` — 2026-06-14. Split from P9-001 scope (master session).
+
+**Problem:** `should_log_full_prompt()` (env var `MCP_CODER_LOG_FULL_PROMPT`) gates whether the executor prompt is written to the `prompt_full` field of the `delegations.jsonl` row in `core/logging/delegation_log.py`. This is a separate write gate from the trace file verbosity gate fixed in P9-001, but it violates the same D-P9-8 principle: write-always; no runtime gate on what reaches disk.
+
+**Target:** Remove the `should_log_full_prompt()` conditional from `build_delegation_record()` and the call site in `server/mcp_server.py`. Write `prompt_full` unconditionally. Retire the `MCP_CODER_LOG_FULL_PROMPT` env var (or demote to deprecated no-op).
+
+**Scope:** `core/logging/delegation_log.py`, `server/mcp_server.py`, `core/observability/base.py` + `local.py` + `null.py` (`should_log_full_prompt` abstract method), tests.
+
+**Phase:** Phase 9 follow-up — after P9-001 lands. Not blocking any Phase 9 acceptance criterion.
 
 ---
 

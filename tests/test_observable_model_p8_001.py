@@ -107,7 +107,9 @@ def test_build_backend_llm_call_record_standard_preview_truncated():
     )
     assert len(rec["prompt_preview"]) <= 200
     assert len(rec["response_preview"]) <= 200
-    assert "prompt_body" not in rec
+    assert "prompt_body" in rec
+    assert len(rec["prompt_body"]) == 300
+    assert len(rec["response_body"]) == 300
 
 
 def test_build_backend_llm_call_record_full_includes_bodies():

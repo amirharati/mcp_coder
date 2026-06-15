@@ -11,7 +11,12 @@ from core.config.observability import (
     capture_for_training_enabled,
     resolve_observability_retention,
 )
-from core.observability.trace import TRACE_TYPE_HEADER, append_trace_record, ensure_trace_header
+from core.observability.trace import (
+    TRACE_TYPE_HEADER,
+    annotate_trace_header_context_package_hash,
+    append_trace_record,
+    ensure_trace_header,
+)
 from core.observability.training_capture import (
     build_training_record,
     training_capture_path,
@@ -84,6 +89,49 @@ def test_ensure_trace_header_written_once(tmp_path):
     lines = path.read_text(encoding="utf-8").strip().splitlines()
     assert len(lines) == 2
     assert json.loads(lines[0])["type"] == TRACE_TYPE_HEADER
+
+
+def test_annotate_trace_header_context_package_hash(tmp_path):
+    ws = tmp_path / "repo"
+    ws.mkdir()
+    session_dir = tmp_path / "session"
+    delegation_id = "d-ctx"
+
+    ensure_trace_header(session_dir=session_dir, delegation_id=delegation_id, workspace=ws)
+    append_trace_record(
+        {
+            "type": "llm_call",
+            "delegation_id": delegation_id,
+            "role": "executor",
+            "call_index": 1,
+        },
+        session_dir=session_dir,
+        delegation_id=delegation_id,
+        workspace=ws,
+    )
+    path = session_dir / "traces" / f"{delegation_id}.jsonl"
+
+    updated = annotate_trace_header_context_package_hash(
+        session_dir=session_dir,
+        delegation_id=delegation_id,
+        context_package_hash="deadbeef" * 8,
+    )
+    assert updated is True
+
+    lines = path.read_text(encoding="utf-8").strip().splitlines()
+    assert len(lines) == 2
+    header = json.loads(lines[0])
+    assert header["type"] == TRACE_TYPE_HEADER
+    assert header["context_package_hash"] == "deadbeef" * 8
+    assert json.loads(lines[1])["type"] == "llm_call"
+
+
+def test_annotate_trace_header_noop_when_file_missing(tmp_path):
+    assert annotate_trace_header_context_package_hash(
+        session_dir=tmp_path / "session",
+        delegation_id="missing",
+        context_package_hash="abc",
+    ) is False
 
 
 def test_training_capture_disabled_by_default(tmp_path):

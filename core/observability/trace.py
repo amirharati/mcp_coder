@@ -2,12 +2,12 @@
 
 from __future__ import annotations
 
+import json
 from pathlib import Path
 from typing import Any
 
 from core.config.observability import (
     VERBOSITY_FULL,
-    VERBOSITY_LEAN,
     VERBOSITY_STANDARD,
 )
 from core.context.summary import redact_secrets, sha256_hex
@@ -15,6 +15,7 @@ from core.logging.delegation_log import _append_jsonl_line, utc_now_iso
 
 TRACE_TYPE_LLM_CALL = "llm_call"
 TRACE_TYPE_BACKEND_LLM_CALL = "backend_llm_call"
+TRACE_TYPE_PROXY_LLM_CALL = "proxy_llm_call"
 TRACE_TYPE_HEADER = "trace_header"
 TRACE_TYPE_TOOL_CALL = "tool_call"
 TRACE_TYPE_ACTION = "action"
@@ -86,6 +87,38 @@ def ensure_trace_header(
     _append_jsonl_line(path, header)
 
 
+def annotate_trace_header_context_package_hash(
+    *,
+    session_dir: str | Path,
+    delegation_id: str,
+    context_package_hash: str | None,
+) -> bool:
+    """Set context_package_hash on the first trace_header line when the trace file exists."""
+    if not context_package_hash:
+        return False
+
+    path = Path(session_dir) / "traces" / f"{delegation_id}.jsonl"
+    if not path.is_file() or path.stat().st_size == 0:
+        return False
+
+    lines = path.read_text(encoding="utf-8").splitlines()
+    if not lines:
+        return False
+
+    try:
+        header = json.loads(lines[0])
+    except json.JSONDecodeError:
+        return False
+
+    if header.get("type") != TRACE_TYPE_HEADER:
+        return False
+
+    header["context_package_hash"] = context_package_hash
+    lines[0] = json.dumps(header, sort_keys=True)
+    path.write_text("\n".join(lines) + "\n", encoding="utf-8")
+    return True
+
+
 def build_trace_record(
     *,
     delegation_id: str,
@@ -126,36 +159,23 @@ def build_trace_record(
     if response_text:
         record["response_hash"] = sha256_hex(response_text)
 
-    if verbosity == VERBOSITY_LEAN:
-        return record
-
     redacted_prompt = redact_secrets(prompt_text) if prompt_text else None
     redacted_response = redact_secrets(response_text) if response_text else None
     redacted_reasoning = redact_secrets(reasoning_text) if reasoning_text else None
 
-    if verbosity == VERBOSITY_STANDARD:
-        if redacted_prompt:
-            record["prompt_preview"] = _truncate_preview(redacted_prompt)
-        if redacted_response:
-            record["response_preview"] = _truncate_preview(redacted_response)
-        return record
-
-    if verbosity == VERBOSITY_FULL:
-        if redacted_prompt:
-            record["prompt_preview"] = _truncate_preview(redacted_prompt)
-            record["prompt_body"] = redacted_prompt
-        if redacted_response:
-            record["response_preview"] = _truncate_preview(redacted_response)
-            record["response_body"] = redacted_response
-        if redacted_reasoning:
-            record["reasoning_body"] = redacted_reasoning
-        return record
-
-    # Unknown tier — treat as standard.
     if redacted_prompt:
-        record["prompt_preview"] = _truncate_preview(redacted_prompt)
+        record["prompt_body"] = redacted_prompt
     if redacted_response:
-        record["response_preview"] = _truncate_preview(redacted_response)
+        record["response_body"] = redacted_response
+    if redacted_reasoning:
+        record["reasoning_body"] = redacted_reasoning
+
+    if verbosity in (VERBOSITY_STANDARD, VERBOSITY_FULL):
+        if redacted_prompt:
+            record["prompt_preview"] = _truncate_preview(redacted_prompt)
+        if redacted_response:
+            record["response_preview"] = _truncate_preview(redacted_response)
+
     return record
 
 
@@ -207,54 +227,73 @@ def build_backend_llm_call_record(
     if response_text:
         record["response_hash"] = sha256_hex(response_text)
 
-    if verbosity == VERBOSITY_LEAN:
-        return record
-
     redacted_prompt = redact_secrets(prompt_text) if prompt_text else None
     redacted_response = redact_secrets(response_text) if response_text else None
     redacted_thinking = redact_secrets(thinking_text) if thinking_text else None
 
-    if verbosity == VERBOSITY_STANDARD:
-        if redacted_prompt:
-            record["prompt_preview"] = _truncate_preview(
-                redacted_prompt, max_chars=BRIEF_MAX_CHARS
-            )
-        if redacted_response:
-            record["response_preview"] = _truncate_preview(
-                redacted_response, max_chars=BRIEF_MAX_CHARS
-            )
-        if redacted_thinking:
-            record["thinking_preview"] = _truncate_preview(
-                redacted_thinking, max_chars=BRIEF_MAX_CHARS
-            )
-        return record
-
-    if verbosity == VERBOSITY_FULL:
-        if redacted_prompt:
-            record["prompt_preview"] = _truncate_preview(
-                redacted_prompt, max_chars=BRIEF_MAX_CHARS
-            )
-            record["prompt_body"] = redacted_prompt
-        if redacted_response:
-            record["response_preview"] = _truncate_preview(
-                redacted_response, max_chars=BRIEF_MAX_CHARS
-            )
-            record["response_body"] = redacted_response
-        if redacted_thinking:
-            record["thinking_preview"] = _truncate_preview(
-                redacted_thinking, max_chars=BRIEF_MAX_CHARS
-            )
-            record["thinking_body"] = redacted_thinking
-        return record
-
     if redacted_prompt:
-        record["prompt_preview"] = _truncate_preview(
-            redacted_prompt, max_chars=BRIEF_MAX_CHARS
-        )
+        record["prompt_body"] = redacted_prompt
     if redacted_response:
-        record["response_preview"] = _truncate_preview(
-            redacted_response, max_chars=BRIEF_MAX_CHARS
-        )
+        record["response_body"] = redacted_response
+    if redacted_thinking:
+        record["thinking_body"] = redacted_thinking
+
+    if verbosity in (VERBOSITY_STANDARD, VERBOSITY_FULL):
+        if redacted_prompt:
+            record["prompt_preview"] = _truncate_preview(
+                redacted_prompt, max_chars=BRIEF_MAX_CHARS
+            )
+        if redacted_response:
+            record["response_preview"] = _truncate_preview(
+                redacted_response, max_chars=BRIEF_MAX_CHARS
+            )
+        if redacted_thinking:
+            record["thinking_preview"] = _truncate_preview(
+                redacted_thinking, max_chars=BRIEF_MAX_CHARS
+            )
+
+    return record
+
+
+def build_proxy_llm_call_record(
+    *,
+    delegation_id: str | None,
+    step_index: int | None,
+    call_index: int | None,
+    model: str | None,
+    verbosity: str,
+    request_received_at: str,
+    response_received_at: str,
+    wire_latency_ms: int,
+    status_code: int,
+    raw_request: str | None = None,
+    raw_response: str | None = None,
+    attribution_source: str = "none",
+    timestamp: str | None = None,
+) -> dict[str, Any]:
+    """Build one JSONL trace line for a proxy-captured LLM HTTP call."""
+    record: dict[str, Any] = {
+        "type": TRACE_TYPE_PROXY_LLM_CALL,
+        "delegation_id": delegation_id,
+        "step_index": step_index,
+        "call_index": call_index,
+        "model": model,
+        "request_received_at": request_received_at,
+        "response_received_at": response_received_at,
+        "wire_latency_ms": wire_latency_ms,
+        "status_code": status_code,
+        "attribution_source": attribution_source,
+        "timestamp": timestamp or utc_now_iso(),
+        "verbosity": verbosity,
+    }
+
+    redacted_request = redact_secrets(raw_request) if raw_request else None
+    redacted_response = redact_secrets(raw_response) if raw_response else None
+    if redacted_request:
+        record["raw_request"] = redacted_request
+    if redacted_response:
+        record["raw_response"] = redacted_response
+
     return record
 
 
@@ -319,33 +358,20 @@ def build_executor_llm_trace_record(
     if response_text:
         record["response_hash"] = sha256_hex(response_text)
 
-    if verbosity == VERBOSITY_LEAN:
-        return record
-
     redacted_prompt = redact_secrets(prompt_text) if prompt_text else None
     redacted_response = redact_secrets(response_text) if response_text else None
 
-    if verbosity == VERBOSITY_STANDARD:
-        if redacted_prompt:
-            record["prompt_preview"] = _truncate_preview(redacted_prompt)
-        if redacted_response:
-            record["response_preview"] = _truncate_preview(redacted_response)
-        return record
-
-    if verbosity == VERBOSITY_FULL:
-        if redacted_prompt:
-            record["prompt_preview"] = _truncate_preview(redacted_prompt)
-            record["prompt_body"] = redacted_prompt
-        if redacted_response:
-            record["response_preview"] = _truncate_preview(redacted_response)
-            record["response_body"] = redacted_response
-        return record
-
-    # Unknown verbosity tier — treat as standard.
     if redacted_prompt:
-        record["prompt_preview"] = _truncate_preview(redacted_prompt)
+        record["prompt_body"] = redacted_prompt
     if redacted_response:
-        record["response_preview"] = _truncate_preview(redacted_response)
+        record["response_body"] = redacted_response
+
+    if verbosity in (VERBOSITY_STANDARD, VERBOSITY_FULL):
+        if redacted_prompt:
+            record["prompt_preview"] = _truncate_preview(redacted_prompt)
+        if redacted_response:
+            record["response_preview"] = _truncate_preview(redacted_response)
+
     return record
 
 
@@ -438,17 +464,16 @@ def build_compile_event_record(
     if last_source_line is not None:
         record["last_source_line"] = last_source_line
 
-    if text_body:
-        record["sha256"] = sha256_hex(text_body)
-        record["byte_count"] = len(text_body.encode("utf-8"))
-
-    if verbosity == VERBOSITY_LEAN or not text_body:
+    if not text_body:
         return record
 
-    redacted = redact_secrets(text_body)
-    record["brief"] = _truncate_brief(_normalize_brief_text(redacted))
+    record["sha256"] = sha256_hex(text_body)
+    record["byte_count"] = len(text_body.encode("utf-8"))
 
-    if verbosity == VERBOSITY_FULL:
-        record["body"] = redacted
+    redacted = redact_secrets(text_body)
+    record["body"] = redacted
+
+    if verbosity in (VERBOSITY_STANDARD, VERBOSITY_FULL):
+        record["brief"] = _truncate_brief(_normalize_brief_text(redacted))
 
     return record

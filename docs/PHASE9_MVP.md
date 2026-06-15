@@ -9,12 +9,12 @@
 
 # Phase 9 — Write-always storage + universal proxy + replay
 
-**Status:** Active — master session complete 2026-06-14; milestones P9-001..P9-006 scoped; workers not yet tasked.
+**Status:** Active — P9-001, P9-002, P9-003 complete; P9-004..P9-006 pending.
 **Purpose:** Prove "100% LLM call captured" by adding a universal internal HTTP proxy (litellm → proxy → provider) that captures raw bytes before any normalization layer; flip the write gate to always-on; add context package blobs and replay CLI.
-**PM board:** this file · **Issues:** [PHASE9_ISSUES.md](./PHASE9_ISSUES.md) (to be created)
+**PM board:** this file · **Issues:** [PHASE9_ISSUES.md](./PHASE9_ISSUES.md)
 **Phase 8 (frozen):** [PHASE8_MVP.md](./PHASE8_MVP.md) · [PHASE8_ISSUES.md](./PHASE8_ISSUES.md)
 **Design notes:** [notes/phase9-master-session-bootstrap.md](./notes/phase9-master-session-bootstrap.md) · [notes/llm-interception-strategies.md](./notes/llm-interception-strategies.md)
-**Backlog inputs:** BL-367 (write-always + blob + replay), BL-357 (GC first slice), BL-507 (thinking token proof), BL-508 (universal proxy)
+**Backlog inputs:** BL-367 (write-always + blob + replay), BL-357 (GC first slice), BL-507 (thinking token proof), BL-508 (universal proxy), BL-510 (prompt_full gate — Phase 9 follow-up)
 
 ---
 
@@ -88,7 +88,7 @@ The proxy also provides the universal architecture for Phase 10+ multi-backend c
 
 ### P9-001 — Write-always storage *(BL-367 core)*
 
-**Status:** `pending`
+**Status:** `done` — implementation + follow-up test alignment complete; AC#8 satisfied (full suite green)
 
 **Goal:** Remove verbosity from the write gate. Trace files are written unconditionally for every delegation at all verbosity tiers. `lean`/`standard`/`full` become read/display/export filters only.
 
@@ -107,7 +107,7 @@ The proxy also provides the universal architecture for Phase 10+ multi-backend c
 
 ### P9-002 — Context package blob sidecar *(BL-367 C1)*
 
-**Status:** `pending`
+**Status:** `done` — [docs/tasks/P9-002-context-package-blob-v1.md](../tasks/P9-002-context-package-blob-v1.md) complete; full suite green (`823 passed, 1 skipped`)
 
 **Goal:** Store the assembled context package for each delegation as a hash-deduplicated JSON blob on disk. Combined with the trace file and JSONL row, any delegation is fully replayable without Cursor.
 
@@ -126,7 +126,7 @@ The proxy also provides the universal architecture for Phase 10+ multi-backend c
 
 ### P9-003 — Universal internal proxy *(BL-508)*
 
-**Status:** `pending`
+**Status:** `done` — implementation complete (P9-003a env bootstrap, P9-003b routing fallback); dual-capture confirmed live: delegation `dfe975e7` has `proxy_llm_call` (status 200, attributed) + `backend_llm_call` (executor_turn, full bodies) in same trace; P9-ISS-002 closed
 
 **Goal:** Spin up `LocalLlmProxy` at MCP server bootstrap. All in-process LLM callers (LlmGateway helpers + AiderEngine via litellm) route through it. Proxy captures raw HTTP request + response before litellm normalization. Emits `proxy_llm_call` events into the trace. Cross-checks against `backend_llm_call` events from Phase 8.
 
@@ -249,6 +249,14 @@ The proxy also provides the universal architecture for Phase 10+ multi-backend c
 
 | Date | Change |
 |------|--------|
+| 2026-06-15 | P9-003 **done**: dogfood delegation `dfe975e7` succeeded; trace contains `proxy_llm_call` (200, attributed, raw bodies) + `backend_llm_call` (executor_turn, full bodies) + `llm_call`; P9-ISS-002 closed; P9-003 moved to `done`. |
+| 2026-06-15 | P9-003b worker completed: OpenRouter fallback route added to `resolve_route` — when `anthropic/` prefix present but `ANTHROPIC_API_KEY` missing, falls back to OpenRouter if key available. 6 new routing tests, full suite `847 passed, 1 skipped`. Proxy routing confirmed live: delegation `81642ee4` reaches OpenRouter (no API key error), 9 × `proxy_llm_call` with full attribution in trace. Remaining gate: 402 credits — dual-capture (both event types) needs successful delegation. |
+| 2026-06-15 | P9-003a worker completed: `_bootstrap_cli_env()` helper in `main.py` ensures `load_env_files()` + `apply_provider_env()` runs for both delegate shortcut and argparse path. Full suite `841 passed, 1 skipped`. |
+| 2026-06-15 | P9-003 worker delivered code + green suite (`838 passed, 1 skipped`), but required live dogfood dual-capture check failed to show `backend_llm_call` alongside `proxy_llm_call` (proxy path returns HTTP 400 missing `ANTHROPIC_API_KEY` in e2e env). Opened P9-ISS-002; milestone set `partial_done`. |
+| 2026-06-15 | P9-003 worker spec drafted and set `spec_ready`: universal internal proxy, proxy observability event path, attribution header injection, and bootstrap lifecycle constraints. |
+| 2026-06-15 | P9-002 completed: context package blob sidecar shipped (`core/context/package_blob.py`), JSONL hash recorded, trace header hash annotation added, dedup write verified; full suite green (`823 passed, 1 skipped`). |
+| 2026-06-15 | P9-001a follow-up completed: legacy assertions updated in 4 out-of-scope tests; full suite green (`817 passed, 1 skipped`). P9-001 moved from `partial_done` to `done`; P9-ISS-001 closed. |
+| 2026-06-15 | P9-001 worker reported complete core implementation (`trace.py` write-always + updated direct tests). Marked `partial_done` pending AC#8 due to 4 out-of-scope tests asserting old trace contract; tracked as P9-ISS-001. |
 | 2026-06-14 | P9-006 added: comparison CLI (`mcp-coder compare`) + viewer dual-capture grouping — Phase 9 validation instrument for proxy coverage and BL-507 resolution. Worker order table (5→6 milestones) and exit criteria updated. North-star acceptance item 4 added. |
 | 2026-06-14 | D-P9-10 added: attribution across HTTP boundary via extra_headers injection (primary) + timing fallback; boundary alignment is experimental — capture first, align later. P9-003 acceptance updated. |
 | 2026-06-14 | D-P9-9 added: proxy is an observability observer — calls `record_proxy_llm_call()` through common writer; no separate write path. P9-003 scope updated accordingly. |

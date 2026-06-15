@@ -258,3 +258,22 @@ class NullObservability(ObservabilityBackend):
         response_text: str | None = None,
     ) -> None:
         pass
+
+    def record_proxy_llm_call(
+        self,
+        *,
+        delegation_id: str | None,
+        step_index: int | None = None,
+        call_index: int | None = None,
+        session_dir: str | Path | None = None,
+        workspace: str | Path | None = None,
+        model: str | None,
+        request_received_at: str,
+        response_received_at: str,
+        wire_latency_ms: int,
+        status_code: int,
+        raw_request: str | None = None,
+        raw_response: str | None = None,
+        attribution_source: str = "none",
+    ) -> None:
+        pass

@@ -237,6 +237,22 @@ def test_jsonl_has_context_package_and_adapter_in(tmp_path, monkeypatch):
     assert "read_paths_in_prompt" in ctx["adapter_in"]
     assert "pkg/core.py" in ctx["adapter_in"]["read_paths_in_prompt"]
 
+    package_hash = ctx["context_package_hash"]
+    session_dir = Path(record["session_dir"])
+    blob_path = session_dir / "context_packages" / f"{package_hash}.json"
+    assert blob_path.is_file(), "context package blob must be written under session dir"
+    blob = json.loads(blob_path.read_text(encoding="utf-8"))
+    assert "brief" in blob
+    assert "entries" in blob
+    assert "metadata" in blob
+    assert "policies" in blob
+
+    trace_path = session_dir / "traces" / f"{record['delegation_id']}.jsonl"
+    assert trace_path.is_file(), "trace file should exist from compile events"
+    trace_header = json.loads(trace_path.read_text(encoding="utf-8").strip().splitlines()[0])
+    assert trace_header["type"] == "trace_header"
+    assert trace_header["context_package_hash"] == package_hash
+
 
 # ---------------------------------------------------------------------------
 # Legacy path when MCP_CODER_USE_CONTEXT_PACKAGE=0
@@ -266,6 +282,11 @@ def test_legacy_run_called_when_env_disabled(tmp_path, monkeypatch):
     payload = json.loads(raw)
     assert "context_package_summary" not in payload
     assert payload["success"] is True
+
+    record = json.loads(Path(payload["log_path"]).read_text(encoding="utf-8").strip())
+    assert "context_package_hash" not in record.get("context", {})
+    session_dir = Path(record["session_dir"])
+    assert not any(session_dir.glob("context_packages/*.json"))
 
 
 def test_legacy_run_called_without_spec_path(tmp_path, monkeypatch):

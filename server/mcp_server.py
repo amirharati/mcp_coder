@@ -52,6 +52,7 @@ from core.observability.trace import (
     STAGE_VALIDATION_OUTPUT,
     TOOL_FILE_WRITE,
     append_trace_record,
+    annotate_trace_header_context_package_hash,
     build_action_trace_record,
     build_compile_event_record,
     build_executor_llm_trace_record,
@@ -1451,8 +1452,20 @@ def delegate_to_agent(
 
         # Build context_block from executor_prompt (legacy: same as prompt; package: translated prompt)
         if context_package is not None:
-            from core.context.package_cache import compute_context_package_cache_key
-            context_package_hash = compute_context_package_cache_key(context_package)
+            try:
+                from core.context.package_blob import persist_context_package_blob
+
+                context_package_hash, _, _ = persist_context_package_blob(
+                    storage.session_dir,
+                    context_package,
+                )
+                annotate_trace_header_context_package_hash(
+                    session_dir=storage.session_dir,
+                    delegation_id=delegation_id,
+                    context_package_hash=context_package_hash,
+                )
+            except Exception:
+                context_package_hash = None
 
         context_block = prompt_metadata(
             executor_prompt,

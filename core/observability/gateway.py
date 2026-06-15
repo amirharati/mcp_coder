@@ -64,6 +64,31 @@ class LlmGateway:
 
     def __init__(self, backend: ObservabilityBackend) -> None:
         self._backend = backend
+        self._call_index = 0
+
+    def _build_extra_headers(self) -> dict[str, str]:
+        from core.observability.context import (
+            delegation_id_var,
+            session_dir_var,
+            step_index_var,
+            workspace_var,
+        )
+
+        self._call_index += 1
+        headers: dict[str, str] = {"X-Mcp-Call-Index": str(self._call_index)}
+        delegation_id = delegation_id_var.get()
+        if delegation_id:
+            headers["X-Mcp-Delegation-Id"] = delegation_id
+        step_index = step_index_var.get()
+        if step_index is not None:
+            headers["X-Mcp-Step-Index"] = str(step_index)
+        session_dir = session_dir_var.get()
+        if session_dir:
+            headers["X-Mcp-Session-Dir"] = session_dir
+        workspace = workspace_var.get()
+        if workspace:
+            headers["X-Mcp-Workspace"] = workspace
+        return headers
 
     def complete(
         self,
@@ -87,6 +112,7 @@ class LlmGateway:
                         model=model,
                         messages=messages,
                         max_tokens=max_tokens,
+                        extra_headers=self._build_extra_headers(),
                     )
                     captured = merged_capture(stdout_cap, stderr_cap)
                     text, reasoning_text = _extract_text_and_reasoning(response)

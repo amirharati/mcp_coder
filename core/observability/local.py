@@ -455,3 +455,62 @@ class LocalObservability(ObservabilityBackend):
             delegation_id=delegation_id,
             workspace=workspace,
         )
+
+    def record_proxy_llm_call(
+        self,
+        *,
+        delegation_id: str | None,
+        step_index: int | None = None,
+        call_index: int | None = None,
+        session_dir: str | Path | None = None,
+        workspace: str | Path | None = None,
+        model: str | None,
+        request_received_at: str,
+        response_received_at: str,
+        wire_latency_ms: int,
+        status_code: int,
+        raw_request: str | None = None,
+        raw_response: str | None = None,
+        attribution_source: str = "none",
+    ) -> None:
+        from core.config.observability import VERBOSITY_STANDARD, resolve_observability_verbosity
+        from core.observability.context import (
+            delegation_id_var,
+            session_dir_var,
+            workspace_var,
+        )
+        from core.observability.trace import append_trace_record, build_proxy_llm_call_record
+
+        resolved_session_dir = session_dir or session_dir_var.get()
+        if not resolved_session_dir:
+            return
+
+        resolved_delegation_id = delegation_id if delegation_id is not None else delegation_id_var.get()
+        trace_delegation_id = resolved_delegation_id or "_proxy_unattributed"
+        resolved_workspace = workspace or workspace_var.get()
+        verbosity = (
+            resolve_observability_verbosity(resolved_workspace)
+            if resolved_workspace
+            else VERBOSITY_STANDARD
+        )
+
+        record = build_proxy_llm_call_record(
+            delegation_id=resolved_delegation_id,
+            step_index=step_index,
+            call_index=call_index,
+            model=model,
+            verbosity=verbosity,
+            request_received_at=request_received_at,
+            response_received_at=response_received_at,
+            wire_latency_ms=wire_latency_ms,
+            status_code=status_code,
+            raw_request=raw_request,
+            raw_response=raw_response,
+            attribution_source=attribution_source,
+        )
+        append_trace_record(
+            record,
+            session_dir=resolved_session_dir,
+            delegation_id=trace_delegation_id,
+            workspace=resolved_workspace,
+        )

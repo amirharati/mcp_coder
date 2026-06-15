@@ -6,7 +6,10 @@ from pathlib import Path
 
 import pytest
 
-from core.observability.bootstrap import ensure_observability_bootstrap
+from core.observability.bootstrap import (
+    ensure_observability_bootstrap,
+    reset_observability_bootstrap_for_tests,
+)
 from core.observability.gateway import (
     LlmGateway,
     NullLlmGateway,
@@ -19,8 +22,10 @@ from core.observability.local import LocalObservability
 
 @pytest.fixture(autouse=True)
 def _reset_gateway():
+    reset_observability_bootstrap_for_tests()
     reset_llm_gateway()
     yield
+    reset_observability_bootstrap_for_tests()
     reset_llm_gateway()
 
 
@@ -73,3 +78,18 @@ def test_mcp_server_uses_bootstrap():
     gw = ensure_observability_bootstrap(mcp_server.obs)
     assert isinstance(gw, LlmGateway)
     assert gw._backend is mcp_server.obs
+
+
+def test_bootstrap_starts_proxy_once_and_sets_api_base(monkeypatch):
+    monkeypatch.delenv("OPENROUTER_API_BASE", raising=False)
+    monkeypatch.delenv("OPENAI_API_BASE", raising=False)
+    monkeypatch.delenv("ANTHROPIC_API_BASE", raising=False)
+
+    ensure_observability_bootstrap()
+    first_base = __import__("os").environ.get("OPENROUTER_API_BASE")
+    assert first_base
+    assert first_base.startswith("http://127.0.0.1:")
+
+    ensure_observability_bootstrap()
+    second_base = __import__("os").environ.get("OPENROUTER_API_BASE")
+    assert second_base == first_base

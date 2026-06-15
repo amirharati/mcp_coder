@@ -154,7 +154,8 @@ def test_build_executor_llm_trace_record_standard_has_preview():
     )
     assert "prompt_preview" in rec
     assert "response_preview" in rec
-    assert "prompt_body" not in rec
+    assert rec["prompt_body"] == "hello prompt"
+    assert rec["response_body"] == "hello response"
 
 
 def test_build_executor_llm_trace_record_full_has_body():

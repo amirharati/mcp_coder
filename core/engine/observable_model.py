@@ -14,7 +14,9 @@ from core.observability.context import (
     delegation_id_var,
     register_backend_stream_call,
     role_var,
+    session_dir_var,
     step_index_var,
+    workspace_var,
 )
 from core.usage.litellm_tokens import _coerce_int, _tokens_from_usage_mapping
 
@@ -288,6 +290,32 @@ def _assemble_stream_response(chunks: list[Any]) -> Any:
 class ObservableModel(Model):
     """Aider Model subclass that records every send_completion() as backend_llm_call."""
 
+    def __init__(self, *args: Any, **kwargs: Any) -> None:
+        super().__init__(*args, **kwargs)
+        self._call_index = 0
+
+    def _inject_attribution_headers(self) -> None:
+        delegation_id = delegation_id_var.get()
+        step_index = step_index_var.get()
+        session_dir = session_dir_var.get()
+        workspace = workspace_var.get()
+        self._call_index += 1
+
+        if self.extra_params is None:
+            self.extra_params = {}
+        existing = dict(self.extra_params.get("extra_headers") or {})
+        headers = dict(existing)
+        if delegation_id:
+            headers["X-Mcp-Delegation-Id"] = delegation_id
+        if step_index is not None:
+            headers["X-Mcp-Step-Index"] = str(step_index)
+        if session_dir:
+            headers["X-Mcp-Session-Dir"] = session_dir
+        if workspace:
+            headers["X-Mcp-Workspace"] = workspace
+        headers["X-Mcp-Call-Index"] = str(self._call_index)
+        self.extra_params["extra_headers"] = headers
+
     def send_completion(
         self,
         messages,
@@ -300,6 +328,7 @@ class ObservableModel(Model):
         model_name = getattr(self, "name", None) or str(getattr(self, "model", "")) or None
         stream_key = None
         stream_handoff = False
+        self._inject_attribution_headers()
         if stream:
             stream_key = register_backend_stream_call(
                 delegation_id=delegation_id_var.get(),
