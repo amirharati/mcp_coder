@@ -9,7 +9,7 @@
 
 # Phase 9 — Write-always storage + universal proxy + replay
 
-**Status:** Active — P9-001..P9-006 + P9-005 shipped; P9-007 (attribution alignment) + P9-008 (prompt_full write-always) pending.
+**Status:** Active — P9-001..P9-006 + P9-005 shipped; P9-007/P9-008/P9-009/P9-010 pending (attribution alignment, prompt_full gate, gzip raw_response, trace inspect CLI).
 **Purpose:** Prove "100% LLM call captured" by adding a universal internal HTTP proxy (litellm → proxy → provider) that captures raw bytes before any normalization layer; flip the write gate to always-on; add context package blobs and replay CLI.
 **PM board:** this file · **Issues:** [PHASE9_ISSUES.md](./PHASE9_ISSUES.md)
 **Phase 8 (frozen):** [PHASE8_MVP.md](./PHASE8_MVP.md) · [PHASE8_ISSUES.md](./PHASE8_ISSUES.md)
@@ -261,6 +261,65 @@ The proxy also provides the universal architecture for Phase 10+ multi-backend c
 
 ---
 
+### P9-009 — Proxy raw_response gzip decompression (P9-ISS-006)
+
+**Status:** `pending`
+
+**Goal:** Fix `proxy_llm_call.raw_response` so it contains readable JSON text, not garbled binary. This is required before any meaningful dual-path analysis or BL-507 re-verification can be done.
+
+**Root cause (from P9-ISS-006):**
+`local_proxy.py` never sets `Accept-Encoding: identity` on the forwarded request. OpenRouter (and likely other providers) return gzip-compressed responses. The proxy stores `body_bytes.decode("utf-8", errors="replace")` — which corrupts all gzip bytes with `U+FFFD` replacement chars. litellm gets the correct compressed bytes + `Content-Encoding: gzip` header and decodes fine, but the trace record is unreadable.
+
+**Scope (`core/proxy/local_proxy.py` only):**
+- In `_forward_headers()`: always inject `Accept-Encoding: identity` into the outgoing upstream request, overriding anything in the client's original headers. This tells the provider to send uncompressed responses. The proxy is localhost → provider, so bandwidth is not a concern.
+- Alternative: if `Accept-Encoding: identity` causes problems with any provider, add fallback: after reading `upstream_resp`, check `Content-Encoding` header; if `gzip`, call `gzip.decompress(body_bytes)` before decode.
+- Prefer `Accept-Encoding: identity` — simpler, fewer code paths.
+- Re-run dogfood and verify `raw_response` is readable JSON for both streaming (SSE) and non-streaming paths.
+
+**Why this matters for BL-507:**
+Our Phase 9 finding "thinking tokens NOT present at HTTP boundary" is **suspect** — we could not actually read the raw response. After this fix, run a fresh delegation with a thinking-enabled model and inspect `raw_response` directly.
+
+**Acceptance:**
+- `proxy_llm_call.raw_response` in a fresh delegation trace is valid UTF-8 JSON text
+- Non-streaming path: full JSON response body readable
+- Streaming path: SSE chunks readable (each line `data: {...}`)
+- BL-507 can now be definitively verified by inspecting `raw_response`
+- Full suite green
+
+---
+
+### P9-010 — `mcp-coder trace inspect` CLI
+
+**Status:** `pending`
+
+**Goal:** Add a CLI sub-command to dump and inspect specific events from a delegation trace file. Needed for the dual-path analysis workflow — currently requires writing custom Python to read the raw JSONL.
+
+**Scope:**
+- New `mcp-coder trace inspect <delegation_id>` command (or `mcp-coder trace dump`)
+- `--type <event_type>` filter: e.g. `--type proxy_llm_call` or `--type backend_llm_call`
+- `--event <n>` to select the Nth matching event (default: all)
+- `--field <field_name>` to print just one field (e.g. `--field raw_response` or `--field raw_request`)
+- `--format {human,json}` — human truncates large fields to 2000 chars with truncation indicator; json dumps raw
+- Wired to `main.py` as `mcp-coder trace inspect` (new `trace` subcommand group)
+- New file `core/cli/trace_inspect.py`
+- Tests in `tests/test_trace_inspect_p9_010.py`
+
+**This enables the full analysis workflow:**
+```
+mcp-coder trace inspect <id> --type proxy_llm_call --field raw_request
+mcp-coder trace inspect <id> --type proxy_llm_call --field raw_response
+mcp-coder trace inspect <id> --type backend_llm_call --field prompt_body
+mcp-coder trace inspect <id> --type backend_llm_call --field response_body
+```
+
+**Acceptance:**
+- `mcp-coder trace inspect <id>` lists all events with type, timestamp, key fields
+- `--type` + `--field` prints just the specified content (untruncated in `--format json`)
+- Works on the existing `dfe975e7` delegation in e2e workspace
+- Full suite green
+
+---
+
 ## Explicitly NOT Phase 9
 
 | Item | Reason |
@@ -284,7 +343,7 @@ The proxy also provides the universal architecture for Phase 10+ multi-backend c
 | **Minimum** | P9-001: write-always + P9-003: proxy live and emitting `proxy_llm_call` events |
 | **Recommended** | + P9-002: context blob + P9-004: replay CLI + P9-006: compare CLI |
 | **Optional capstone** | + P9-005: GC first slice |
-| **Full auditability** | + P9-007: attribution alignment (compare shows `matched`) + P9-008: prompt_full write-always |
+| **Full auditability** | + P9-007: attribution alignment + P9-008: prompt_full write-always + P9-009: gzip fix + P9-010: trace inspect |
 
 ---
 
@@ -298,6 +357,7 @@ The proxy also provides the universal architecture for Phase 10+ multi-backend c
 
 | Date | Change |
 |------|--------|
+| 2026-06-15 | P9-009 + P9-010 added: proxy gzip fix (`raw_response` corrupted — blocks BL-507 re-verification) and `mcp-coder trace inspect` CLI (needed for dual-path analysis without custom Python). P9-ISS-006 opened. |
 | 2026-06-15 | P9-007 + P9-008 added: attribution alignment (wire `call_index` from `ObservableModel` through to `backend_llm_call` record) and prompt_full write-always (remove `MCP_CODER_LOG_FULL_PROMPT` gate) — both identified during post-P9 audit of "100% auditable log" goal. P9-ISS-004/P9-ISS-005 opened. |
 | 2026-06-15 | P9-005 **done**: added `mcp-coder maintenance gc` (`--dry-run`, `--format {human,json}`), TTL-only retention enforcement, training-sidecar block, blob prune by live delegation references, and blob counts in `maintenance stats`; focused `13 passed`; full suite `873 passed, 1 skipped`. Phase 9 milestones now fully complete. |
 | 2026-06-15 | P9-003 **done**: dogfood delegation `dfe975e7` succeeded; trace contains `proxy_llm_call` (200, attributed, raw bodies) + `backend_llm_call` (executor_turn, full bodies) + `llm_call`; P9-ISS-002 closed; P9-003 moved to `done`. |

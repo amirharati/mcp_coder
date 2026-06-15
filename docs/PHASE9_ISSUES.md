@@ -1,6 +1,6 @@
 # Phase 9 issues
 
-**Status:** Active — P9-ISS-004, P9-ISS-005 open  
+**Status:** Active — P9-ISS-004, P9-ISS-005, P9-ISS-006 open  
 **Related PM board:** [PHASE9_MVP.md](./PHASE9_MVP.md)
 
 ---
@@ -294,3 +294,58 @@ Update tests that assert `prompt_full` is absent without the env var.
 2. `MCP_CODER_LOG_FULL_PROMPT` documented as deprecated / ignored.
 3. `should_log_full_prompt()` removed or demoted to no-op stub.
 4. Tests updated. Full suite green.
+
+---
+
+## P9-ISS-006 — `proxy_llm_call.raw_response` is gzip-corrupted — BL-507 finding uncertain
+
+**Milestone:** P9-009  
+**Severity:** critical  
+**Status:** open  
+**Opened:** 2026-06-15
+
+### Summary
+
+Every `proxy_llm_call` event in traces has an unreadable `raw_response` field. The proxy captures gzip-compressed HTTP response bodies and stores them as UTF-8-decoded strings with replacement characters. The content is irrecoverably corrupted — the data written to disk cannot be decompressed.
+
+### Root cause
+
+`core/proxy/local_proxy.py` does not set `Accept-Encoding: identity` on outgoing upstream requests. OpenRouter (and likely other providers) return gzip-compressed responses by default. The proxy then calls:
+
+```python
+raw_response = body_bytes.decode("utf-8", errors="replace")
+```
+
+Gzip byte `0x8b` is not valid UTF-8 and is replaced with `U+FFFD`. The original bytes are discarded. The stored string is undecodable back to the original binary.
+
+**litellm is not affected** — the proxy forwards the original compressed bytes and the original `Content-Encoding: gzip` header, so litellm decompresses correctly. Only the trace record is corrupted.
+
+### Evidence
+
+Inspection of delegation `dfe975e7`:
+- `proxy_llm_call.status_code: 200` — delegation succeeded
+- `proxy_llm_call.raw_response` first 4 chars: `ords=[31, 65533, 8, 0]` — second byte is `U+FFFD` (replacement), confirming gzip byte `0x8b` was corrupted
+- `backend_llm_call.response_body` is clean (litellm decompressed correctly)
+
+### Impact
+
+1. **`raw_response` is unreadable for all existing traces** where the provider returned gzip — data is permanently lost in those records.
+2. **BL-507 finding is uncertain**: we declared "thinking tokens NOT present at HTTP boundary" based on `compare` output, but `proxy_thinking=False` was derived from a corrupted `raw_response`. The actual HTTP response content has never been readable.
+3. **Dual-path analysis is blocked**: the primary value of the proxy is inspecting the raw response before litellm normalization — this is currently impossible.
+
+### Fix (P9-009)
+
+In `core/proxy/local_proxy.py`, in `_forward_headers()` (or the request-building block): add `"Accept-Encoding": "identity"` to the forwarded headers unconditionally. This instructs providers to send uncompressed responses. The proxy is localhost, so bandwidth is irrelevant.
+
+After the fix: all new traces will have readable `raw_response`. Existing corrupted traces cannot be recovered — fresh delegations needed for BL-507 re-verification.
+
+### BL-507 re-verification required
+
+After P9-009 ships: run a fresh delegation with `claude-sonnet-4` (or any thinking-enabled model) and inspect `proxy_llm_call.raw_response` directly. The `raw_request` includes `"thinking": {"type": "enabled", "budget_tokens": N}` if Aider passes budget params. Check if `raw_response` contains a thinking block before litellm strips it.
+
+### Exit criteria
+
+1. `proxy_llm_call.raw_response` in a fresh trace is readable JSON text.
+2. Non-streaming and streaming (SSE) paths both verified.
+3. BL-507 re-verified: `raw_response` inspected for thinking block presence/absence.
+4. Full suite green.
