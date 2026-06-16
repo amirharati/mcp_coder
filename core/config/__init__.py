@@ -11,6 +11,7 @@ from core.config.role_models import (
     resolve_role_model_name,
     role_config_keys,
 )
+from core.config.model_registry import CallParams, resolve
 from core.config.providers import (
     DEFAULT_OPENROUTER_API_BASE,
     apply_provider_env,
@@ -19,6 +20,8 @@ from core.config.providers import (
 
 __all__ = [
     "RECOMMENDED_CONTEXT_BUILDER_MODEL",
+    "CallParams",
+    "resolve",
     "DEFAULT_MODEL",
     "DEFAULT_OPENROUTER_API_BASE",
     "ROLE_CONTEXT_BUILDER",

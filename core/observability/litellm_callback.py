@@ -265,6 +265,7 @@ def _append_trace_for_completion(
         return
 
     from core.config.observability import resolve_observability_verbosity
+    from core.observability.context import model_policy_var
     from core.observability.trace import append_trace_record, build_trace_record
 
     prompt_text = _extract_prompt_text(kwargs)
@@ -281,6 +282,7 @@ def _append_trace_for_completion(
         prompt_text=prompt_text,
         response_text=response_text,
         reasoning_text=reasoning_text,
+        policy_applied=model_policy_var.get(),
     )
     append_trace_record(record, session_dir=session_dir, delegation_id=delegation_id, workspace=workspace)
 

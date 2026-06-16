@@ -1464,6 +1464,10 @@ delegate_to_agent(backend=…)
 | **BL-508** | **Universal internal HTTP proxy** — `LocalLlmProxy` between litellm and real provider; all in-process callers route through it; model-prefix routing from env vars | **Phase 9 (P9-003)**; same proxy extended to out-of-process backends (Claude Code, Codex, OpenCode) in Phase 10+ via base URL config |
 | **BL-509** | **Content-addressable dedup for trace bodies** — replace repeated large text fields in trace events with sha256 refs; store blobs once in CAS store | Post-Phase 9 once corpus exists to measure dedup ratio; context package blob (P9-002) is the proof-of-concept |
 | **BL-510** | **Remove `should_log_full_prompt` write gate from delegation row** — `MCP_CODER_LOG_FULL_PROMPT` env var gates `prompt_full` on `delegations.jsonl` row; should be unconditional like trace bodies per D-P9-8 | Phase 9 follow-up after P9-001 lands; separate write path from trace file |
+| **BL-511** | **Model registry Stage 1** — `core/config/model_registry.py` front door (`resolve(role,workspace)→CallParams`) reusing `role_models`; unify helper path onto `LlmGateway`; generation params + weak-model default-fill; `policy_applied` logging | **Phase 9 — split P9-011** (unify helper path + registry front door) **+ P9-012** (params + weak model + logging); closes BL-507 loop; see [model-policy-layer.md](./notes/model-policy-layer.md) |
+| **BL-512** | **Model policy layer — Stage 2: host-set policy** — MCP host passes `model_policy` block inside `delegate_to_agent` call; overrides env layer for that delegation; host can set per-role model, thinking budget, cost cap | Future (Phase 11+) — depends on BL-511; see [model-policy-layer.md](./notes/model-policy-layer.md) Stage 2 |
+| **BL-513** | **Model policy layer — Stage 3: AI-suggested parameters** — lightweight pre-delegation analysis step (cheap LLM or heuristic) that examines the incoming task and suggests policy overrides (e.g. hard refactor → higher thinking budget); suggestion logged as `policy_suggestion` trace event; can be accepted/rejected/overridden | Future — depends on BL-511/BL-512; see [model-policy-layer.md](./notes/model-policy-layer.md) Stage 3 |
+| **BL-514** | **Model policy layer — Stage 4: dynamic escalation** — outer-loop controller modifies active policy mid-delegation in response to runtime signals (retry exhausted → larger model; critic reject → more thinking; cost cap → downgrade); connects to BL-321/BL-006 signals | Future — depends on BL-511/BL-512/BL-513 and a critic or supervisor being in place; see [model-policy-layer.md](./notes/model-policy-layer.md) Stage 4 |
 | **BL-334** | **Backend prompt customization** (system prefix + edit-format control) | See § BL-334 |
 | **BL-340** | **Cursor SDK execution backend** (beside Aider) | See § Execution backends — BL-340 |
 
@@ -1703,6 +1707,111 @@ Blobs stored at `sessions/<id>/blobs/<sha256>` (or a session-shared store). At a
 
 ---
 
+### BL-511: Model registry Stage 1 (front door + unified helper path + params + logging)
+
+**Status:** `scheduled` — **Phase 9**, split into **P9-011** + **P9-012** (2026-06-16 code review); promoted from Phase 10 because proxy verification is useless without it.  
+**Design note:** [docs/notes/model-policy-layer.md](./notes/model-policy-layer.md)  
+**Specs:** [P9-011](./tasks/P9-011-model-policy-layer-v1.md) (unify helper path + registry front door), [P9-012](./tasks/P9-012-generation-params-logging-v1.md) (params + weak model + logging)
+
+**Problem:** Generation params (thinking/temperature/etc.) are set nowhere. Two helper paths emit `llm_call`; a third (`workspace_summarizer`, `spec_review`) bypasses the gateway and emits no trace event. Proxy confirmed `proxy_llm_call.raw_request` carries no `thinking` field. Model ID + budget are *already* centralized in `role_models.py` — reuse, do not rewrite.
+
+**Architecture:** Single front door `model_registry.resolve(role, workspace) → CallParams` reusing `role_models` for id/budget; generation params + weak model layered on top with per-field `sources` provenance. One helper path (`LlmGateway`); `ExecutionEngine` stays pluggable; Aider is a read-only metadata source.
+
+**P9-011 (refactor):** remove legacy direct-`Model()` helper calls (route through `LlmGateway`); create `model_registry.py` skeleton (id + budget only). Behaviour-neutral apart from new uniform logging.
+
+**P9-012 (params + logging):** generation-param env vars; weak-model default-fill (Sonnet/Opus→Haiku, logged, opt-out via `=self`); wire `model.extra_params` + litellm kwargs; `policy_applied` on `backend_llm_call` + `llm_call`.
+
+**New env vars (P9-012, all optional):** `MCP_CODER_<ROLE>_REASONING_EFFORT`, `_THINKING_BUDGET`, `_MAX_TOKENS`, `_TEMPERATURE`, `_TOP_P`, `_EXTRA_PARAMS` (JSON), `_WEAK_MODEL`. `reasoning_effort` is the portable thinking knob; `drop_params=True` always.
+
+**Related:** BL-162, BL-321, BL-512, BL-513, BL-514, BL-515 (tiers).
+
+---
+
+### BL-512: Model policy layer — Stage 2 (host-set policy)
+
+**Status:** `idea` — 2026-06-16; depends on BL-511.  
+**Design note:** [docs/notes/model-policy-layer.md § Stage 2](./notes/model-policy-layer.md)
+
+**What:** The MCP host (Cursor, Claude Code, CI automation) passes an optional `model_policy` object inside the `delegate_to_agent` call arguments. This overrides the env layer for the duration of that single delegation. The host knows its own context (latency budget, cost cap, task urgency) better than a static `.env` file does.
+
+**Sketch:**
+```json
+{
+  "task": "...",
+  "model_policy": {
+    "executor": { "thinking_budget": 8000 },
+    "context_builder": { "model": "gemini/gemini-2.5-flash-preview-04-17", "temperature": 0.2 }
+  }
+}
+```
+
+**Precedence position:** host policy > env vars > code defaults. Sits one level above Stage 1 in the chain.
+
+**Related:** BL-511 (Stage 1 prerequisite), BL-513.
+
+---
+
+### BL-513: Model policy layer — Stage 3 (AI-suggested parameters)
+
+**Status:** `idea` — 2026-06-16; depends on BL-511/BL-512.  
+**Design note:** [docs/notes/model-policy-layer.md § Stage 3](./notes/model-policy-layer.md)
+
+**What:** A lightweight pre-delegation analysis step (cheap LLM call or rule-based heuristic) examines the incoming task and recommends policy overrides. Examples:
+
+- Large diff / architectural refactor → `executor.thinking_budget = 10000`
+- Simple docstring / formatting task → `executor.thinking_budget = 0`, cheaper model
+- Task touches > N files → `executor.max_tokens += 2000`
+
+Suggestions are logged as a `policy_suggestion` trace event (fully auditable). In automatic mode the suggestion is accepted unless a Stage 1 env var or Stage 2 host override is present.
+
+**Related:** BL-511, BL-512, BL-514.
+
+---
+
+### BL-514: Model policy layer — Stage 4 (dynamic escalation)
+
+**Status:** `idea` — 2026-06-16; depends on BL-511–513 and a critic/supervisor (BL-321/BL-006).  
+**Design note:** [docs/notes/model-policy-layer.md § Stage 4](./notes/model-policy-layer.md)
+
+**What:** The outer-loop controller can mutate the active policy mid-delegation in response to runtime signals:
+
+- Executor hit max retries with current model → switch to a larger/stronger model.
+- Critic (BL-006) rejects output after N attempts → increase thinking budget.
+- Running cost exceeds cap → downgrade remaining calls to a cheaper model.
+
+This is the full outer-loop control capability. Stages 1–3 lay the resolver infrastructure; Stage 4 activates it.
+
+**Related:** BL-321 (tiered escalation), BL-006 (critic), BL-511–513, BL-515 (model tiers prerequisite).
+
+---
+
+### BL-515: Model tiers and classes
+
+**Status:** `idea` — 2026-06-16; depends on BL-511 (registry infrastructure). Prerequisite for BL-514 (escalation).  
+**Design note:** [docs/notes/model-policy-layer.md § Model tiers and classes](./notes/model-policy-layer.md)
+
+**What:** Assign every model a tier enum so the outer loop can escalate or downgrade automatically:
+
+```
+Tier 0: nano      ← gpt-4o-mini, claude-haiku, gemini-flash-8b, flash-lite
+Tier 1: balanced  ← claude-sonnet, gpt-4o, gemini-flash, deepseek-chat
+Tier 2: powerful  ← claude-opus, gpt-4.5, gemini-pro
+Tier 3: thinking  ← claude-opus-thinking, o3, gemini-2.5-pro (high thinking)
+```
+
+**Capabilities:**
+- `get_tier(model_id) → ModelTier` — for logging, audit, cost bucketing
+- `best_model_for_tier(tier, provider_pref) → model_id` — for runtime escalation in BL-514
+- Auto weak-model selection: pick Tier 0 as `weak_model` when Aider registry has `None` for Tier 1+ models
+- `CallParams.tier` field for policy expressions like `"tier": "balanced"` instead of explicit model IDs
+- Integration with `resolve()` — `resolve(role, max_tier=1)` respects cost caps
+
+**Why deferred:** Tier assignments need research and will drift as models release. Phase 9 proxy already logs the `model` field in every trace event — tier can be derived post-hoc for now. Phase 10 outer-loop work (BL-321 + BL-514) is the right time.
+
+**Related:** BL-511 (registry), BL-514 (escalation needs tiers), BL-321 (tiered escalation).
+
+---
+
 ## Done
 
 | ID | Item | Completed |
@@ -1722,6 +1831,7 @@ Blobs stored at `sessions/<id>/blobs/<sha256>` (or a session-shared store). At a
 
 | Date | Change |
 |------|--------|
+| 2026-06-16 | BL-511–514 added — model policy layer Stages 1–4 (env-controlled config, host-set policy, AI-suggested params, dynamic escalation); design note at [model-policy-layer.md](./notes/model-policy-layer.md); BL-511 scheduled for Phase 10 |
 | 2026-06-13 | **Phase 7 closeout sync** — BL-350/353/368 statuses updated to reflect P7 shipment; BL-369/370/371 added from carried P7 issues |
 | 2026-06-13 | **Phase 6 closed** — PHASE6_MVP + PHASE6_ISSUES frozen; P6-ISS-002 → BL-368; Phase 6 exit table added; BL-335 done (partial); BL-353 partial |
 | 2026-06-13 | BL-368 added — unified LlmGateway completion proxy (P6-ISS-002); Phase 7 target |

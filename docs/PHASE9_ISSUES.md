@@ -1,7 +1,42 @@
 # Phase 9 issues
 
-**Status:** No open issues (`P9-ISS-001`..`P9-ISS-006` closed)  
+**Open:** P9-ISS-007 (policy_applied misleading for executor-ignored params)  
+**Closed:** `P9-ISS-001`..`P9-ISS-006`. `P9-OBS-001` promoted to **P9-011 + P9-012**, both **done** (full suite `924 passed, 2 skipped`) — see below.  
 **Related PM board:** [PHASE9_MVP.md](./PHASE9_MVP.md)
+
+---
+
+## P9-OBS-001 → P9-011 + P9-012 — No model registry; LLM request parameters hardcoded / unset per call site
+
+**Type:** Dogfood observation → promoted to active milestones  
+**Milestones:** P9-011 ([spec](../tasks/P9-011-model-policy-layer-v1.md)) + P9-012 ([spec](../tasks/P9-012-generation-params-logging-v1.md))  
+**Severity:** high — proxy captures are uninformative until we can actually send thinking tokens  
+**Status:** done — P9-011 + P9-012 shipped 2026-06-16 (helper paths unified onto `LlmGateway`; generation params + weak-model default-fill resolve per role; `policy_applied` on every `backend_llm_call`/`llm_call`)  
+**Opened:** 2026-06-16 (Phase 9 post-completion dogfood)  
+**Promoted:** 2026-06-16 — needed now, not Phase 10; **split into P9-011 (refactor) + P9-012 (params + logging) after code review**  
+**Design note:** [docs/notes/model-policy-layer.md](notes/model-policy-layer.md)
+
+### Summary
+
+Phase 9 dogfooding confirmed that `proxy_llm_call.raw_request` contains no `thinking` field for any LLM call path. This is because the executor, owned helpers, and legacy helpers each construct request parameters independently with no shared policy — thinking budget, max tokens, and temperature are hardcoded (or absent) at each call site.
+
+Three separate paths exist:
+- **Executor path** — `AiderEngine` → `ObservableModel` (Aider `Model` + litellm)
+- **Owned-helper path** — `run_owned_helper_completion` → `LlmGateway` → direct `litellm.completion`
+- **Legacy-helper path** — `aider.models.Model` directly (`workspace_summarizer_llm.py`, `spec_review.py`)
+
+### Why it was promoted to Phase 9
+
+Phase 9 built the proxy to capture raw HTTP traffic. But if nothing interesting is being sent (no thinking tokens, no per-role parameter control), the capture infrastructure cannot be used to verify anything meaningful. P9-012 closes the loop: once params are wired, adding `MCP_CODER_EXECUTOR_REASONING_EFFORT=high` to `.env` makes `proxy_llm_call.raw_request` show a `thinking` block — which directly resolves BL-507.
+
+### Resolution (split after 2026-06-16 code review)
+
+A code-grounded review found model ID + budget already centralized in `role_models.py`, and that the "legacy-helper path" bypasses `LlmGateway` and emits no `llm_call` event. Resolution split into two milestones:
+
+- **P9-011** — remove the legacy direct-`Model()` helper calls (route `workspace_summarizer` + `spec_review` through `LlmGateway`); add `core/config/model_registry.py` front door (`resolve(role, workspace) → CallParams`) reusing `role_models` for id/budget. Refactor + skeleton.
+- **P9-012** — generation-param env vars, weak-model resolution (default-fill + override), wire `model.extra_params` (executor) + litellm kwargs (gateway), attach `policy_applied` (with per-field `sources`) to `backend_llm_call` + `llm_call`.
+
+Escalation hooks (model/thinking bump after N retries) are deferred to Stage 4 (BL-514); model tiers to BL-515.
 
 ---
 
@@ -410,3 +445,44 @@ Reported validation:
 Outcome:
 - New traces should store readable UTF-8 `proxy_llm_call.raw_response` instead of gzip-corrupted replacement text.
 - Existing historical corrupted traces remain irrecoverable and should not be used for BL-507 conclusions.
+
+---
+
+## P9-ISS-007 — `policy_applied` misleading for executor-ignored params
+
+**Type:** Logging correctness  
+**Severity:** low — not a runtime bug, but `policy_applied` can imply a param was applied to Aider when it wasn't  
+**Status:** open  
+**Opened:** 2026-06-16 (post P9-012 review)
+
+### Summary
+
+`_apply_executor_model_params` applies four things to the aider `Model`: `reasoning_effort`, `thinking_budget`, `extra_params`, and `weak_model`. It does **not** apply `temperature`, `top_p`, or `max_tokens` — Aider owns those values internally.
+
+However, if a user sets e.g. `MCP_CODER_EXECUTOR_TEMPERATURE=0.5`, `resolve("executor")` resolves it, and `policy_applied()` faithfully includes it in the trace:
+
+```json
+"policy_applied": {"role": "executor", "temperature": 0.5, "sources": {"temperature": "env"}}
+```
+
+This is misleading — the value was never passed to Aider. The log suggests it was applied.
+
+### Resolution plan
+
+Add an `"ignored"` key to `policy_applied` for the executor surface. In `_apply_executor_model_params`, collect field names that were resolved but not applicable, and include them in `policy_applied`:
+
+```json
+"policy_applied": {
+  "role": "executor",
+  "reasoning_effort": "high",
+  "ignored": ["temperature", "top_p"],
+  "note": "temperature/top_p/max_tokens are owned by Aider; use MCP_CODER_EXECUTOR_EXTRA_PARAMS to override",
+  ...
+}
+```
+
+Alternatively, filter them out of executor's `policy_applied` entirely (simpler, but loses the "you set it but it had no effect" signal).
+
+### Workaround
+
+For now, `temperature`/`top_p`/`max_tokens` on the executor can be forced via `MCP_CODER_EXECUTOR_EXTRA_PARAMS={"temperature": 0.5}` (passed directly into Aider's `extra_params` dict which litellm forwards). That **does** work; the registry env knobs for those fields on the executor currently do not.

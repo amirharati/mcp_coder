@@ -33,6 +33,44 @@ from core.engine.stdio_isolation import isolated_stdio, merged_capture
 
 BACKEND_ID = "aider"
 
+
+def _apply_executor_model_params(model: Any, params: Any) -> None:
+    """Apply registry CallParams to an aider Model for the executor role (P9-012).
+
+    Uses Aider's own setters so the provider-specific translation (reasoning_effort
+    vs thinking budget) is delegated to Aider/litellm. Best-effort: a setter failing
+    must not abort a delegation.
+    """
+    try:
+        if params.reasoning_effort:
+            model.set_reasoning_effort(params.reasoning_effort)
+        elif params.thinking_budget:
+            model.set_thinking_tokens(params.thinking_budget)
+    except Exception:
+        pass
+
+    if params.extra_params:
+        try:
+            if not model.extra_params:
+                model.extra_params = {}
+            for key, value in params.extra_params.items():
+                if (
+                    isinstance(value, dict)
+                    and isinstance(model.extra_params.get(key), dict)
+                ):
+                    model.extra_params[key] = {**model.extra_params[key], **value}
+                else:
+                    model.extra_params[key] = value
+        except Exception:
+            pass
+
+    if params.weak_model:
+        try:
+            model.get_weak_model(params.weak_model)
+        except Exception:
+            pass
+
+
 _READ_CONTEXT_HEADER = (
     "\n\n---\n\n## Read context (read-only — do not edit unless spec allows)\n"
 )
@@ -185,6 +223,7 @@ class AiderEngine(ExecutionEngine):
         before_mtimes: dict[str, float | None] | None = None
         snapshot_session = None
         contract = contract_paths or edit_paths_rel
+        policy_token = None
         try:
             os.chdir(workspace_path)
             resolved_files = [
@@ -192,6 +231,13 @@ class AiderEngine(ExecutionEngine):
                 for f in fnames_rel
             ]
             model = ObservableModel(self._model_name)
+
+            from core.config.model_registry import ROLE_EXECUTOR, policy_applied, resolve
+            from core.observability.context import model_policy_var
+
+            exec_params = resolve(ROLE_EXECUTOR, workspace_path)
+            _apply_executor_model_params(model, exec_params)
+            policy_token = model_policy_var.set(policy_applied(exec_params, ROLE_EXECUTOR))
             before_git = snapshot_git_dirty(workspace_path)
             before_mtimes = snapshot_mtimes(workspace_path, edit_paths_rel)
             snapshot_session = begin_delegation_snapshot(
@@ -379,6 +425,10 @@ class AiderEngine(ExecutionEngine):
             )
         finally:
             os.chdir(prev_cwd)
+            if policy_token is not None:
+                from core.observability.context import model_policy_var
+
+                model_policy_var.reset(policy_token)
 
     def run(
         self,

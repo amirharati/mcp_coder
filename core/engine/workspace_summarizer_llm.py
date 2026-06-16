@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import concurrent.futures
 import time
 from dataclasses import dataclass
 from pathlib import Path
@@ -10,9 +9,9 @@ from typing import Any
 
 from core.config.providers import apply_provider_env
 from core.config.models import provider_hint_for_model
+from core.config.model_registry import ROLE_WORKSPACE_SUMMARIZER
 from core.config.role_models import ROLE_CONTEXT_BUILDER, resolve_role_model_name
-from core.engine.stdio_isolation import isolated_stdio, merged_capture
-from core.usage.litellm_tokens import extract_litellm_model_tokens
+from core.observability.context import role_context
 
 SUMMARY_INPUT_MAX_CHARS = 8000
 SUMMARY_OUTPUT_MAX_CHARS = 600
@@ -79,41 +78,33 @@ def run_workspace_file_summarizer_llm(
         truncated += "\n…[truncated]"
     prompt = build_workspace_summary_prompt(rel_path=rel_path, source=truncated)
 
-    from aider.models import Model
+    from core.engine.owned_helper_llm import run_owned_helper_completion
 
     messages = [{"role": "user", "content": prompt}]
     t0 = time.perf_counter()
 
-    def _call() -> tuple[str, str, Any]:
-        with isolated_stdio() as (stdout_cap, stderr_cap):
-            model = Model(resolved)
-            reply = model.simple_send_with_retries(messages)
-            captured = merged_capture(stdout_cap, stderr_cap)
-            text = (reply or "").strip()
-            if captured.strip() and not text:
-                text = captured.strip()
-            return text, captured, model
+    with role_context(ROLE_WORKSPACE_SUMMARIZER):
+        completion = run_owned_helper_completion(messages, model=resolved)
 
-    try:
-        with concurrent.futures.ThreadPoolExecutor(max_workers=1) as pool:
-            text, captured, model_obj = pool.submit(_call).result()
-    except Exception as exc:
+    duration_ms = completion.duration_ms or int((time.perf_counter() - t0) * 1000)
+    if completion.error:
         return WorkspaceSummaryResult(
             success=False,
             summary="",
             model=resolved,
-            error=f"{type(exc).__name__}: {exc}",
-            duration_ms=int((time.perf_counter() - t0) * 1000),
+            error=completion.error,
+            tokens=completion.tokens,
+            duration_ms=duration_ms,
         )
 
-    duration_ms = int((time.perf_counter() - t0) * 1000)
-    output = text or captured
+    output = completion.text
     if not output.strip():
         return WorkspaceSummaryResult(
             success=False,
             summary="",
             model=resolved,
             error="Empty summary response from model",
+            tokens=completion.tokens,
             duration_ms=duration_ms,
         )
 
@@ -124,16 +115,16 @@ def run_workspace_file_summarizer_llm(
             summary="",
             model=resolved,
             error=output.strip()[:2000],
+            tokens=completion.tokens,
             duration_ms=duration_ms,
         )
 
     summary = _clean_summary(output)
-    tokens = extract_litellm_model_tokens(model_obj, role_source="workspace_summarizer")
     return WorkspaceSummaryResult(
         success=True,
         summary=summary,
         model=resolved,
         error=None,
-        tokens=tokens,
+        tokens=completion.tokens,
         duration_ms=duration_ms,
     )

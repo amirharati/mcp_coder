@@ -9,7 +9,7 @@
 
 # Phase 9 — Write-always storage + universal proxy + replay
 
-**Status:** Complete — P9-001..P9-010 shipped (write-always storage, dual-capture proxy, replay/compare/trace inspect tooling, GC, and prompt_full write-always alignment).
+**Status:** In progress — P9-001..P9-010 shipped; **P9-011 (unify helper path + registry front door) and P9-012 (generation params + weak model + policy_applied logging) both done**. Model config (reasoning/thinking) is now settable from env and audited per call via `policy_applied`.
 **Purpose:** Prove "100% LLM call captured" by adding a universal internal HTTP proxy (litellm → proxy → provider) that captures raw bytes before any normalization layer; flip the write gate to always-on; add context package blobs and replay CLI.
 **PM board:** this file · **Issues:** [PHASE9_ISSUES.md](./PHASE9_ISSUES.md)
 **Phase 8 (frozen):** [PHASE8_MVP.md](./PHASE8_MVP.md) · [PHASE8_ISSUES.md](./PHASE8_ISSUES.md)
@@ -85,6 +85,8 @@ The proxy also provides the universal architecture for Phase 10+ multi-backend c
 | 7 | P9-007 | [P9-007](../tasks/P9-007-attribution-alignment-v1.md) | done | call_index wiring complete; focused `16 passed`, full suite `877 passed, 1 skipped` |
 | 8 | P9-010 | [P9-010](../tasks/P9-010-trace-inspect-cli-v1.md) | done | trace inspect CLI shipped; focused `10 passed`, full suite `887 passed, 1 skipped` |
 | 9 | P9-008 | [P9-008](../tasks/P9-008-prompt-full-write-always-v1.md) | done | prompt_full write gate removed; focused `21 passed`, full suite `887 passed, 1 skipped` |
+| 10 | P9-011 | [P9-011](../tasks/P9-011-model-policy-layer-v1.md) | done | helper path unified onto LlmGateway + `model_registry.resolve()` front door; focused `15 passed`, full suite `901 passed, 2 skipped` |
+| 11 | P9-012 | [P9-012](../tasks/P9-012-generation-params-logging-v1.md) | done | generation params + weak-model default-fill + `policy_applied` logging; focused `23 passed`, full suite `924 passed, 2 skipped` |
 
 ---
 
@@ -337,10 +339,77 @@ mcp-coder trace inspect <id> --type backend_llm_call --field response_body
 | Cross-session reasoning (BL-333) | Needs corpus to validate |
 | Embeddings for RAG (BL-366) | Measure FTS recall first |
 | Global promoted knowledge store | Phase 10+ |
+| Model policy Stages 2–4 (host-set, AI-suggested, dynamic escalation) | BL-512–514 — future phases; Stage 1 ships in P9-011 + P9-012 |
+| Model tiers / classes | BL-515 — future; tier can be derived post-hoc from `model` in trace events for now |
+
+---
+
+### Model registry Stage 1 — split into P9-011 + P9-012 *(BL-511)*
+
+**Why now:** The proxy captures raw HTTP traffic but confirmed no `thinking` field is sent on any path. To turn thinking on and verify it via `proxy_llm_call.raw_request` (closing the BL-507 loop) we need a registry that controls generation params. A code review (2026-06-16) found that model ID + budget are already centralized in `role_models.py`, and that two "legacy" helpers (`workspace_summarizer`, `spec_review`) bypass the gateway and emit no `llm_call` event. So Stage 1 is a small refactor + a params layer, split into two reviewable milestones.
+
+**Settled architecture:** single front door `core/config/model_registry.py` → `resolve(role, workspace) → CallParams` (the one object carrying id + budget + generation params + weak model + metadata, with per-field `sources`). It reuses `role_models.py` for id/budget. One helper path (`LlmGateway`); `ExecutionEngine` stays pluggable. Aider is a read-only metadata source. Full detail: [model-policy-layer.md](../notes/model-policy-layer.md).
+
+#### P9-011 — Unify helper path + registry front door
+
+**Status:** `done` (focused `15 passed`; full suite `901 passed, 2 skipped`) · spec: [P9-011](../tasks/P9-011-model-policy-layer-v1.md)
+
+#### P9-012 — Generation params + weak model + policy_applied logging
+
+**Status:** `done` (focused `23 passed`; full suite `924 passed, 2 skipped`) · spec: [P9-012](../tasks/P9-012-generation-params-logging-v1.md)
+Env knobs `MCP_CODER_<ROLE>_{REASONING_EFFORT,THINKING_BUDGET,MAX_TOKENS,TEMPERATURE,TOP_P,EXTRA_PARAMS,WEAK_MODEL}` resolve via `model_registry.resolve()`, apply on executor (aider setters) + helpers (gateway litellm kwargs), and every `backend_llm_call`/`llm_call` event carries `policy_applied` (role + set fields + per-field `sources`). Weak model auto-filled from a registry default map (overridable).
+
+- Remove legacy direct-`Model().simple_send_with_retries()` calls; route `workspace_summarizer_llm` + `spec_review` through `LlmGateway` → uniform `llm_call` logging, one helper path.
+- Create `model_registry.py` with `CallParams` + `resolve()` wrapping `role_models` (model + budget only this milestone).
+- Behaviour-neutral apart from the new `llm_call` events for the migrated helpers.
+
+#### P9-012 — Generation params + weak model + policy_applied logging
+
+**Status:** `spec_ready` · spec: [P9-012](../tasks/P9-012-generation-params-logging-v1.md)
+
+- Per-role generation-param env vars (`REASONING_EFFORT`, `THINKING_BUDGET`, `TEMPERATURE`, `TOP_P`, `MAX_TOKENS`, `EXTRA_PARAMS`).
+- Weak-model resolution: env override → registry default-fill map (Sonnet/Opus → Haiku etc.) → Aider's own choice. **Intentional behaviour change** (cheap-task routing only), logged via `policy_applied.sources`.
+- Wire executor (`model.extra_params` + `weak_model`) and helpers (litellm kwargs + `drop_params=True`).
+- Attach `policy_applied` (with per-field `sources`) to `backend_llm_call` and `llm_call`.
+
+**litellm note:** `reasoning_effort="low|medium|high"` is the portable knob litellm translates per provider (Anthropic `thinking`, Gemini `thinkingConfig`, OpenAI native); `thinking_budget` is the Anthropic escape hatch. With `reasoning_effort` set, `proxy_llm_call.raw_request` shows the translated `thinking` block — directly answering BL-507.
+
+**Acceptance (combined):**
+1. P9-011: `resolve(role, ws)` returns correct `model` + `budget_tokens` from `role_models`; `sources["model"]=="role_models"`.
+2. P9-011: `workspace_summarizer` + `spec_review` emit `llm_call` events; no `simple_send_with_retries` left in `core/engine/`.
+3. P9-012: `MCP_CODER_EXECUTOR_REASONING_EFFORT=high` → resolved + provider-translated `thinking` block visible in `proxy_llm_call.raw_request`.
+4. P9-012: weak-model default-fill (Sonnet→Haiku) with no env; `MCP_CODER_<ROLE>_WEAK_MODEL=self` opts out.
+5. P9-012: `backend_llm_call` + `llm_call` contain `policy_applied` with `role` + `sources`.
+6. Both: full suite green; executor main-output behaviour unchanged (only weak/cheap-task model differs under default-fill).
+
+---
+
+## Phase 9 additions (from dogfooding — in scope)
+
+> Findings from Phase 9 dogfooding promoted to active Phase 9 milestones.
+
+### OBS-001 → P9-011 — Model policy layer Stage 1 (env-controlled config)
+
+**Identified:** 2026-06-16 (Phase 9 post-completion dogfood)  
+**Promoted to:** P9-011 — needed now so proxy verification of thinking tokens is actually useful.  
+**Design note:** [docs/notes/model-policy-layer.md](notes/model-policy-layer.md)  
+**Backlog:** BL-511 (Stage 1, this phase), BL-512–514 (Stages 2–4, future)
+
+**Summary:**  
+Phase 9 dogfooding confirmed that `proxy_llm_call.raw_request` contains no `thinking` field for any path — the executor, owned helpers, and legacy helpers all construct LLM request parameters independently with no shared policy. Model IDs flow from the shared `.env` file, but parameters like thinking budget, max output tokens, and temperature are hardcoded (or absent) at each call site. Without this fix, the proxy capture infrastructure (P9-003) cannot be used to verify model behaviour — there is nothing to observe.
+
+Three separate call paths exist today:
+- **Executor path** — `AiderEngine` → `ObservableModel` (Aider `Model` + litellm)
+- **Owned-helper path** — `run_owned_helper_completion` → `LlmGateway` (direct `litellm.completion`)
+- **Legacy-helper path** — direct `aider.models.Model` (`workspace_summarizer_llm.py`, `spec_review.py`)
+
+P9-011 + P9-012 introduce `core/config/model_registry.py` (front door reusing `role_models`), unify the helper path onto `LlmGateway`, wire generation params + weak model on both paths, and add `policy_applied` logging. Stages 2–4 (host-set policy, AI-suggested params, dynamic escalation) remain future work (BL-512–514); model tiers are BL-515.
 
 ---
 
 ## Exit criteria
+
+> Note: the `### OBS-001 → P9-011` heading below predates the 2026-06-16 split; Stage 1 now ships as **P9-011 + P9-012** (see milestone detail and changelog).
 
 | Tier | Criteria |
 |------|----------|
@@ -348,6 +417,7 @@ mcp-coder trace inspect <id> --type backend_llm_call --field response_body
 | **Recommended** | + P9-002: context blob + P9-004: replay CLI + P9-006: compare CLI |
 | **Optional capstone** | + P9-005: GC first slice |
 | **Full auditability** | + P9-007: attribution alignment + P9-008: prompt_full write-always + P9-009: gzip fix + P9-010: trace inspect |
+| **Verification complete** | + P9-011/P9-012: model registry Stage 1 — unified helper path + can set thinking via env and verify in `proxy_llm_call.raw_request` with `policy_applied` audit |
 
 ---
 
@@ -361,6 +431,10 @@ mcp-coder trace inspect <id> --type backend_llm_call --field response_body
 
 | Date | Change |
 |------|--------|
+| 2026-06-16 | P9-012 **done**: generation params + weak-model default-fill resolve per role (env + role defaults via `model_registry.resolve()`); applied on executor (aider `set_reasoning_effort`/`set_thinking_tokens`/`extra_params`/`get_weak_model`) and helpers (gateway litellm kwargs, `drop_params=True`); `policy_applied` audit object now on every `backend_llm_call` + `llm_call` (carried via `model_policy_var` contextvar). Thinking/reasoning is now settable from env. Focused `23 passed`; full suite `924 passed, 2 skipped`. |
+| 2026-06-16 | P9-011 **done**: created `core/config/model_registry.py` (`resolve(role,workspace)→CallParams` reusing `role_models`); migrated `workspace_summarizer_llm` + `spec_review` off direct `Model().simple_send_with_retries()` onto `LlmGateway` (now emit `llm_call`); bootstrapped gateway in CLI `index_workspace`. Focused `15 passed`; full suite `901 passed, 2 skipped`. Executor path untouched. |
+| 2026-06-16 | Architecture review of model registry: code-grounded review found id+budget already centralized in `role_models.py` and two legacy helpers (`workspace_summarizer`, `spec_review`) bypassing the gateway (no `llm_call` event). Decisions: single `model_registry.resolve()` front door reusing `role_models`; one helper path (remove legacy direct-`Model()` calls); weak model resolved in registry with default-fill. **Split Stage 1 into P9-011** (unify helper path + registry front door, refactor) **and P9-012** (generation params + weak model + `policy_applied` logging). Added BL-515 (model tiers). Both specs `spec_ready`. |
+| 2026-06-16 | P9-011 added: model policy layer Stage 1 promoted from deferred-to-Phase-10 observation (OBS-001) into active Phase 9 milestone — needed now so proxy verification of thinking tokens is actually useful. *(Superseded same day by the 011/012 split above.)* |
 | 2026-06-15 | P9-008 **done**: removed `MCP_CODER_LOG_FULL_PROMPT` gate from production write path (`server/mcp_server.py` + `core/logging/delegation_log.py`), demoted `should_log_full_prompt()` to deprecated no-op, removed observability gate methods, and updated prompt_full tests; focused `21 passed`; full suite `887 passed, 1 skipped`. Phase 9 milestone set now complete. |
 | 2026-06-15 | P9-010 **done**: shipped `mcp-coder trace inspect` CLI + `main.py` wiring + focused test suite (`10 passed`); full suite `887 passed, 1 skipped`. |
 | 2026-06-15 | P9-007 **done**: wired `call_index` through `ObservableModel` backend recording for both sync and stream finalize paths; added call-index regression coverage; focused `16 passed`; full suite `877 passed, 1 skipped`. |

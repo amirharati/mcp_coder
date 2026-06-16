@@ -17,6 +17,11 @@ session_dir_var: ContextVar[str | None] = ContextVar("session_dir", default=None
 mcp_session_id_var: ContextVar[str | None] = ContextVar("mcp_session_id", default=None)
 step_index_var: ContextVar[int | None] = ContextVar("step_index", default=None)
 
+# Resolved model policy (compact policy_applied dict) for the active LLM call.
+# Set by the executor (AiderEngine) and the gateway around a completion; read by
+# the trace layer to annotate backend_llm_call / llm_call events (P9-012).
+model_policy_var: ContextVar[dict | None] = ContextVar("model_policy", default=None)
+
 # Set by ObservableModel.send_completion(); litellm_callback skips Route A when True.
 _backend_call_active: ContextVar[bool] = ContextVar("_backend_call_active", default=False)
 
@@ -158,3 +163,4 @@ def clear_delegation_context() -> None:
     session_dir_var.set(None)
     mcp_session_id_var.set(None)
     step_index_var.set(None)
+    model_policy_var.set(None)

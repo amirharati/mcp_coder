@@ -132,6 +132,7 @@ def build_trace_record(
     prompt_text: str | None,
     response_text: str | None,
     reasoning_text: str | None = None,
+    policy_applied: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     """Build one JSONL trace line for an LLM completion."""
     record: dict[str, Any] = {
@@ -143,6 +144,9 @@ def build_trace_record(
         "timestamp": timestamp or utc_now_iso(),
         "verbosity": verbosity,
     }
+
+    if policy_applied:
+        record["policy_applied"] = policy_applied
 
     if duration_ms is not None:
         record["duration_ms"] = duration_ms
@@ -194,6 +198,7 @@ def build_backend_llm_call_record(
     usage: dict[str, Any] | None = None,
     prompt_text: str | None = None,
     response_text: str | None = None,
+    policy_applied: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     """Build one JSONL trace line for an Aider inner-loop LLM completion."""
     record: dict[str, Any] = {
@@ -204,6 +209,9 @@ def build_backend_llm_call_record(
         "timestamp": timestamp or utc_now_iso(),
         "verbosity": verbosity,
     }
+
+    if policy_applied:
+        record["policy_applied"] = policy_applied
 
     if step_index is not None:
         record["step_index"] = step_index

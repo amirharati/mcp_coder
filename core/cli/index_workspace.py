@@ -39,6 +39,11 @@ def main_index_workspace(argv: list[str] | None = None) -> int:
     args = parser.parse_args(argv)
 
     ws = _resolve_workspace(args.workspace)
+    # Summaries now run through LlmGateway (P9-011); ensure it is initialised for
+    # the CLI entry point (the server bootstraps at startup).
+    from core.observability.bootstrap import ensure_observability_bootstrap
+
+    ensure_observability_bootstrap()
     if not workspace_file_rag_enabled(ws):
         msg = "workspace file RAG disabled (set workspace_file_rag: true or MCP_CODER_WORKSPACE_FILE_RAG=1)"
         if args.json:

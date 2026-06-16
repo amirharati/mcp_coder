@@ -419,6 +419,7 @@ class LocalObservability(ObservabilityBackend):
         from core.config.observability import resolve_observability_verbosity
         from core.observability.context import (
             delegation_id_var,
+            model_policy_var,
             session_dir_var,
             step_index_var,
             workspace_var,
@@ -446,6 +447,7 @@ class LocalObservability(ObservabilityBackend):
             usage=usage,
             prompt_text=prompt_text,
             response_text=response_text,
+            policy_applied=model_policy_var.get(),
         )
         append_trace_record(
             record,

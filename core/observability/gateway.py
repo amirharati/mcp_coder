@@ -103,17 +103,36 @@ class LlmGateway:
 
         def _call() -> GatewayCompletion:
             active_token = _gateway_call_active.set(True)
+            from core.config.model_registry import policy_applied, resolve
+            from core.observability.context import model_policy_var, workspace_var
+
+            params = resolve(role, workspace_var.get() or "", include_aider_metadata=False)
+            policy_token = model_policy_var.set(policy_applied(params, role))
             try:
                 with isolated_stdio() as (stdout_cap, stderr_cap):
                     import litellm
 
                     litellm.suppress_debug_info = True
-                    response = litellm.completion(
-                        model=model,
-                        messages=messages,
-                        max_tokens=max_tokens,
-                        extra_headers=self._build_extra_headers(),
-                    )
+                    completion_kwargs: dict[str, Any] = {
+                        "model": model,
+                        "messages": messages,
+                        "max_tokens": params.max_tokens or max_tokens,
+                        "drop_params": True,
+                        "extra_headers": self._build_extra_headers(),
+                    }
+                    if params.reasoning_effort:
+                        completion_kwargs["reasoning_effort"] = params.reasoning_effort
+                    elif params.thinking_budget:
+                        completion_kwargs["thinking"] = {
+                            "type": "enabled",
+                            "budget_tokens": params.thinking_budget,
+                        }
+                    if params.temperature is not None:
+                        completion_kwargs["temperature"] = params.temperature
+                    if params.top_p is not None:
+                        completion_kwargs["top_p"] = params.top_p
+                    completion_kwargs.update(params.extra_params)
+                    response = litellm.completion(**completion_kwargs)
                     captured = merged_capture(stdout_cap, stderr_cap)
                     text, reasoning_text = _extract_text_and_reasoning(response)
                     if captured.strip() and not text:
@@ -148,6 +167,7 @@ class LlmGateway:
                 )
             finally:
                 _gateway_call_active.reset(active_token)
+                model_policy_var.reset(policy_token)
 
         try:
             ctx = contextvars.copy_context()

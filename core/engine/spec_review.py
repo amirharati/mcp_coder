@@ -2,14 +2,12 @@
 
 from __future__ import annotations
 
-import concurrent.futures
-from typing import Any
-
 from core.config.models import provider_hint_for_model, resolve_model_name
 from core.config.review_model import resolve_review_model_name
 from core.config.providers import apply_provider_env
+from core.config.role_models import ROLE_REVIEW
 from core.engine.base import ExecutionResult
-from core.engine.stdio_isolation import isolated_stdio, merged_capture
+from core.observability.context import role_context
 
 REVIEW_PREAMBLE = """## Delegation mode: review
 
@@ -54,34 +52,24 @@ def run_spec_review(
             tokens={"source": "unavailable"},
         )
 
-    from aider.models import Model
+    from core.engine.owned_helper_llm import run_owned_helper_completion
 
     full_prompt = wrap_review_prompt(prompt)
     messages = [{"role": "user", "content": full_prompt}]
 
-    def _call() -> tuple[str, str]:
-        with isolated_stdio() as (stdout_cap, stderr_cap):
-            model = Model(resolved)
-            reply = model.simple_send_with_retries(messages)
-            captured = merged_capture(stdout_cap, stderr_cap)
-            text = (reply or "").strip()
-            if captured.strip() and not text:
-                text = captured.strip()
-            return text, captured
+    with role_context(ROLE_REVIEW):
+        completion = run_owned_helper_completion(messages, model=resolved)
 
-    try:
-        with concurrent.futures.ThreadPoolExecutor(max_workers=1) as pool:
-            text, captured = pool.submit(_call).result()
-    except Exception as exc:
+    if completion.error:
         return ExecutionResult(
             success=False,
             output="",
             model=resolved,
-            error=f"{type(exc).__name__}: {exc}",
+            error=completion.error,
             tokens={"source": "unavailable"},
         )
 
-    output = text or captured
+    output = completion.text
     if not output.strip():
         return ExecutionResult(
             success=False,
