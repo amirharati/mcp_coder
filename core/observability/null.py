@@ -247,6 +247,7 @@ class NullObservability(ObservabilityBackend):
         call_type: str,
         model: str | None,
         step_index: int | None = None,
+        call_index: int | None = None,
         thinking_text: str | None = None,
         thinking_tokens: int | None = None,
         usage: dict[str, Any] | None = None,

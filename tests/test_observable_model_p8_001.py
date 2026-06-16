@@ -206,6 +206,7 @@ def test_observable_model_sync_records_backend_llm_call(
     assert len(backend) == 1
     assert backend[0]["call_type"] == "executor_turn"
     assert backend[0]["step_index"] == 2
+    assert backend[0]["call_index"] == 1
 
 
 def test_observable_model_stream_records_on_exhaustion(
@@ -259,6 +260,7 @@ def test_observable_model_stream_records_on_exhaustion(
     backend = [line for line in lines if line.get("type") == TRACE_TYPE_BACKEND_LLM_CALL]
     assert len(backend) == 1
     assert backend[0]["response_hash"]
+    assert backend[0]["call_index"] == 1
     assert len(recorded) == 1
     assert recorded[0]["call_index"] == 1
 

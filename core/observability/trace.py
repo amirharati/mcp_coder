@@ -183,6 +183,7 @@ def build_backend_llm_call_record(
     *,
     delegation_id: str,
     step_index: int | None,
+    call_index: int | None = None,
     call_type: str,
     model: str | None,
     verbosity: str,
@@ -206,6 +207,9 @@ def build_backend_llm_call_record(
 
     if step_index is not None:
         record["step_index"] = step_index
+
+    if call_index is not None:
+        record["call_index"] = call_index
 
     if duration_ms is not None:
         record["duration_ms"] = duration_ms
