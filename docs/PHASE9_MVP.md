@@ -9,7 +9,7 @@
 
 # Phase 9 — Write-always storage + universal proxy + replay
 
-**Status:** In progress — P9-001..P9-010 shipped; **P9-011 (unify helper path + registry front door) and P9-012 (generation params + weak model + policy_applied logging) both done**. Model config (reasoning/thinking) is now settable from env and audited per call via `policy_applied`.
+**Status:** **All milestones done** — P9-001..P9-012 shipped 2026-06-16. 924 tests passing. All north-star acceptance criteria verified (BL-507 resolved: thinking tokens confirmed at HTTP boundary). Pending: dogfood A-to-Z session + guide folder deep update.
 **Purpose:** Prove "100% LLM call captured" by adding a universal internal HTTP proxy (litellm → proxy → provider) that captures raw bytes before any normalization layer; flip the write gate to always-on; add context package blobs and replay CLI.
 **PM board:** this file · **Issues:** [PHASE9_ISSUES.md](./PHASE9_ISSUES.md)
 **Phase 8 (frozen):** [PHASE8_MVP.md](./PHASE8_MVP.md) · [PHASE8_ISSUES.md](./PHASE8_ISSUES.md)
@@ -423,7 +423,23 @@ P9-011 + P9-012 introduce `core/config/model_registry.py` (front door reusing `r
 
 ## § Results
 
-*(to be filled by workers)*
+**Phase complete 2026-06-16. All 7 north-star acceptance criteria verified.**
+
+| # | Criterion | Result |
+|---|-----------|--------|
+| 1 | Full prompt + response bodies unconditional in `traces/<id>.jsonl` | ✓ P9-001 + P9-008 |
+| 2 | Context package blob at `sessions/<id>/context_packages/<hash>.json` | ✓ P9-002 |
+| 3 | `proxy_llm_call` events for every in-process LLM call | ✓ P9-003 (live delegation `dfe975e7` confirmed) |
+| 4 | `mcp-coder compare <id>` shows dual-capture side-by-side | ✓ P9-006 |
+| 5 | **BL-507 resolved** — thinking tokens present at HTTP boundary | ✓ `MCP_CODER_EXECUTOR_REASONING_EFFORT=high` → `reasoning:{effort:high}` in proxy `raw_request`; `thinking_tokens=38` on `backend_llm_call` |
+| 6 | `mcp-coder replay <id>` reconstructs delegation from disk | ✓ P9-004 |
+| 7 | `mcp-coder maintenance gc --dry-run` reports prunable data | ✓ P9-005 |
+
+**Additional completions:** `call_index` attribution wired end-to-end (P9-007), gzip corruption fixed (P9-009), trace inspect CLI (P9-010), model registry Stage 1 — unified helper path + `CallParams` + generation params + weak-model default-fill + `policy_applied` on every `backend_llm_call` + `llm_call` (P9-011 + P9-012).
+
+**Open issue:** P9-ISS-007 — `policy_applied` logs `temperature`/`top_p`/`max_tokens` for executor role even though Aider controls those internally; low severity, filed for future refinement.
+
+**Pending next:** dogfood A-to-Z session (real Cursor delegation from scratch) + guide folder deep update (T-07, `per-role-models.md`, `overview.md` Phase 8–9 sync, `how-it-works.md` Phase 6–9 additions).
 
 ---
 

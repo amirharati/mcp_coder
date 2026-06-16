@@ -1,7 +1,8 @@
 # Phase 9 master session bootstrap
 
-**Created:** 2026-06-14
-**Status:** Active — planning complete; PM doc at [PHASE9_MVP.md](../PHASE9_MVP.md).
+**Created:** 2026-06-14  
+**Status:** **Complete** — all Phase 9 milestones shipped 2026-06-16. PM doc at [PHASE9_MVP.md](../PHASE9_MVP.md).  
+**Outcome:** All 7 north-star acceptance criteria verified, including BL-507 (thinking tokens at HTTP boundary). 924 tests passing. Phase not yet formally closed — dogfood A-to-Z session and guide update pending.  
 **Purpose:** Record all Phase 9 scope decisions, design rationale, and locked choices made in the master planning session. Workers read the PM doc; this note is the *why* behind it.
 **Related notes:** [llm-interception-strategies.md](./llm-interception-strategies.md) (proxy architecture detail), [phase8-master-session-bootstrap.md](./phase8-master-session-bootstrap.md) (Phase 8 decisions)
 

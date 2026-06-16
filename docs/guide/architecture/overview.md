@@ -1,7 +1,7 @@
 # Architecture overview
 
-**Status:** Living — update as shipped decisions change.  
-**Scope:** Phases 1–7 as implemented. Phase 8+ items in backlog (see § Known gaps).  
+**Status:** Living — update as shipped decisions change. **Phase 9 sync pending** (full rewrite after dogfood session).  
+**Scope:** Phases 1–7 documented; Phases 8–9 shipped but not yet fully reflected here (see § Known gaps for items now resolved).  
 **How to use:** Read as a structural reference after [how-it-works.md](../how-it-works.md). That doc is the *operator* mental model; this one is the *layer map and design decisions*. Deeper per-subsystem docs live alongside this file.
 
 ---
@@ -252,13 +252,14 @@ Full layout: [storage-layout.md](./storage-layout.md) (pending) and [`notes/stor
 | Gap | Where it hurts | Backlog |
 |-----|----------------|---------|
 | **Executor continuation still conservative** | P7 outer loop ships step events, but multi-step retry/continue policy is still v1 and intentionally conservative | BL-350 follow-on |
-| **Verbosity controls what's written, not what's shown** | At `lean`/`standard`, prompt bodies lost permanently — should capture 100%, filter display | **BL-367** (Phase 8) |
-| **Backend-complete interception not finished** | Owned callsites use LlmGateway; backend-internal interception parity across present/future backends is still a planning item | BL-371 |
-| **Context package blob not stored** | Only hash kept; can't replay exact prompt package from disk | BL-367 prereq |
+| ~~**Verbosity controls what's written, not what's shown**~~ | ~~At `lean`/`standard`, prompt bodies lost permanently~~ | **Done (Phase 9 P9-001/P9-008)** — write-always; verbosity is display-only |
+| **Backend-complete interception not finished** | In-process callers fully covered (proxy + gateway); out-of-process (Claude Code, Codex, OpenCode) via base URL config in Phase 10+ | BL-371 / Phase 10+ |
+| ~~**Context package blob not stored**~~ | ~~Only hash kept; can't replay from disk~~ | **Done (Phase 9 P9-002)** |
 | **Validation block → empty `context_refs`** | Looks like RAG regression when spec blocks | BL-364 |
 | **Single executor backend (Aider)** | `opencode_engine.py` stub exists; no second backend | BL-340 |
 | **Session policy heuristics** | `align_host` matching is fragile (slug-based) | BL-317 |
 | **Embeddings / recall metric** | FTS-only retrieval; no measured recall | P5-005 deferred |
+| ~~**No model config control**~~ | ~~Parameters hardcoded per call site~~ | **Done (Phase 9 P9-011/P9-012)** — `model_registry.resolve()`, env knobs, `policy_applied` in every trace |
 
 ---
 
@@ -275,13 +276,14 @@ Full layout: [storage-layout.md](./storage-layout.md) (pending) and [`notes/stor
 
 | Area | Note |
 |------|------|
-| **Full-capture substrate** | LlmGateway proxy + verbosity as display-only filter; capture 100% raw, filter at read time (BL-367, Phase 8) |
-| **Executor loop ownership** | Phase 7 shipped bounded outer-loop events; follow-on is richer continuation/escalation policy (BL-350/BL-351) |
+| ~~**Full-capture substrate**~~ | **Done (Phase 9)** — universal HTTP proxy, write-always storage, context blob, replay CLI, compare CLI, model registry + `policy_applied`. See [PHASE9_MVP.md](../../PHASE9_MVP.md). |
+| **Executor continuation/escalation** | Phase 7 shipped bounded outer-loop events; follow-on is richer continuation/escalation policy (BL-350/BL-351) |
 | **Lean JSONL refs** | Expand `context_refs[]`; drop remaining inline bodies once corpora mature (BL-356) |
-| **Storage lifecycle** | Retention, promote-then-prune, gc (BL-357) |
+| **Storage lifecycle** | Retention, promote-then-prune, gc — first slice shipped (P9-005); full policy BL-357 |
 | **Executor-pull tools** | `mcp-coder search --format plain` pre-shapes BL-354 |
 | **Workflow turns** | Named modes beyond implement/review: digest, polish, refactor (BL-359) |
 | **Alternate backends** | Cursor-SDK executor (BL-340) |
+| **Model policy Stage 2+** | Host-set policy per delegation (BL-512), AI-suggested params (BL-513), dynamic escalation (BL-514), model tiers (BL-515) |
 
 ---
 
@@ -305,6 +307,7 @@ Full layout: [storage-layout.md](./storage-layout.md) (pending) and [`notes/stor
 
 | Date | Change |
 |------|--------|
+| 2026-06-16 | Phase 9 partial sync — known gaps updated (write-always, context blob, model registry done); future direction updated; full rewrite (layer map, lifecycle, helper LLMs, D-5 model registry) pending after dogfood session |
 | 2026-06-13 | Phase 7 sync — scope updated to Phases 1–7; trace/event descriptions updated (executor + compile_event); known gaps adjusted to post-P7 state |
 | 2026-06-13 | Phase 6 — `core/observability/` seam + trace files; storage map updated; known gaps and future direction refreshed; helper LLM note updated (tokens live, not null) |
 | 2026-06-13 | Phase 5 — `rag_retrieval`, `workspace_rag.db`, `workspace_search`; gaps table refresh |

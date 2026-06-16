@@ -2,7 +2,7 @@
 
 **Purpose:** the mental model. Everything you need to keep in your head to operate, debug, or extend the system. Re-read when coming back after a break. Deeper detail lives in [architecture/](./architecture/) and the [tutorials](./tutorials/); module-by-module map in [code-structure.md](./code-structure.md).
 
-**Covers:** Phases 1–5 as shipped. Last updated: 2026-06-13.
+**Covers:** Phases 1–5 as shipped. Last updated: 2026-06-13. **Phases 6–9 not yet reflected here** — deep update scheduled after Phase 9 dogfood session.
 
 ---
 

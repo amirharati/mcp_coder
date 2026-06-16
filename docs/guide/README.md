@@ -1,8 +1,10 @@
 # mcp-coder guide
 
-Onboarding, tutorials, and architecture reference for the mcp-coder stack (Phases 1–7).
+Onboarding, tutorials, and architecture reference for the mcp-coder stack (Phases 1–9).
 
-This folder is the output of **Phase 4.5** literacy work, updated after **Phase 5** (RAG), **Phase 6** (observability substrate), and **Phase 7** (executor loop ownership + compile provenance). Written from running and reading the code, not from specs alone.
+This folder is the output of **Phase 4.5** literacy work, updated after **Phase 5** (RAG), **Phase 6** (observability substrate), **Phase 7** (executor loop ownership + compile provenance), **Phase 8** (Aider inner-loop capture, ObservableModel), and **Phase 9** (universal HTTP proxy, write-always storage, model registry, thinking-token verification). Written from running and reading the code, not from specs alone.
+
+**Deep guide update pending** after Phase 9 dogfood session (T-07, `per-role-models.md`, `overview.md` full sync).
 
 ## Start here
 

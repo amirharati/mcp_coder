@@ -173,7 +173,7 @@ Phase 1 deferred executor conversation carry-over to here (BL-155); see P1-130 `
 | BL-350 | **Supervised executor loop — inspect mid-run, inject context, capture thinking** | **Phase 7 partial shipped (P7-002):** bounded outer loop + executor `llm_call` / `tool_call` / `action` events + `executor_turns` stats. **Remaining:** adaptive multi-step continuation protocol and stronger supervised escalation behavior (BL-351). |
 | BL-351 | **Simulated interactive + escalate to host (Cursor human intervention)** | Today: `InputOutput(yes=True)` auto-approves all Aider prompts (blind); “add files to chat” → implement failure; no structured handoff back to Cursor mid-delegate. **Later:** supervisor answers executor prompts via **cheap LLM + rules** (add read / expand spec / continue) instead of blind yes; when uncertain → **pause delegation** and return `needs_input` / `clarification_needed` to **Cursor planner** for human decision, then resume (BL-350 outer loop or custom IO). High leverage for scope expansion + trust. **Phase 5+**. From P4.5-ISS-014. |
 | BL-352 | **Multi-language symbol scan + outlines (C/C++, Go, Rust, …)** | Today: symbol scan hardcoded to 9 extensions (`SCAN_EXTENSIONS` in `file_picker.py`); repo-map/excerpt regex is Python `def`/`class` only — C/C++/Go/Rust/Java/etc. work via **spec contract** but not **auto-discovery** or useful outlines. **Later:** expand/configurable scan globs; per-language outline heuristics (or tie to BL-348 index); goal = “works for money cases” on polyglot/monorepo repos without hand-listing every path. **Phase 5+**. From P4.5-ISS-015. |
-| BL-353 | **LLM boundary observability — full pass-through logging** | **Phase 6+7+8 partial shipped:** helper traces/tokens (P6), executor step events (P7-002), compile provenance bundle (P7-003), Aider inner-loop capture via `ObservableModel` + thinking tokens (P8-001). **Remaining:** write-always storage + replay-grade completeness → **BL-367** (Phase 9). |
+| BL-353 | **LLM boundary observability — full pass-through logging** | **Phase 6+7+8+9 done:** helper traces/tokens (P6), executor step events (P7), compile provenance (P7), Aider inner-loop + thinking tokens (P8), write-always + proxy + replay + model registry + policy_applied (P9). BL-367 fully shipped. |
 | BL-354 | **Executor context tools (pull) — RAG/history/read during backend loop** | **Dual model:** keep **compile-push (A)** as default; **also** expose read-only mcp-coder tools inside the executor loop (Aider today ignores planner MCP). LLM-driven `rag_search`, `workspace_search`, history, excerpts beside edit tools. **Phase 5+** (pairs with BL-002 usage); see § BL-354. From T-04 pass (2026-06-11). |
 | BL-355 | **Optional host CLI toolchain — `rg`, docs, `mcp-coder doctor`** | Today: **ripgrep** optional (Python fallback in file picker); **git** soft-required for diffs/snapshots; tutorials use **jq** / **grep** for inspection. **Later:** curated optional-deps list, `setup`/`doctor` hints (`brew install ripgrep`), perf notes when fallback is used. **Phase 5+** DX; see § BL-355. From T-04 playground (2026-06-11). |
 | BL-356 | **RAG-backed context audit refs — lean JSONL + digest provenance** | As **BL-002** indexes digests (chat, delegations, workspace files), stop duplicating bodies in `delegations.jsonl`; store `context_refs[]` + hashes; index-time metadata for replay/retrieval. Pairs with **BL-353** wire log. **Phase 5+** (after RAG corpus); see § BL-356. From T-04 observability pass (2026-06-11). |
@@ -306,9 +306,9 @@ Phase 1 deferred executor conversation carry-over to here (BL-155); see P1-130 `
 
 ### BL-353: LLM boundary observability — full pass-through logging
 
-**Status:** `partial` — 2026-06-13; expanded 2026-06-11 (T-04 full-delegate audit gaps).
+**Status:** `done` — 2026-06-16. Phase 9 completes this item.
 
-**Target phase:** **Phase 6+7+8 partial shipped** (P6 helpers/tokens, P7 executor step events + compile provenance, P8 Aider inner-loop + thinking tokens). **Remaining:** write-always storage + replay-grade full completeness → **BL-367** (Phase 9).
+**Target phase:** **Phase 6+7+8+9 fully shipped** — P6 helpers/tokens, P7 executor step events + compile provenance, P8 Aider inner-loop + thinking tokens, P9 write-always + universal proxy + context blob + model registry + policy_applied. BL-367 closed.
 
 **Problem:** Today we audit **intent** more than **reality**. A full `delegate_to_agent` / `mcp-coder delegate` run appends one `delegations.jsonl` row — but most **wire traffic** is missing or only inferable.
 
@@ -1455,16 +1455,16 @@ delegate_to_agent(backend=…)
 | **BL-364** | **Blocked-delegate skip reasons in JSONL** | See table; **Phase 5+** |
 | **BL-365** | **RAG toolset DX** — unified CLI, workspace stats | See § BL-365; **Phase 5+** |
 | **BL-366** | **RAG evaluation (P5-005)** — recall, cost, embeddings | See § BL-366; **Phase 5+** |
-| **BL-367** | **Full-capture substrate** — write-always storage + replay | See § BL-367; **Phase 9** target; prerequisite: Phase 8 complete ✓ |
+| **BL-367** | **Full-capture substrate** — write-always storage + replay | **Phase 9 done** — P9-001 (write-always), P9-002 (context blob), P9-003 (proxy), P9-004 (replay CLI), P9-005 (GC), P9-006 (compare). See § BL-367. |
 | **BL-368** | **Unified LlmGateway completion proxy** — single LLM boundary | **Phase 7 shipped (P7-001)** for owned callsites; backend-internal interception strategy tracked in BL-371 |
 | **BL-369** | **CLI gateway bootstrap hardening** | **Done (Phase 8 / P8-003):** shared `ensure_observability_bootstrap()` path for server + CLI entry points |
 | **BL-370** | **Host transcript byte-range provenance** | **Done (Phase 8 / P8-004):** `validation_input` compile events include `byte_start`/`byte_end` alongside `source_path`/`last_source_line` |
 | BL-371 | **Backend-specific interception strategy for full in/out capture** | **Phase 8 delivered for Aider (P8-001 + P8-002 + P8-006 hardening).** Remaining: non-Python backends (Claude Code, Codex, OpenCode) via Phase 10+ HTTP proxy. |
-| **BL-507** | **Thinking token capture verification** — confirm `thinking_text`/`thinking_tokens` on `backend_llm_call` events with a known thinking-enabled model/provider path | **Phase 9 resolution target (P9-003 proxy):** raw proxy response log will reveal definitively whether thinking tokens are present at HTTP boundary before litellm normalization. |
-| **BL-508** | **Universal internal HTTP proxy** — `LocalLlmProxy` between litellm and real provider; all in-process callers route through it; model-prefix routing from env vars | **Phase 9 (P9-003)**; same proxy extended to out-of-process backends (Claude Code, Codex, OpenCode) in Phase 10+ via base URL config |
+| **BL-507** | **Thinking token capture verification** | **Phase 9 done** — `MCP_CODER_EXECUTOR_REASONING_EFFORT=high` → `reasoning:{effort:high}` in proxy raw_request; `thinking_tokens=38` in `backend_llm_call`; compare CLI: `proxy_thinking=True backend_thinking=True`. BL-507 resolved 2026-06-16. |
+| **BL-508** | **Universal internal HTTP proxy** — `LocalLlmProxy` between litellm and real provider; all in-process callers route through it; model-prefix routing from env vars | **Phase 9 done (P9-003, P9-009)**; same proxy extended to out-of-process backends in Phase 10+ via base URL config |
 | **BL-509** | **Content-addressable dedup for trace bodies** — replace repeated large text fields in trace events with sha256 refs; store blobs once in CAS store | Post-Phase 9 once corpus exists to measure dedup ratio; context package blob (P9-002) is the proof-of-concept |
-| **BL-510** | **Remove `should_log_full_prompt` write gate from delegation row** — `MCP_CODER_LOG_FULL_PROMPT` env var gates `prompt_full` on `delegations.jsonl` row; should be unconditional like trace bodies per D-P9-8 | Phase 9 follow-up after P9-001 lands; separate write path from trace file |
-| **BL-511** | **Model registry Stage 1** — `core/config/model_registry.py` front door (`resolve(role,workspace)→CallParams`) reusing `role_models`; unify helper path onto `LlmGateway`; generation params + weak-model default-fill; `policy_applied` logging | **Phase 9 — split P9-011** (unify helper path + registry front door) **+ P9-012** (params + weak model + logging); closes BL-507 loop; see [model-policy-layer.md](./notes/model-policy-layer.md) |
+| **BL-510** | **Remove `should_log_full_prompt` write gate from delegation row** | **Phase 9 done (P9-008)** — `MCP_CODER_LOG_FULL_PROMPT` gate removed; `prompt_full` written unconditionally; `should_log_full_prompt()` retired as no-op. |
+| **BL-511** | **Model registry Stage 1** — `core/config/model_registry.py` + unified helper path + generation params + `policy_applied` | **Phase 9 done (P9-011 + P9-012)** — both shipped 2026-06-16; `reasoning_effort=high` → thinking tokens verified end-to-end. See [model-policy-layer.md](./notes/model-policy-layer.md). |
 | **BL-512** | **Model policy layer — Stage 2: host-set policy** — MCP host passes `model_policy` block inside `delegate_to_agent` call; overrides env layer for that delegation; host can set per-role model, thinking budget, cost cap | Future (Phase 11+) — depends on BL-511; see [model-policy-layer.md](./notes/model-policy-layer.md) Stage 2 |
 | **BL-513** | **Model policy layer — Stage 3: AI-suggested parameters** — lightweight pre-delegation analysis step (cheap LLM or heuristic) that examines the incoming task and suggests policy overrides (e.g. hard refactor → higher thinking budget); suggestion logged as `policy_suggestion` trace event; can be accepted/rejected/overridden | Future — depends on BL-511/BL-512; see [model-policy-layer.md](./notes/model-policy-layer.md) Stage 3 |
 | **BL-514** | **Model policy layer — Stage 4: dynamic escalation** — outer-loop controller modifies active policy mid-delegation in response to runtime signals (retry exhausted → larger model; critic reject → more thinking; cost cap → downgrade); connects to BL-321/BL-006 signals | Future — depends on BL-511/BL-512/BL-513 and a critic or supervisor being in place; see [model-policy-layer.md](./notes/model-policy-layer.md) Stage 4 |
@@ -1518,7 +1518,7 @@ delegate_to_agent(backend=…)
 
 ### BL-367: Full-capture substrate — LlmGateway proxy + verbosity as display-only filter
 
-**Status:** `idea` — 2026-06-13. **Target phase: Phase 9** (Phase 8 prerequisites now complete 2026-06-14). **Expanded scope (2026-06-14):** Phase 9 also adds `LocalLlmProxy` (BL-508) as the universal capture foundation alongside write-always storage and blobs.
+**Status:** `done` — 2026-06-16. **Phase 9 complete.** P9-001 (write-always), P9-002 (context blob), P9-003 (universal proxy), P9-004 (replay CLI), P9-005 (GC), P9-006 (compare), P9-007–P9-010 (attribution, prompt_full, gzip fix, trace inspect), P9-011 (unified helper path + registry), P9-012 (generation params + policy_applied). All Phase 9 north-star criteria verified including BL-507 (thinking tokens at HTTP boundary).
 
 **Origin:** Phase 6 exit review. Phase 6 shipped the observability seam and helper traces — but verbosity still controls **what gets written to disk**, meaning at `lean` or `standard` verbosity, prompt bodies and executor turns are permanently lost. This is the wrong direction: training-data quality, forensic replay, and debugging all require that **nothing is ever silently dropped at write time**.
 
@@ -1626,7 +1626,7 @@ delegate_to_agent(backend=…)
 
 ### BL-507: Thinking token capture verification
 
-**Status:** `deferred` — 2026-06-14. Carried from P8-ISS-004.
+**Status:** `done` — 2026-06-16. Resolved in Phase 9. `MCP_CODER_EXECUTOR_REASONING_EFFORT=high` → `reasoning:{effort:high}` in proxy `raw_request`; `thinking_tokens=38` in `backend_llm_call.thinking_tokens`; `compare` CLI confirms `proxy_thinking=True, backend_thinking=True`. Litellm preserves thinking tokens through normalization; nothing is stripped.
 
 **Problem:** Live dogfood of Phase 8 (`ObservableModel`) with `openrouter/anthropic/claude-sonnet-4` produced no `thinking_text`/`thinking_tokens` fields on `backend_llm_call` events, even for a complex task. Phase 8 capture infrastructure is correct (fields exist in schema and `extract_thinking_from_response()` is wired), but the provider/litellm path may not expose these fields for that model/route.
 
@@ -1643,7 +1643,7 @@ delegate_to_agent(backend=…)
 
 ### BL-508: Universal internal HTTP proxy
 
-**Status:** `idea` → **Phase 9 (P9-003)** — 2026-06-14. Promoted from Phase 10+ to Phase 9 in master session.
+**Status:** `done` — 2026-06-16. Phase 9 (P9-003 + P9-009 gzip fix). `LocalLlmProxy` running as a local HTTP server; all in-process litellm calls route through it; `proxy_llm_call` events with call_index attribution, raw request/response bodies, and `Accept-Encoding: identity` for readable payloads.
 
 **Problem:** Phase 8's `ObservableModel` captures Aider inner-loop calls above litellm's normalization layer. Whatever litellm silently drops (thinking blocks, provider extensions) is permanently lost before we see it. There is no way to prove "100% captured" from user-space instrumentation alone.
 
@@ -1665,7 +1665,7 @@ delegate_to_agent(backend=…)
 
 ### BL-510: Remove `should_log_full_prompt` write gate from delegation row
 
-**Status:** `idea` — 2026-06-14. Split from P9-001 scope (master session).
+**Status:** `done` — 2026-06-16. Phase 9 (P9-008). `MCP_CODER_LOG_FULL_PROMPT` gate removed from `delegation_log.py` and `mcp_server.py`; `prompt_full` now written unconditionally; `should_log_full_prompt()` retired as a deprecated no-op.
 
 **Problem:** `should_log_full_prompt()` (env var `MCP_CODER_LOG_FULL_PROMPT`) gates whether the executor prompt is written to the `prompt_full` field of the `delegations.jsonl` row in `core/logging/delegation_log.py`. This is a separate write gate from the trace file verbosity gate fixed in P9-001, but it violates the same D-P9-8 principle: write-always; no runtime gate on what reaches disk.
 
@@ -1709,7 +1709,7 @@ Blobs stored at `sessions/<id>/blobs/<sha256>` (or a session-shared store). At a
 
 ### BL-511: Model registry Stage 1 (front door + unified helper path + params + logging)
 
-**Status:** `scheduled` — **Phase 9**, split into **P9-011** + **P9-012** (2026-06-16 code review); promoted from Phase 10 because proxy verification is useless without it.  
+**Status:** `done` — 2026-06-16. Phase 9 (P9-011 + P9-012). 924 passed, 2 skipped. BL-507 end-to-end verified.  
 **Design note:** [docs/notes/model-policy-layer.md](./notes/model-policy-layer.md)  
 **Specs:** [P9-011](./tasks/P9-011-model-policy-layer-v1.md) (unify helper path + registry front door), [P9-012](./tasks/P9-012-generation-params-logging-v1.md) (params + weak model + logging)
 
@@ -1831,7 +1831,7 @@ Tier 3: thinking  ← claude-opus-thinking, o3, gemini-2.5-pro (high thinking)
 
 | Date | Change |
 |------|--------|
-| 2026-06-16 | BL-511–514 added — model policy layer Stages 1–4 (env-controlled config, host-set policy, AI-suggested params, dynamic escalation); design note at [model-policy-layer.md](./notes/model-policy-layer.md); BL-511 scheduled for Phase 10 |
+| 2026-06-16 | BL-511–514 added — model policy layer Stages 1–4; design note at [model-policy-layer.md](./notes/model-policy-layer.md). BL-511 implemented in Phase 9 (P9-011 + P9-012, done same day). BL-507/508/510 closed. BL-367/BL-353 fully done. |
 | 2026-06-13 | **Phase 7 closeout sync** — BL-350/353/368 statuses updated to reflect P7 shipment; BL-369/370/371 added from carried P7 issues |
 | 2026-06-13 | **Phase 6 closed** — PHASE6_MVP + PHASE6_ISSUES frozen; P6-ISS-002 → BL-368; Phase 6 exit table added; BL-335 done (partial); BL-353 partial |
 | 2026-06-13 | BL-368 added — unified LlmGateway completion proxy (P6-ISS-002); Phase 7 target |
