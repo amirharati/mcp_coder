@@ -271,6 +271,22 @@ def _append_trace_for_completion(
     prompt_text = _extract_prompt_text(kwargs)
     response_text, reasoning_text = _extract_response_parts(response_obj)
     verbosity = resolve_observability_verbosity(workspace)
+
+    policy = model_policy_var.get()
+    if policy is None and workspace is not None and role:
+        # The async litellm callback can fire after the ContextVar is reset in
+        # finally blocks (e.g. aider_engine resets model_policy_var after
+        # _run_coder completes).  Re-derive from the registry so the trace
+        # record still carries meaningful audit data.
+        try:
+            from core.config.model_registry import policy_applied as _pa
+            from core.config.model_registry import resolve as _resolve
+
+            params = _resolve(role, workspace, include_aider_metadata=False)
+            policy = _pa(params, role)
+        except Exception:
+            pass
+
     record = build_trace_record(
         delegation_id=delegation_id,
         role=role,
@@ -282,7 +298,7 @@ def _append_trace_for_completion(
         prompt_text=prompt_text,
         response_text=response_text,
         reasoning_text=reasoning_text,
-        policy_applied=model_policy_var.get(),
+        policy_applied=policy,
     )
     append_trace_record(record, session_dir=session_dir, delegation_id=delegation_id, workspace=workspace)
 

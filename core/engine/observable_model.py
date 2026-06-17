@@ -339,6 +339,14 @@ class ObservableModel(Model):
         stream_key = None
         stream_handoff = False
         self._inject_attribution_headers()
+        if stream:
+            # Ask the provider to include a final usage chunk so we can record
+            # input/output tokens in the backend_llm_call trace event.
+            if self.extra_params is None:
+                self.extra_params = {}
+            opts = dict(self.extra_params.get("stream_options") or {})
+            opts["include_usage"] = True
+            self.extra_params["stream_options"] = opts
         _ci = self._call_index
         if stream:
             stream_key = register_backend_stream_call(

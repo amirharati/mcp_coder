@@ -9,7 +9,7 @@
 
 # Phase 9 — Write-always storage + universal proxy + replay
 
-**Status:** **All milestones done** — P9-001..P9-012 shipped 2026-06-16. 924 tests passing. All north-star acceptance criteria verified (BL-507 resolved: thinking tokens confirmed at HTTP boundary). Pending: dogfood A-to-Z session + guide folder deep update.
+**Status:** **Complete** — P9-001..P9-012 shipped 2026-06-16. A-to-Z dogfood session run 2026-06-17 (3 separate runs; final session: 6 delegations, 6/6 exact proxy↔llm_call alignment, all event types fully attributed). 924 tests passing. All north-star acceptance criteria verified. Three post-dogfood fixes shipped (P9-ISS-008..010). Pending: guide folder deep update.
 **Purpose:** Prove "100% LLM call captured" by adding a universal internal HTTP proxy (litellm → proxy → provider) that captures raw bytes before any normalization layer; flip the write gate to always-on; add context package blobs and replay CLI.
 **PM board:** this file · **Issues:** [PHASE9_ISSUES.md](./PHASE9_ISSUES.md)
 **Phase 8 (frozen):** [PHASE8_MVP.md](./PHASE8_MVP.md) · [PHASE8_ISSUES.md](./PHASE8_ISSUES.md)
@@ -437,9 +437,14 @@ P9-011 + P9-012 introduce `core/config/model_registry.py` (front door reusing `r
 
 **Additional completions:** `call_index` attribution wired end-to-end (P9-007), gzip corruption fixed (P9-009), trace inspect CLI (P9-010), model registry Stage 1 — unified helper path + `CallParams` + generation params + weak-model default-fill + `policy_applied` on every `backend_llm_call` + `llm_call` (P9-011 + P9-012).
 
+**Post-dogfood fixes (2026-06-17):**
+- P9-ISS-008 — Proxy routing catch-all: `google/*` (Gemini helpers) were getting 400 because litellm strips `openrouter/` prefix before forwarding. Added catch-all fallback to OpenRouter for any unrecognised model prefix. 924 tests passing.
+- P9-ISS-009 — `backend_llm_call` input/output token counts were null for streaming calls. Fixed by injecting `stream_options: {"include_usage": True}` when `stream=True` in `ObservableModel.send_completion()`. Providers now send a final usage chunk; `_assemble_stream_response` already captures it.
+- P9-ISS-010 — `llm_call.policy_applied` was null/absent on executor events. Two-part fix: (a) litellm async callback re-derives policy from registry when contextvar is reset; (b) P7-002 step event builder (`build_executor_llm_trace_record`) now accepts and writes `policy_applied`, resolved once at `_bounded_executor_loop` entry. Final dogfood: all 6/6 executor `llm_call` events carry `policy_applied` ✓.
+
 **Open issue:** P9-ISS-007 — `policy_applied` logs `temperature`/`top_p`/`max_tokens` for executor role even though Aider controls those internally; low severity, filed for future refinement.
 
-**Pending next:** dogfood A-to-Z session (real Cursor delegation from scratch) + guide folder deep update (T-07, `per-role-models.md`, `overview.md` Phase 8–9 sync, `how-it-works.md` Phase 6–9 additions).
+**Pending:** guide folder deep update (T-07, `per-role-models.md`, `overview.md` Phase 8–9 sync, `how-it-works.md` Phase 6–9 additions).
 
 ---
 
@@ -447,6 +452,7 @@ P9-011 + P9-012 introduce `core/config/model_registry.py` (front door reusing `r
 
 | Date | Change |
 |------|--------|
+| 2026-06-17 | **A-to-Z dogfood complete** (3 runs; final session `f33fdbaf`: 6 delegations, 77 tests passing, 6/6 proxy↔llm_call alignment exact). Three post-dogfood fixes shipped: proxy routing catch-all (P9-ISS-008), streaming token counts (P9-ISS-009), executor `llm_call.policy_applied` (P9-ISS-010). Full suite 924 passing. |
 | 2026-06-16 | P9-012 **done**: generation params + weak-model default-fill resolve per role (env + role defaults via `model_registry.resolve()`); applied on executor (aider `set_reasoning_effort`/`set_thinking_tokens`/`extra_params`/`get_weak_model`) and helpers (gateway litellm kwargs, `drop_params=True`); `policy_applied` audit object now on every `backend_llm_call` + `llm_call` (carried via `model_policy_var` contextvar). Thinking/reasoning is now settable from env. Focused `23 passed`; full suite `924 passed, 2 skipped`. |
 | 2026-06-16 | P9-011 **done**: created `core/config/model_registry.py` (`resolve(role,workspace)→CallParams` reusing `role_models`); migrated `workspace_summarizer_llm` + `spec_review` off direct `Model().simple_send_with_retries()` onto `LlmGateway` (now emit `llm_call`); bootstrapped gateway in CLI `index_workspace`. Focused `15 passed`; full suite `901 passed, 2 skipped`. Executor path untouched. |
 | 2026-06-16 | Architecture review of model registry: code-grounded review found id+budget already centralized in `role_models.py` and two legacy helpers (`workspace_summarizer`, `spec_review`) bypassing the gateway (no `llm_call` event). Decisions: single `model_registry.resolve()` front door reusing `role_models`; one helper path (remove legacy direct-`Model()` calls); weak model resolved in registry with default-fill. **Split Stage 1 into P9-011** (unify helper path + registry front door, refactor) **and P9-012** (generation params + weak model + `policy_applied` logging). Added BL-515 (model tiers). Both specs `spec_ready`. |

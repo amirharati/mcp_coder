@@ -236,6 +236,18 @@ def _bounded_executor_loop(
     last_output: str = ""
     result: ExecutionResult | None = None
 
+    # Resolve executor policy once (stable for the whole delegation) so every
+    # executor llm_call trace event carries a populated policy_applied field.
+    _executor_policy: "dict | None" = None
+    try:
+        from core.config.model_registry import ROLE_EXECUTOR
+        from core.config.model_registry import policy_applied as _pa
+        from core.config.model_registry import resolve as _resolve
+
+        _executor_policy = _pa(_resolve(ROLE_EXECUTOR, workspace), ROLE_EXECUTOR)
+    except Exception:
+        pass
+
     for step_idx in range(1, max_steps + 1):
         elapsed = time.perf_counter() - loop_t0
         if elapsed >= total_timeout_s:
@@ -280,6 +292,7 @@ def _bounded_executor_loop(
             verbosity=obs_verbosity,
             prompt_text=step_result.prompt_used,
             response_text=step_result.output,
+            policy_applied=_executor_policy,
         )
         append_trace_record(
             exec_llm_rec,

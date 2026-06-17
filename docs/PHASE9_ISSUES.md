@@ -1,7 +1,7 @@
 # Phase 9 issues
 
 **Open:** P9-ISS-007 (policy_applied misleading for executor-ignored params)  
-**Closed:** `P9-ISS-001`..`P9-ISS-006`. `P9-OBS-001` promoted to **P9-011 + P9-012**, both **done** (full suite `924 passed, 2 skipped`) — see below.  
+**Closed:** `P9-ISS-001`..`P9-ISS-006`, `P9-ISS-008`..`P9-ISS-010`. `P9-OBS-001` promoted to **P9-011 + P9-012**, both **done** (full suite `924 passed, 2 skipped`) — see below.  
 **Related PM board:** [PHASE9_MVP.md](./PHASE9_MVP.md)
 
 ---
@@ -445,6 +445,76 @@ Reported validation:
 Outcome:
 - New traces should store readable UTF-8 `proxy_llm_call.raw_response` instead of gzip-corrupted replacement text.
 - Existing historical corrupted traces remain irrecoverable and should not be used for BL-507 conclusions.
+
+---
+
+## P9-ISS-008 — Proxy routing: `google/*` models get 400 — Gemini helpers silently fail
+
+**Type:** Bug — proxy routing gap  
+**Severity:** critical — all Gemini helper LLMs (spec_validation, architect_pass, context_builder, workspace_summarizer) returned `BadRequestError 400` on every call; delegation proceeded with mechanical-only briefs  
+**Status:** closed  
+**Opened:** 2026-06-17 (A-to-Z dogfood session 1)  
+**Closed:** 2026-06-17
+
+### Root cause
+
+litellm strips the `openrouter/` prefix before forwarding to the proxy. A model configured as `openrouter/google/gemini-2.5-flash` arrives at the proxy as `google/gemini-2.5-flash`. `resolve_route()` in `core/proxy/routing.py` had explicit rules only for `openrouter/`, `anthropic/`, and `openai/` prefixes — no match for `google/*` → `RouteResolutionError: no route for model 'google/gemini-2.5-flash'` → litellm raises `BadRequestError`.
+
+### Fix
+
+Added a catch-all fallback at the end of `resolve_route()`: if no prefix rule matches but `OPENROUTER_API_KEY` is set, return the OpenRouter fallback route. Covers `google/*`, `meta-llama/*`, `mistralai/*` and any other provider litellm strips to a non-listed prefix. Updated `test_resolve_route_missing_prefix_raises` to assert it only raises when OPENROUTER_API_KEY is also absent; added `test_resolve_route_unknown_prefix_falls_back_to_openrouter`.
+
+### Verification
+
+Post-fix dogfood (session `42820299`, `f33fdbaf`): all `proxy_llm_call` events `status=200`; `llm_call` events present for all helper roles with token counts; `compile_event.brief` fields contain real LLM output.
+
+---
+
+## P9-ISS-009 — `backend_llm_call.usage` input/output tokens always null for streaming executor
+
+**Type:** Observability gap — token counts missing from trace events  
+**Severity:** medium — tokens available in `model_roles.executor.tokens` (from Aider stdout parse) but not in the per-turn trace event  
+**Status:** closed  
+**Opened:** 2026-06-17 (A-to-Z dogfood analysis)  
+**Closed:** 2026-06-17
+
+### Root cause
+
+Aider calls litellm with `stream=True` by default. OpenRouter/Anthropic do not include a `usage` block in stream chunks unless explicitly requested. `_assemble_stream_response()` already collects the last chunk's `usage` attribute, but without `stream_options: {"include_usage": True}` in the request, no usage chunk is sent → `usage=None` → `build_backend_llm_call_record(usage=None)` → no `usage` field in the event.
+
+### Fix
+
+In `ObservableModel.send_completion()`, when `stream=True`, inject `stream_options: {"include_usage": True}` into `self.extra_params` before calling `super()`. This is a standard OpenAI parameter that litellm passes through to providers; OpenRouter applies it to all proxied models.
+
+### Verification
+
+Post-fix dogfood: `backend_llm_call.usage.input` and `.output` are populated (e.g. `inp=8630 out=10046`) and `thinking_tokens` also present (e.g. `think=3540`).
+
+---
+
+## P9-ISS-010 — `llm_call.policy_applied` null/absent on executor step events
+
+**Type:** Observability gap — audit field missing  
+**Severity:** low — `backend_llm_call` carried it correctly; `llm_call` for executor was missing the field  
+**Status:** closed  
+**Opened:** 2026-06-17 (A-to-Z dogfood analysis)  
+**Closed:** 2026-06-17
+
+### Root cause (two separate paths)
+
+**Path A — litellm callback (`llm_call` via `_append_trace_for_completion`):** The async litellm callback fires after `aider_engine.py`'s `finally` block resets `model_policy_var` to None. So `model_policy_var.get()` returns None at callback time.
+
+**Path B — P7-002 step event builder (`build_executor_llm_trace_record`):** Called in `_bounded_executor_loop` *after* `step_fn` returns (which is also after `model_policy_var` is reset). `build_executor_llm_trace_record` had no `policy_applied` parameter at all.
+
+### Fix
+
+**Path A:** In `_append_trace_for_completion`, when `model_policy_var.get()` is None but `workspace_var.get()` and `role` are available (which they must be for the trace write to succeed), re-derive the policy from `model_registry.resolve()` + `policy_applied()`. Policy is stable within a delegation (reads only env vars + config); re-derivation is cheap and correct.
+
+**Path B:** Added `policy_applied: dict | None = None` parameter to `build_executor_llm_trace_record` in `trace.py`. In `_bounded_executor_loop` in `mcp_server.py`, resolve the executor policy once at loop entry (before any step runs) via `model_registry.resolve(ROLE_EXECUTOR, workspace)` and pass it to `build_executor_llm_trace_record` on every step.
+
+### Verification
+
+Final dogfood session `f33fdbaf`: all 6/6 executor `llm_call` events have `policy_applied` key present and populated with correct `role`, `model`, `reasoning_effort`, and `sources`.
 
 ---
 

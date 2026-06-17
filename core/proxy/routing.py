@@ -88,6 +88,13 @@ def resolve_route(model: str | None) -> ProviderRoute:
                     return _OPENROUTER_FALLBACK_ROUTE
             raise RouteResolutionError(f"missing API key env {route.api_key_env}")
 
+    # No explicit prefix matched. Fall back to OpenRouter for any model that
+    # arrived without a provider prefix — this happens when litellm strips the
+    # "openrouter/" prefix before forwarding (e.g. google/gemini-2.5-flash,
+    # meta-llama/*, mistralai/* etc. all route through OpenRouter in practice).
+    openrouter_key = os.environ.get("OPENROUTER_API_KEY", "").strip()
+    if openrouter_key:
+        return _OPENROUTER_FALLBACK_ROUTE
     raise RouteResolutionError(f"no route for model '{model}'")
 
 

@@ -342,6 +342,7 @@ def build_executor_llm_trace_record(
     verbosity: str,
     prompt_text: str | None = None,
     response_text: str | None = None,
+    policy_applied: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     """Build one llm_call trace line for an executor step (role=executor, executor_turn=true)."""
     record: dict[str, Any] = {
@@ -354,6 +355,8 @@ def build_executor_llm_trace_record(
         "timestamp": timestamp or utc_now_iso(),
         "verbosity": verbosity,
     }
+    if policy_applied is not None:
+        record["policy_applied"] = policy_applied
 
     if duration_ms is not None:
         record["duration_ms"] = duration_ms

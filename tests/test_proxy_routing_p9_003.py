@@ -36,9 +36,20 @@ def test_resolve_route_openai(monkeypatch):
     assert route.prefix == "openai/"
 
 
-def test_resolve_route_missing_prefix_raises():
+def test_resolve_route_missing_prefix_raises(monkeypatch):
+    """Unknown prefix raises when OPENROUTER_API_KEY is also absent."""
+    monkeypatch.delenv("OPENROUTER_API_KEY", raising=False)
     with pytest.raises(RouteResolutionError, match="no route"):
         resolve_route("gemini/flash")
+
+
+def test_resolve_route_unknown_prefix_falls_back_to_openrouter(monkeypatch):
+    """google/*, meta-llama/* and any other unrecognized prefix route to OpenRouter
+    when OPENROUTER_API_KEY is set (litellm strips 'openrouter/' before forwarding)."""
+    monkeypatch.setenv("OPENROUTER_API_KEY", "or-key")
+    route = resolve_route("google/gemini-2.5-flash")
+    assert route.base_url == "https://openrouter.ai/api/v1"
+    assert route.api_key_env == "OPENROUTER_API_KEY"
 
 
 def test_resolve_route_missing_api_key_raises(monkeypatch):
