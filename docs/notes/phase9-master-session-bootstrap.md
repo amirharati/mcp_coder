@@ -1,8 +1,8 @@
 # Phase 9 master session bootstrap
 
 **Created:** 2026-06-14  
-**Status:** **Complete** — all Phase 9 milestones shipped 2026-06-16. PM doc at [PHASE9_MVP.md](../PHASE9_MVP.md).  
-**Outcome:** All 7 north-star acceptance criteria verified, including BL-507 (thinking tokens at HTTP boundary). 924 tests passing. Phase not yet formally closed — dogfood A-to-Z session and guide update pending.  
+**Status:** **Complete and closed** — all Phase 9 milestones shipped 2026-06-16. A-to-Z dogfood session run 2026-06-17 (6 delegations; 6/6 proxy↔llm_call alignment exact). PM doc at [PHASE9_MVP.md](../PHASE9_MVP.md).  
+**Outcome:** All 7 north-star acceptance criteria verified, including BL-507 (thinking tokens at HTTP boundary). 924 tests passing. Three post-dogfood fixes shipped (P9-ISS-008 proxy routing catch-all, P9-ISS-009 streaming token counts, P9-ISS-010 executor `llm_call.policy_applied`). Pending: guide folder deep update only.  
 **Purpose:** Record all Phase 9 scope decisions, design rationale, and locked choices made in the master planning session. Workers read the PM doc; this note is the *why* behind it.
 **Related notes:** [llm-interception-strategies.md](./llm-interception-strategies.md) (proxy architecture detail), [phase8-master-session-bootstrap.md](./phase8-master-session-bootstrap.md) (Phase 8 decisions)
 
