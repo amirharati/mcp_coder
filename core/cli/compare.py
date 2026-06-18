@@ -48,6 +48,12 @@ def _pair_key(step_index: int | None, call_index: int | None) -> tuple[int | Non
     return (step_index, call_index)
 
 
+def _pair_key_sort_key(key: tuple[int | None, int | None]) -> tuple[tuple[bool, int], tuple[bool, int]]:
+    """Sort pair keys with None indices last (proxy events may omit step_index)."""
+    step, call = key
+    return ((step is None, step or 0), (call is None, call or 0))
+
+
 def _models_compatible(left: str | None, right: str | None) -> bool:
     if not left or not right:
         return True
@@ -218,7 +224,7 @@ def pair_dual_capture_events(events: list[dict[str, Any]]) -> dict[str, Any]:
         key = _pair_key(_step_index(backend), _call_index(backend))
         backend_by_key.setdefault(key, []).append(idx)
 
-    for key in sorted(set(proxy_by_key) | set(backend_by_key)):
+    for key in sorted(set(proxy_by_key) | set(backend_by_key), key=_pair_key_sort_key):
         proxy_idxs = list(proxy_by_key.get(key, []))
         backend_idxs = list(backend_by_key.get(key, []))
         while proxy_idxs or backend_idxs:

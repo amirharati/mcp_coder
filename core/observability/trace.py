@@ -456,12 +456,19 @@ def build_compile_event_record(
     verbosity: str,
     timestamp: str | None = None,
     text_body: str | None = None,
+    status: str | None = None,
+    detail: str | None = None,
     source_path: str | None = None,
     byte_start: int | None = None,
     byte_end: int | None = None,
     last_source_line: int | None = None,
 ) -> dict[str, Any]:
-    """Build one compile_event trace line with verbosity-aware body handling."""
+    """Build one compile_event trace line with verbosity-aware body handling.
+
+    status: "ok" | "skipped" | "error" — present even when there is no text_body,
+    so every pipeline stage leaves a trace entry regardless of whether it ran.
+    detail: short human-readable reason (e.g. why skipped, or truncated error).
+    """
     record: dict[str, Any] = {
         "type": TRACE_TYPE_COMPILE_EVENT,
         "delegation_id": delegation_id,
@@ -469,6 +476,10 @@ def build_compile_event_record(
         "verbosity": verbosity,
         "timestamp": timestamp or utc_now_iso(),
     }
+    if status is not None:
+        record["status"] = status
+    if detail is not None:
+        record["detail"] = detail
 
     if source_path is not None:
         record["source_path"] = source_path

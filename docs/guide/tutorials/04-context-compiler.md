@@ -1250,4 +1250,4 @@ Hands-on helper + Aider prompt demos: **§8** (helper layers) and **§9** (wire 
 
 - **T-05 (Workspace history):** why checkpoints vs git, `mcp-coder history` CLI, revert, policy/revert building blocks; builder history is one consumer
 - **T-06 (Delegation pipeline):** `mcp-coder delegate` artifact fields, `delegation_pipeline` JSONL, post_gateway / auto_verify — builds on §0 Bonus here
-- **BL-335:** token counts in `model_roles` currently `null` for several paths — context builder included; understanding this gap requires T-04 context
+- **BL-335 resolved (Phase 9):** token counts in `model_roles` are now live for all paths (helper + executor), with `policy_applied` provenance blocks on every `backend_llm_call` and `llm_call` trace event

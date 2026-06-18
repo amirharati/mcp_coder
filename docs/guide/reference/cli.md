@@ -189,6 +189,12 @@ mcp-coder view delegations [LOG_FILE] [--workspace PATH] [--port PORT] [--no-ope
 
 `LOG_FILE` and `--workspace` are mutually exclusive.
 
+Viewer behavior (Phase 9):
+- Chronological, multi-delegation browser with collapsible delegation blocks
+- Boundary-oriented event timeline (`host→mcp`, `mcp.*`, `executor→llm`, `llm→executor`, `executor→mcp`, `mcp→host`)
+- Detail panel per row (context, request params, policy, prompt/response fields, tool activity)
+- Enrichment loaded lazily from trace + RAG/context sources on card expand
+
 ---
 
 ## `history`

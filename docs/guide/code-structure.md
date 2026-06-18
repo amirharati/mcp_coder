@@ -2,7 +2,7 @@
 
 **Purpose:** Read this first. Explains what every directory and module does so you can find your way around the codebase without loading the whole thing into your head.
 
-**Last updated:** 2026-06-13 (reflects Phases 1–5)
+**Last updated:** 2026-06-17 (module map reflects Phases 1–9; Phase 9 additions: `core/proxy/`, `core/config/model_registry.py`, `core/cli/compare.py`, `core/cli/trace_inspect.py`, `core/cli/delegation_view_enrich.py`, `core/cli/replay.py`)
 
 ---
 
@@ -265,7 +265,7 @@ The heart of the system. Builds the prompt Aider sees.
 | `telemetry.py` | `UsageRecord` — preflight + actual token counts + static cost estimate |
 | `rates.py` | Load `model_rates.yaml`; `cost_estimate()` |
 | `role_audit.py` | `build_role_usage_record()` — per-role `model_roles` block in JSONL |
-| `aider_tokens.py` | Extract token counts from Aider `Coder` post-run (currently returns `None` — BL-335) |
+| `aider_tokens.py` | Extract token counts from Aider `Coder` post-run (executor-internal tokens; per-event token counts on `backend_llm_call` via Phase 9 P9-009/P9-012) |
 | `policy.py` | Usage policy helpers |
 
 ### `core/rag/` — retrieval (Phase 3 index + Phase 5 builder wiring)
@@ -319,7 +319,7 @@ Test files follow the module they cover: `test_file_picker.py` → `core/context
 | How is `files_changed` computed? | `core/workspace/snapshot.py` + `diff_util.py` |
 | How does the builder LLM work? | `core/engine/context_builder_llm.py` + `core/context/builder_prompt.py` |
 | Where do config flags live? | `core/config/*.py` — one file per feature |
-| Why might token counts still be incomplete in some paths? | `core/usage/aider_tokens.py` + `core/observability/*` (BL-335/BL-350 follow-ons; helper tokens are live, executor internals still backend-dependent) |
+| Where do per-event token counts come from? | `core/observability/trace.py` — `backend_llm_call.usage` (Phase 9 P9-012); `core/usage/aider_tokens.py` handles executor-internal counts from Aider stdout |
 | What does a JSONL record look like? | `core/logging/delegation_log.py` + any `delegations.jsonl` file |
 | Where do Cursor rules get written? | `core/host/cursor_rules.py` |
 

@@ -2,9 +2,9 @@
 
 Onboarding, tutorials, and architecture reference for the mcp-coder stack (Phases 1–9).
 
-This folder is the output of **Phase 4.5** literacy work, updated after **Phase 5** (RAG), **Phase 6** (observability substrate), **Phase 7** (executor loop ownership + compile provenance), **Phase 8** (Aider inner-loop capture, ObservableModel), and **Phase 9** (universal HTTP proxy, write-always storage, model registry, thinking-token verification). Written from running and reading the code, not from specs alone.
+This folder is the output of **Phase 4.5** literacy work, updated after **Phase 5** (RAG), **Phase 6** (observability substrate), **Phase 7** (executor loop ownership + compile provenance), **Phase 8** (Aider inner-loop capture, ObservableModel), and **Phase 9** (universal HTTP proxy, write-always storage, replay/compare/inspect CLI, model registry, and the v2 boundary delegation viewer). Written from running and reading the code, not from specs alone.
 
-**Deep guide update pending** after Phase 9 dogfood session (T-07, `per-role-models.md`, `overview.md` full sync).
+Guide coverage now includes the shipped Phase 9 viewer architecture (`view_events[]` middleware + boundary table UI). Remaining docs debt is additive (extra walkthrough depth), not foundational accuracy gaps.
 
 ## Start here
 
@@ -36,7 +36,7 @@ T-04 = how context is compiled (tiers, picker, builder). T-06 = every step on a 
 
 | Document | Topic |
 |----------|-------|
-| [architecture/overview.md](./architecture/overview.md) | Layer map, locked decisions, delegation lifecycle, observability layer, known gaps — **living** (Phase 7 synced 2026-06-13) |
+| [architecture/overview.md](./architecture/overview.md) | Layer map, locked decisions, delegation lifecycle, observability layer, known gaps — **living** (Phase 9 synced 2026-06-17) |
 | [architecture/context-pipeline.md](./architecture/context-pipeline.md) | Picker → compiler tiers → builder LLM → Aider |
 | [architecture/storage-layout.md](./architecture/storage-layout.md) | `~/.mcp-coder`, `workspace_history.db`, JSONL schema |
 | [architecture/per-role-models.md](./architecture/per-role-models.md) | Model registry, role resolution, known gaps |

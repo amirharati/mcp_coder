@@ -63,6 +63,7 @@
       color: var(--text);
       border: 1px solid var(--border);
     }
+    button.secondary.active { background: rgba(110,182,255,0.12); color: var(--accent); border-color: var(--accent); }
     .stats {
       display: flex;
       gap: 1rem;
@@ -71,51 +72,90 @@
       color: var(--muted);
     }
     .stats strong { color: var(--text); }
-    main { padding: 1rem 1.25rem 2rem; max-width: 960px; margin: 0 auto; }
-    .empty { color: var(--muted); padding: 2rem; text-align: center; }
-    .card {
+    main {
+      padding: 1rem 1.25rem 2rem;
+      display: flex;
+      align-items: flex-start;
+      gap: 0.75rem;
+      max-width: 100%;
+    }
+    .split-left {
+      flex: 1;
+      min-width: 0;
+    }
+    .split-right {
+      width: 42%;
+      flex-shrink: 0;
+      position: sticky;
+      top: 0px; /* updated by JS after header height resolves */
+      max-height: calc(100vh - 80px);
+      overflow-y: auto;
       background: var(--panel);
       border: 1px solid var(--border);
-      border-radius: 10px;
-      margin-bottom: 0.75rem;
-      overflow: hidden;
+      border-radius: 8px;
+      display: none; /* hidden until a row is selected */
     }
-    .card-head {
-      padding: 0.85rem 1rem;
-      cursor: pointer;
-      display: grid;
-      grid-template-columns: auto 1fr auto;
-      gap: 0.75rem;
-      align-items: start;
+    .split-right.active { display: block; }
+    .dp-header {
+      display: flex; align-items: center; gap: 0.5rem;
+      padding: 0.45rem 0.7rem;
+      border-bottom: 1px solid var(--border);
+      background: var(--bg);
+      position: sticky; top: 0; z-index: 2;
+      font-size: 0.72rem;
     }
-    .card-head:hover { background: rgba(110, 182, 255, 0.06); }
-    .badge {
-      font-size: 0.7rem;
-      font-weight: 700;
-      text-transform: uppercase;
-      padding: 0.15rem 0.45rem;
+    .dp-close {
+      margin-left: auto; background: none; border: none; cursor: pointer;
+      color: var(--muted); font-size: 0.9rem; line-height: 1; padding: 2px 4px;
+    }
+    .dp-close:hover { color: var(--text); }
+    .dp-type { font-family: ui-monospace,monospace; font-weight: 700; text-transform: uppercase; letter-spacing: 0.04em; font-size: 0.62rem; }
+    .dp-summ { color: var(--text); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; flex: 1; }
+    .dp-body { padding: 0.6rem 0.75rem; font-size: 0.8rem; }
+    .dp-meta { display: flex; flex-wrap: wrap; gap: 0.3rem; margin-bottom: 0.65rem; }
+    .dp-meta-pill {
+      font-family: ui-monospace,monospace; font-size: 0.62rem;
+      background: var(--bg); border: 1px solid var(--border);
+      border-radius: 4px; padding: 0.1rem 0.4rem; color: var(--muted);
+    }
+    .dp-meta-ts { color: var(--text); }
+    /* Generous spacing in detail panel */
+    .split-right .tl-field { margin-bottom: 0.4rem; }
+    .split-right .tl-field-label { font-size: 0.65rem; min-width: 5rem; }
+    .split-right .tl-msg { margin-bottom: 0.35rem; }
+    .split-right pre.scrollable { max-height: 340px; font-size: 0.74rem; }
+    .split-right .kv-table { font-size: 0.76rem; }
+    .split-right .tl-raw { margin-top: 0.5rem; }
+    .tl-param-row {
+      display: flex; flex-wrap: wrap; gap: 0.25rem;
+      margin: 0.35rem 0 0.5rem;
+    }
+    .tl-param-row .chip {
+      font-size: 0.68rem; padding: 0.12rem 0.38rem;
+      color: var(--text);
+    }
+    .tl-meta-fold {
+      margin: 0.35rem 0 0.5rem;
+      border: 1px solid var(--border);
       border-radius: 4px;
+      overflow: hidden;
+      font-size: 0.76rem;
     }
-    .badge.ok { background: rgba(62, 207, 142, 0.2); color: var(--ok); }
-    .badge.fail { background: rgba(248, 113, 113, 0.2); color: var(--fail); }
-    .meta { font-size: 0.8rem; color: var(--muted); }
-    .task { font-size: 0.9rem; margin-top: 0.25rem; }
-    .card-body {
-      display: none;
-      padding: 0 1rem 1rem;
-      border-top: 1px solid var(--border);
-      font-size: 0.85rem;
-    }
-    .card.open .card-body { display: block; }
-    .section { margin-top: 0.75rem; }
-    .section h3 {
-      margin: 0 0 0.35rem;
-      font-size: 0.75rem;
-      text-transform: uppercase;
-      letter-spacing: 0.04em;
+    .tl-meta-fold > summary {
+      padding: 0.28rem 0.55rem;
+      cursor: pointer;
+      list-style: none;
       color: var(--muted);
+      background: var(--panel);
+      user-select: none;
     }
-    .chips { display: flex; flex-wrap: wrap; gap: 0.35rem; }
+    .tl-meta-fold > summary::-webkit-details-marker { display: none; }
+    .tl-meta-fold > summary::before { content: "▶ "; font-size: 0.6rem; }
+    .tl-meta-fold[open] > summary::before { content: "▼ "; }
+    .tl-meta-fold > summary:hover { color: var(--text); }
+    .tl-meta-fold .kv-table { margin: 0.35rem 0.5rem 0.5rem; font-size: 0.74rem; }
+    .tl-http-meta { font-size: 0.7rem; margin-bottom: 0.35rem; }
+    .empty { color: var(--muted); padding: 2rem; text-align: center; }
     .chip {
       background: var(--bg);
       border: 1px solid var(--border);
@@ -140,24 +180,272 @@
       word-break: break-word;
       font-size: 0.78rem;
       margin: 0;
+      max-height: 400px;
     }
-    .source-tag {
-      display: inline-block;
-      font-size: 0.68rem;
-      text-transform: uppercase;
-      letter-spacing: 0.04em;
-      color: var(--muted);
-      margin-bottom: 0.35rem;
+    /* structured record sections */
+    .rec-section details { margin-bottom: 0.35rem; }
+    .rec-section summary { font-size: 0.75rem; color: var(--muted); cursor: pointer; text-transform: uppercase; letter-spacing: 0.04em; padding: 0.2rem 0; }
+    .rec-section summary:hover { color: var(--text); }
+    /* Pipeline view */
+    .pipeline { display: flex; flex-direction: column; gap: 0.7rem; }
+    .pipeline-summary { margin-bottom: 0.4rem; }
+    /* Stage: base + per-type left-border color coding */
+    /* Field rows */
+    .tl-field { display: flex; align-items: baseline; gap: 0.5rem; margin-bottom: 0.28rem; font-size: 0.8rem; }
+    .tl-field-label { font-family: ui-monospace, monospace; font-size: 0.7rem; color: var(--muted); min-width: 80px; flex-shrink: 0; }
+    /* Sent / received expand */
+    .tl-msg { margin-bottom: 0.28rem; border: 1px solid var(--border); border-radius: 4px; overflow: hidden; }
+    .tl-msg > summary { padding: 0.26rem 0.55rem; cursor: pointer; list-style: none; display: flex; align-items: center; gap: 0.4rem; font-size: 0.75rem; user-select: none; background: var(--panel); }
+    .tl-msg > summary::-webkit-details-marker { display: none; }
+    .tl-msg > summary:hover { background: rgba(110,182,255,0.06); }
+    .tl-msg > summary::before { content: "▶ "; font-size: 0.6rem; color: var(--muted); }
+    .tl-msg[open] > summary::before { content: "▼ "; }
+    .tl-msg-label { font-weight: 600; }
+    .tl-msg-label.sent     { color: #6eb6ff; }
+    .tl-msg-label.received { color: #7ddb8c; }
+    .tl-msg-label.thinking { color: #b48eff; }
+    .tl-msg-meta { font-size: 0.7rem; color: var(--muted); }
+    .tl-msg pre { margin: 0; border-top: 1px solid var(--border); border-radius: 0; }
+    /* Raw captures */
+    .tl-raw { margin-top: 0.35rem; border: 1px solid var(--border); border-radius: 4px; overflow: hidden; }
+    .tl-raw > summary { padding: 0.22rem 0.55rem; cursor: pointer; list-style: none; display: block; font-size: 0.72rem; color: var(--muted); background: var(--panel); user-select: none; }
+    .tl-raw > summary::-webkit-details-marker { display: none; }
+    .tl-raw > summary::before { content: "▶ "; font-size: 0.6rem; }
+    .tl-raw[open] > summary::before { content: "▼ "; }
+    .tl-raw > summary:hover { color: var(--text); background: rgba(110,182,255,0.05); }
+    .tl-cap-grid { display: flex; flex-direction: column; gap: 0.5rem; padding: 0.5rem 0.6rem; }
+    .tl-cap-label { font-size: 0.7rem; font-weight: 600; color: var(--muted); text-transform: uppercase; letter-spacing: 0.04em; margin-bottom: 0.2rem; border-bottom: 1px solid var(--border); padding-bottom: 0.15rem; }
+    .tl-section-label { margin: 0.7rem 0 0.25rem; font-size: 0.7rem; font-weight: 600; color: var(--accent,#6eb6ff); text-transform: uppercase; letter-spacing: 0.06em; border-bottom: 1px solid var(--border); padding-bottom: 0.18rem; }
+    /* Collapsible long / JSON content blocks */
+    .content-block { margin-bottom: 0.35rem; border: 1px solid var(--border); border-radius: 4px; overflow: hidden; background: var(--bg); }
+    .content-block.short .content-head { padding: 0.3rem 0.55rem; border-bottom: 1px solid var(--border); display: flex; align-items: baseline; gap: 0.5rem; background: var(--panel); }
+    .content-block > summary {
+      padding: 0.3rem 0.55rem; cursor: pointer; list-style: none;
+      display: flex; flex-wrap: wrap; align-items: baseline; gap: 0.35rem 0.6rem;
+      font-size: 0.75rem; background: var(--panel); user-select: none;
     }
-    .ref-card {
-      background: var(--bg);
+    .content-block > summary::-webkit-details-marker { display: none; }
+    .content-block > summary::before { content: "▶ "; font-size: 0.6rem; color: var(--muted); }
+    .content-block[open] > summary::before { content: "▼ "; }
+    .content-block > summary:hover { background: rgba(110,182,255,0.06); }
+    .content-label { font-weight: 600; }
+    .content-label.sent     { color: #6eb6ff; }
+    .content-label.received { color: #7ddb8c; }
+    .content-label.thinking { color: #b48eff; }
+    .content-meta { font-size: 0.68rem; color: var(--muted); }
+    .content-preview {
+      flex: 1 1 100%; font-family: ui-monospace, monospace; font-size: 0.68rem;
+      color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+      padding-left: 0.9rem;
+    }
+    .content-body { border-top: 1px solid var(--border); }
+    .content-search {
+      width: 100%; box-sizing: border-box; border: none; border-bottom: 1px solid var(--border);
+      background: var(--panel); color: var(--text); padding: 0.35rem 0.55rem;
+      font-size: 0.72rem; outline: none;
+    }
+    .content-search:focus { background: rgba(110,182,255,0.06); }
+    .content-search::placeholder { color: var(--muted); }
+    .content-pre {
+      margin: 0; padding: 0.55rem 0.65rem; border: none; border-radius: 0;
+      font-family: ui-monospace, "SF Mono", Menlo, monospace;
+      font-size: 0.72rem; line-height: 1.45; tab-size: 2;
+      max-height: 420px; overflow: auto; white-space: pre-wrap; word-break: break-word;
+    }
+    .jk  { color: #7ec8ff; }  /* JSON key */
+    .js  { color: #9cdc8c; }  /* JSON string */
+    .jn  { color: #d4a574; }  /* JSON number */
+    .jb  { color: #c792ea; }  /* JSON bool */
+    .jnul{ color: #8b9cb3; font-style: italic; }
+    .jp  { color: var(--muted); } /* punctuation */
+    mark.search-hit { background: rgba(255, 214, 102, 0.35); color: inherit; padding: 0 1px; border-radius: 2px; }
+    /* JSON tree renderer */
+    .json-tree { font-family: ui-monospace, "SF Mono", Menlo, monospace; font-size: 0.72rem; line-height: 1.45; padding: 0.45rem 0.55rem; }
+    .json-tree-wrap { max-height: 420px; overflow: auto; }
+    .json-node.nested { margin-left: 0.85rem; padding-left: 0.55rem; border-left: 1px solid var(--border); }
+    .json-row { margin: 0.2rem 0; display: flex; flex-wrap: wrap; align-items: baseline; gap: 0.2rem; }
+    .json-key { color: #7ec8ff; font-weight: 500; }
+    .json-idx { color: var(--muted); font-size: 0.68rem; min-width: 1.8rem; }
+    .json-str { margin: 0.15rem 0; border: 1px solid var(--border); border-radius: 3px; background: rgba(0,0,0,0.15); }
+    .json-str > summary { padding: 0.2rem 0.45rem; cursor: pointer; list-style: none; display: flex; flex-wrap: wrap; align-items: baseline; gap: 0.35rem; font-size: 0.7rem; }
+    .json-str > summary::-webkit-details-marker { display: none; }
+    .json-str > summary::before { content: "▶ "; font-size: 0.58rem; color: var(--muted); }
+    .json-str[open] > summary::before { content: "▼ "; }
+    .json-str-type { color: #9cdc8c; font-weight: 600; }
+    .json-str-body { margin: 0; padding: 0.45rem 0.55rem; border-top: 1px solid var(--border); white-space: pre-wrap; word-break: break-word; font-size: 0.72rem; max-height: 280px; overflow: auto; }
+    .json-coll > summary { cursor: pointer; list-style: none; padding: 0.15rem 0; color: var(--muted); font-size: 0.7rem; }
+    .json-coll > summary::-webkit-details-marker { display: none; }
+    .json-coll > summary::before { content: "▶ "; font-size: 0.58rem; }
+    .json-coll[open] > summary::before { content: "▼ "; }
+    /* ── Flat delegation list (v2) ──────────────────────────────────── */
+    .ev-delg { margin-bottom: 0.5rem; }
+    .ev-delg-header {
+      display: flex; align-items: center; gap: 0.55rem;
+      padding: 0.42rem 0.75rem;
+      background: var(--panel); border: 1px solid var(--border);
+      border-radius: 6px; cursor: pointer; user-select: none;
+    }
+    .ev-delg-header:hover { background: rgba(110,182,255,0.06); }
+    .ev-delg.open .ev-delg-header { border-radius: 6px 6px 0 0; }
+    .ev-events { display: none; border: 1px solid var(--border); border-top: none; border-radius: 0 0 6px 6px; background: var(--bg); }
+    .ev-delg.open .ev-events { display: block; }
+    .ev-delg-id { font-family: ui-monospace,monospace; font-size: 0.82rem; font-weight: 700; flex-shrink: 0; }
+    .ev-delg-meta { font-size: 0.74rem; color: var(--muted); white-space: nowrap; flex-shrink: 0; }
+    .ev-delg-task { flex: 1; font-size: 0.8rem; color: var(--muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .ev-delg-arrow { font-size: 0.66rem; color: var(--muted); flex-shrink: 0; transition: transform 0.15s; }
+    .ev-delg.open .ev-delg-arrow { transform: rotate(180deg); }
+    /* Event rows */
+    .ev-row {
+      display: flex; align-items: center; gap: 0.45rem;
+      padding: 0.22rem 0.65rem; border-bottom: 1px solid var(--border);
+      border-left: 3px solid transparent; cursor: pointer; min-height: 1.9rem;
+    }
+    .ev-row:last-of-type { border-bottom: none; }
+    .ev-row:hover { background: rgba(110,182,255,0.04); }
+    .ev-row.open { background: rgba(110,182,255,0.05); }
+    .ev-row.tl-compile { border-left-color: #f59e0b; }
+    .ev-row.tl-action  { border-left-color: #64748b; }
+    .ev-row.tl-llm     { border-left-color: #6eb6ff; }
+    .ev-row.tl-tool    { border-left-color: #e8b84b; }
+    .ev-row.tl-helper  { border-left-color: #7ddb8c; }
+    .ev-row.tl-host    { border-left-color: #a78bfa; }
+    .ev-r-delg { font-family: ui-monospace,monospace; font-size: 0.64rem; color: var(--muted); min-width: 4.5rem; flex-shrink: 0; opacity: 0.7; }
+    .ev-r-seq  { font-family: ui-monospace,monospace; font-size: 0.64rem; color: var(--muted); min-width: 3.2rem; flex-shrink: 0; }
+    .ev-r-dir  { font-size: 0.76rem; font-weight: 700; min-width: 1.4rem; flex-shrink: 0; text-align: center; }
+    .ev-r-dir.out   { color: #6eb6ff; }
+    .ev-r-dir.in    { color: #7ddb8c; }
+    .ev-r-dir.inout { color: var(--muted); }
+    .ev-r-type { font-family: ui-monospace,monospace; font-size: 0.64rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.04em; min-width: 62px; flex-shrink: 0; }
+    .ev-r-type.tl-compile { color: #f59e0b; }
+    .ev-r-type.tl-action  { color: #64748b; }
+    .ev-r-type.tl-llm     { color: #6eb6ff; }
+    .ev-r-type.tl-tool    { color: #e8b84b; }
+    .ev-r-type.tl-helper  { color: #7ddb8c; }
+    .ev-r-type.tl-host    { color: #a78bfa; }
+    .ev-r-summary { flex: 1; font-size: 0.78rem; color: var(--text); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .ev-r-ts { font-family: ui-monospace,monospace; font-size: 0.62rem; color: var(--text); white-space: nowrap; flex-shrink: 0; }
+    .ts-rel  { color: var(--muted); font-size: 0.58rem; margin-left: 0.2rem; }
+    .ev-r-toggle { display: none; } /* detail now shown in right panel, not inline */
+    .ev-detail { display: none !important; } /* hidden — content goes to split-right panel */
+    .ev-row { cursor: pointer; }
+    .ev-row.selected { background: color-mix(in srgb, var(--accent) 12%, transparent); outline: 1px solid var(--accent); outline-offset: -1px; border-radius: 4px; }
+    /* Expanded row detail (sibling after .ev-row) */
+    .ev-detail { display: none; padding: 0.5rem 0.75rem; background: var(--bg); border-bottom: 1px solid var(--border); border-left: 3px solid var(--border); font-size: 0.8rem; }
+    .ev-row.tl-llm     + .ev-detail { border-left-color: #6eb6ff; }
+    .ev-row.tl-helper  + .ev-detail { border-left-color: #7ddb8c; }
+    .ev-row.tl-compile + .ev-detail { border-left-color: #f59e0b; }
+    .ev-row.tl-tool    + .ev-detail { border-left-color: #e8b84b; }
+    .ev-row.tl-host    + .ev-detail { border-left-color: #a78bfa; }
+    .ev-row.open + .ev-detail { display: block; }
+    .ev-loading { padding: 0.55rem 0.75rem; font-size: 0.8rem; color: var(--muted); font-style: italic; }
+    /* Delegation separator / collapsible block */
+    .ev-sep { height: 6px; background: var(--bg); border-top: 2px solid var(--border); margin: 0; }
+    .deleg-block {
+      margin-bottom: 0.85rem;
       border: 1px solid var(--border);
-      border-radius: 6px;
-      padding: 0.55rem 0.65rem;
-      margin-bottom: 0.45rem;
+      border-radius: 8px;
+      background: var(--panel);
+      overflow: hidden;
     }
-    .ref-meta { font-size: 0.75rem; color: var(--muted); margin-bottom: 0.25rem; }
-    .loading { color: var(--muted); font-style: italic; }
+    .deleg-block[data-latest="1"] { border-color: color-mix(in srgb, var(--accent) 45%, var(--border)); }
+    .deleg-head {
+      display: flex; align-items: center; gap: 0.55rem;
+      padding: 0.5rem 0.75rem;
+      cursor: pointer; user-select: none; list-style: none;
+      background: var(--panel);
+      border-bottom: 1px solid transparent;
+    }
+    .deleg-block[open] .deleg-head { border-bottom-color: var(--border); }
+    .deleg-head::-webkit-details-marker { display: none; }
+    .deleg-head::before {
+      content: "▶"; font-size: 0.62rem; color: var(--muted);
+      flex-shrink: 0; width: 0.85rem;
+    }
+    .deleg-block[open] .deleg-head::before { content: "▼"; }
+    .deleg-head:hover { background: rgba(110,182,255,0.06); }
+    .deleg-id {
+      font-family: ui-monospace, monospace; font-size: 0.8rem; font-weight: 700;
+      flex-shrink: 0; color: var(--text);
+    }
+    .deleg-ts { font-family: ui-monospace, monospace; font-size: 0.68rem; color: var(--muted); flex-shrink: 0; }
+    .deleg-status {
+      font-family: ui-monospace, monospace; font-size: 0.62rem; font-weight: 700;
+      text-transform: uppercase; padding: 0.1rem 0.35rem; border-radius: 3px; flex-shrink: 0;
+    }
+    .deleg-status.ok { color: #7ddb8c; background: rgba(125,219,140,0.12); }
+    .deleg-status.fail { color: #f87171; background: rgba(248,113,113,0.12); }
+    .deleg-events { font-size: 0.68rem; color: var(--muted); flex-shrink: 0; }
+    .deleg-task {
+      flex: 1; font-size: 0.76rem; color: var(--muted);
+      overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0;
+    }
+    .deleg-body { background: var(--bg); padding: 0.15rem 0 0.25rem; }
+    .deleg-body .ev-row:first-child { border-top: none; }
+    .ev-row.enrich-error .ev-r-summary { color: #f87171; font-style: italic; }
+    /* Sticky table header */
+    .ev-table-head {
+      display: flex; align-items: center; gap: 0.45rem;
+      padding: 0.3rem 0.65rem;
+      background: var(--panel); border: 1px solid var(--border);
+      border-radius: 6px; margin-bottom: 0.35rem;
+      position: sticky; top: 0; z-index: 5; box-shadow: 0 2px 6px rgba(0,0,0,0.3);
+      font-family: ui-monospace, monospace; font-size: 0.62rem;
+      font-weight: 700; text-transform: uppercase; letter-spacing: 0.06em;
+      color: var(--muted);
+    }
+    .ev-th-delg  { min-width: 4.5rem; flex-shrink: 0; }
+    .ev-th-seq   { min-width: 3.2rem; flex-shrink: 0; }
+    .ev-th-dir   { min-width: 1.4rem; flex-shrink: 0; }
+    .ev-th-type  { min-width: 62px;   flex-shrink: 0; }
+    .ev-th-summ  { flex: 1; }
+    .ev-th-ts    { white-space: nowrap; flex-shrink: 0; min-width: 7.5rem; }
+    /* Pagination */
+    .pg-bar { display: flex; align-items: center; gap: 0.5rem; padding: 0.5rem 0; font-size: 0.82rem; color: var(--muted); }
+    .pg-bar button { background: var(--panel); color: var(--text); border: 1px solid var(--border); padding: 0.3rem 0.7rem; border-radius: 5px; font-size: 0.8rem; font-weight: 500; cursor: pointer; }
+    .pg-bar button:hover:not(:disabled) { border-color: var(--accent); color: var(--accent); }
+    .pg-bar button:disabled { opacity: 0.35; cursor: default; }
+    .pg-info { flex: 1; text-align: center; }
+    /* kv-table for clean field rendering */
+    .kv-table { border-collapse: collapse; width: 100%; font-size: 0.78rem; }
+    .kv-table td { padding: 0.15rem 0.4rem 0.15rem 0; vertical-align: top; }
+    .kv-key { color: var(--muted); white-space: nowrap; min-width: 120px; font-family: ui-monospace, monospace; }
+    .kv-val { color: var(--text); word-break: break-word; }
+    .kv-val code { background: var(--bg); border: 1px solid var(--border); padding: 0.05rem 0.3rem; border-radius: 3px; font-size: 0.75rem; }
+    /* ── ViewEvent-based row colors (canonical event model) ──────────── */
+    /* host scope: violet */
+    .ev-row.scope-host   { border-left-color: #a78bfa; }
+    .ev-r-type.scope-host { color: #a78bfa; }
+    /* mcp scope: amber */
+    .ev-row.scope-mcp    { border-left-color: #f59e0b; }
+    .ev-r-type.scope-mcp { color: #f59e0b; }
+    .ev-row.scope-post   { border-left-color: #94a3b8; opacity: 0.92; }
+    .ev-r-type.scope-post { color: #94a3b8; }
+    /* executor → llm (send): blue */
+    .ev-row.ve-send      { border-left-color: #6eb6ff; }
+    .ev-r-type.ve-send   { color: #6eb6ff; }
+    /* llm → executor (recv): green */
+    .ev-row.ve-recv      { border-left-color: #7ddb8c; }
+    .ev-r-type.ve-recv   { color: #7ddb8c; }
+    /* executor tools: gold */
+    .ev-row.ve-tool      { border-left-color: #e8b84b; }
+    .ev-r-type.ve-tool   { color: #e8b84b; }
+    /* virtual events: slightly dimmed */
+    .ev-row.ve-virtual   { opacity: 0.8; }
+    /* Step divider: full-width separator row */
+    .ev-step-divider {
+      display: flex; align-items: center; gap: 0.5rem;
+      padding: 0.22rem 0.65rem;
+      background: #1a2433;
+      border-top: 1px solid #2d3d52;
+      border-bottom: 1px solid #2d3d52;
+      font-family: ui-monospace, monospace;
+      font-size: 0.65rem;
+      color: #64748b;
+      user-select: none;
+      min-height: 1.55rem;
+    }
+    .ev-step-div-name { font-weight: 700; color: #94a3b8; letter-spacing: 0.04em; min-width: 120px; }
+    .ev-step-div-kind { color: #64748b; }
   </style>
 </head>
 <body>
@@ -172,22 +460,47 @@
         <span class="path-line" id="serverPath"></span>
         <button type="button" class="secondary" id="reloadBtn">Reload</button>
       </span>
-      <input type="text" id="search" placeholder="Search id, task, files, error…" />
-      <select id="filter">
-        <option value="all">All</option>
-        <option value="ok">Success only</option>
-        <option value="fail">Failed only</option>
-      </select>
+      <button type="button" class="secondary" id="latestBtn" hidden title="Jump to newest delegation">Latest ↓</button>
+      <button type="button" class="secondary" id="expandAllBtn" hidden title="Expand all delegations on this page">Expand all</button>
+      <button type="button" class="secondary" id="collapseOlderBtn" hidden title="Collapse all except the newest delegation">Collapse older</button>
     </div>
     <div class="stats" id="stats"></div>
   </header>
   <main>
-    <div id="list" class="empty">Load a delegations.jsonl file, or run <code>mcp-coder view delegations</code> from your project directory</div>
+    <div class="split-left">
+      <div id="pagination" class="pg-bar" style="display:none"></div>
+      <div id="list" class="empty">Load a delegations.jsonl file, or run <code>mcp-coder view delegations</code> from your project directory</div>
+      <div id="pagination-bottom" class="pg-bar" style="display:none"></div>
+    </div>
+    <aside class="split-right" id="detail-panel">
+      <div class="dp-header">
+        <span class="dp-type" id="dp-type"></span>
+        <span class="dp-summ" id="dp-summ"></span>
+        <button class="dp-close" id="dp-close" title="Close">✕</button>
+      </div>
+      <div class="dp-body" id="dp-body"></div>
+    </aside>
   </main>
 
   <script>
     let records = [];
     let sourcePath = "";
+    const PAGE_SIZE = 10;
+    let currentPage = 0;
+
+    function delegationSortKey(r) {
+      return r.timestamp_start || r.timestamp_end || "";
+    }
+
+    function sortRecordsChronological(data) {
+      return [...data].sort((a, b) =>
+        delegationSortKey(a).localeCompare(delegationSortKey(b))
+      );
+    }
+
+    function totalPages() {
+      return Math.max(1, Math.ceil(records.length / PAGE_SIZE));
+    }
     let serverMode = false;
     const enrichCache = new Map();
 
@@ -195,30 +508,6 @@
       const d = document.createElement("div");
       d.textContent = s ?? "";
       return d.innerHTML;
-    }
-
-    function copyText(text) {
-      navigator.clipboard.writeText(text).catch(() => {});
-    }
-
-    function fullPath(workspace, rel) {
-      if (!rel) return "";
-      if (!workspace) return rel;
-      const sep = workspace.endsWith("/") ? "" : "/";
-      return workspace + sep + rel;
-    }
-
-    function formatOutputLocal(r) {
-      const response = r.response_to_cursor || {};
-      if (r.error) return { text: r.error, source: "error" };
-      if (response.output) return { text: response.output, source: "legacy_jsonl" };
-      if (response.output_preview) {
-        const bits = [response.output_preview];
-        if (response.output_sha256) bits.push(`sha256: ${response.output_sha256}`);
-        if (response.output_bytes != null) bits.push(`${response.output_bytes} bytes`);
-        return { text: bits.join("\n"), source: "digest_preview" };
-      }
-      return { text: "—", source: "none" };
     }
 
     function sourceLabel(source) {
@@ -237,99 +526,564 @@
       return labels[source] || source;
     }
 
-    function renderContextRefs(refs) {
-      if (!refs || !refs.length) return "<div class='meta'>—</div>";
-      return refs
-        .map((ref) => {
-          const pointer = ref.pointer || ref;
-          const title = `${pointer.kind || "?"} · ${pointer.id || "?"} · score ${pointer.score ?? "?"}`;
-          const snippet = ref.snippet ? `<pre>${esc(ref.snippet)}</pre>` : "";
-          const err = ref.error ? `<div class='meta'>${esc(ref.error)}</div>` : "";
-          const meta = ref.metadata && Object.keys(ref.metadata).length
-            ? `<div class='ref-meta'>${esc(JSON.stringify(ref.metadata))}</div>`
-            : "";
-          return `<div class='ref-card'><div class='ref-meta'><strong>${esc(title)}</strong> · ${esc(sourceLabel(ref.source || "inline_jsonl"))}</div>${meta}${snippet}${err}</div>`;
-        })
-        .join("");
+    // ── JSON tree renderer ────────────────────────────────────────────────────
+    const CONTENT_PREVIEW_CHARS = 100;
+    let _contentBlockId = 0;
+
+    function tryParseJson(text) {
+      if (!text || typeof text !== "string") return null;
+      const trimmed = text.trim();
+      if (!(trimmed.startsWith("{") || trimmed.startsWith("["))) return null;
+      try { return JSON.parse(trimmed); } catch { return null; }
     }
 
-    function renderDualCaptureCompare(compare) {
-      if (!compare) return "";
-      const summary = compare.summary || {};
-      const head = `<div class='meta'>dual capture: matched ${summary.matched || 0} · proxy-only ${summary.proxy_only || 0} · backend-only ${summary.backend_only || 0} · field-diff ${summary.field_diff || 0}</div>`;
-      const rows = (compare.calls || [])
-        .map((row) => {
-          const statusClass = row.status === "matched" ? "ok" : "warn";
-          const bits = [
-            `step ${row.step_index ?? "?"} / call ${row.call_index ?? "?"}`,
-            row.status,
-            row.backend_model ? `backend ${row.backend_model}` : null,
-            row.proxy_model ? `proxy ${row.proxy_model}` : null,
-            row.proxy_status_code != null ? `status ${row.proxy_status_code}` : null,
-            row.wire_latency_ms != null ? `wire ${row.wire_latency_ms}ms` : null,
-            row.total_latency_ms != null ? `total ${row.total_latency_ms}ms` : null,
-            row.litellm_overhead_ms != null ? `overhead ${row.litellm_overhead_ms}ms` : null,
-          ].filter(Boolean);
-          const bl507 = row.bl507 || {};
-          const bl507Line = `BL-507 backend=${bl507.backend_thinking_present} proxy=${bl507.proxy_thinking_present}`;
-          const diffs = (row.field_diffs || []).length
-            ? `<div class='meta'>field diffs: ${esc((row.field_diffs || []).join(", "))}</div>`
-            : "";
-          return `<div class='ref-card ${statusClass}'><div class='ref-meta'>${esc(bits.join(" · "))}</div><div class='meta'>${esc(bl507Line)}</div>${diffs}</div>`;
-        })
-        .join("");
-      const bl507 = compare.bl507 || {};
-      const notes = (bl507.notes || [])
-        .map((note) => `<div class='meta'>${esc(note)}</div>`)
-        .join("");
-      const bl507Head = `<div class='meta'>BL-507 summary: proxy=${bl507.proxy_thinking_present} backend=${bl507.backend_thinking_present}</div>${notes}`;
-      return `<div class='section-subhead'>Dual-capture compare</div>${head}${rows || "<div class='meta'>no paired calls</div>"}${bl507Head}`;
+    function oneLinePreview(text) {
+      return String(text).replace(/\s+/g, " ").trim();
     }
 
-    function renderTrace(trace) {
-      if (!trace || !trace.found) {
-        return `<div class='meta'>${trace && trace.trace_ref ? esc(trace.trace_ref) + " (not found on disk)" : "—"}</div>`;
+    function isLongString(s) {
+      return s.length > CONTENT_PREVIEW_CHARS || s.includes("\n");
+    }
+
+    function jsonTopSummary(val) {
+      if (Array.isArray(val)) return `${val.length} item${val.length !== 1 ? "s" : ""}`;
+      if (val && typeof val === "object") {
+        if (Array.isArray(val.messages)) {
+          const model = val.model ? ` · ${val.model}` : "";
+          return `${val.messages.length} message${val.messages.length !== 1 ? "s" : ""}${model}`;
+        }
+        const keys = Object.keys(val);
+        return `${keys.length} key${keys.length !== 1 ? "s" : ""}`;
       }
-      const head = `<div class='path-line'>${esc(trace.path || trace.trace_ref || "")}</div>`;
-      const dual = renderDualCaptureCompare(trace.dual_capture_compare);
-      const calls = (trace.llm_calls || [])
-        .map((c) => {
-          const bits = [
-            `${c.role || "?"} · ${c.model || "?"}`,
-            c.tokens ? `tokens ${JSON.stringify(c.tokens)}` : null,
-            c.duration_ms != null ? `${c.duration_ms}ms` : null,
-          ].filter(Boolean);
-          const preview = c.response_preview ? `<pre>${esc(c.response_preview)}</pre>` : "";
-          return `<div class='ref-card'><div class='ref-meta'>${esc(bits.join(" · "))}</div>${preview}</div>`;
-        })
-        .join("");
-      const legacy = calls
-        ? `<div class='section-subhead'>Legacy llm_call summary</div>${calls}`
-        : "<div class='meta'>no llm_call lines</div>";
-      return head + (dual || "") + legacy;
+      return oneLinePreview(String(val)).slice(0, CONTENT_PREVIEW_CHARS);
     }
 
-    function renderStorageLinks(links) {
-      if (!links) return "—";
-      const rows = [
-        ["trace_ref", links.trace_ref],
-        ["context_package_hash", links.context_package_hash],
-        ["workspace_snapshot_db", links.workspace_snapshot_db],
-        ["delegation_rag.db", links.delegation_rag_db],
-        ["workspace_rag.db", links.workspace_rag_db],
-      ].filter(([, v]) => v);
-      if (!rows.length) return "—";
-      return rows
-        .map(([k, v]) => `<div><span class='meta'>${esc(k)}</span><div class='path-line'>${esc(v)}</div></div>`)
-        .join("");
+    function renderJsonString(s) {
+      if (!isLongString(s)) {
+        return `<span class="js">"${esc(s)}"</span>`;
+      }
+      const prev = esc(oneLinePreview(s).slice(0, CONTENT_PREVIEW_CHARS));
+      return `<details class="json-str">
+        <summary>
+          <span class="json-str-type">string</span>
+          <span class="content-meta">${s.length.toLocaleString()} chars</span>
+          <span class="content-preview">${prev}…</span>
+        </summary>
+        <pre class="json-str-body">${esc(s)}</pre>
+      </details>`;
     }
 
-    function renderDiffSummary(diff) {
-      if (!diff) return "—";
-      const created = (diff.created || []).length;
-      const modified = (diff.modified || []).length;
-      const deleted = (diff.deleted || []).length;
-      return `<div class='meta'>${created} created · ${modified} modified · ${deleted} deleted</div>`;
+    function renderJsonPrimitive(val) {
+      if (val === null) return '<span class="jnul">null</span>';
+      if (typeof val === "boolean") return `<span class="jb">${val}</span>`;
+      if (typeof val === "number") return `<span class="jn">${val}</span>`;
+      if (typeof val === "string") return renderJsonString(val);
+      return esc(String(val));
+    }
+
+    function renderJsonNode(val, depth) {
+      depth = depth || 0;
+      if (val === null || typeof val !== "object") return renderJsonPrimitive(val);
+
+      if (Array.isArray(val)) {
+        if (!val.length) return '<span class="jp">[]</span>';
+        const inner = val.map((item, i) =>
+          `<div class="json-row"><span class="json-idx">[${i}]</span>${renderJsonNode(item, depth + 1)}</div>`
+        ).join("");
+        if (val.length > 4 && depth < 2) {
+          return `<details class="json-coll">
+            <summary><span class="jp">[</span> <span class="content-meta">${val.length} items</span> <span class="jp">]</span></summary>
+            <div class="json-node nested">${inner}</div>
+          </details>`;
+        }
+        return `<div class="json-node${depth ? " nested" : ""}">${inner}</div>`;
+      }
+
+      const keys = Object.keys(val);
+      if (!keys.length) return '<span class="jp">{}</span>';
+      const inner = keys.map(k => {
+        const v = val[k];
+        let valHtml;
+        if (typeof v === "string") valHtml = renderJsonString(v);
+        else valHtml = renderJsonNode(v, depth + 1);
+        return `<div class="json-row"><span class="json-key">${esc(k)}</span><span class="jp">: </span>${valHtml}</div>`;
+      }).join("");
+
+      // Message objects: role + collapsed content
+      if (keys.length <= 4 && keys.includes("role") && keys.includes("content") && typeof val.content === "string") {
+        const role = val.role || "?";
+        const content = val.content;
+        const prev = esc(oneLinePreview(content).slice(0, CONTENT_PREVIEW_CHARS));
+        const extra = keys.filter(k => k !== "role" && k !== "content")
+          .map(k => `<div class="json-row"><span class="json-key">${esc(k)}</span><span class="jp">: </span>${renderJsonNode(val[k], depth + 1)}</div>`).join("");
+        return `<details class="json-str">
+          <summary>
+            <span class="json-key">role</span><span class="jp">: </span><span class="js">"${esc(role)}"</span>
+            <span class="content-meta">· content ${content.length.toLocaleString()} chars</span>
+            <span class="content-preview">${prev}…</span>
+          </summary>
+          <div class="json-node nested">
+            <div class="json-row"><span class="json-key">content</span><span class="jp">: </span></div>
+            <pre class="json-str-body">${esc(content)}</pre>
+            ${extra}
+          </div>
+        </details>`;
+      }
+
+      if (keys.length > 5 && depth < 2) {
+        return `<details class="json-coll">
+          <summary><span class="jp">{</span> <span class="content-meta">${keys.length} keys</span> <span class="jp">}</span></summary>
+          <div class="json-node nested">${inner}</div>
+        </details>`;
+      }
+      return `<div class="json-node${depth ? " nested" : ""}">${inner}</div>`;
+    }
+
+    function renderJsonTree(text) {
+      const parsed = tryParseJson(text);
+      if (parsed === null) return null;
+      return `<div class="json-tree">${renderJsonNode(parsed, 0)}</div>`;
+    }
+
+    function contentBlock(label, text, opts) {
+      opts = opts || {};
+      if (!text) return "";
+      const id = "cb-" + (++_contentBlockId);
+      const labelCls = opts.labelClass ? `content-label ${opts.labelClass}` : "content-label";
+      const asJson = opts.json !== false;
+      const parsed = asJson ? tryParseJson(text) : null;
+
+      if (parsed !== null) {
+        const tree = renderJsonTree(text);
+        const summary = jsonTopSummary(parsed);
+        return `<details class="content-block">
+          <summary>
+            <span class="${labelCls}">${esc(label)}</span>
+            <span class="content-meta">JSON · ${esc(summary)} · click to expand</span>
+          </summary>
+          <div class="content-body">
+            <input type="search" class="content-search" placeholder="Search in this block…" data-target="${id}" />
+            <div class="json-tree-wrap scrollable" id="${id}">${tree}</div>
+          </div>
+        </details>`;
+      }
+
+      const preview = oneLinePreview(text).slice(0, CONTENT_PREVIEW_CHARS);
+      const meta = `${text.length.toLocaleString()} chars`;
+      const collapsible = isLongString(text);
+
+      if (!collapsible) {
+        return `<div class="content-block short">
+          <div class="content-head"><span class="${labelCls}">${esc(label)}</span><span class="content-meta">${meta}</span></div>
+          <pre class="content-pre scrollable">${esc(text)}</pre>
+        </div>`;
+      }
+      return `<details class="content-block">
+        <summary>
+          <span class="${labelCls}">${esc(label)}</span>
+          <span class="content-meta">${meta} · click to expand</span>
+          <span class="content-preview">${esc(preview)}…</span>
+        </summary>
+        <div class="content-body">
+          <input type="search" class="content-search" placeholder="Search in this block…" data-target="${id}" />
+          <pre class="content-pre scrollable" id="${id}">${esc(text)}</pre>
+        </div>
+      </details>`;
+    }
+
+    function initContentBlocks(root) {
+      if (!root) return;
+      root.querySelectorAll(".content-pre, .json-tree-wrap").forEach(el => {
+        if (!el._defaultHtml) el._defaultHtml = el.innerHTML;
+      });
+      root.querySelectorAll(".content-search").forEach(input => {
+        if (input._wired) return;
+        input._wired = true;
+        input.addEventListener("input", () => {
+          const el = document.getElementById(input.dataset.target);
+          if (!el) return;
+          const q = input.value.trim();
+          if (!q) {
+            el.innerHTML = el._defaultHtml || "";
+            return;
+          }
+          const plain = el.textContent || "";
+          const re = new RegExp(q.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"), "gi");
+          el.innerHTML = esc(plain).replace(re, m => `<mark class="search-hit">${m}</mark>`);
+        });
+      });
+    }
+
+    // ── Clean value renderer ──────────────────────────────────────────────────
+    function renderValue(val, depth) {
+      depth = depth || 0;
+      if (val === null || val === undefined) return `<span class="meta">(null)</span>`;
+      if (typeof val === "boolean") return `<code>${val}</code>`;
+      if (typeof val === "number")  return `<code>${val.toLocaleString()}</code>`;
+      if (typeof val === "string") {
+        if (isLongString(val)) return contentBlock("text", val, { json: false });
+        return `<span>${esc(val)}</span>`;
+      }
+      if (Array.isArray(val)) {
+        if (!val.length) return `<span class="meta">(empty)</span>`;
+        if (val.every(v => typeof v !== "object" || v === null))
+          return val.map(v => `<code class="chip">${esc(String(v))}</code>`).join(" ");
+        if (depth >= 1) {
+          return `<div class="json-tree">${renderJsonNode(val, 0)}</div>`;
+        }
+        return `<table class="kv-table">${val.map((item, i) =>
+          `<tr><td class="kv-key">[${i}]</td><td class="kv-val">${renderValue(item, depth + 1)}</td></tr>`).join("")}</table>`;
+      }
+      if (typeof val === "object") {
+        const entries = Object.entries(val).filter(([, v]) => v !== null && v !== undefined);
+        if (!entries.length) return `<span class="meta">(empty)</span>`;
+        if (depth >= 1) {
+          return `<div class="json-tree">${renderJsonNode(val, 0)}</div>`;
+        }
+        const longValues = entries.some(([, v]) => typeof v === "string" && isLongString(v));
+        if (longValues || entries.length > 6) {
+          return `<div class="json-tree">${renderJsonNode(val, 0)}</div>`;
+        }
+        return `<table class="kv-table">${entries.map(([k, v]) =>
+          `<tr><td class="kv-key">${esc(k)}</td><td class="kv-val">${renderValue(v, depth + 1)}</td></tr>`).join("")}</table>`;
+      }
+      return esc(String(val));
+    }
+
+    // ── Shared rendering helpers ──────────────────────────────────────────────
+
+    function tl_field(label, val) {
+      return `<div class="tl-field"><div class="tl-field-label">${esc(label)}</div><div>${val}</div></div>`;
+    }
+
+    function tl_msgRow(cls, label, text) {
+      if (!text) return "";
+      return contentBlock(label, text, { labelClass: cls, json: true });
+    }
+
+    function tl_rawBlock(label, text) {
+      if (!text) return "";
+      return contentBlock(label, text, { json: true });
+    }
+
+    const PARAM_ORDER = [
+      "stream", "temperature", "top_p", "max_tokens", "max_completion_tokens",
+      "reasoning_effort", "thinking", "tools", "tool_choice", "response_format",
+      "stream_options", "n", "stop", "seed",
+    ];
+
+    function tl_paramChips(params) {
+      if (!params || typeof params !== "object") return "";
+      const keys = Object.keys(params);
+      if (!keys.length) return "";
+      keys.sort((a, b) => {
+        const ia = PARAM_ORDER.indexOf(a), ib = PARAM_ORDER.indexOf(b);
+        if (ia === -1 && ib === -1) return a.localeCompare(b);
+        if (ia === -1) return 1;
+        if (ib === -1) return -1;
+        return ia - ib;
+      });
+      const chips = keys.map(k => {
+        const v = params[k];
+        const val = typeof v === "boolean" ? String(v) : String(v);
+        return `<code class="chip" title="${esc(k)}">${esc(k)}=${esc(val)}</code>`;
+      }).join("");
+      return `<div class="tl-param-row">${chips}</div>`;
+    }
+
+    function tl_policyFold(policy) {
+      if (!policy || typeof policy !== "object") return "";
+      const role = policy.role || "";
+      const sources = policy.sources || {};
+      const rows = [];
+      for (const [k, v] of Object.entries(policy)) {
+        if (k === "role" || k === "sources" || k === "extra_params" || v == null) continue;
+        const src = sources[k];
+        const srcTag = src ? ` <span class="meta">(${esc(src)})</span>` : "";
+        rows.push(`<tr><td class="kv-key">${esc(k)}</td><td class="kv-val"><code>${esc(String(v))}</code>${srcTag}</td></tr>`);
+      }
+      if (policy.extra_params && typeof policy.extra_params === "object") {
+        const epSrc = sources.extra_params;
+        const epTag = epSrc ? ` <span class="meta">(${esc(epSrc)})</span>` : "";
+        rows.push(`<tr><td class="kv-key">extra_params</td><td class="kv-val">${renderValue(policy.extra_params, 1)}${epTag}</td></tr>`);
+      }
+      if (!rows.length) return "";
+      return `<details class="tl-meta-fold"><summary>Policy applied${role ? " · " + esc(role) : ""}</summary><table class="kv-table">${rows.join("")}</table></details>`;
+    }
+
+    function tl_httpMeta(d) {
+      const parts = [
+        d.status_code != null ? `HTTP ${d.status_code}` : null,
+        d.wire_latency_ms != null ? `${d.wire_latency_ms}ms wire` : null,
+        d.call_type || null,
+        d.attribution_source && d.attribution_source !== "none" ? d.attribution_source : null,
+      ].filter(Boolean);
+      if (!parts.length) return "";
+      return `<div class="meta tl-http-meta">${parts.map(esc).join("  ·  ")}</div>`;
+    }
+
+    // ── ViewEvent detail renderer ─────────────────────────────────────────────
+    // Branches on ve.name to produce a human-readable detail panel body.
+    // All display data comes from ve.detail (pre-computed by _build_view_events).
+    function renderViewEventDetail(ve) {
+      if (!ve) return "<span class='meta'>—</span>";
+      const d = ve.detail || {};
+      const n = ve.name || "";
+
+      if (n === "host→mcp") {
+        let html = "";
+        if (d.task) html += tl_msgRow("sent", "→ Task", d.task);
+        const meta = [
+          d.model ? `model: ${d.model}` : null,
+          d.spec_path ? `spec: ${d.spec_path}` : null,
+          d.workspace ? `workspace: ${d.workspace}` : null,
+        ].filter(Boolean);
+        if (meta.length) html += `<div class="meta" style="margin-bottom:0.4rem">${meta.map(esc).join("  ·  ")}</div>`;
+        if (d.files_requested && d.files_requested.length)
+          html += tl_field("files_requested",
+            d.files_requested.map(f => `<code class="chip">${esc(f)}</code>`).join(" "));
+        return html || renderValue(d);
+      }
+
+      if (n === "mcp→post") {
+        let html = "";
+        if (d.description) {
+          html += `<div class="meta" style="margin-bottom:0.5rem">${esc(d.description)}</div>`;
+        }
+        if (d.index_count != null) {
+          html += tl_field("files indexed", String(d.index_count));
+        }
+        return html || renderValue(d);
+      }
+
+      if (n === "mcp→index") {
+        let html = "";
+        html += `<div class="meta" style="margin-bottom:0.45rem">Post-delegate housekeeping — not part of the executor result.</div>`;
+        if (d.index_path) html += tl_field("file", `<code>${esc(d.index_path)}</code>`);
+        if (d.model) html += tl_field("model", esc(d.model));
+        if (d.tokens) {
+          const tk = d.tokens;
+          html += tl_field("tokens", [
+            tk.input  != null ? `${fmtK(tk.input)} in`  : null,
+            tk.output != null ? `${fmtK(tk.output)} out` : null,
+          ].filter(Boolean).join(" / "));
+        }
+        if (d.duration_ms) html += tl_field("duration", `${d.duration_ms}ms`);
+        html += tl_policyFold(d.policy_applied);
+        html += tl_msgRow("sent", "→ Prompt", d.prompt_body || d.prompt_preview);
+        html += tl_msgRow("received", "← Summary", d.response_body || d.response_preview);
+        return html || renderValue(d);
+      }
+
+      if (n.startsWith("mcp.") && n !== "mcp→host" && n !== "mcp→executor") {
+        let html = "";
+
+        // Skipped stage — show reason, nothing else
+        if (d.status === "skipped") {
+          html += `<div class="meta" style="color:var(--muted);font-style:italic">Stage skipped${d.skip_reason ? ": " + esc(d.skip_reason) : ""}.</div>`;
+          return html;
+        }
+
+        // Standalone helper llm_call (not a compile stage row)
+        if (d.role && !d.stage) {
+          if (d.model) html += tl_field("model", esc(d.model));
+          if (d.tokens) {
+            const tk = d.tokens;
+            html += tl_field("tokens", [
+              tk.input  != null ? `${fmtK(tk.input)} in`  : null,
+              tk.output != null ? `${fmtK(tk.output)} out` : null,
+            ].filter(Boolean).join(" / "));
+          }
+          if (d.duration_ms) html += tl_field("duration", `${d.duration_ms}ms`);
+          html += tl_policyFold(d.policy_applied);
+          html += tl_msgRow("sent", "→ Prompt", d.prompt_body || d.prompt_preview);
+          html += tl_msgRow("received", "← Response", d.response_body || d.response_preview);
+          return html || renderValue(d);
+        }
+
+        const dir = ve.direction;
+        const dirLabel = dir === "→" ? "→ Input" : "← Output";
+        if (d.byte_count != null) html += tl_field("bytes", Number(d.byte_count).toLocaleString());
+        if (d.sha256) html += tl_field("sha256", `<code>${esc(d.sha256.slice(0,16))}…</code>`);
+        if (d.brief) html += tl_msgRow(dir === "→" ? "sent" : "received", dirLabel + " (brief)", d.brief);
+        if (d.body && d.body !== d.brief) html += tl_msgRow(dir === "→" ? "sent" : "received", dirLabel + " (full)", d.body);
+        if (d.llm) {
+          const lc = d.llm;
+          html += `<div class="tl-section-label">LLM call</div>`;
+          if (lc.model) html += tl_field("model", esc(lc.model));
+          if (lc.tokens) {
+            const tk = lc.tokens;
+            html += tl_field("tokens", [
+              tk.input  != null ? `${fmtK(tk.input)} in`  : null,
+              tk.output != null ? `${fmtK(tk.output)} out` : null,
+            ].filter(Boolean).join(" / "));
+          }
+          if (lc.duration_ms) html += tl_field("duration", `${lc.duration_ms}ms`);
+          html += tl_paramChips(lc.request_params);
+          html += tl_policyFold(lc.policy_applied);
+          html += tl_msgRow("sent",     "→ Prompt",   lc.prompt_body    || lc.prompt_preview);
+          html += tl_msgRow("received", "← Response", lc.response_body  || lc.response_preview);
+        }
+        if (d.mechanical_brief) {
+          html += `<div class="tl-section-label">Mechanical brief (before LLM)</div>`;
+          const mb = d.mechanical_brief;
+          if (mb.byte_count != null) html += tl_field("bytes", Number(mb.byte_count).toLocaleString());
+          html += tl_msgRow("sent", "→ Brief", mb.brief || mb.body);
+        }
+        return html || renderValue(d);
+      }
+
+      if (n === "mcp→executor") {
+        let html = "";
+        if (d.byte_count != null) html += tl_field("bytes", Number(d.byte_count).toLocaleString());
+        if (d.sha256) html += tl_field("sha256", `<code>${esc(d.sha256.slice(0, 16))}…</code>`);
+        const brief = d.brief || d.final_prompt_brief;
+        const body = d.body || d.final_prompt_body;
+        if (brief) html += tl_msgRow("sent", "→ Compiled prompt (brief)", brief);
+        if (body && body !== brief) html += tl_msgRow("sent", "→ Compiled prompt (full)", body);
+        if (d.logged_after_executor) {
+          html += `<div class="meta" style="margin-top:0.35rem;font-size:0.72rem">Trace logged this handoff after the executor ran; shown here before executor steps for causal order.</div>`;
+        }
+        html += `<div class="meta" style="margin-top:0.4rem;font-size:0.72rem">Full context window is in the first executor LLM call (executor→llm).</div>`;
+        return html || renderValue(d);
+      }
+
+      if (n === "executor→llm") {
+        let html = "";
+        // ── Core metadata ──────────────────────────────────────────────────
+        if (d.model) html += tl_field("model", esc(d.model));
+        const stepCall = [
+          d.step_index != null ? `step ${d.step_index}` : null,
+          d.call_index != null ? `call ${d.call_index}` : null,
+        ].filter(Boolean).join(" · ");
+        if (stepCall) html += tl_field("position", stepCall);
+        if (d.tokens_in != null) html += tl_field("tokens in", fmtK(d.tokens_in));
+        html += tl_httpMeta(d);
+
+        // ── Request flags + policy (compact, non-obscuring) ─────────────────
+        if (d.request_params && Object.keys(d.request_params).length) {
+          html += `<div class="tl-section-label">Request options</div>`;
+          html += tl_paramChips(d.request_params);
+        }
+        html += tl_policyFold(d.policy_applied);
+
+        // ── Prompt decomposition ────────────────────────────────────────────
+        const fmt = d.prompt_format || "unknown";
+        html += `<div class="tl-section-label">Prompt · <code>${esc(fmt)}</code></div>`;
+        if (fmt === "openai") {
+          if (d.system_chars) {
+            html += tl_field("system prompt",
+              `${fmtK(d.system_chars)} chars`);
+            html += tl_msgRow("sent", "→ System", d.system_prompt);
+          }
+          if (d.context_turns) {
+            html += tl_field("context",
+              `${d.context_turns} turn${d.context_turns !== 1 ? "s" : ""} · ${fmtK(d.context_chars)} chars`);
+            html += tl_msgRow("sent", "→ Context (prior messages)", d.context);
+          }
+          html += tl_field("task",
+            `${fmtK(d.task_chars)} chars`);
+          html += tl_msgRow("sent", "→ Task (last user message)", d.task);
+        } else {
+          html += `<div class="meta">Format <code>${esc(fmt)}</code> not yet decomposed.</div>`;
+          if (d.prompt_preview) html += tl_msgRow("sent", "→ Prompt (preview)", d.prompt_preview);
+        }
+
+        // ── Raw request (collapsible) ───────────────────────────────────────
+        if (d.raw_request) {
+          html += tl_rawBlock("Raw HTTP request body", d.raw_request);
+        }
+        return html || renderValue(d);
+      }
+
+      if (n === "llm→executor") {
+        let html = "";
+        // ── Core metadata ──────────────────────────────────────────────────
+        if (d.model) html += tl_field("model", esc(d.model));
+        const stepCall2 = [
+          d.step_index != null ? `step ${d.step_index}` : null,
+          d.call_index != null ? `call ${d.call_index}` : null,
+        ].filter(Boolean).join(" · ");
+        if (stepCall2) html += tl_field("position", stepCall2);
+        const tokStr = [
+          d.tokens_in  != null ? `${fmtK(d.tokens_in)} in`  : null,
+          d.tokens_out != null ? `${fmtK(d.tokens_out)} out` : null,
+          d.thinking_tokens ? `${fmtK(d.thinking_tokens)} ◈ think` : null,
+        ].filter(Boolean).join("  ·  ");
+        if (tokStr) html += tl_field("tokens", tokStr);
+        if (d.duration_ms != null) html += tl_field("duration", `${d.duration_ms.toLocaleString()}ms`);
+        html += tl_httpMeta(d);
+
+        // ── Response content ───────────────────────────────────────────────
+        html += `<div class="tl-section-label">Response</div>`;
+        html += tl_msgRow("received", "← Reply", d.response_body || d.response_preview);
+        if (d.thinking_body || d.thinking_preview)
+          html += tl_msgRow("thinking", "◈ Thinking", d.thinking_body || d.thinking_preview);
+
+        // ── Raw response (collapsible) ─────────────────────────────────────
+        if (d.raw_response) {
+          html += tl_rawBlock("Raw HTTP response body", d.raw_response);
+        }
+        return html || renderValue(d);
+      }
+
+      if (n === "executor.file_write") {
+        let html = "";
+        if (d.path) html += tl_field("path", `<code>${esc(d.path)}</code>`);
+        if (d.bytes_written != null) html += tl_field("bytes", Number(d.bytes_written).toLocaleString());
+        if (d.step_index != null) html += tl_field("step", String(d.step_index));
+        return html || renderValue(d);
+      }
+
+      if (n === "executor.shell") {
+        let html = "";
+        if (d.command) html += tl_field("command", `<code>${esc(d.command)}</code>`);
+        if (d.exit_code != null) html += tl_field("exit_code", `<code class="${d.exit_code === 0 ? "" : "fail"}">${d.exit_code}</code>`);
+        if (d.args && d.args.length) html += tl_field("args", renderValue(d.args));
+        if (d.step_index != null) html += tl_field("step", String(d.step_index));
+        return html || renderValue(d);
+      }
+
+      if (n === "executor→mcp") {
+        let html = "";
+        // ── Aggregate LLM stats ────────────────────────────────────────────
+        if (d.llm_calls != null) html += tl_field("LLM calls", String(d.llm_calls));
+        const totTok = [
+          d.total_tokens_in  != null ? `${fmtK(d.total_tokens_in)} in`   : null,
+          d.total_tokens_out != null ? `${fmtK(d.total_tokens_out)} out`  : null,
+          d.total_thinking   != null ? `${fmtK(d.total_thinking)} ◈ think` : null,
+        ].filter(Boolean).join("  ·  ");
+        if (totTok) html += tl_field("total tokens", totTok);
+        // ── Output ────────────────────────────────────────────────────────
+        const changed = d.files_changed || [];
+        if (changed.length)
+          html += tl_field("files changed", changed.map(f => `<code class="chip">${esc(f)}</code>`).join(" "));
+        if (d.output_text) html += tl_msgRow("received", "← Output", d.output_text);
+        if (d.success != null) html += tl_field("success", `<code>${d.success}</code>`);
+        return html || renderValue(d);
+      }
+
+      if (n === "mcp→host") {
+        let html = "";
+        if (d.output_text) html += tl_msgRow("received", "← Response to Cursor", d.output_text);
+        const meta = [
+          d.output_bytes != null ? `${Number(d.output_bytes).toLocaleString()} bytes` : null,
+          d.source ? sourceLabel(d.source) : null,
+        ].filter(Boolean);
+        if (meta.length) html += `<div class="meta" style="margin-bottom:0.3rem">${meta.map(esc).join("  ·  ")}</div>`;
+        if (d.output_sha256) html += tl_field("sha256", `<code>${esc(d.output_sha256.slice(0, 16))}…</code>`);
+        if (d.success != null) html += tl_field("success", `<code>${d.success}</code>`);
+        return html || renderValue(d);
+      }
+
+      // Fallback
+      return renderValue(d);
+    }
+
+    function fmtK(n) {
+      if (n == null) return "?";
+      if (n >= 10000) return (n / 1000).toFixed(1) + "k";
+      return Number(n).toLocaleString();
     }
 
     async function fetchEnrichment(record) {
@@ -347,52 +1101,6 @@
       return payload;
     }
 
-    function applyEnrichment(card, record, enriched) {
-      const output = enriched?.output || formatOutputLocal(record);
-      const outEl = card.querySelector("[data-output]");
-      const outSrc = card.querySelector("[data-output-source]");
-      if (outEl) outEl.textContent = output.text || "—";
-      if (outSrc) outSrc.textContent = sourceLabel(output.source);
-
-      const refsEl = card.querySelector("[data-context-refs]");
-      if (refsEl) {
-        const refs = enriched?.context_refs_resolved?.length
-          ? enriched.context_refs_resolved
-          : (record.context_refs || []).map((pointer) => ({
-              pointer,
-              source: pointer.snippet ? "inline_jsonl" : "unresolved",
-              snippet: pointer.snippet,
-              metadata: pointer.metadata || {},
-            }));
-        refsEl.innerHTML = renderContextRefs(refs);
-      }
-
-      const traceEl = card.querySelector("[data-trace]");
-      if (traceEl) traceEl.innerHTML = renderTrace(enriched?.trace || { trace_ref: record.trace_ref, found: false });
-
-      const linksEl = card.querySelector("[data-storage-links]");
-      if (linksEl) linksEl.innerHTML = renderStorageLinks(enriched?.storage_links);
-
-      const diffEl = card.querySelector("[data-diff-summary]");
-      if (diffEl) diffEl.innerHTML = renderDiffSummary(enriched?.delegation_diff);
-    }
-
-    async function onCardOpen(card, record) {
-      if (!serverMode) {
-        applyEnrichment(card, record, null);
-        return;
-      }
-      const status = card.querySelector("[data-enrich-status]");
-      if (status) status.textContent = "Resolving pointers from DBs and trace files…";
-      try {
-        const enriched = await fetchEnrichment(record);
-        applyEnrichment(card, record, enriched);
-        if (status) status.textContent = "";
-      } catch (err) {
-        applyEnrichment(card, record, null);
-        if (status) status.textContent = `Enrichment failed: ${err.message}`;
-      }
-    }
 
     function renderStats(data) {
       const ok = data.filter((r) => r.success).length;
@@ -404,103 +1112,388 @@
         (sourcePath ? `<span class="path-line">${esc(sourcePath)}</span>` : "");
     }
 
-    function filtered() {
-      const q = document.getElementById("search").value.trim().toLowerCase();
-      const f = document.getElementById("filter").value;
-      return records.filter((r) => {
-        if (f === "ok" && !r.success) return false;
-        if (f === "fail" && r.success) return false;
-        if (!q) return true;
-        const blob = JSON.stringify(r).toLowerCase();
-        return blob.includes(q);
+
+    // delegRowsHtml — consumes ViewEvent[] from the canonical middleware mapper.
+    function delegationHeaderMeta(record, viewEvents) {
+      const id = (record && record.delegation_id) || "?";
+      const ts = (record && (record.timestamp_start || record.timestamp_end)) || "";
+      const mcp_req = (record && record.mcp_request) || {};
+      const task = String(mcp_req.task || mcp_req.prompt || "");
+      return {
+        id,
+        short: id.slice(0, 8),
+        ts,
+        tsShort: ts ? ts.replace("T", " ").replace("Z", "").slice(0, 19) : "—",
+        task,
+        ok: record && record.success,
+        n: (viewEvents && viewEvents.length) || 0,
+      };
+    }
+
+    function delegationBlockHtml(record, viewEvents, enrichError, opts) {
+      const expanded = !!(opts && opts.expanded);
+      const isLatest = !!(opts && opts.isLatest);
+      const meta = delegationHeaderMeta(record, viewEvents);
+      const inner = delegRowsHtml(record, viewEvents, enrichError);
+      const statusCls = meta.ok === true ? "ok" : meta.ok === false ? "fail" : "";
+      const statusLbl = meta.ok === true ? "ok" : meta.ok === false ? "fail" : "—";
+      const openAttr = expanded ? " open" : "";
+      const latestAttr = isLatest ? ' data-latest="1"' : "";
+      return `<details class="deleg-block"${openAttr}${latestAttr}>
+        <summary class="deleg-head">
+          <span class="deleg-id" title="${esc(meta.id)}">${esc(meta.short)}</span>
+          <span class="deleg-ts">${esc(meta.tsShort)}</span>
+          <span class="deleg-status ${statusCls}">${statusLbl}</span>
+          <span class="deleg-events">${meta.n} event${meta.n !== 1 ? "s" : ""}</span>
+          <span class="deleg-task">${esc(meta.task.slice(0, 100) || "(no task)")}</span>
+        </summary>
+        <div class="deleg-body">${inner}</div>
+      </details>`;
+    }
+
+    // No raw log type parsing here; all logic is in _build_view_events (Python).
+    function delegRowsHtml(record, viewEvents, enrichError) {
+      const id    = (record && record.delegation_id) || "?";
+      const short = id.slice(0, 7);
+
+      // ── Timestamp helpers ─────────────────────────────────────────────
+      let firstTs = null;
+      for (const ve of (viewEvents || [])) {
+        if (ve.timestamp) { firstTs = new Date(ve.timestamp); if (!isNaN(firstTs)) break; }
+      }
+      if (!firstTs && record && record.timestamp_start) {
+        const t = new Date(record.timestamp_start);
+        if (!isNaN(t)) firstTs = t;
+      }
+
+      function absTs(ve) {
+        if (!ve || !ve.timestamp) return null;
+        const t = new Date(ve.timestamp);
+        if (isNaN(t)) return null;
+        return [t.getHours(), t.getMinutes(), t.getSeconds()]
+          .map(n => String(n).padStart(2, "0")).join(":")
+          + "." + String(t.getMilliseconds()).padStart(3, "0");
+      }
+
+      function relativeTs(ve) {
+        if (!ve || !ve.timestamp || !firstTs) return "";
+        const t = new Date(ve.timestamp);
+        if (isNaN(t)) return "";
+        const ms = t - firstTs;
+        if (ms < 0) return "";
+        return ms < 1000 ? `+${ms}ms` : `+${(ms / 1000).toFixed(2)}s`;
+      }
+
+      function tsHtml(ve) {
+        const abs = absTs(ve); if (!abs) return "—";
+        const rel = relativeTs(ve);
+        return rel ? `${abs} <span class="ts-rel">${rel}</span>` : abs;
+      }
+
+      // ── CSS class and label per ViewEvent ─────────────────────────────
+      function veStyle(ve) {
+        const n = ve.name || "";
+        if (n === "host→mcp" || n === "mcp→host") return { cls: "scope-host", label: n };
+        if (n === "mcp→executor")    return { cls: "scope-mcp", label: "mcp→exec" };
+        if (n === "mcp→post")        return { cls: "scope-mcp scope-post", label: "mcp→post" };
+        if (n === "mcp→index")       return { cls: "scope-mcp scope-post", label: "index" };
+        if (n.startsWith("mcp."))    return { cls: "scope-mcp", label: n.replace("mcp.", "") };
+        if (n.startsWith("executor→llm")) return { cls: "ve-send", label: "exec→llm" };
+        if (n.startsWith("llm→executor")) return { cls: "ve-recv", label: "llm→exec" };
+        if (n === "executor→mcp")    return { cls: "ve-recv", label: "exec→mcp" };
+        if (n === "executor.file_write") return { cls: "ve-tool", label: "file_write" };
+        if (n === "executor.shell")  return { cls: "ve-tool", label: "shell" };
+        return { cls: "", label: n };
+      }
+
+      function dirCls(ve) {
+        return ve.direction === "→" ? "out" : ve.direction === "←" ? "in" : "inout";
+      }
+
+      // ── Enrichment error row ──────────────────────────────────────────
+      let html = "";
+      if (enrichError) {
+        html += `<div class="ev-row enrich-error">
+          <span class="ev-r-delg" title="${esc(id)}">${esc(short)}</span>
+          <span class="ev-r-seq">!</span>
+          <span class="ev-r-dir inout">!</span>
+          <span class="ev-r-type">error</span>
+          <span class="ev-r-summary">trace load failed: ${esc(String(enrichError))}</span>
+          <span class="ev-r-ts">—</span>
+          <button class="ev-r-toggle" type="button">▾</button>
+        </div>
+        <div class="ev-detail">${esc(String(enrichError))}</div>`;
+      }
+
+      // ── No view events: synthetic fallback from record ────────────────
+      if (!viewEvents || !viewEvents.length) {
+        const mcp_req = (record && record.mcp_request) || {};
+        const task    = mcp_req.task || mcp_req.prompt_preview || "";
+        const rtc     = (record && record.response_to_cursor) || {};
+        const out     = rtc.output_preview || rtc.output || (record && record.output && record.output.text) || "";
+
+        html += `<div class="ev-row scope-host">
+          <span class="ev-r-delg" title="${esc(id)}">${esc(short)}</span>
+          <span class="ev-r-seq">—</span>
+          <span class="ev-r-dir out">→</span>
+          <span class="ev-r-type scope-host">host→mcp</span>
+          <span class="ev-r-summary">${esc(task.slice(0, 120) || "(no task)")}</span>
+          <span class="ev-r-ts">—</span>
+          <button class="ev-r-toggle" type="button">▾</button>
+        </div>
+        <div class="ev-detail">${renderValue(mcp_req)}</div>`;
+
+        html += `<div class="ev-row scope-host">
+          <span class="ev-r-delg" title="${esc(id)}">${esc(short)}</span>
+          <span class="ev-r-seq">—</span>
+          <span class="ev-r-dir in">←</span>
+          <span class="ev-r-type scope-host">mcp→host</span>
+          <span class="ev-r-summary">${esc(String(out).slice(0, 120) || "(no output)")}</span>
+          <span class="ev-r-ts">—</span>
+          <button class="ev-r-toggle" type="button">▾</button>
+        </div>
+        <div class="ev-detail">${renderValue(rtc)}</div>`;
+
+        return html;
+      }
+
+      // ── Full view_events path ─────────────────────────────────────────
+      for (const ve of viewEvents) {
+        if (ve.is_divider) {
+          html += `<div class="ev-step-divider">
+            <span class="ev-step-div-name">${esc(ve.name || "step")}</span>
+            <span class="ev-step-div-kind">${esc(ve.summary || "")}</span>
+          </div>`;
+          continue;
+        }
+
+        const { cls, label } = veStyle(ve);
+        const dcls  = dirCls(ve);
+        const ts    = tsHtml(ve);
+        const summ  = ve.summary || "";
+        const det   = renderViewEventDetail(ve);
+        const vCls  = ve.is_virtual ? " ve-virtual" : "";
+
+        html += `<div class="ev-row ${cls}${vCls}">
+          <span class="ev-r-delg" title="${esc(id)}">${esc(short)}</span>
+          <span class="ev-r-seq">${esc(String(ve.seq ?? "—"))}</span>
+          <span class="ev-r-dir ${dcls}">${esc(ve.direction || "·")}</span>
+          <span class="ev-r-type ${cls}">${esc(label)}</span>
+          <span class="ev-r-summary">${esc(summ)}</span>
+          <span class="ev-r-ts">${ts}</span>
+          <button class="ev-r-toggle" type="button">▾</button>
+        </div>
+        <div class="ev-detail">${det}</div>`;
+      }
+
+      return html;
+    }
+
+    function renderList() { renderPage(); }
+
+    function renderPagination(total, page) {
+      const pages = Math.ceil(total / PAGE_SIZE);
+      if (pages <= 1) return "";
+      const from = page * PAGE_SIZE + 1;
+      const to   = Math.min((page + 1) * PAGE_SIZE, total);
+      return `
+        <button type="button" onclick="goPage(${page - 1})" ${page === 0 ? "disabled" : ""}>← Older</button>
+        <span class="pg-info">delegations ${from}–${to} of ${total} · oldest → newest</span>
+        <button type="button" onclick="goPage(${page + 1})" ${page >= pages - 1 ? "disabled" : ""}>Newer →</button>
+        <button type="button" class="secondary" onclick="goLatest()">Latest ↓</button>`;
+    }
+
+    function goPage(p, opts) {
+      const pages = totalPages();
+      currentPage = Math.max(0, Math.min(p, pages - 1));
+      renderPage().then(() => {
+        if (opts && opts.scroll === "bottom") {
+          scrollListEnd();
+        } else {
+          window.scrollTo(0, 0);
+        }
       });
     }
 
-    function toggleCard(card, idx) {
-      const opening = !card.classList.contains("open");
-      card.classList.toggle("open");
-      if (opening) {
-        const record = filtered()[idx];
-        if (record) onCardOpen(card, record);
-      }
+    function scrollListEnd() {
+      const list = document.getElementById("list");
+      const target = document.getElementById("pagination-bottom") || list;
+      target.scrollIntoView({ behavior: "smooth", block: "end" });
     }
 
-    function renderList() {
-      const data = filtered();
+    function goLatest() {
+      goPage(totalPages() - 1, { scroll: "bottom" });
+    }
+
+    async function renderPage() {
       const list = document.getElementById("list");
-      if (!data.length) {
-        list.innerHTML = '<div class="empty">No matching delegations</div>';
+      const pgTop = document.getElementById("pagination");
+      const pgBot = document.getElementById("pagination-bottom");
+
+      if (!records.length) {
+        list.innerHTML = '<div class="empty">No delegations</div>';
+        pgTop.style.display = "none"; pgBot.style.display = "none";
+        updateDelegToolbar();
         return;
       }
-      list.innerHTML = data
-        .map((r, i) => {
-          const id = r.delegation_id || "?";
-          const short = id.slice(0, 8);
-          const task =
-            (r.mcp_request && r.mcp_request.task) ||
-            (r.context && r.context.prompt_preview) ||
-            "";
-          const ws = r.workspace_path || "";
-          const files = (r.files_changed || []).concat(r.files_requested || []);
-          const uniq = [...new Set(files)];
-          const chips = uniq
-            .slice(0, 8)
-            .map((f) => {
-              const abs = fullPath(ws, f);
-              return `<span class="chip">${esc(f)}<button type="button" class="secondary" data-copy="${esc(abs)}">copy path</button></span>`;
-            })
-            .join("");
-          const timing = r.timing
-            ? `engine ${r.timing.engine_run_ms ?? "?"}ms · total ${r.duration_ms ?? "?"}ms`
-            : `${r.duration_ms ?? "?"}ms`;
-          return `
-          <article class="card" data-idx="${i}" data-delegation-id="${esc(id)}">
-            <div class="card-head" onclick="toggleCard(this.parentElement, ${i})">
-              <span class="badge ${r.success ? "ok" : "fail"}">${r.success ? "ok" : "fail"}</span>
-              <div>
-                <div><strong>${esc(short)}…</strong> · ${esc(r.model || "?")} · ${esc(timing)}</div>
-                <div class="meta">${esc(r.timestamp_start || "")}</div>
-                <div class="task">${esc(task.slice(0, 160))}${task.length > 160 ? "…" : ""}</div>
-              </div>
-              <div class="meta">${(r.files_changed || []).length} changed</div>
-            </div>
-            <div class="card-body">
-              <div class="section">
-                <h3>Workspace</h3>
-                <div class="path-line">${esc(ws)}</div>
-                <button type="button" class="secondary" data-copy="${esc(ws)}">Copy workspace</button>
-              </div>
-              <div class="section"><h3>Files</h3><div class="chips">${chips || "—"}</div></div>
-              <div class="section"><h3>Context preview</h3><pre>${esc((r.context && r.context.prompt_preview) || "—")}</pre></div>
-              <div class="section">
-                <h3>Output / error</h3>
-                <div class="source-tag" data-output-source>${esc(sourceLabel(formatOutputLocal(r).source))}</div>
-                <pre data-output>${esc(formatOutputLocal(r).text)}</pre>
-                <div class="meta loading" data-enrich-status></div>
-              </div>
-              <div class="section"><h3>Context refs</h3><div data-context-refs class="meta loading">Expand to resolve…</div></div>
-              <div class="section"><h3>Trace file</h3><div data-trace class="meta loading">Expand to load…</div></div>
-              <div class="section"><h3>Workspace diff</h3><div data-diff-summary class="meta loading">Expand to load…</div></div>
-              <div class="section"><h3>Storage links</h3><div data-storage-links class="meta loading">Expand to load…</div></div>
-              <div class="section"><h3>Full record</h3><pre>${esc(JSON.stringify(r, null, 2))}</pre></div>
-            </div>
-          </article>`;
-        })
-        .join("");
-      list.querySelectorAll("[data-copy]").forEach((btn) => {
-        btn.addEventListener("click", (e) => {
-          e.stopPropagation();
-          copyText(btn.getAttribute("data-copy"));
+
+      const pg = renderPagination(records.length, currentPage);
+      pgTop.innerHTML = pg; pgTop.style.display = pg ? "flex" : "none";
+      pgBot.innerHTML = pg; pgBot.style.display = pg ? "flex" : "none";
+
+      const pageRecords = records.slice(currentPage * PAGE_SIZE, (currentPage + 1) * PAGE_SIZE);
+      const pageStart = currentPage * PAGE_SIZE;
+
+      const tableHead = `<div class="ev-table-head">
+        <span class="ev-th-delg">delegation</span>
+        <span class="ev-th-seq">#</span>
+        <span class="ev-th-dir">dir</span>
+        <span class="ev-th-type">type</span>
+        <span class="ev-th-summ">summary</span>
+        <span class="ev-th-ts">time</span>
+      </div>`;
+
+      // Phase 1: render boundary rows immediately from record data (no server needed)
+      let quickHtml = tableHead;
+      for (let i = 0; i < pageRecords.length; i++) {
+        const globalIdx = pageStart + i;
+        quickHtml += delegationBlockHtml(pageRecords[i], [], null, {
+          expanded: globalIdx === records.length - 1,
+          isLatest: globalIdx === records.length - 1,
         });
+      }
+      list.innerHTML = quickHtml || '<div class="empty">No delegations</div>';
+      updateTableHeadTop();
+      updateDelegToolbar();
+
+      if (!serverMode) { wireRowClicks(list); return; }
+
+      // Phase 2: fetch enrichments and replace with full rows
+      const enrichResults = await Promise.allSettled(
+        pageRecords.map(r => withTimeout(fetchEnrichment(r), 20000))
+      );
+
+      let html = "";
+      for (let i = 0; i < pageRecords.length; i++) {
+        const globalIdx = pageStart + i;
+        const blockOpts = {
+          expanded: globalIdx === records.length - 1,
+          isLatest: globalIdx === records.length - 1,
+        };
+        const result = enrichResults[i];
+        if (result.status === "rejected") {
+          const errMsg = String(result.reason?.message || result.reason || "unknown error");
+          html += delegationBlockHtml(pageRecords[i], [], errMsg, blockOpts);
+        } else {
+          const enriched = result.value;
+          const viewEvents = enriched?.view_events || [];
+          try {
+            html += delegationBlockHtml(pageRecords[i], viewEvents, null, blockOpts);
+          } catch (e) {
+            console.error("delegationBlockHtml failed:", e, e?.stack);
+            html += delegationBlockHtml(pageRecords[i], [], "render error: " + e?.message, blockOpts);
+          }
+        }
+      }
+      list.innerHTML = tableHead + (html || '<div class="empty">No events</div>');
+      wireRowClicks(list);
+      updateTableHeadTop();
+      updateDelegToolbar();
+    }
+
+    function updateDelegToolbar() {
+      const multi = records.length > 1;
+      ["latestBtn", "expandAllBtn", "collapseOlderBtn"].forEach(id => {
+        const el = document.getElementById(id);
+        if (el) el.hidden = !multi;
       });
     }
 
-    function loadRecords(data, path) {
-      records = data;
+    function expandAllDelegations() {
+      document.querySelectorAll(".deleg-block").forEach(el => { el.open = true; });
+    }
+
+    function collapseOlderDelegations() {
+      document.querySelectorAll(".deleg-block").forEach(el => {
+        el.open = el.dataset.latest === "1";
+      });
+    }
+
+    const detailPanel = document.getElementById("detail-panel");
+    const dpType  = document.getElementById("dp-type");
+    const dpSumm  = document.getElementById("dp-summ");
+    const dpBody  = document.getElementById("dp-body");
+    const dpClose = document.getElementById("dp-close");
+
+    dpClose.addEventListener("click", () => {
+      detailPanel.classList.remove("active");
+      document.querySelectorAll(".ev-row.selected").forEach(r => r.classList.remove("selected"));
+    });
+
+    function showDetail(row) {
+      document.querySelectorAll(".ev-row.selected").forEach(r => r.classList.remove("selected"));
+      row.classList.add("selected");
+
+      const typeEl  = row.querySelector(".ev-r-type");
+      const summEl  = row.querySelector(".ev-r-summary");
+      const delgEl  = row.querySelector(".ev-r-delg");
+      const seqEl   = row.querySelector(".ev-r-seq");
+      const tsEl    = row.querySelector(".ev-r-ts");
+
+      dpType.textContent = typeEl ? typeEl.textContent : "";
+      dpType.className   = "dp-type " + (typeEl ? typeEl.className.replace("ev-r-type","").trim() : "");
+      dpSumm.textContent = summEl ? summEl.textContent : "";
+
+      // pull detail body from sibling .ev-detail
+      const detail = row.nextElementSibling;
+      const bodyHtml = (detail && detail.classList.contains("ev-detail")) ? detail.innerHTML : "";
+
+      // build rich panel content
+      const delg = delgEl ? delgEl.title || delgEl.textContent : "";
+      const seq  = seqEl ? seqEl.textContent : "";
+      const ts   = tsEl  ? tsEl.textContent  : "";
+
+      const metaHtml = `<div class="dp-meta">
+        ${delg ? `<span class="dp-meta-pill" title="Delegation ID">${esc(delg)}</span>` : ""}
+        ${seq && seq !== "·" && seq !== "host" ? `<span class="dp-meta-pill">${esc(seq)}</span>` : ""}
+        ${ts && ts !== "—" ? `<span class="dp-meta-pill dp-meta-ts">${tsEl.innerHTML}</span>` : ""}
+      </div>`;
+
+      dpBody.innerHTML = metaHtml + (bodyHtml || "<span class='meta'>No detail available</span>");
+      initContentBlocks(dpBody);
+      detailPanel.classList.add("active");
+      updateDetailPanelTop();
+    }
+
+    function wireRowClicks(container) {
+      container.onclick = e => {
+        const row = e.target.closest(".ev-row");
+        if (row) showDetail(row);
+      };
+    }
+
+    function updateDetailPanelTop() {
+      const hh = document.querySelector("header")?.offsetHeight || 0;
+      detailPanel.style.top = hh + "px";
+      detailPanel.style.maxHeight = `calc(100vh - ${hh + 8}px)`;
+    }
+
+    function withTimeout(promise, ms) {
+      return Promise.race([
+        promise,
+        new Promise((_, reject) => setTimeout(() => reject(new Error("timeout")), ms))
+      ]);
+    }
+
+    function loadRecords(data, path, opts) {
+      records = sortRecordsChronological(data);
       sourcePath = path || "";
+      currentPage = 0;
       enrichCache.clear();
       renderStats(records);
-      renderList();
+      renderPage().then(() => {
+        if (opts && opts.scroll === "latest") scrollListEnd();
+      });
     }
 
     async function loadFromServer() {
@@ -520,13 +1513,23 @@
       serverMode = false;
       const text = await file.text();
       const lines = text.split("\n").filter((l) => l.trim());
-      const parsed = lines.map((l) => JSON.parse(l)).reverse();
+      const parsed = lines.map((l) => JSON.parse(l));
       loadRecords(parsed, file.name);
     });
 
-    document.getElementById("search").addEventListener("input", renderList);
-    document.getElementById("filter").addEventListener("change", renderList);
     document.getElementById("reloadBtn")?.addEventListener("click", () => loadFromServer().catch(alert));
+    document.getElementById("latestBtn")?.addEventListener("click", () => goLatest());
+    document.getElementById("expandAllBtn")?.addEventListener("click", () => expandAllDelegations());
+    document.getElementById("collapseOlderBtn")?.addEventListener("click", () => collapseOlderDelegations());
+
+    // Make the table header and detail panel stick just below the page header
+    function updateTableHeadTop() {
+      const hh = document.querySelector("header")?.offsetHeight || 0;
+      document.querySelectorAll(".ev-table-head").forEach(el => el.style.top = hh + "px");
+      updateDetailPanelTop();
+    }
+    new ResizeObserver(updateTableHeadTop).observe(document.querySelector("header"));
+    updateTableHeadTop();
 
     loadFromServer().catch(() => {
       /* standalone: use file picker */

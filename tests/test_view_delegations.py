@@ -69,6 +69,18 @@ def test_main_view_rejects_log_file_and_workspace(tmp_path):
     assert exc.value.code == 2
 
 
+def test_load_delegations_chronological_order(tmp_path):
+    log = tmp_path / "delegations.jsonl"
+    older = {"delegation_id": "old", "timestamp_start": "2026-01-01T10:00:00Z"}
+    newer = {"delegation_id": "new", "timestamp_start": "2026-01-02T10:00:00Z"}
+    log.write_text(json.dumps(newer) + "\n" + json.dumps(older) + "\n")
+
+    from core.cli.view_delegations import _load_delegations
+
+    records = _load_delegations(log)
+    assert [r["delegation_id"] for r in records] == ["old", "new"]
+
+
 def test_api_delegations_single_file(tmp_path):
     log = tmp_path / "delegations.jsonl"
     record = {"type": "delegation", "delegation_id": "abc", "timestamp_end": "2026-01-01T00:00:00Z"}

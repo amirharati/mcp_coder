@@ -345,7 +345,7 @@ Even on this trivial delegation:
 
 1. **`context.delegation_pipeline`** (JSONL) / top-level `delegation_pipeline` (MCP response) shows where time went. `executor` typically dominates. `file_picker` and `context_assemble` are fast. `builder_llm` adds ~500–1500ms for the narrative brief. *(Full delegation pipeline: T-06.)*
 2. **`model_roles`** (top-level in JSONL) — e.g. `model_roles.context_builder` if the builder brief ran on a separate model role. Configurable or disable with `context_builder_llm: false` in `config.yaml`.
-3. **`model_roles.*.tokens` may be `null`** — known gap (BL-335). The model ran; token counting is a pending fix.
+3. **`model_roles.*.tokens`** shows live token counts per role (Phase 9 — all helper and executor paths are now fully attributed via `policy_applied`).
 4. **The spec report** at `.mcp-coder/specs/reports/hello-01-v1.md` — mcp-coder appended an audit section. Open it to see what was recorded.
 5. **`use-mcp-coder.mdc`** was in `.cursor/rules/` before the delegation ran — it was compiled and synced on server startup, and it's what told the planner how to write the spec.
 
@@ -380,7 +380,7 @@ mcp-coder view delegations ~/.mcp-coder/projects/<key>/sessions/<id>/delegations
 mcp-coder view delegations --no-open   # serve only, don't open browser
 ```
 
-Opens http://127.0.0.1:8765/ with a searchable list of delegations (task snippet, files, success/fail). Expanded detail is still mostly **raw JSON** today — structured sections for pipeline, model roles, etc. are tracked (**P4.5-ISS-006** / **BL-343**); a fuller viewer walkthrough will land when that ships.
+Opens http://127.0.0.1:8765/ with a searchable list of delegations (task snippet, files, success/fail). Expanded detail uses the shipped **v2 boundary viewer**: chronological boundary rows (`host→mcp`, `mcp.*`, `executor→llm`, `llm→executor`, `executor→mcp`, `mcp→host`) backed by Python middleware (`view_events[]`). Click a boundary row to inspect detail fields (context, request params, policy, prompts/responses, tool activity) without reading raw JSON manually.
 
 **No server:** open `tools/delegation_viewer.html` from the mcp-coder repo and use **Choose file** to pick any `delegations.jsonl`.
 

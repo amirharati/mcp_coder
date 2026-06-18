@@ -117,6 +117,31 @@ def test_compare_unknown_id_returns_1(tmp_path, monkeypatch, capsys):
     assert "delegation not found: missing-id" in capsys.readouterr().err
 
 
+def test_compare_pairs_when_proxy_step_index_missing():
+    """Proxy events may omit step_index; pairing must not crash on sort."""
+    events = [
+        {
+            "type": "proxy_llm_call",
+            "step_index": None,
+            "call_index": 1,
+            "model": "proxy-model",
+            "wire_latency_ms": 10,
+            "status_code": 200,
+            "raw_response": "{}",
+        },
+        {
+            "type": "backend_llm_call",
+            "step_index": 1,
+            "call_index": 1,
+            "model": "backend-model",
+            "duration_ms": 33,
+        },
+    ]
+    paired = pair_dual_capture_events(events)
+    assert "summary" in paired
+    assert paired["summary"]["matched"] + paired["summary"]["proxy_only"] + paired["summary"]["backend_only"] >= 1
+
+
 def test_compare_flags_proxy_only_gap():
     events = [
         {
@@ -336,4 +361,4 @@ def test_enrich_legacy_trace_without_dual_capture_still_safe(tmp_path):
     }
     enriched = enrich_delegation_record(record)
     assert enriched["trace"]["dual_capture_compare"] is None
-    assert len(enriched["trace"]["llm_calls"]) == 1
+    assert len(enriched["trace"]["events"]) == 1

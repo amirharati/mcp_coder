@@ -272,7 +272,7 @@ mcp-coder view delegations              # merged JSONL for cwd workspace
 mcp-coder view delegations --no-open    # serve at http://127.0.0.1:8765/ without opening a tab
 ```
 
-Good for browsing many delegations. The list shows outcome, files, and timing. Expand a card to **enrich** it — the viewer lazily resolves `context_refs` from the RAG DBs and loads the trace file, so you see helper LLM summaries and resolved snippets without reading raw JSONL. For full JSON, `tail -1 delegations.jsonl | python3 -m json.tool` still works.
+Good for browsing many delegations. The list shows outcome, files, and timing. Expand a card to **enrich** it — the viewer lazily resolves `context_refs` from the RAG DBs and loads trace data, then renders a boundary timeline row set (`host→mcp`, `mcp.*`, `executor→llm`, `llm→executor`, `executor→mcp`, `mcp→host`) with a detail panel per row. For full JSON, `tail -1 delegations.jsonl | python3 -m json.tool` still works.
 
 ### List recent delegations
 
@@ -333,7 +333,7 @@ Each trace file has one JSON line per event:
 | Line | Type | Content |
 |------|------|---------|
 | 1 | `trace_header` | `version_tags`: git SHA, model versions, config fingerprint, pipeline flags |
-| 2+ | `llm_call` / `tool_call` / `action` / `compile_event` | Helper calls, executor step calls, non-LLM actions, and compile provenance events |
+| 2+ | `llm_call` / `proxy_llm_call` / `backend_llm_call` / `tool_call` / `action` / `compile_event` | Helper + proxy + backend LLM captures, executor step actions/tool events, and compile provenance |
 
 Example `llm_call` line (at default `standard` verbosity — previews only):
 
@@ -353,11 +353,11 @@ Example `llm_call` line (at default `standard` verbosity — previews only):
 
 | Tier | Trace content | Use when |
 |------|--------------|----------|
-| `lean` | Hashes + token counts only | Minimal disk use |
-| `standard` *(default)* | Previews (≤500 chars) | Normal debugging |
-| `full` | Full prompt and response bodies | Deep inspection |
+| `lean` | Full bodies still written; leaner display/export behavior | Minimal UI noise |
+| `standard` *(default)* | Full bodies written + standard previews in CLI/viewer | Normal debugging |
+| `full` | Full bodies written + maximal display detail | Deep inspection |
 
-> **Note:** verbosity currently controls what is *written* to the trace file. Full capture regardless of verbosity is planned for Phase 8 (BL-367).
+> **Phase 9 update:** write behavior is now **always full-capture** (P9-001/P9-008). Verbosity controls presentation/export and downstream promotion behavior, not whether prompts/responses are stored.
 
 The JSONL row points to its trace via `trace_ref`. The delegation viewer resolves it lazily on card expand.
 

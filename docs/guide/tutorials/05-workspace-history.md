@@ -224,7 +224,7 @@ This is **best-effort** — if snapshots are disabled or the DB is empty, delega
 | `spec_path` | Task spec used (nullable) |
 | `checkpoint_summary` | One-line label of what happened |
 | `outcome` | `success` / `failure` / `partial` |
-| `model`, `duration_ms`, `tokens_total` | Trajectory metadata (`tokens_total` often null — BL-335) |
+| `model`, `duration_ms`, `tokens_total` | Trajectory metadata (token counts live since Phase 9) |
 | `delta_created` / `modified` / `deleted` | File counts |
 
 ### `file_deltas`

@@ -1,7 +1,7 @@
 # Architecture overview
 
-**Status:** Living — update as shipped decisions change. **Phase 9 sync pending** (full rewrite after dogfood session).  
-**Scope:** Phases 1–7 documented; Phases 8–9 shipped but not yet fully reflected here (see § Known gaps for items now resolved).  
+**Status:** Living — update as shipped decisions change. **Phase 9 sync applied** (viewer + proxy/write-always/model-policy architecture reflected).  
+**Scope:** Phases 1–9 documented at architecture level; keep per-subsystem details in linked docs.  
 **How to use:** Read as a structural reference after [how-it-works.md](../how-it-works.md). That doc is the *operator* mental model; this one is the *layer map and design decisions*. Deeper per-subsystem docs live alongside this file.
 
 ---
@@ -50,7 +50,7 @@
           │
           ▼
    ┌──────────────────────────────────────────┐
-  │ Observability  (Phases 6–7)              │
+  │ Observability  (Phases 6–9)              │
    │ core/observability/                      │
    │                                          │
    │ ObservabilityBackend (base.py)           │
@@ -59,6 +59,9 @@
    │                                          │
   │ LlmGateway + LiteLLM callback shim       │
   │ trace.py → per-delegation trace events   │
+  │            (`llm_call`, `proxy_llm_call`,│
+  │             `backend_llm_call`,          │
+  │             `compile_event`, `tool_call`)│
    │ stats.py → maintenance stats             │
    └──────────────────────────────────────────┘
           │
@@ -106,7 +109,7 @@ These are concrete decisions baked into the codebase. Changing them would requir
 The spec's `files_edit` list is the only way a path enters `edit-full` tier and Aider `fnames`. The file picker **discovers** read candidates but **never grants edit rights**. That invariant is enforced at compile time in `file_picker.py` + `assemble.py` and checked post-hoc by `post_gateway`.
 
 ### D-5: One model per role (D-P4-8)
-Every LLM call is tagged with a `role` (`executor`, `context_builder`, `review`, `critic`). Each resolves its model independently via `resolve_role_model_name()` — precedence: env var → `config.yaml` → built-in default. All calls are audited in `model_roles` JSONL. Token counts are currently null for several paths (BL-335).
+Every LLM call is tagged with a `role` (`executor`, `context_builder`, `review`, `critic`). Each resolves its model independently via `model_registry.resolve()` (Phase 9) — precedence: env var → `config.yaml` → built-in default. All calls are audited in `model_roles` JSONL with live token counts and a `policy_applied` provenance block on every `backend_llm_call` and `llm_call` event (shipped P9-012).
 
 ### D-6: Snapshot-based file diffing (not git)
 Pre/post SHA-256 manifests of the workspace bracket the executor. `files_changed` comes from the manifest diff, not from git or from what Aider reports. This works on untracked files, gitignored paths, and repos with no git history. Git is a soft dependency only.
@@ -307,6 +310,7 @@ Full layout: [storage-layout.md](./storage-layout.md) (pending) and [`notes/stor
 
 | Date | Change |
 |------|--------|
+| 2026-06-17 | Phase 9 sync — observability layer updated to 6–9, trace event families listed (`proxy_llm_call`/`backend_llm_call` included), and guide status/scope moved from pending to synced |
 | 2026-06-16 | Phase 9 partial sync — known gaps updated (write-always, context blob, model registry done); future direction updated; full rewrite (layer map, lifecycle, helper LLMs, D-5 model registry) pending after dogfood session |
 | 2026-06-13 | Phase 7 sync — scope updated to Phases 1–7; trace/event descriptions updated (executor + compile_event); known gaps adjusted to post-P7 state |
 | 2026-06-13 | Phase 6 — `core/observability/` seam + trace files; storage map updated; known gaps and future direction refreshed; helper LLM note updated (tokens live, not null) |

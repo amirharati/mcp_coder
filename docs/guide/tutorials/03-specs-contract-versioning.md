@@ -364,7 +364,7 @@ Open the record (T-02) or `mcp-coder view delegations`:
 | `scope_violations` / `files_unexpected` | Gateway findings |
 | `outcome` | See table in §6 |
 | `context.delegation_pipeline` | Phase timings (implement + valid spec only) |
-| `model_roles` | Per-role models; token counts may be `null` (known gap **BL-335**) |
+| `model_roles` | Per-role models with live token counts and `policy_applied` provenance (Phase 9) |
 
 MCP tool responses expose some fields at the top level (e.g. `delegation_pipeline`); JSONL nests pipeline under `context` — see T-02.
 
@@ -406,4 +406,4 @@ Bundled templates: `resources/spec-template.md`, `spec-epic-template.md`, `spec-
 
 - **T-04 (Context compiler):** `inspect-context` dry-run — tiers, builder LLM, what Aider actually sees for a spec-backed delegate
 - **T-06 (Delegation pipeline):** full `delegate_to_agent` phase list and config flag matrix
-- **BL-343:** structured delegation viewer (today `view delegations` expands mostly raw JSON)
+- **BL-343:** structured delegation viewer is now shipped in Phase 9 (`view_events[]` middleware + boundary-table UI in `mcp-coder view delegations`)

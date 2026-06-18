@@ -146,6 +146,8 @@ def _emit_compile_event(
     workspace: str,
     session_dir: "Path | str",
     obs_verbosity: str,
+    status: str | None = None,
+    detail: str | None = None,
     source_path: str | None = None,
     byte_start: int | None = None,
     byte_end: int | None = None,
@@ -158,6 +160,8 @@ def _emit_compile_event(
             stage=stage,
             verbosity=obs_verbosity,
             text_body=text_body,
+            status=status,
+            detail=detail,
             source_path=source_path,
             byte_start=byte_start,
             byte_end=byte_end,
@@ -171,6 +175,28 @@ def _emit_compile_event(
         )
     except Exception:
         pass
+
+
+def _emit_compile_skip(
+    *,
+    delegation_id: str,
+    stage: str,
+    workspace: str,
+    session_dir: "Path | str",
+    obs_verbosity: str,
+    reason: str,
+) -> None:
+    """Emit a compile_event with status=skipped and no body; never raises."""
+    _emit_compile_event(
+        delegation_id=delegation_id,
+        stage=stage,
+        text_body=None,
+        workspace=workspace,
+        session_dir=session_dir,
+        obs_verbosity=obs_verbosity,
+        status="skipped",
+        detail=reason,
+    )
 
 
 def _emit_compile_provenance_pair(
@@ -1041,11 +1067,27 @@ def delegate_to_agent(
                     status="skipped",
                     detail="empty_host_transcript",
                 )
+                _emit_compile_skip(
+                    delegation_id=delegation_id,
+                    stage=STAGE_VALIDATION_INPUT,
+                    workspace=ws,
+                    session_dir=storage.session_dir,
+                    obs_verbosity=_compile_verbosity,
+                    reason="empty_host_transcript",
+                )
         elif pipeline_recorder is not None and not review_target_files_error:
             pipeline_recorder.mark(
                 "spec_validation",
                 status="skipped",
                 detail="disabled",
+            )
+            _emit_compile_skip(
+                delegation_id=delegation_id,
+                stage=STAGE_VALIDATION_INPUT,
+                workspace=ws,
+                session_dir=storage.session_dir,
+                obs_verbosity=_compile_verbosity,
+                reason="disabled",
             )
 
         if spec_invalid_reason:
@@ -1244,11 +1286,20 @@ def delegate_to_agent(
                                 )
                             else:
                                 pipeline_recorder.end("architect_pass", status="ok")
-                    elif pipeline_recorder is not None:
-                        pipeline_recorder.mark(
-                            "architect_pass",
-                            status="skipped",
-                            detail="disabled",
+                    else:
+                        if pipeline_recorder is not None:
+                            pipeline_recorder.mark(
+                                "architect_pass",
+                                status="skipped",
+                                detail="disabled",
+                            )
+                        _emit_compile_skip(
+                            delegation_id=delegation_id,
+                            stage=STAGE_ARCHITECT_INPUT,
+                            workspace=ws,
+                            session_dir=storage.session_dir,
+                            obs_verbosity=_compile_verbosity,
+                            reason="disabled",
                         )
 
                     builder_llm_enabled = (
@@ -1294,11 +1345,20 @@ def delegate_to_agent(
                                 )
                             else:
                                 pipeline_recorder.end("builder_llm", status="ok")
-                    elif pipeline_recorder is not None:
-                        pipeline_recorder.mark(
-                            "builder_llm",
-                            status="skipped",
-                            detail="disabled",
+                    else:
+                        if pipeline_recorder is not None:
+                            pipeline_recorder.mark(
+                                "builder_llm",
+                                status="skipped",
+                                detail="disabled",
+                            )
+                        _emit_compile_skip(
+                            delegation_id=delegation_id,
+                            stage=STAGE_BUILDER_INPUT,
+                            workspace=ws,
+                            session_dir=storage.session_dir,
+                            obs_verbosity=_compile_verbosity,
+                            reason="disabled",
                         )
                     if architect_plan:
                         context_package.brief = _merge_architect_plan(
@@ -1317,6 +1377,16 @@ def delegate_to_agent(
                     if budget is not None:
                         context_package = apply_context_budget(
                             context_package, workspace=Path(ws), budget_tokens=budget
+                        )
+                    executor_prompt = context_package.brief
+                    if delegate_mode == DELEGATE_MODE_IMPLEMENT:
+                        _emit_compile_event(
+                            delegation_id=delegation_id,
+                            stage=STAGE_FINAL_EXECUTOR_PROMPT,
+                            text_body=executor_prompt,
+                            workspace=ws,
+                            session_dir=storage.session_dir,
+                            obs_verbosity=_compile_verbosity,
                         )
                     if pipeline_recorder is not None:
                         pipeline_recorder.start("executor")
@@ -1345,6 +1415,30 @@ def delegate_to_agent(
                     )
                     executor_prompt = result.prompt_used or context_package.brief
                 else:
+                    # Legacy path: no context package — log raw prompt as mechanical_brief
+                    _emit_compile_event(
+                        delegation_id=delegation_id,
+                        stage=STAGE_MECHANICAL_BRIEF,
+                        text_body=prompt or None,
+                        workspace=ws,
+                        session_dir=storage.session_dir,
+                        obs_verbosity=_compile_verbosity,
+                        status="ok",
+                        detail="no_spec_raw_prompt",
+                    )
+                    for _skipped_stage in (
+                        STAGE_VALIDATION_INPUT,
+                        STAGE_ARCHITECT_INPUT,
+                        STAGE_BUILDER_INPUT,
+                    ):
+                        _emit_compile_skip(
+                            delegation_id=delegation_id,
+                            stage=_skipped_stage,
+                            workspace=ws,
+                            session_dir=storage.session_dir,
+                            obs_verbosity=_compile_verbosity,
+                            reason="context_package_disabled",
+                        )
                     if pipeline_recorder is not None:
                         pipeline_recorder.mark(
                             "file_picker",
@@ -1387,6 +1481,15 @@ def delegate_to_agent(
                         pipeline_recorder.start("executor")
                         executor_phase_started = True
                     _loop_obs_verbosity = resolve_observability_verbosity(ws)
+                    if delegate_mode == DELEGATE_MODE_IMPLEMENT:
+                        _emit_compile_event(
+                            delegation_id=delegation_id,
+                            stage=STAGE_FINAL_EXECUTOR_PROMPT,
+                            text_body=prompt,
+                            workspace=ws,
+                            session_dir=storage.session_dir,
+                            obs_verbosity=_compile_verbosity,
+                        )
 
                     def _legacy_step_fn(timeout_s: float | None) -> ExecutionResult:
                         with role_context(ROLE_EXECUTOR):
@@ -1435,15 +1538,6 @@ def delegate_to_agent(
                         "executor",
                         status="ok" if success else "error",
                         detail=error[:200] if (error and not success) else None,
-                    )
-                if delegate_mode == DELEGATE_MODE_IMPLEMENT and executor_prompt:
-                    _emit_compile_event(
-                        delegation_id=delegation_id,
-                        stage=STAGE_FINAL_EXECUTOR_PROMPT,
-                        text_body=executor_prompt,
-                        workspace=ws,
-                        session_dir=storage.session_dir,
-                        obs_verbosity=_compile_verbosity,
                     )
 
             except UnknownBackendError as exc:

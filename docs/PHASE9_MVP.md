@@ -9,11 +9,11 @@
 
 # Phase 9 — Write-always storage + universal proxy + replay
 
-**Status:** **Core complete; two observability UX milestones pending** — P9-001..P9-012 shipped 2026-06-16. A-to-Z dogfood session run 2026-06-17 (3 separate runs; final session: 6 delegations, 6/6 exact proxy↔llm_call alignment, all event types fully attributed). 924 tests passing. All north-star acceptance criteria verified. Three post-dogfood fixes shipped (P9-ISS-008..010). **P9-013 (viewer overhaul) spec_ready. P9-014 (trace inspect power-up) pending spec.** Pending: guide folder deep update.
+**Status:** **Core complete; one observability UX follow-up pending** — P9-001..P9-012 shipped 2026-06-16. A-to-Z dogfood session run 2026-06-17 (3 separate runs; final session: 6 delegations, 6/6 exact proxy↔llm_call alignment, all event types fully attributed). 924 tests passing. All north-star acceptance criteria verified. Three post-dogfood fixes shipped (P9-ISS-008..010). **P9-013 done (v2 boundary viewer, production-usable). P9-015 superseded by P9-013 v2 architecture. P9-014 (trace inspect power-up) pending spec.** Pending: guide folder deep update.
 **Purpose:** Prove "100% LLM call captured" by adding a universal internal HTTP proxy (litellm → proxy → provider) that captures raw bytes before any normalization layer; flip the write gate to always-on; add context package blobs and replay CLI.
 **PM board:** this file · **Issues:** [PHASE9_ISSUES.md](./PHASE9_ISSUES.md)
 **Phase 8 (frozen):** [PHASE8_MVP.md](./PHASE8_MVP.md) · [PHASE8_ISSUES.md](./PHASE8_ISSUES.md)
-**Design notes:** [notes/phase9-master-session-bootstrap.md](./notes/phase9-master-session-bootstrap.md) · [notes/llm-interception-strategies.md](./notes/llm-interception-strategies.md)
+**Design notes:** [notes/phase9-master-session-bootstrap.md](./notes/phase9-master-session-bootstrap.md) · [notes/llm-interception-strategies.md](./notes/llm-interception-strategies.md) · [notes/viewer-design-principles-v2.md](./notes/viewer-design-principles-v2.md) · [notes/viewer-design-principles.md](./notes/viewer-design-principles.md)
 **Backlog inputs:** BL-367 (write-always + blob + replay), BL-357 (GC first slice), BL-507 (thinking token proof), BL-508 (universal proxy), BL-510 (prompt_full gate — Phase 9 follow-up)
 
 ---
@@ -87,8 +87,9 @@ The proxy also provides the universal architecture for Phase 10+ multi-backend c
 | 9 | P9-008 | [P9-008](../tasks/P9-008-prompt-full-write-always-v1.md) | done | prompt_full write gate removed; focused `21 passed`, full suite `887 passed, 1 skipped` |
 | 10 | P9-011 | [P9-011](../tasks/P9-011-model-policy-layer-v1.md) | done | helper path unified onto LlmGateway + `model_registry.resolve()` front door; focused `15 passed`, full suite `901 passed, 2 skipped` |
 | 11 | P9-012 | [P9-012](../tasks/P9-012-generation-params-logging-v1.md) | done | generation params + weak-model default-fill + `policy_applied` logging; focused `23 passed`, full suite `924 passed, 2 skipped` |
-| 12 | P9-013 | [P9-013](../tasks/P9-013-viewer-phase9-overhaul-v1.md) | spec_ready | Viewer Phase 9 overhaul — event timeline, typed event cards, proxy↔backend pairing, `policy_applied` chip, token summary, field-visibility presets, structured record sections |
+| 12 | P9-013 | [P9-013](../tasks/P9-013-viewer-phase9-overhaul-v1.md) | done | Viewer shipped as v2 boundary table (`view_events[]` middleware + thin renderer): chronological boundary rows, detail panel, multi-delegation collapsing, request/policy/context debug coverage |
 | 13 | P9-014 | — | pending_spec | `trace inspect` power-up + `mcp-coder log` cross-delegation table |
+| 14 | P9-015 | [P9-015](../tasks/P9-015-pipeline-timeline-v1.md) | superseded | Superseded by P9-013 v2 boundary viewer architecture; do not implement pipeline-card UI |
 
 ---
 
@@ -330,19 +331,33 @@ mcp-coder trace inspect <id> --type backend_llm_call --field response_body
 
 ### P9-013 — Delegation viewer Phase 9 overhaul *(BL-343)*
 
-**Status:** `spec_ready` · **Spec:** [P9-013](../tasks/P9-013-viewer-phase9-overhaul-v1.md)
+**Status:** `done` · **Spec:** [P9-013](../tasks/P9-013-viewer-phase9-overhaul-v1.md)
 
-**Goal:** Replace the thin trace summary and raw-JSON-dump "Full record" section in the delegation viewer with a fully structured Phase 9 event timeline. Make the viewer actually useful for daily debug and R&D browsing.
+**Shipped architecture (canonical):**
+`JSONL trace + delegation record → enrich_delegation_record() → view_events[] (Python middleware) → delegation_viewer.html (thin renderer)`
 
-**Key deliverables:**
-- Event timeline panel (all 5 event types as typed cards, chronological, collapsible)
-- Proxy ↔ backend paired rows where matched; amber flag for mismatches
-- `policy_applied` expandable audit chip on every LLM event
-- Per-delegation token summary bar (input / output / thinking totals)
-- Event-type filter chips (all · proxy · backend · llm_call · compile · tool)
-- Replace "Full record" JSON dump with structured collapsible field groups
-- Field-visibility presets: minimal / standard / full
-- Enrich layer: expose all trace events (not just `llm_call`) to the viewer
+**What shipped (final, not the original card UI):**
+- v2 boundary table UX with flat chronological rows (`host→mcp`, `mcp.* →/←`, `mcp→executor`, `executor→llm`, `llm→executor`, `executor→mcp`, `mcp→host`)
+- Detail panel driven by boundary `name` + `detail` payload (content-first, metadata secondary)
+- `_build_view_events()` mapper in Python as canonical translation layer; JS no longer maps raw trace types
+- Multi-delegation usability upgrades: chronological sort, collapsible delegation blocks, `Expand all` / `Collapse older` / `Latest ↓`
+- Debug polish: request params + policy chips on executor boundaries, context decompose on `executor→llm`, corrected `mcp→executor` ordering, post-delegate `mcp→post` / `mcp→index`, compile skipped status visibility
+
+**Validation from worker report:**
+- Viewer suites: `pytest -q tests/test_viewer_enrich_p9_013.py` → `40 passed`
+- Viewer-related bundle (enrich + view_delegations + compare): `70 passed`
+- Full suite at handoff: `966 passed, 2 skipped`, with one unrelated pre-existing failure (`test_workspace_revert.py::test_schema_migration_from_322a_db`)
+
+---
+
+### P9-015 — Pipeline timeline view *(BL-343 follow-up)*
+
+**Status:** `superseded` · **Spec:** [P9-015](../tasks/P9-015-pipeline-timeline-v1.md)
+
+Superseded by P9-013 v2 boundary viewer after user feedback and real-trace dogfooding.
+The pipeline-card model was implemented briefly, then removed.
+
+**Decision:** boundary-table `view_events[]` architecture is canonical for Phase 9+ viewer work; do **not** implement P9-015 pipeline-card UI as written.
 
 ---
 
@@ -483,6 +498,7 @@ P9-011 + P9-012 introduce `core/config/model_registry.py` (front door reusing `r
 
 | Date | Change |
 |------|--------|
+| 2026-06-17 | P9-013 moved to **done** with significant scope evolution: shipped as v2 boundary viewer (`view_events[]` middleware + thin renderer), not the original card timeline. P9-015 marked **superseded** by this architecture. Linked `viewer-design-principles-v2.md` in design context. |
 | 2026-06-17 | P9-013 + P9-014 added — viewer Phase 9 overhaul (BL-343) and trace-inspect power-up; P9-013 spec written and `spec_ready`; P9-014 `pending_spec`. |
 | 2026-06-17 | **A-to-Z dogfood complete** (3 runs; final session `f33fdbaf`: 6 delegations, 77 tests passing, 6/6 proxy↔llm_call alignment exact). Three post-dogfood fixes shipped: proxy routing catch-all (P9-ISS-008), streaming token counts (P9-ISS-009), executor `llm_call.policy_applied` (P9-ISS-010). Full suite 924 passing. |
 | 2026-06-16 | P9-012 **done**: generation params + weak-model default-fill resolve per role (env + role defaults via `model_registry.resolve()`); applied on executor (aider `set_reasoning_effort`/`set_thinking_tokens`/`extra_params`/`get_weak_model`) and helpers (gateway litellm kwargs, `drop_params=True`); `policy_applied` audit object now on every `backend_llm_call` + `llm_call` (carried via `model_policy_var` contextvar). Thinking/reasoning is now settable from env. Focused `23 passed`; full suite `924 passed, 2 skipped`. |

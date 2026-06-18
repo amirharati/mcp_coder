@@ -385,7 +385,7 @@ mcp-coder history diff "$ID" --path src/api.py   # optional single file
 mcp-coder view delegations --workspace /path/to/project
 ```
 
-List view is structured; expanded row is still mostly raw JSON today (**BL-343**). Until a structured pipeline panel ships, use the `jq` snippets above on `context.delegation_pipeline`.
+List view is structured and expanded detail now uses the Phase 9 v2 boundary viewer (`view_events[]`): chronological boundary rows plus a detail panel for each crossing. Keep the `jq` snippets handy when you want to script/filter raw fields directly from JSONL.
 
 ### What to look for
 

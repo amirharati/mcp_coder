@@ -2,7 +2,7 @@
 
 **Purpose:** the mental model. Everything you need to keep in your head to operate, debug, or extend the system. Re-read when coming back after a break. Deeper detail lives in [architecture/](./architecture/) and the [tutorials](./tutorials/); module-by-module map in [code-structure.md](./code-structure.md).
 
-**Covers:** Phases 1–5 as shipped. Last updated: 2026-06-13. **Phases 6–9 not yet reflected here** — deep update scheduled after Phase 9 dogfood session.
+**Covers:** Phases 1–9 as shipped. Last updated: 2026-06-17.
 
 ---
 
@@ -98,13 +98,13 @@ One delegation may involve up to five model calls, each **independently configur
 | `review` | `mode=review` | falls back to executor model |
 | `critic` | reserved (stub) | falls back to executor model |
 
-Every call is audited in the JSONL `model_roles` block with tokens/duration/cost-estimate. (Known gap: token counts currently `None` for several paths — BL-335.)
+Every call is audited in the JSONL `model_roles` block with tokens/duration/cost-estimate, and Phase 9 traces include `policy_applied` on `backend_llm_call` and `llm_call` events for per-role parameter provenance.
 
 **On "cheap" vs "expensive" — don't over-fit to the current defaults.** The architecture lets you route each role to a different model; whether that's cheaper or pricier than the executor is a tuning decision, not a property of the role. Examples:
 - A `spec_validation` pass that just checks a spec against the conversation can run on a small, cheap model.
 - An `architect_pass` that is really a *plan-improvement / brainstorm* step — possibly iterating with the host on an epic or a hard task — may justify a **stronger, more expensive** model than the executor. This is **TBD** and will be tuned with real telemetry.
 
-So the durable idea is **"right model for each role,"** not "expensive plans, cheap edits." The split *enables* cost optimization (and lets a strong model think while a fast model types) but does not mandate any particular price direction. Today's defaults are a starting point, expected to change as BL-335 telemetry lands.
+So the durable idea is **"right model for each role,"** not "expensive plans, cheap edits." The split *enables* cost optimization (and lets a strong model think while a fast model types) but does not mandate any particular price direction. Today's defaults are a starting point, expected to change as live telemetry (now available via `policy_applied` + `backend_llm_call.usage` in Phase 9 traces) informs tuning decisions.
 
 **Where this is heading (target, not yet built):** the role registry is the foundation for **auto-selection** (mcp-coder picks the model tier from task signals) and **auto-escalation** (a failed/`partial` delegation retries on a stronger tier instead of failing or burning budget on every attempt). That's the §1 payoff #1 made concrete — see BL-162. Until then, model-per-role is manual config.
 
@@ -168,7 +168,7 @@ API keys and model ids live in `.env` (OpenRouter is the common provider for eve
 2. **Host and backend are adapters, not the architecture.** Cursor and Aider are the *current* implementations; both are swappable. Aider-specific anything lives only in `core/engine/aider_engine.py` + `core/config/aider_runtime.py`; host-specific anything in `core/host/`. The rest of `core/` is neutral by design.
 3. **LLM helpers can only annotate, never mutate the mechanical truth.** Brief layers stack; tiers/paths from the assembler are authoritative.
 4. **Optional stages fail open; validation blocks closed.** A builder-LLM error never kills a delegation; a real spec ambiguity stops it before money is spent.
-5. **Everything is audited.** If it isn't in `delegations.jsonl`, it didn't happen. Debugging always starts there (or `mcp-coder view delegations` / `tools/delegation_viewer.html`).
+5. **Everything is audited.** `delegations.jsonl` is the canonical row-level audit, and `traces/<delegation_id>.jsonl` is the per-event audit. Debugging starts from one of those (usually via `mcp-coder view delegations`).
 6. **Discovery ≠ permission.** Picker-discovered files are read-only context; edit rights come only from the spec.
 7. **mcp-coder never writes user config.** `.mcp-coder/config.yaml` is yours; `session.json` and reports are the system's.
 

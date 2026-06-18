@@ -93,13 +93,20 @@ def _delegation_log_paths_for_workspace(ws: str) -> list[Path]:
     return []
 
 
+def _delegation_sort_key(record: dict[str, Any]) -> str:
+    return str(record.get("timestamp_start") or record.get("timestamp_end") or "")
+
+
+def _sort_delegations_chronological(records: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """Oldest first (JSONL file order / timeline order)."""
+    return sorted(records, key=_delegation_sort_key)
+
+
 def _load_delegations(path: Path | str) -> list[dict[str, Any]]:
     p = Path(path)
     if not p.is_file():
         raise FileNotFoundError(p)
-    records = _load_jsonl_file(p)
-    records.reverse()
-    return records
+    return _sort_delegations_chronological(_load_jsonl_file(p))
 
 
 def _load_delegations_for_workspace(ws: str | Path) -> list[dict[str, Any]]:
@@ -109,11 +116,7 @@ def _load_delegations_for_workspace(ws: str | Path) -> list[dict[str, Any]]:
     records: list[dict[str, Any]] = []
     for path in paths:
         records.extend(_load_jsonl_file(path))
-    records.sort(
-        key=lambda r: r.get("timestamp_end") or r.get("timestamp_start") or "",
-        reverse=True,
-    )
-    return records
+    return _sort_delegations_chronological(records)
 
 
 def resolve_view_source(

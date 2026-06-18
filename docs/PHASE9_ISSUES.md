@@ -3,6 +3,7 @@
 **Open:** P9-ISS-007 (policy_applied misleading for executor-ignored params)  
 **Closed:** `P9-ISS-001`..`P9-ISS-006`, `P9-ISS-008`..`P9-ISS-010`. `P9-OBS-001` promoted to **P9-011 + P9-012**, both **done** (full suite `924 passed, 2 skipped`) — see below.  
 **Related PM board:** [PHASE9_MVP.md](./PHASE9_MVP.md)
+**Viewer milestone disposition:** **P9-013 done** (shipped as v2 boundary viewer architecture) and **P9-015 superseded** (pipeline cards intentionally not continued).
 
 ---
 
