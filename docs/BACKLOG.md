@@ -10,7 +10,24 @@
 
 Items deferred from active phases, future ideas, and nice-to-haves. **Not** scheduled for the current worker session unless pulled into [PHASE1_MVP.md](./PHASE1_MVP.md). **Vision:** [IDEA.md](./IDEA.md) · [VISION_DOCS.md](./VISION_DOCS.md).
 
-Status: `idea` | `deferred` | `blocked` | `done`
+Status: `idea` | `deferred` | `blocked` | `in_phase` | `done`
+
+---
+
+## Phase 10 active (pulled from backlog 2026-06-18)
+
+**PM board:** [PHASE10_MVP.md](./PHASE10_MVP.md) · **Issues:** [PHASE10_ISSUES.md](./PHASE10_ISSUES.md) · **Bootstrap:** [notes/phase10-master-session-bootstrap.md](./notes/phase10-master-session-bootstrap.md)
+
+| Backlog | Milestone | Phase 10 scope | Remainder |
+|---------|-----------|----------------|-----------|
+| BL-334 | P10-001 | `system_prompt_prefix` + `edit_format` wiring + audit | Per-delegation `model_policy` → BL-512 (Phase 11) |
+| BL-106 | P10-002 | `ctx.info` pipeline milestones (POF) | Capture→egress bridge, `report_progress` → backlog |
+| BL-520 | P10-002 | `logs tail --latest` on trace JSONL (POF) | `server.jsonl` filter, BL-160b tee → backlog |
+| BL-351 | P10-003 | Stall detect → `needs_input` v0 | Full supervisor + `InputOutput` → Phase 11 |
+| BL-517 | P10-004 | `policy_applied.ignored` | — |
+| BL-519 | P10-004 | `MCP_CODER_PROXY_ENABLED` toggle | — |
+| BL-516 | P10-004 | `trace inspect --summary` only | `mcp-coder log` table, `--no-truncate` → backlog |
+| BL-518 | P10-004 | Env matrix docs + `.env.example` stubs | Unified log level, proxy debug → backlog |
 
 ---
 
@@ -48,7 +65,7 @@ Status: `idea` | `deferred` | `blocked` | `done`
 | BL-103 | `inspect_delegations.py` CLI | Home-path aware |
 | BL-104 | Aider dry-run mode in MCP | Safe first tests |
 | BL-105 | Default Aider → `context_optimizer_proxy` in setup template | Composes with sibling project |
-| BL-106 | MCP progress notifications for long Aider runs | Avoid Cursor timeout perception |
+| BL-106 | **MCP live progress + logging notifications** — `ctx.report_progress` / `ctx.log` during long `delegate_to_agent`; capture→egress bridge from pipeline + executor | **Phase 10 — P10-002** (POF: `ctx.info` milestones); remainder → backlog. See § BL-106. |
 | BL-107 | `MCP_CODER_MIRROR_LOGS_TO_WORKSPACE` default policy | Migration from P1-100 paths |
 | BL-108 | Pick “main” mcp session among N per `host_session_id` | Heuristic TBD |
 | BL-109 | `continue_session` by explicit `mcp_session_id` | After P1-130 infra |
@@ -104,7 +121,7 @@ Phase 1 deferred executor conversation carry-over to here (BL-155); see P1-130 `
 | ID | Option | What | Notes |
 |----|--------|------|--------|
 | BL-160a | **Supervised complex task** | One MCP call; mcp-coder helps Aider finish a **multi-step** job (internal steps, retries, optional human OK between steps). User does **not** need to chat in Cursor for each micro-step. | Overlaps **BL-161**; lighter than full REPL |
-| BL-160b | **Live terminal visibility** | While delegate runs (even “non-interactive”), **tee** Aider command/edit stream to stderr file or terminal tail for **quick review** — without breaking MCP stdout (JSON-only). Today: brief stderr + captured output in tool result only. | `stdio_isolation` blocks raw stdout to Cursor |
+| BL-160b | **Live terminal visibility** | While delegate runs (even “non-interactive”), **tee** Aider command/edit stream to stderr file or terminal tail for **quick review** — without breaking MCP stdout (JSON-only). Today: brief stderr + captured output in tool result only. | `stdio_isolation` blocks raw stdout to Cursor; pairs with **BL-106** (MCP notifications) and **BL-520** (`logs tail` on tee file + trace JSONL) |
 | BL-160c | **Handoff to real terminal** | MCP prepares context + opens / prints a command; user continues in **real terminal** with native Aider REPL if they want deep hands-on. | Pairs with **BL-005** CLI |
 | BL-160d | **Full interactive via CLI** | `mcp-coder session` — same core as MCP, no Cursor transport; multi-turn chat with executor in terminal. | Lowest priority of the four |
 
@@ -171,7 +188,7 @@ Phase 1 deferred executor conversation carry-over to here (BL-155); see P1-130 `
 | BL-348 | **Incremental workspace code-intel cache (high ROI context)** | Today: per-delegate regex `def`/`class` repo map + `rg` symbol scan + raw file payloads — **no** persisted API catalog, import/dep graph, or auto-generated module docs; no AST. **Later:** build + cache richer artifacts under `~/.mcp-coder/projects/<key>/` (or repo `.mcp-coder/`): per-file symbol/API index (signatures, docstrings, exports), import/call edges, optional LLM file summaries — **incrementally updated** when `workspace_history` / manifest hash changes (re-index stale paths only). Feed context picker/builder/compiler tiers instead of re-deriving every delegate. Complements **BL-002** (planner `workspace_search`) and **BL-347** (policy selection). **Phase 5+** — likely high ROI once basics exist. From P4.5-ISS-011. |
 | BL-349 | **Recently touched files — session + project, git + manifest fusion** | Today: per-delegation `files_changed` (manifest walk ± git dirty), `get_file_history` (one file → timeline), `list_delegations` — **no** aggregated “recently updated files” view, no MCP `recent_files` / picker hint, no merge of git mtime/status with `workspace_history` file deltas. **Later:** rank paths touched in current MCP session vs project-wide N delegations / time window; attach detail (checkpoint summary, diff snippet, BL-348 symbol summary) when relevant to task/RAG/symbol query; surface to planner MCP + context picker/builder as read hints (not auto edit). **Phase 5+**. From P4.5-ISS-012. |
 | BL-350 | **Supervised executor loop — inspect mid-run, inject context, capture thinking** | **Phase 7 partial shipped (P7-002):** bounded outer loop + executor `llm_call` / `tool_call` / `action` events + `executor_turns` stats. **Remaining:** adaptive multi-step continuation protocol and stronger supervised escalation behavior (BL-351). |
-| BL-351 | **Simulated interactive + escalate to host (Cursor human intervention)** | Today: `InputOutput(yes=True)` auto-approves all Aider prompts (blind); “add files to chat” → implement failure; no structured handoff back to Cursor mid-delegate. **Later:** supervisor answers executor prompts via **cheap LLM + rules** (add read / expand spec / continue) instead of blind yes; when uncertain → **pause delegation** and return `needs_input` / `clarification_needed` to **Cursor planner** for human decision, then resume (BL-350 outer loop or custom IO). High leverage for scope expansion + trust. **Phase 5+**. From P4.5-ISS-014. |
+| BL-351 | **Simulated interactive + escalate to host (Cursor human intervention)** | **Phase 10 — P10-003** (v0: stall → `needs_input`). **Remainder:** cheap LLM supervisor, supervised `InputOutput`, outer-loop resume → Phase 11. From P4.5-ISS-014. See § BL-351. |
 | BL-352 | **Multi-language symbol scan + outlines (C/C++, Go, Rust, …)** | Today: symbol scan hardcoded to 9 extensions (`SCAN_EXTENSIONS` in `file_picker.py`); repo-map/excerpt regex is Python `def`/`class` only — C/C++/Go/Rust/Java/etc. work via **spec contract** but not **auto-discovery** or useful outlines. **Later:** expand/configurable scan globs; per-language outline heuristics (or tie to BL-348 index); goal = “works for money cases” on polyglot/monorepo repos without hand-listing every path. **Phase 5+**. From P4.5-ISS-015. |
 | BL-353 | **LLM boundary observability — full pass-through logging** | **Phase 6+7+8+9 done:** helper traces/tokens (P6), executor step events (P7), compile provenance (P7), Aider inner-loop + thinking tokens (P8), write-always + proxy + replay + model registry + policy_applied (P9). BL-367 fully shipped. |
 | BL-354 | **Executor context tools (pull) — RAG/history/read during backend loop** | **Dual model:** keep **compile-push (A)** as default; **also** expose read-only mcp-coder tools inside the executor loop (Aider today ignores planner MCP). LLM-driven `rag_search`, `workspace_search`, history, excerpts beside edit tools. **Phase 5+** (pairs with BL-002 usage); see § BL-354. From T-04 pass (2026-06-11). |
@@ -255,7 +272,7 @@ Phase 1 deferred executor conversation carry-over to here (BL-155); see P1-130 `
 
 ### BL-351: Simulated interactive mode + host escalation (human intervention)
 
-**Status:** `idea` — 2026-06-10. Surfaced T-04 Q&A on `yes=True` vs intelligent supervision + Cursor handoff.
+**Status:** `in_phase` — **Phase 10 P10-003** (v0: stall detect → `needs_input`). Full vision (supervised `InputOutput`, cheap LLM supervisor, outer-loop resume) → Phase 11.
 
 **Problem:** Headless Aider uses `InputOutput(yes=True)` — every confirm (“add file?”, “run shell?”) is auto-approved without mcp-coder judgment. When the model asks for files in prose, we fail the delegation rather than help. There is no path for the **executor to route a decision back to the Cursor planner** for human intervention inside a supervised delegate.
 
@@ -1468,11 +1485,13 @@ delegate_to_agent(backend=…)
 | **BL-512** | **Model policy layer — Stage 2: host-set policy** — MCP host passes `model_policy` block inside `delegate_to_agent` call; overrides env layer for that delegation; host can set per-role model, thinking budget, cost cap | Future (Phase 11+) — depends on BL-511; see [model-policy-layer.md](./notes/model-policy-layer.md) Stage 2 |
 | **BL-513** | **Model policy layer — Stage 3: AI-suggested parameters** — lightweight pre-delegation analysis step (cheap LLM or heuristic) that examines the incoming task and suggests policy overrides (e.g. hard refactor → higher thinking budget); suggestion logged as `policy_suggestion` trace event; can be accepted/rejected/overridden | Future — depends on BL-511/BL-512; see [model-policy-layer.md](./notes/model-policy-layer.md) Stage 3 |
 | **BL-514** | **Model policy layer — Stage 4: dynamic escalation** — outer-loop controller modifies active policy mid-delegation in response to runtime signals (retry exhausted → larger model; critic reject → more thinking; cost cap → downgrade); connects to BL-321/BL-006 signals | Future — depends on BL-511/BL-512/BL-513 and a critic or supervisor being in place; see [model-policy-layer.md](./notes/model-policy-layer.md) Stage 4 |
-| **BL-516** | **CLI log health table + `trace inspect --summary`** — cross-delegation scan table (`mcp-coder log`), per-delegation health scorecard, `--no-truncate` on `trace inspect --field` | **Deferred from Phase 9 (P9-014)** — convenience/DX polish; existing `compare`, `trace inspect`, `replay`, and v2 viewer cover audit needs. See § BL-516. |
-| **BL-517** | **Executor `policy_applied` ignored-params** — don't imply `temperature`/`top_p`/`max_tokens` were applied when Aider owns them | **Deferred from Phase 9 (P9-ISS-007)** — low severity logging correctness. See § BL-517. |
-| **BL-518** | **Runtime log level / verbosity DX** — consolidate or document logging knobs; `.env.example` coverage; optional proxy debug logging | **Deferred post-Phase 9** — operational polish (scope TBD). See § BL-518. |
-| **BL-519** | **`MCP_CODER_PROXY_ENABLED` env toggle** — enable/disable `LocalLlmProxy` at bootstrap without code changes | **Deferred post-Phase 9** — escape hatch for debugging and direct-provider runs (scope TBD). See § BL-519. |
-| **BL-334** | **Backend prompt customization** (system prefix + edit-format control) | See § BL-334 |
+| **BL-516** | **CLI log health table + `trace inspect --summary`** — cross-delegation scan table (`mcp-coder log`), per-delegation health scorecard, `--no-truncate` on `trace inspect --field` | **Phase 10 — P10-004** (partial: `--summary` only); `mcp-coder log` table + `--no-truncate` → backlog. See § BL-516. |
+| **BL-517** | **Executor `policy_applied` ignored-params** — don't imply `temperature`/`top_p`/`max_tokens` were applied when Aider owns them | **Phase 10 — P10-004** (full). See § BL-517. |
+| **BL-518** | **Runtime log level / verbosity DX** — consolidate or document logging knobs; `.env.example` coverage; optional proxy debug logging | **Phase 10 — P10-004** (partial: docs + `.env.example`); unified master level + proxy debug → backlog. See § BL-518. |
+| **BL-519** | **`MCP_CODER_PROXY_ENABLED` env toggle** — enable/disable `LocalLlmProxy` at bootstrap without code changes | **Phase 10 — P10-004** (full). See § BL-519. |
+| **BL-106** | **MCP live progress + logging notifications** — FastMCP `report_progress` / `ctx.log` during `delegate_to_agent`; filtered egress from Phase 9 capture | **Phase 10 — P10-002** (POF). See § BL-106. |
+| **BL-520** | **Live log tail / follow delegation** — `mcp-coder logs tail` on trace JSONL, server.jsonl, optional executor tee file while run is in flight | **Phase 10 — P10-002** (POF: trace tail). See § BL-520. |
+| **BL-334** | **Backend prompt customization** (system prefix + edit-format control) | **Phase 10 — P10-001** (v0). See § BL-334 |
 | **BL-340** | **Cursor SDK execution backend** (beside Aider) | See § Execution backends — BL-340 |
 
 ### BL-333: Reasoning trace capture + cross-delegation context feed
@@ -1492,7 +1511,7 @@ delegate_to_agent(backend=…)
 
 ### BL-334: Backend prompt customization (system prompt prefix + edit-format control)
 
-**Status:** `idea` — 2026-06-09. Smaller than BL-333; mostly knobs on the existing Aider adapter.
+**Status:** `in_phase` — **Phase 10 P10-001** (v0: env/yaml wiring + audit). Per-delegation override → BL-512 Stage 2 (Phase 11).
 
 **Origin:** Same Phase 4 discussion. We hand Aider a prompt, but Aider wraps it with **its own** system prompt (`main_system`), hard-coded example conversations, and a SEARCH/REPLACE `system_reminder`. We currently pass content only; we don't shape Aider's framing.
 
@@ -1818,7 +1837,7 @@ Tier 3: thinking  ← claude-opus-thinking, o3, gemini-2.5-pro (high thinking)
 
 ### BL-516: CLI log health table + `trace inspect --summary`
 
-**Status:** `deferred` — 2026-06-17; migrated from Phase 9 milestone **P9-014**.
+**Status:** `in_phase` — **Phase 10 P10-004** (partial: `trace inspect --summary` only). Cross-delegation `mcp-coder log` table + `--no-truncate` → backlog.
 
 **What:** Three CLI conveniences for batch R&D scanning across delegations:
 
@@ -1834,7 +1853,7 @@ Tier 3: thinking  ← claude-opus-thinking, o3, gemini-2.5-pro (high thinking)
 
 ### BL-517: Executor `policy_applied` ignored params
 
-**Status:** `deferred` — 2026-06-17; migrated from open issue **P9-ISS-007**.
+**Status:** `in_phase` — **Phase 10 P10-004** (full). Migrated from Phase 9 issue **P9-ISS-007**.
 
 **What:** `_apply_executor_model_params` applies `reasoning_effort`, `thinking_budget`, `extra_params`, and `weak_model` to the Aider `Model` — but **not** `temperature`, `top_p`, or `max_tokens` (Aider owns those). Today `policy_applied()` can still log env-resolved values for those fields, implying they were applied.
 
@@ -1850,7 +1869,7 @@ Tier 3: thinking  ← claude-opus-thinking, o3, gemini-2.5-pro (high thinking)
 
 ### BL-518: Runtime log level / verbosity DX
 
-**Status:** `idea` — 2026-06-17; scope **TBD** (post-Phase 9 operational polish).
+**Status:** `in_phase` — **Phase 10 P10-004** (partial: env matrix docs + `.env.example` stubs). Unified master level + proxy debug logging → backlog.
 
 **Problem:** Logging and verbosity knobs are fragmented across several env vars and yaml keys with overlapping names and different semantics:
 
@@ -1880,7 +1899,7 @@ Operators tuning dogfood/debug runs must know this matrix by heart; `.env.exampl
 
 ### BL-519: `MCP_CODER_PROXY_ENABLED` env toggle
 
-**Status:** `idea` — 2026-06-17; scope **TBD** (post-Phase 9 operational polish).
+**Status:** `in_phase` — **Phase 10 P10-004** (full).
 
 **Problem:** `ensure_observability_bootstrap()` always starts `LocalLlmProxy` and rewrites `OPENROUTER_API_BASE` / `OPENAI_API_BASE` / `ANTHROPIC_API_BASE` to the local proxy URL. There is no env escape hatch to run litellm direct-to-provider without editing code or test hooks.
 
@@ -1897,6 +1916,54 @@ Operators tuning dogfood/debug runs must know this matrix by heart; `.env.exampl
 **Why deferred:** Proxy is core Phase 9 infrastructure and should stay on by default; toggle is convenience/DX, not missing functionality.
 
 **Related:** BL-508 (proxy shipped P9-003), P9-003 bootstrap, [llm-interception-strategies.md](./notes/llm-interception-strategies.md).
+
+---
+
+### BL-106: MCP live progress + logging notifications
+
+**Status:** `in_phase` — **Phase 10 P10-002** (POF: `ctx.info` pipeline milestones + thread bridge). Capture→egress bridge + `report_progress` → backlog.
+
+**Problem:** Long `delegate_to_agent` runs show only a spinner in Cursor until the tool returns. Today mcp-coder emits **brief stderr** (`MCP_CODER_LOG_BRIEF`) at start/end and writes **full detail to disk** (trace JSONL, `server.jsonl`) — but does not send **MCP protocol notifications** mid-run. Users cannot see pipeline phase or executor step progress in the host UI.
+
+**What (POF → MVP):**
+
+1. **Inject FastMCP `Context`** into `delegate_to_agent` (and optionally other long tools).
+2. **`ctx.report_progress(progress, total, message)`** at pipeline milestones — compile, builder, architect, validation, executor step N/M. Requires host `progressToken` (Cursor: version-dependent; no-op if absent).
+3. **`ctx.info` / `ctx.log`** for short redacted status lines (throttled; reuse `redact_secrets`).
+4. **Capture → egress bridge** — subscribe to observability events already written to trace; map to live notifications (phase boundaries first; optional executor highlights later). Full bodies stay on disk (D-P9-8).
+5. **Thread bridge** — executor runs in worker thread; queue async `ctx.log` on MCP event loop (cannot call async context from Aider thread directly).
+
+**POF scope:** pipeline milestones only (~6–8 messages per delegation).  
+**MVP scope:** + executor step index + “edited `path`” highlights; spike Cursor UI for progress vs MCP Logs panel.
+
+**Not in scope v1:** streaming raw Aider tokens into chat; duplicating Phase 9 trace bodies over MCP.
+
+**Related:** **BL-160b** (tee to file), **BL-520** (CLI tail when host UI weak), **BL-351** (stall → `needs_input`), P9-001 write-always (trace append enables tail), [PHASE2_MVP.md](./PHASE2_MVP.md) Q6.
+
+---
+
+### BL-520: Live log tail / follow delegation
+
+**Status:** `in_phase` — **Phase 10 P10-002** (POF: `mcp-coder logs tail` on trace JSONL). `server.jsonl` filter + BL-160b tee → backlog.
+
+**Problem:** Even with **BL-106**, host UIs vary (Cursor progress visibility flaky across versions). Operators need a **reliable local view** while a delegation runs without opening the full viewer.
+
+**What:**
+
+1. **`mcp-coder logs tail`** (or extend existing maintenance/log CLIs):
+   - `--delegation-id <id>` or `--follow latest` (most recent open delegation in session)
+   - Tail `traces/<delegation_id>.jsonl` as new events append (**enabled by Phase 9 write-always**)
+   - Optional: tail `server.jsonl` (global/project scope) filtered by `delegation_id`
+   - Optional: tail executor tee file when **BL-160b** writes `sessions/<id>/executor_tee.log`
+2. **Human-readable line format** — one line per trace event: `compile_event`, `llm_call`, `proxy_llm_call`, `executor_stall`, etc. (not raw JSON dump by default).
+3. **`make logs-tail`** / docs pointer for dogfood workflow: terminal 2 runs tail while terminal 1 delegates in Cursor.
+
+**POF:** tail trace JSONL by delegation id with jq-friendly or built-in formatter.  
+**MVP:** `--follow latest`, event-type filter, integrate with `server.jsonl`.
+
+**Why now (post-Phase 9):** capture is complete on disk; tail is read-side only — no MCP stdout risk.
+
+**Related:** **BL-106**, **BL-160b**, **BL-516** (post-hoc health scan), P9-010 trace inspect, `make server-logs-last`.
 
 ---
 
@@ -1919,6 +1986,8 @@ Operators tuning dogfood/debug runs must know this matrix by heart; `.env.exampl
 
 | Date | Change |
 |------|--------|
+| 2026-06-18 | **Phase 10 opened.** BL-334 → **P10-001**; BL-106 + BL-520 → **P10-002**; BL-351 (v0) → **P10-003**; BL-516/517/518/519 → **P10-004**. Status `in_phase` on promoted items; § Phase 10 active table added. See [PHASE10_MVP.md](./PHASE10_MVP.md). |
+| 2026-06-17 | **BL-106** expanded (MCP `report_progress` + `ctx.log` + capture→egress bridge) and **BL-520** added (`logs tail` / follow delegation on trace + server JSONL). Phase 9 closed — live visibility is Phase 10 read/notify layer on top of write-always capture. |
 | 2026-06-17 | **BL-518** (runtime log level / verbosity DX) and **BL-519** (`MCP_CODER_PROXY_ENABLED` toggle) added — post-Phase 9 operational polish; scope TBD. |
 | 2026-06-17 | **Phase 9 formally closed.** P9-014 deferred → **BL-516** (CLI log health table + `trace inspect --summary`). P9-ISS-007 deferred → **BL-517** (executor `policy_applied` ignored params). No open Phase 9 issues. |
 | 2026-06-17 | **Phase 9 A-to-Z dogfood complete** — 6 delegations; 6/6 proxy↔llm_call exact alignment. Three post-dogfood fixes: P9-ISS-008 proxy routing catch-all (`google/*` → OpenRouter), P9-ISS-009 streaming token counts (`stream_options: include_usage`), P9-ISS-010 executor `llm_call.policy_applied` (contextvar re-derive + step builder). Guide synced 2026-06-17. |

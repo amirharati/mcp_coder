@@ -10,7 +10,7 @@
 
 This document is the **delivery plan**: what to build, in what order, and how we validate each step. Vision and rationale live in [IDEA.md](./IDEA.md) · doc map: [VISION_DOCS.md](./VISION_DOCS.md). Implementation happens in focused coding sessions once a phase (or sub-step) is agreed.
 
-**Status:** Phase 1 **complete** (P1-199). Phase 2 **complete** (P2-499). Phase 3 **complete** (P3-499). Phase 4 **complete** (2026-06-09). Phase 5 **complete** (2026-06-13). Phase 6 **complete** (2026-06-13). Phase 7 **complete** (2026-06-13; optional capstone met). Phase 8 **complete** (2026-06-14; P8-001..P8-006 delivered). Phase 9 **complete** (2026-06-17; P9-001..P9-013 shipped, P9-015 superseded). **Next:** Phase 10 planning — outer-loop control, multi-backend proxy extension. See [PHASE9_MVP.md](./PHASE9_MVP.md) (closed).
+**Status:** Phase 1 **complete** (P1-199). Phase 2 **complete** (P2-499). Phase 3 **complete** (P3-499). Phase 4 **complete** (2026-06-09). Phase 5 **complete** (2026-06-13). Phase 6 **complete** (2026-06-13). Phase 7 **complete** (2026-06-13; optional capstone met). Phase 8 **complete** (2026-06-14; P8-001..P8-006 delivered). Phase 9 **complete** (2026-06-17; P9-001..P9-013 shipped, P9-015 superseded). **Phase 10 active** (opened 2026-06-18) — executor option wiring + MCP visibility + stall supervision + backlog clearance. See [PHASE10_MVP.md](./PHASE10_MVP.md).
 
 ---
 
@@ -52,8 +52,9 @@ This document is the **delivery plan**: what to build, in what order, and how we
 | **6** | **Observability substrate + reasoning buffer** — `core/observability/` adapter seam; live tokens; trace files; reasoning hot buffer; training opt-in (POC/MVP of AGENTIC_LOOP_LOGGING product) | [PHASE6_MVP.md](./PHASE6_MVP.md) **complete** 2026-06-13 |
 | **7** *(complete)* | **Executor loop ownership + unified LLM boundary** — own every executor turn (BL-350); `LlmGateway` proxy for all LLM calls (BL-368); compile provenance bundle; per-turn trace events | Closed 2026-06-13 — see `PHASE7_MVP.md` |
 | **8** *(complete)* | **Backend interception: full Aider visibility** — `ObservableModel` captures Aider inner-loop calls; backend interception contract; CLI bootstrap hardening; transcript byte-range provenance; streaming dedup hardening | [PHASE8_MVP.md](./PHASE8_MVP.md) **complete** 2026-06-14 |
-| **9** *(active)* | **Write-always + universal proxy + replay** — `LocalLlmProxy` between litellm and provider captures raw HTTP before normalization; write-always storage; context package blobs; `mcp-coder replay <id>`; storage GC first slice | [PHASE9_MVP.md](./PHASE9_MVP.md) **active** |
-| **8+** | Interactive/long-running sessions, curation pipeline, novelty filter, cross-session reasoning, multi-host, ensemble | BL-333, BL-351, BL-354, BL-357, BL-160, BL-007 |
+| **9** *(complete)* | **Write-always + universal proxy + replay** — `LocalLlmProxy` between litellm and provider captures raw HTTP before normalization; write-always storage; context package blobs; `mcp-coder replay <id>`; storage GC first slice | [PHASE9_MVP.md](./PHASE9_MVP.md) **complete** 2026-06-17 |
+| **10** *(active)* | **Trustable real-project dogfood** — executor behavior shaping (`system_prompt_prefix` / `edit_format`); MCP `ctx.info` progress notifications + `logs tail`; stall detection → `needs_input`; Phase 9 backlog clearance | [PHASE10_MVP.md](./PHASE10_MVP.md) **active** |
+| **10+** | Full outer-loop supervision, host-set model policy (BL-512), AI-suggested params (BL-513), dynamic escalation (BL-514), out-of-process backend proxy, multi-model ensemble | BL-350, BL-351, BL-512–515, BL-321, BL-160, BL-007 |
 
 **Principle (Phase 3+ attribution):** MCP reports `files_changed` from **delegation-scoped workspace manifest delta** — git-agnostic, backend-agnostic. User git is complementary; optional `git_tracked` metadata later (trivial).
 
@@ -881,8 +882,48 @@ Phase 6 — seam + helpers + tokens + lean JSONL  → observability skeleton
 Phase 7 — LlmGateway + executor loop            → no bypass paths, all turns captured
 Phase 8 — ObservableModel + interception proof  → Aider inner-loop visible
 Phase 9 — write-always + proxy + blobs + replay → 100% proven at HTTP boundary, replayable
-Phase 10+ — multi-backend + control             → same proxy, add backends + intervention
+Phase 10 — trust + visibility + executor shaping → real-project dogfood
+Phase 11+ — multi-backend + full outer-loop control
 ```
+
+---
+
+## Phase 10: Trustable real-project dogfood *(active)*
+
+**Status:** Active — opened 2026-06-18; milestones P10-001..P10-004 scoped; worker specs pending.
+**PM doc:** [PHASE10_MVP.md](./PHASE10_MVP.md) · **Issues:** [PHASE10_ISSUES.md](./PHASE10_ISSUES.md) · **Bootstrap:** [notes/phase10-master-session-bootstrap.md](./notes/phase10-master-session-bootstrap.md)
+
+### One-line goal
+
+Shape Aider's behavior before problems occur, see what is happening while it runs, and handle stalls gracefully — POC/partial level sufficient for real-project dogfood.
+
+### What Phase 10 owns
+
+| Milestone | Theme | Backlog |
+|-----------|-------|---------|
+| P10-001 | Executor option wiring (`system_prompt_prefix`, `edit_format`) | BL-334 v0 |
+| P10-002 | MCP `ctx.info` notifications + `mcp-coder logs tail` | BL-106 POF, BL-520 POF |
+| P10-003 | Stall detect → `needs_input` structured response | BL-351 v0 |
+| P10-004 | Backlog clearance (policy_applied, proxy toggle, trace summary, env docs) | BL-516/517/518/519 |
+
+### What Phase 10 does NOT own
+
+| Item | Why deferred |
+|------|-------------|
+| Full inner-loop supervision (BL-350 continuation) | Phase 11 — needs dogfood evidence |
+| AI-suggested model params (BL-513) | Phase 11 |
+| Dynamic escalation (BL-514) | Phase 11 |
+| Out-of-process backend proxy extension | Phase 11 |
+| Critic/reviewer (BL-358, BL-006) | Phase 11 |
+
+### Phase 10 acceptance (dogfood)
+
+1. `MCP_CODER_EXECUTOR_SYSTEM_PREFIX` measurably shapes executor behavior.
+2. `ctx.info` progress visible in Cursor during delegation (≥5 milestone messages).
+3. `mcp-coder logs tail --latest` follows a live delegation in a side terminal.
+4. Aider "add files to chat" stall returns `needs_input` with `files_requested[]` — not silent failure.
+5. Executor `policy_applied.ignored` present when temperature/top_p set but not applied.
+6. `MCP_CODER_PROXY_ENABLED=0` runs without proxy; `backend_llm_call` still captured.
 
 ---
 
@@ -904,3 +945,4 @@ Phase 10+ — multi-backend + control             → same proxy, add backends +
 - [x] Phase 6 — observability substrate + reasoning buffer (P6-001…P6-008); recommended exit + post-dogfood fixes met 2026-06-13; [PHASE6_MVP.md](./PHASE6_MVP.md).
 - [x] **Phase 8 complete** — backend interception (P8-001..P8-006); `ObservableModel` + `InterceptionProfile` + bootstrap + byte-range provenance + streaming dedup; see `PHASE8_MVP.md` (closed 2026-06-14).
 - [x] **Phase 9 complete** — write-always storage + `LocalLlmProxy` + context blobs + replay CLI + GC + v2 boundary viewer (P9-001..P9-013); closed 2026-06-17; see [PHASE9_MVP.md](./PHASE9_MVP.md).
+- [ ] **Phase 10 active** — executor option wiring (P10-001), MCP visibility + `logs tail` (P10-002), stall detection → `needs_input` (P10-003), backlog clearance BL-516/517/518/519 (P10-004); see [PHASE10_MVP.md](./PHASE10_MVP.md).

@@ -1,6 +1,6 @@
 # mcp-coder guide
 
-Onboarding, tutorials, and architecture reference for the mcp-coder stack (Phases 1–9).
+Onboarding, tutorials, and architecture reference for the mcp-coder stack (Phases 1–9 shipped; **Phase 10** active — see [PHASE10_MVP.md](../PHASE10_MVP.md)).
 
 This folder is the output of **Phase 4.5** literacy work, updated after **Phase 5** (RAG), **Phase 6** (observability substrate), **Phase 7** (executor loop ownership + compile provenance), **Phase 8** (Aider inner-loop capture, ObservableModel), and **Phase 9** (universal HTTP proxy, write-always storage, replay/compare/inspect CLI, model registry, and the v2 boundary delegation viewer). Written from running and reading the code, not from specs alone.
 
