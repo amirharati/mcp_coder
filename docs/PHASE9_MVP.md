@@ -9,7 +9,7 @@
 
 # Phase 9 — Write-always storage + universal proxy + replay
 
-**Status:** **Core complete; one observability UX follow-up pending** — P9-001..P9-012 shipped 2026-06-16. A-to-Z dogfood session run 2026-06-17 (3 separate runs; final session: 6 delegations, 6/6 exact proxy↔llm_call alignment, all event types fully attributed). 924 tests passing. All north-star acceptance criteria verified. Three post-dogfood fixes shipped (P9-ISS-008..010). **P9-013 done (v2 boundary viewer, production-usable). P9-015 superseded by P9-013 v2 architecture. P9-014 (trace inspect power-up) pending spec.** Pending: guide folder deep update.
+**Status:** **Frozen** — Phase 9 closed 2026-06-17. P9-001..P9-013 shipped; P9-015 superseded. A-to-Z dogfood (final session: 6 delegations, 6/6 exact proxy↔llm_call alignment). All 7 north-star acceptance criteria verified. Post-dogfood fixes P9-ISS-008..010 shipped. **Deferred to backlog:** P9-014 → **BL-516**; P9-ISS-007 → **BL-517**; runtime log-level DX → **BL-518**; proxy env toggle → **BL-519**.
 **Purpose:** Prove "100% LLM call captured" by adding a universal internal HTTP proxy (litellm → proxy → provider) that captures raw bytes before any normalization layer; flip the write gate to always-on; add context package blobs and replay CLI.
 **PM board:** this file · **Issues:** [PHASE9_ISSUES.md](./PHASE9_ISSUES.md)
 **Phase 8 (frozen):** [PHASE8_MVP.md](./PHASE8_MVP.md) · [PHASE8_ISSUES.md](./PHASE8_ISSUES.md)
@@ -88,7 +88,7 @@ The proxy also provides the universal architecture for Phase 10+ multi-backend c
 | 10 | P9-011 | [P9-011](../tasks/P9-011-model-policy-layer-v1.md) | done | helper path unified onto LlmGateway + `model_registry.resolve()` front door; focused `15 passed`, full suite `901 passed, 2 skipped` |
 | 11 | P9-012 | [P9-012](../tasks/P9-012-generation-params-logging-v1.md) | done | generation params + weak-model default-fill + `policy_applied` logging; focused `23 passed`, full suite `924 passed, 2 skipped` |
 | 12 | P9-013 | [P9-013](../tasks/P9-013-viewer-phase9-overhaul-v1.md) | done | Viewer shipped as v2 boundary table (`view_events[]` middleware + thin renderer): chronological boundary rows, detail panel, multi-delegation collapsing, request/policy/context debug coverage |
-| 13 | P9-014 | — | pending_spec | `trace inspect` power-up + `mcp-coder log` cross-delegation table |
+| 13 | P9-014 | — | deferred | Moved to **BL-516** — `trace inspect --summary` + `mcp-coder log` cross-delegation table |
 | 14 | P9-015 | [P9-015](../tasks/P9-015-pipeline-timeline-v1.md) | superseded | Superseded by P9-013 v2 boundary viewer architecture; do not implement pipeline-card UI |
 
 ---
@@ -363,12 +363,14 @@ The pipeline-card model was implemented briefly, then removed.
 
 ### P9-014 — `trace inspect` power-up + cross-delegation log table
 
-**Status:** `pending_spec`
+**Status:** `deferred` → **[BL-516](./BACKLOG.md#bl-516-cli-log-health-table--trace-inspect-summary)** (post-Phase 9)
 
 **Goal:** Extend the CLI log-browsing toolset with two additions:
 1. `mcp-coder trace inspect --summary` — single-shot health scorecard per delegation (event counts, token totals, policy_applied coverage %, proxy alignment %)
 2. `mcp-coder log` (new sub) — cross-delegation table: last N delegations, one row each with health indicators for quick R&D scanning
 3. `--no-truncate` flag on `trace inspect --field` for pipe-friendly full content
+
+**Disposition:** Not required for Phase 9 exit — `compare`, `trace inspect`, `replay`, and v2 boundary viewer cover audit needs. Pulled when batch R&D scanning becomes painful.
 
 ---
 
@@ -469,7 +471,7 @@ P9-011 + P9-012 introduce `core/config/model_registry.py` (front door reusing `r
 
 ## § Results
 
-**Phase complete 2026-06-16. All 7 north-star acceptance criteria verified.**
+**Phase closed 2026-06-17. All 7 north-star acceptance criteria verified. P9-013 v2 boundary viewer shipped. Remaining polish deferred to backlog (BL-516..BL-519).**
 
 | # | Criterion | Result |
 |---|-----------|--------|
@@ -488,9 +490,9 @@ P9-011 + P9-012 introduce `core/config/model_registry.py` (front door reusing `r
 - P9-ISS-009 — `backend_llm_call` input/output token counts were null for streaming calls. Fixed by injecting `stream_options: {"include_usage": True}` when `stream=True` in `ObservableModel.send_completion()`. Providers now send a final usage chunk; `_assemble_stream_response` already captures it.
 - P9-ISS-010 — `llm_call.policy_applied` was null/absent on executor events. Two-part fix: (a) litellm async callback re-derives policy from registry when contextvar is reset; (b) P7-002 step event builder (`build_executor_llm_trace_record`) now accepts and writes `policy_applied`, resolved once at `_bounded_executor_loop` entry. Final dogfood: all 6/6 executor `llm_call` events carry `policy_applied` ✓.
 
-**Open issue:** P9-ISS-007 — `policy_applied` logs `temperature`/`top_p`/`max_tokens` for executor role even though Aider controls those internally; low severity, filed for future refinement.
+**Deferred to backlog:** P9-ISS-007 → **BL-517**; P9-014 → **BL-516**; runtime log-level DX → **BL-518**; proxy env toggle → **BL-519**.
 
-**Pending:** guide folder deep update (T-07, `per-role-models.md`, `overview.md` Phase 8–9 sync, `how-it-works.md` Phase 6–9 additions).
+**Optional follow-up (not phase exit):** T-07 end-to-end trace tutorial; `architecture/per-role-models.md` deep write.
 
 ---
 
@@ -498,6 +500,8 @@ P9-011 + P9-012 introduce `core/config/model_registry.py` (front door reusing `r
 
 | Date | Change |
 |------|--------|
+| 2026-06-17 | **Phase 9 frozen.** PM + issues closed; deferred items → BL-516..BL-519. Guide synced (2026-06-17). Optional additive debt: T-07 tutorial. |
+| 2026-06-17 | **Phase 9 closed.** P9-014 deferred → BL-516; P9-ISS-007 deferred → BL-517. BL-518 (log-level DX) + BL-519 (proxy env toggle) added to backlog. No open Phase 9 issues remain. |
 | 2026-06-17 | P9-013 moved to **done** with significant scope evolution: shipped as v2 boundary viewer (`view_events[]` middleware + thin renderer), not the original card timeline. P9-015 marked **superseded** by this architecture. Linked `viewer-design-principles-v2.md` in design context. |
 | 2026-06-17 | P9-013 + P9-014 added — viewer Phase 9 overhaul (BL-343) and trace-inspect power-up; P9-013 spec written and `spec_ready`; P9-014 `pending_spec`. |
 | 2026-06-17 | **A-to-Z dogfood complete** (3 runs; final session `f33fdbaf`: 6 delegations, 77 tests passing, 6/6 proxy↔llm_call alignment exact). Three post-dogfood fixes shipped: proxy routing catch-all (P9-ISS-008), streaming token counts (P9-ISS-009), executor `llm_call.policy_applied` (P9-ISS-010). Full suite 924 passing. |

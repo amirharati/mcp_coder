@@ -1,8 +1,10 @@
 # Phase 9 issues
 
-**Open:** P9-ISS-007 (policy_applied misleading for executor-ignored params)  
+**Status:** **Frozen** — Phase 9 closed 2026-06-17. No open issues; remaining items deferred to backlog.  
+**Open:** none  
+**Deferred:** P9-ISS-007 → **BL-517**; P9-014 → **BL-516**; runtime log-level DX → **BL-518**; proxy env toggle → **BL-519**  
 **Closed:** `P9-ISS-001`..`P9-ISS-006`, `P9-ISS-008`..`P9-ISS-010`. `P9-OBS-001` promoted to **P9-011 + P9-012**, both **done** (full suite `924 passed, 2 skipped`) — see below.  
-**Related PM board:** [PHASE9_MVP.md](./PHASE9_MVP.md)
+**Related PM board:** [PHASE9_MVP.md](./PHASE9_MVP.md) (frozen)
 **Viewer milestone disposition:** **P9-013 done** (shipped as v2 boundary viewer architecture) and **P9-015 superseded** (pipeline cards intentionally not continued).
 
 ---
@@ -523,7 +525,7 @@ Final dogfood session `f33fdbaf`: all 6/6 executor `llm_call` events have `polic
 
 **Type:** Logging correctness  
 **Severity:** low — not a runtime bug, but `policy_applied` can imply a param was applied to Aider when it wasn't  
-**Status:** open  
+**Status:** deferred → **[BL-517](./BACKLOG.md#bl-517-executor-policy_applied-ignored-params)** (migrated from open issue 2026-06-17)  
 **Opened:** 2026-06-16 (post P9-012 review)
 
 ### Summary

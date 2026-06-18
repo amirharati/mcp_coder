@@ -10,7 +10,7 @@
 
 This document is the **delivery plan**: what to build, in what order, and how we validate each step. Vision and rationale live in [IDEA.md](./IDEA.md) · doc map: [VISION_DOCS.md](./VISION_DOCS.md). Implementation happens in focused coding sessions once a phase (or sub-step) is agreed.
 
-**Status:** Phase 1 **complete** (P1-199). Phase 2 **complete** (P2-499). Phase 3 **complete** (P3-499). Phase 4 **complete** (2026-06-09). Phase 5 **complete** (2026-06-13). Phase 6 **complete** (2026-06-13). Phase 7 **complete** (2026-06-13; optional capstone met). Phase 8 **complete** (2026-06-14; P8-001..P8-006 delivered, with thinking-token provider-path follow-up carried). **Next:** Phase 9 — write-always + universal proxy + replay. See [PHASE9_MVP.md](./PHASE9_MVP.md).
+**Status:** Phase 1 **complete** (P1-199). Phase 2 **complete** (P2-499). Phase 3 **complete** (P3-499). Phase 4 **complete** (2026-06-09). Phase 5 **complete** (2026-06-13). Phase 6 **complete** (2026-06-13). Phase 7 **complete** (2026-06-13; optional capstone met). Phase 8 **complete** (2026-06-14; P8-001..P8-006 delivered). Phase 9 **complete** (2026-06-17; P9-001..P9-013 shipped, P9-015 superseded). **Next:** Phase 10 planning — outer-loop control, multi-backend proxy extension. See [PHASE9_MVP.md](./PHASE9_MVP.md) (closed).
 
 ---
 
@@ -798,11 +798,10 @@ After a live `delegate_to_agent` call:
 
 ---
 
-## Phase 9: Write-always storage + universal proxy + replay *(active)*
+## Phase 9: Write-always storage + universal proxy + replay *(complete — frozen 2026-06-17)*
 
-**Status:** Active — master session complete 2026-06-14; milestones scoped; workers not yet tasked.
-**PM doc:** [PHASE9_MVP.md](./PHASE9_MVP.md)
-**Backlog inputs:** BL-367, BL-357 (first slice), BL-507, BL-508
+**Status:** Complete — frozen 2026-06-17; P9-001..P9-013 shipped; P9-015 superseded; polish deferred to **BL-516**..**BL-519** (CLI log table, `policy_applied` ignored params, log-level DX, proxy env toggle).  
+**PM doc:** [PHASE9_MVP.md](./PHASE9_MVP.md) (frozen) · **Issues:** [PHASE9_ISSUES.md](./PHASE9_ISSUES.md) (frozen)
 
 ### One-line goal
 
@@ -904,4 +903,4 @@ Phase 10+ — multi-backend + control             → same proxy, add backends +
 - [x] Phase 5 — RAG + retrieval (P5-001…P5-004, P5-006); recommended exit met 2026-06-13; [PHASE5_MVP.md](./PHASE5_MVP.md).
 - [x] Phase 6 — observability substrate + reasoning buffer (P6-001…P6-008); recommended exit + post-dogfood fixes met 2026-06-13; [PHASE6_MVP.md](./PHASE6_MVP.md).
 - [x] **Phase 8 complete** — backend interception (P8-001..P8-006); `ObservableModel` + `InterceptionProfile` + bootstrap + byte-range provenance + streaming dedup; see `PHASE8_MVP.md` (closed 2026-06-14).
-- [ ] **Phase 9 — Active** — write-always storage + `LocalLlmProxy` (litellm → proxy → provider) + context blobs + replay CLI + GC first slice; see [PHASE9_MVP.md](./PHASE9_MVP.md).
+- [x] **Phase 9 complete** — write-always storage + `LocalLlmProxy` + context blobs + replay CLI + GC + v2 boundary viewer (P9-001..P9-013); closed 2026-06-17; see [PHASE9_MVP.md](./PHASE9_MVP.md).

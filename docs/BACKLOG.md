@@ -1468,6 +1468,10 @@ delegate_to_agent(backend=…)
 | **BL-512** | **Model policy layer — Stage 2: host-set policy** — MCP host passes `model_policy` block inside `delegate_to_agent` call; overrides env layer for that delegation; host can set per-role model, thinking budget, cost cap | Future (Phase 11+) — depends on BL-511; see [model-policy-layer.md](./notes/model-policy-layer.md) Stage 2 |
 | **BL-513** | **Model policy layer — Stage 3: AI-suggested parameters** — lightweight pre-delegation analysis step (cheap LLM or heuristic) that examines the incoming task and suggests policy overrides (e.g. hard refactor → higher thinking budget); suggestion logged as `policy_suggestion` trace event; can be accepted/rejected/overridden | Future — depends on BL-511/BL-512; see [model-policy-layer.md](./notes/model-policy-layer.md) Stage 3 |
 | **BL-514** | **Model policy layer — Stage 4: dynamic escalation** — outer-loop controller modifies active policy mid-delegation in response to runtime signals (retry exhausted → larger model; critic reject → more thinking; cost cap → downgrade); connects to BL-321/BL-006 signals | Future — depends on BL-511/BL-512/BL-513 and a critic or supervisor being in place; see [model-policy-layer.md](./notes/model-policy-layer.md) Stage 4 |
+| **BL-516** | **CLI log health table + `trace inspect --summary`** — cross-delegation scan table (`mcp-coder log`), per-delegation health scorecard, `--no-truncate` on `trace inspect --field` | **Deferred from Phase 9 (P9-014)** — convenience/DX polish; existing `compare`, `trace inspect`, `replay`, and v2 viewer cover audit needs. See § BL-516. |
+| **BL-517** | **Executor `policy_applied` ignored-params** — don't imply `temperature`/`top_p`/`max_tokens` were applied when Aider owns them | **Deferred from Phase 9 (P9-ISS-007)** — low severity logging correctness. See § BL-517. |
+| **BL-518** | **Runtime log level / verbosity DX** — consolidate or document logging knobs; `.env.example` coverage; optional proxy debug logging | **Deferred post-Phase 9** — operational polish (scope TBD). See § BL-518. |
+| **BL-519** | **`MCP_CODER_PROXY_ENABLED` env toggle** — enable/disable `LocalLlmProxy` at bootstrap without code changes | **Deferred post-Phase 9** — escape hatch for debugging and direct-provider runs (scope TBD). See § BL-519. |
 | **BL-334** | **Backend prompt customization** (system prefix + edit-format control) | See § BL-334 |
 | **BL-340** | **Cursor SDK execution backend** (beside Aider) | See § Execution backends — BL-340 |
 
@@ -1812,6 +1816,90 @@ Tier 3: thinking  ← claude-opus-thinking, o3, gemini-2.5-pro (high thinking)
 
 ---
 
+### BL-516: CLI log health table + `trace inspect --summary`
+
+**Status:** `deferred` — 2026-06-17; migrated from Phase 9 milestone **P9-014**.
+
+**What:** Three CLI conveniences for batch R&D scanning across delegations:
+
+1. **`mcp-coder trace inspect --summary`** — single-shot health scorecard per delegation: event counts by type, token totals, `policy_applied` coverage %, proxy↔backend alignment %.
+2. **`mcp-coder log`** (new subcommand) — cross-delegation table: last N delegations, one row each with health indicators (alignment, missing events, token anomalies).
+3. **`--no-truncate`** on `trace inspect --field` — pipe-friendly full field content for scripting.
+
+**Why deferred:** Phase 9 exit criteria met without these. `mcp-coder compare`, `trace inspect`, `replay`, `view delegations`, and the v2 boundary viewer already support per-delegation audit. Pull when scanning many delegations in a row becomes painful.
+
+**Related:** P9-010 (trace inspect shipped), P9-006 (compare), P9-013 (v2 viewer), BL-343 (structured viewer — shipped).
+
+---
+
+### BL-517: Executor `policy_applied` ignored params
+
+**Status:** `deferred` — 2026-06-17; migrated from open issue **P9-ISS-007**.
+
+**What:** `_apply_executor_model_params` applies `reasoning_effort`, `thinking_budget`, `extra_params`, and `weak_model` to the Aider `Model` — but **not** `temperature`, `top_p`, or `max_tokens` (Aider owns those). Today `policy_applied()` can still log env-resolved values for those fields, implying they were applied.
+
+**Resolution options:**
+- Add `"ignored": ["temperature", "top_p", ...]` (and optional `note`) to executor `policy_applied`.
+- Or filter executor-inapplicable fields from `policy_applied` entirely (simpler; loses "you set it but it had no effect" signal).
+
+**Workaround:** Force via `MCP_CODER_EXECUTOR_EXTRA_PARAMS={"temperature": 0.5}` — passed into Aider `extra_params` and forwarded by litellm.
+
+**Related:** BL-511 (model registry + `policy_applied`), P9-012 (generation params logging), [PHASE9_ISSUES.md](./PHASE9_ISSUES.md) P9-ISS-007.
+
+---
+
+### BL-518: Runtime log level / verbosity DX
+
+**Status:** `idea` — 2026-06-17; scope **TBD** (post-Phase 9 operational polish).
+
+**Problem:** Logging and verbosity knobs are fragmented across several env vars and yaml keys with overlapping names and different semantics:
+
+| Knob | What it controls today |
+|------|------------------------|
+| `MCP_CODER_SERVER_LOG_LEVEL` / `server_log_level` | `server.jsonl` audit log minimum level |
+| `MCP_CODER_LOG_BRIEF` | stderr receive/send one-liners (MCP-safe) |
+| `MCP_CODER_LOG_VERBOSE` | stderr extra line when JSONL row appended |
+| `MCP_CODER_OBS_VERBOSITY` / `observability_verbosity` | trace **display/export** filter (`lean`/`standard`/`full`) — not write gate since P9-001 |
+| `MCP_CODER_CAPTURE_REASONING` | whether reasoning text is captured in traces |
+| Proxy (`LocalLlmProxy`) | no env-controlled debug/access logging; `log_message` suppressed |
+
+Operators tuning dogfood/debug runs must know this matrix by heart; `.env.example` documents server + stderr knobs but not observability env vars.
+
+**Proposed scope (TBD — pick subset in planning session):**
+
+1. **Documented matrix** in guide/README — what each knob affects (write vs display vs stderr).
+2. **Optional unified master level** — e.g. `MCP_CODER_LOG_LEVEL=debug` fans out to server log + stderr + proxy debug (with per-knob overrides).
+3. **`.env.example` + config.yaml parity** — add `MCP_CODER_OBS_VERBOSITY`, `MCP_CODER_CAPTURE_REASONING`, and related observability env stubs.
+4. **Proxy access logging** — opt-in debug lines for routing decisions, upstream errors, attribution header presence (off by default).
+
+**Why deferred:** Phase 9 shipped write-always capture and dual-capture proxy; no exit blocker on log ergonomics. Pull when dogfood/debug friction justifies a planning pass.
+
+**Related:** BL-125 (server log shipped), P9-001 (write-always), BL-516 (CLI log scanning), [storage-and-linking.md](./notes/storage-and-linking.md).
+
+---
+
+### BL-519: `MCP_CODER_PROXY_ENABLED` env toggle
+
+**Status:** `idea` — 2026-06-17; scope **TBD** (post-Phase 9 operational polish).
+
+**Problem:** `ensure_observability_bootstrap()` always starts `LocalLlmProxy` and rewrites `OPENROUTER_API_BASE` / `OPENAI_API_BASE` / `ANTHROPIC_API_BASE` to the local proxy URL. There is no env escape hatch to run litellm direct-to-provider without editing code or test hooks.
+
+**Proposed scope (TBD):**
+
+- `MCP_CODER_PROXY_ENABLED=0` (or yaml `local_llm_proxy: false`) skips proxy start and leaves provider `*_API_BASE` env vars untouched.
+- Default **on** — preserves Phase 9 dual-capture behavior and north-star acceptance.
+- When disabled: `proxy_llm_call` events absent; `backend_llm_call` + litellm callback paths still run (partial capture).
+- Bootstrap + CLI paths share the same resolver (`core/observability/bootstrap.py`).
+- Document tradeoff in README/guide: disabling proxy loses HTTP ground-truth and BL-507-style verification for that run.
+
+**Use cases:** isolate proxy routing bugs vs provider bugs; faster local iteration when proxy overhead matters; CI scenarios that mock providers without spinning localhost proxy; emergency workaround if proxy misroutes a model prefix.
+
+**Why deferred:** Proxy is core Phase 9 infrastructure and should stay on by default; toggle is convenience/DX, not missing functionality.
+
+**Related:** BL-508 (proxy shipped P9-003), P9-003 bootstrap, [llm-interception-strategies.md](./notes/llm-interception-strategies.md).
+
+---
+
 ## Done
 
 | ID | Item | Completed |
@@ -1831,7 +1919,9 @@ Tier 3: thinking  ← claude-opus-thinking, o3, gemini-2.5-pro (high thinking)
 
 | Date | Change |
 |------|--------|
-| 2026-06-17 | **Phase 9 A-to-Z dogfood complete** — 6 delegations; 6/6 proxy↔llm_call exact alignment. Three post-dogfood fixes: P9-ISS-008 proxy routing catch-all (`google/*` → OpenRouter), P9-ISS-009 streaming token counts (`stream_options: include_usage`), P9-ISS-010 executor `llm_call.policy_applied` (contextvar re-derive + step builder). Phase 9 formally closed. Guide folder update pending. |
+| 2026-06-17 | **BL-518** (runtime log level / verbosity DX) and **BL-519** (`MCP_CODER_PROXY_ENABLED` toggle) added — post-Phase 9 operational polish; scope TBD. |
+| 2026-06-17 | **Phase 9 formally closed.** P9-014 deferred → **BL-516** (CLI log health table + `trace inspect --summary`). P9-ISS-007 deferred → **BL-517** (executor `policy_applied` ignored params). No open Phase 9 issues. |
+| 2026-06-17 | **Phase 9 A-to-Z dogfood complete** — 6 delegations; 6/6 proxy↔llm_call exact alignment. Three post-dogfood fixes: P9-ISS-008 proxy routing catch-all (`google/*` → OpenRouter), P9-ISS-009 streaming token counts (`stream_options: include_usage`), P9-ISS-010 executor `llm_call.policy_applied` (contextvar re-derive + step builder). Guide synced 2026-06-17. |
 | 2026-06-16 | BL-511–514 added — model policy layer Stages 1–4; design note at [model-policy-layer.md](./notes/model-policy-layer.md). BL-511 implemented in Phase 9 (P9-011 + P9-012, done same day). BL-507/508/510 closed. BL-367/BL-353 fully done. |
 | 2026-06-13 | **Phase 7 closeout sync** — BL-350/353/368 statuses updated to reflect P7 shipment; BL-369/370/371 added from carried P7 issues |
 | 2026-06-13 | **Phase 6 closed** — PHASE6_MVP + PHASE6_ISSUES frozen; P6-ISS-002 → BL-368; Phase 6 exit table added; BL-335 done (partial); BL-353 partial |
