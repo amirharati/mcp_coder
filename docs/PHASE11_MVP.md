@@ -103,7 +103,7 @@ Phase 11:  MCP → Aider (supervised, decisions routed) ↔ Supervisor LLM → r
 | 5 | P11-005 | [P11-005](../tasks/P11-005-reviewer-tier1-v0.md) | **done** 2026-06-19 | Tier-1 reviewer phase wired, non-fatal |
 | 6 | P11-006 | [P11-006](../tasks/P11-006-smart-architect-trigger.md) | **done** 2026-06-19 | Smart trigger + skip-reason audit |
 | 7 | P11-007 | [P11-007](../tasks/P11-007-model-policy-host.md) | **done** 2026-06-19 | Host model_policy arg wired, additive precedence |
-| 8 | P11-008 | [P11-008](../tasks/P11-008-planner-rename-refactor.md) | pending | Naming refactor: architect_pass → planner_pass; role hierarchy constants |
+| 8 | P11-008 | [P11-008](../tasks/P11-008-planner-rename-refactor.md) | **done** 2026-06-19 | Naming refactor: architect_pass → planner_pass; role hierarchy constants; 1126 passed |
 
 ---
 
@@ -275,7 +275,7 @@ Phase 11:  MCP → Aider (supervised, decisions routed) ↔ Supervisor LLM → r
 
 ### P11-008 — Naming refactor: architect_pass → planner_pass *(end-of-phase cleanup)*
 
-**Status:** `pending`
+**Status:** `done` — shipped 2026-06-19 (1126 passed, 1 skipped)
 **Goal:** The current `architect_pass` is architecturally a task-level planner, not the CTO-level architect role now defined in BL-526. Rename all code references so "architect" is free for the epic-boundary role in Phase 12+, and install role hierarchy constants as the foundation for Phase 12 planner/supervisor infrastructure.
 
 **Scope:**
@@ -330,7 +330,7 @@ Phase 11:  MCP → Aider (supervised, decisions routed) ↔ Supervisor LLM → r
 Run a focused observability validation pass on 3-5 delegations and confirm:
 
 1. `delegation_pipeline` includes every expected step with `ok|error|skipped` statuses (including skipped reasons).
-2. `model_roles` captures all helper + executor calls used in that run (`spec_validation`, `clarity_check`, `architect_pass`, `builder_llm`, `supervisor`, `reviewer_pass`, `executor` when applicable).
+2. `model_roles` captures all helper + executor calls used in that run (`spec_validation`, `clarity_check`, `planner_pass`, `builder_llm`, `supervisor`, `reviewer_pass`, `executor` when applicable).
 3. Compile/provenance stages exist for mechanical and helper phases (input/output or explicit skip events with reasons).
 4. New P11 audit fields are present and stable (`supervisor_*`, `human_gate_*`, `executor_pull_hint_applied`, `reviewer_pass_result`).
 5. `trace inspect` + JSONL records agree on phase ordering and outcomes.
@@ -403,12 +403,24 @@ Run a focused observability validation pass on 3-5 delegations and confirm:
 - **Compatibility hardening:** model id is overridden only when host explicitly sets role `model`; otherwise existing caller-selected model behavior is preserved.
 - **Tests:** 36 passed target suite (plus helper-path regression checks -> 41 passed total with extended run).
 
+### P11-008 — planner_pass rename refactor (2026-06-19)
+
+- **Shipped:** complete `architect_pass` → `planner_pass` rename across 21 files (3 new modules + 18 edits).
+- **New modules:** `planner_prompt.py`, `planner_pass_llm.py`, `planner_pass.py` (symbol-renamed from architect counterparts); old modules kept as thin backward-compat shims.
+- **Legacy alias handling:** `planner_pass_enabled()` accepts `MCP_CODER_ARCHITECT_PASS` and `architect_pass` yaml key with warning; old modules not deleted.
+- **Runtime callers updated:** `delegation/prepare.py`, `version_tags.py` (emits both `planner_pass` canonical + `architect_pass` deprecated alias), `delegation_view_enrich.py` (LLM role map + fold set), `inspect.py` (imports + helper_phases dict canonical key with deprecated alias).
+- **Role constants:** `ROLE_PLANNER`, `ROLE_REVIEWER`, `ROLE_PLANNER_PASS` added to `role_models.py`.
+- **Docs:** `docs/guide/terminology.md` updated; `.env.example` adds `MCP_CODER_PLANNER_PASS`, marks old var deprecated.
+- **Pre-existing fixes:** 4 mock-target failures in `test_compile_provenance_p7_003.py` and `test_pipeline_phases.py` fixed as part of the sweep.
+- **Tests:** 10 new in `test_planner_pass_p11_008.py`; 1126 passed, 1 skipped full suite.
+
 ---
 
 ## Changelog
 
 | Date | Change |
 |------|--------|
+| 2026-06-19 | **P11-008 shipped** — `architect_pass` → `planner_pass` rename refactor complete; legacy aliases kept with warnings; 1126 passed. Phase 11 all milestones done; pre-dogfood log review gate now open. |
 | 2026-06-19 | **P11-007 shipped** — host `model_policy` arg (BL-512 Stage 2) wired with per-role normalization, additive precedence, delegation-lifetime context binding, and non-fatal warning behavior. |
 | 2026-06-19 | **P11-006 shipped** — smart architect trigger v0 with spec/env/heuristic precedence and skip-reason audit wiring; 24 tests passed. |
 | 2026-06-19 | **P11-005 shipped** — tier-1 reviewer v0 (`reviewer_pass`) wired with opt-in enablement, report section append, non-fatal error handling, and audit field `reviewer_pass_result`. |

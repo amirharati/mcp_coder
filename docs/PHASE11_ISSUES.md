@@ -20,6 +20,7 @@
 | **BL-358** | **P11-005** ✅ | Tier-1 reviewer shipped: cheap model scan on `files_changed`, appended to spec report | Tier-2 epic-boundary review, critic/redo → Phase 12 |
 | — | **P11-006** ✅ | Smart architect trigger shipped: heuristic skip for trivial tasks + spec front-matter override + skip-reason audit detail | — |
 | **BL-512** | **P11-007** ✅ | Host model policy shipped: `model_policy` arg on `delegate_to_agent`, precedence over env with non-fatal validation warnings | BL-513 AI-suggested, BL-514 dynamic escalation → Phase 12 |
+| — | **P11-008** ✅ | Naming refactor: `architect_pass` → `planner_pass` (canonical); legacy aliases retained with warnings; role constants `ROLE_PLANNER`, `ROLE_REVIEWER`, `ROLE_PLANNER_PASS` added | — |
 
 ---
 
@@ -34,6 +35,7 @@
 | P11-005 | 2026-06-19 | Tier-1 reviewer shipped (`reviewer_pass` + report section append); non-fatal error path; 34 tests passed |
 | P11-006 | 2026-06-19 | Smart architect trigger shipped (`should_run_architect_pass` + pipeline skip-reason wiring); 24 tests passed |
 | P11-007 | 2026-06-19 | Host `model_policy` shipped (executor/helper wiring + audit/warnings); 36 tests passed (41 incl. helper-path regression run) |
+|| P11-008 | 2026-06-19 | `architect_pass` → `planner_pass` rename refactor; legacy aliases + warnings; 21 files; 1126 passed full suite |
 
 ---
 
