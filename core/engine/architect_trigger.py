@@ -60,10 +60,22 @@ def _task_has_arch_keywords(task: str) -> bool:
 
 
 def _env_architect_disabled() -> bool:
-    raw = os.environ.get("MCP_CODER_ARCHITECT_PASS", "").strip()
-    if not raw:
-        return False
-    return _parse_bool(raw) is False
+    """Check both canonical and legacy env vars for explicit disable."""
+    canonical = os.environ.get("MCP_CODER_PLANNER_PASS", "").strip()
+    if canonical:
+        return _parse_bool(canonical) is False
+    legacy = os.environ.get("MCP_CODER_ARCHITECT_PASS", "").strip()
+    if legacy:
+        return _parse_bool(legacy) is False
+    return False
+
+
+def _spec_override_planner(spec_read: Any | None) -> bool | None:
+    """Check canonical planner_pass key, then fall back to legacy architect_pass key."""
+    canonical = _spec_front_matter_bool(spec_read, "planner_pass")
+    if canonical is not None:
+        return canonical
+    return _spec_front_matter_bool(spec_read, "architect_pass")
 
 
 def should_run_architect_pass(
@@ -77,10 +89,12 @@ def should_run_architect_pass(
 
     reason is one of:
     run | spec_override_true | spec_override_false | env_disabled | heuristic_trivial_task
+
+    Checks canonical spec key `planner_pass` first, then legacy `architect_pass`.
     """
     _ = workspace  # reserved for future workspace-level policy hooks
 
-    spec_override = _spec_front_matter_bool(spec_read, "architect_pass")
+    spec_override = _spec_override_planner(spec_read)
     if spec_override is True:
         return True, REASON_SPEC_OVERRIDE_TRUE
     if spec_override is False:

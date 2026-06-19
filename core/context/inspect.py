@@ -6,7 +6,7 @@ import os
 from pathlib import Path
 from typing import Any
 
-from core.config.architect_pass import architect_pass_enabled
+from core.config.planner_pass import planner_pass_enabled
 from core.config.auto_merge import auto_merge_spec_read_enabled
 from core.config.context_builder import (
     context_builder_enabled,
@@ -21,7 +21,7 @@ from core.config.spec_validation import spec_validation_enabled
 from core.context.assemble import assemble_context
 from core.context.budget import apply_context_budget, resolve_context_budget_tokens
 from core.context.helper_llm_pipeline import (
-    apply_architect_pass,
+    apply_planner_pass,
     apply_builder_llm,
     apply_spec_validation,
     merge_architect_plan,
@@ -211,6 +211,12 @@ def inspect_context_package(
         effective_target_files = merge_result.effective_target_files
         auto_merged_read_paths = merge_result.auto_merged_read_paths
 
+    _planner_pass_default: dict[str, Any] = {
+        "ran": False,
+        "applied": False,
+        "error": None,
+        "model": None,
+    }
     helper_phases: dict[str, Any] = {
         "spec_validation": {
             "ran": False,
@@ -225,12 +231,8 @@ def inspect_context_package(
             "hit_count": 0,
             "error": None,
         },
-        "architect_pass": {
-            "ran": False,
-            "applied": False,
-            "error": None,
-            "model": None,
-        },
+        "planner_pass": _planner_pass_default,
+        "architect_pass": _planner_pass_default,  # deprecated alias for old trace viewers
         "builder_llm": {
             "ran": False,
             "applied": False,
@@ -369,12 +371,12 @@ def inspect_context_package(
     architect_plan: str | None = None
     want_architect = _should_run_helper(
         requested=run_architect,
-        workspace_enabled=architect_pass_enabled(ws),
+        workspace_enabled=planner_pass_enabled(ws),
         force_helpers=force_helpers,
         respect_workspace_flags=respect_workspace_flags,
     )
     if want_architect and spec_read is not None:
-        architect_plan, arch_error, arch_record, _arch_provenance = apply_architect_pass(
+        architect_plan, arch_error, arch_record, _arch_provenance = apply_planner_pass(
             context_package=package,
             spec_read=spec_read,
             picker_result=picker_result,
@@ -383,12 +385,14 @@ def inspect_context_package(
             context_summary=context_summary or "",
             host_transcript=host_transcript,
         )
-        helper_phases["architect_pass"] = {
+        _planner_phase_result: dict[str, Any] = {
             "ran": True,
             "applied": architect_plan is not None,
             "error": arch_error,
             "model": _helper_phase_model(arch_record),
         }
+        helper_phases["planner_pass"] = _planner_phase_result
+        helper_phases["architect_pass"] = _planner_phase_result  # deprecated alias
 
     want_builder = (
         effective_run_builder

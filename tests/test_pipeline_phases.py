@@ -122,11 +122,11 @@ def test_pipeline_recorder_records_ok_phase():
 
 def test_pipeline_recorder_skipped_phase():
     rec = PipelineRecorder()
-    rec.mark("architect_pass", status="skipped", detail="disabled")
+    rec.mark("planner_pass", status="skipped", detail="disabled")
     rows = rec.to_list()
     assert rows == [
         {
-            "phase": "architect_pass",
+            "phase": "planner_pass",
             "status": "skipped",
             "duration_ms": 0,
             "detail": "disabled",
@@ -223,6 +223,7 @@ def test_delegate_pipeline_architect_off_skipped(tmp_path, monkeypatch):
     monkeypatch.setenv("MCP_CODER_CONTEXT_BUILDER_ENABLED", "0")
     monkeypatch.setenv("MCP_CODER_CONTEXT_BUILDER_LLM", "0")
     monkeypatch.chdir(ws)
+    _write_workspace_config(ws, "auto_merge_spec_read: false\n")
 
     fake = ExecutionResult(success=True, output="ok", files_changed=["pkg/cli.py"], model="m")
     engine = _make_mock_engine(fake)
@@ -237,7 +238,7 @@ def test_delegate_pipeline_architect_off_skipped(tmp_path, monkeypatch):
         )
 
     payload = json.loads(raw)
-    assert _phase_status(payload["delegation_pipeline"], "architect_pass") == "skipped"
+    assert _phase_status(payload["delegation_pipeline"], "planner_pass") == "skipped"
 
 
 def test_delegate_pipeline_spec_validation_disabled_is_skipped(tmp_path, monkeypatch):

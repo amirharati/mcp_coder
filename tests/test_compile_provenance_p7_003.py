@@ -169,18 +169,18 @@ def test_helper_pipeline_returns_provenance():
 
     arch_result = MagicMock()
     arch_result.success = True
-    arch_result.plan = "## Architect plan\nDo X"
+    arch_result.plan = "## Planner plan\nDo X"
     arch_result.model = "m"
     arch_result.tokens = {"input": 1, "output": 2, "total": 3, "source": "x"}
     arch_result.duration_ms = 10
-    arch_result.raw_output = "## Architect plan\nDo X"
+    arch_result.raw_output = "## Planner plan\nDo X"
     arch_result.error = None
 
     with patch(
-        "core.engine.architect_pass_llm.run_architect_pass_llm",
+        "core.engine.planner_pass_llm.run_planner_pass_llm",
         return_value=arch_result,
     ), patch(
-        "core.context.architect_prompt.build_architect_pass_prompt",
+        "core.context.planner_prompt.build_planner_pass_prompt",
         return_value="arch prompt",
     ):
         plan, err, record, prov = apply_architect_pass(
@@ -194,7 +194,7 @@ def test_helper_pipeline_returns_provenance():
         )
     assert plan is not None
     assert prov["input_prompt"] == "arch prompt"
-    assert prov["output_text"] == "## Architect plan\nDo X"
+    assert prov["output_text"] == "## Planner plan\nDo X"
 
     builder_result = MagicMock()
     builder_result.success = False
@@ -287,11 +287,12 @@ def test_delegate_emits_compile_events_without_bloating_jsonl(tmp_path, monkeypa
     with patch("server.mcp_server.get_engine", return_value=engine), patch(
         "server.mcp_server._shared_apply_builder_llm", side_effect=_fake_builder
     ), patch(
-        "server.mcp_server._shared_apply_architect_pass", side_effect=_fake_arch
+        "server.mcp_server._shared_apply_planner_pass", side_effect=_fake_arch
     ), patch(
         "server.mcp_server.spec_validation_enabled", return_value=False
     ), patch(
-        "server.mcp_server.architect_pass_enabled", return_value=True
+        "server.mcp_server.should_run_architect_pass",
+        return_value=(True, "spec_override_true"),
     ), patch(
         "server.mcp_server.context_builder_enabled", return_value=True
     ), patch(
@@ -406,7 +407,8 @@ def test_delegate_validation_input_includes_transcript_byte_range(tmp_path, monk
     ), patch(
         "server.mcp_server.context_builder_enabled", return_value=False
     ), patch(
-        "server.mcp_server.architect_pass_enabled", return_value=False
+        "server.mcp_server.should_run_architect_pass",
+        return_value=(False, "env_disabled"),
     ):
         host_provider.return_value.resolve_active_session.return_value = hint
         raw = delegate_to_agent(

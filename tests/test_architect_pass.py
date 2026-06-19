@@ -1,4 +1,4 @@
-"""Architect pass (P4-020)."""
+"""Architect pass / planner pass compat tests (P4-020, P11-008)."""
 
 from __future__ import annotations
 
@@ -7,9 +7,12 @@ from pathlib import Path
 from unittest.mock import patch
 
 from core.config.architect_pass import architect_pass_enabled
+from core.config.planner_pass import planner_pass_enabled
 from core.context.architect_prompt import build_architect_pass_prompt
+from core.context.planner_prompt import build_planner_pass_prompt
 from core.context.file_picker import CandidateFilesResult
 from core.engine.architect_pass_llm import ArchitectPassLlmResult, run_architect_pass_llm
+from core.engine.planner_pass_llm import PlannerPassLlmResult, run_planner_pass_llm
 from core.engine.owned_helper_llm import OwnedHelperCompletion
 from core.engine.base import ExecutionResult
 from core.engine.capabilities import AIDER_CAPABILITIES
@@ -49,6 +52,36 @@ STEP_SPEC_ARCH_ON = """\
 ---
 spec_id: step-b
 architect_pass: true
+files_edit:
+  - pkg/cli.py
+files_read:
+  - pkg/core.py
+edit_scope: discover
+---
+
+# Step task spec
+
+## Goal
+
+CLI uses core.
+
+## Constraints
+
+Do not touch database layer.
+
+## Files
+
+### Edit
+- `pkg/cli.py`
+
+### Read
+- `pkg/core.py`
+"""
+
+STEP_SPEC_PLANNER_ON = """\
+---
+spec_id: step-b
+planner_pass: true
 files_edit:
   - pkg/cli.py
 files_read:
@@ -203,6 +236,47 @@ def test_architect_flag_yaml_enables(tmp_path, monkeypatch):
     assert architect_pass_enabled(tmp_path) is True
 
 
+# ── Planner pass canonical naming tests (P11-008) ─────────────────────────────
+
+
+def test_planner_flag_default_off(tmp_path, monkeypatch):
+    monkeypatch.delenv("MCP_CODER_PLANNER_PASS", raising=False)
+    monkeypatch.delenv("MCP_CODER_ARCHITECT_PASS", raising=False)
+    assert planner_pass_enabled(tmp_path) is False
+
+
+def test_planner_flag_canonical_env_on(tmp_path, monkeypatch):
+    monkeypatch.setenv("MCP_CODER_PLANNER_PASS", "1")
+    monkeypatch.delenv("MCP_CODER_ARCHITECT_PASS", raising=False)
+    assert planner_pass_enabled(tmp_path) is True
+
+
+def test_planner_flag_legacy_env_on(tmp_path, monkeypatch):
+    monkeypatch.delenv("MCP_CODER_PLANNER_PASS", raising=False)
+    monkeypatch.setenv("MCP_CODER_ARCHITECT_PASS", "1")
+    assert planner_pass_enabled(tmp_path) is True
+
+
+def test_planner_flag_canonical_yaml_enables(tmp_path, monkeypatch):
+    monkeypatch.delenv("MCP_CODER_PLANNER_PASS", raising=False)
+    monkeypatch.delenv("MCP_CODER_ARCHITECT_PASS", raising=False)
+    _write_workspace_config(tmp_path, "planner_pass: true\n")
+    assert planner_pass_enabled(tmp_path) is True
+
+
+def test_planner_flag_legacy_yaml_enables(tmp_path, monkeypatch):
+    monkeypatch.delenv("MCP_CODER_PLANNER_PASS", raising=False)
+    monkeypatch.delenv("MCP_CODER_ARCHITECT_PASS", raising=False)
+    _write_workspace_config(tmp_path, "architect_pass: true\n")
+    assert planner_pass_enabled(tmp_path) is True
+
+
+def test_planner_canonical_overrides_legacy_env(tmp_path, monkeypatch):
+    monkeypatch.setenv("MCP_CODER_PLANNER_PASS", "0")
+    monkeypatch.setenv("MCP_CODER_ARCHITECT_PASS", "1")
+    assert planner_pass_enabled(tmp_path) is False
+
+
 def test_architect_prompt_includes_spec_paths_and_transcript(tmp_path):
     ws = _setup_workspace(tmp_path)
     spec_read = read_task_spec(ws / ".mcp-coder/specs/tasks/step-b.md", workspace=ws)
@@ -248,7 +322,40 @@ def test_architect_llm_runner_strips_reasoning_preamble(tmp_path):
     assert result.plan.startswith("## Architect plan")
 
 
+def _run_planner_llm(tmp_path, response: str):
+    completion = OwnedHelperCompletion(
+        text=response,
+        model="openrouter/test/flash",
+        tokens={"input": 10, "output": 5, "total": 15, "source": "owned_completion"},
+        duration_ms=42,
+    )
+    with patch("core.engine.planner_pass_llm.provider_hint_for_model", return_value=None):
+        with patch("core.engine.planner_pass_llm.run_owned_helper_completion", return_value=completion):
+            return run_planner_pass_llm("prompt", workspace_path=tmp_path)
+
+
+def test_planner_llm_runner_success(tmp_path):
+    result = _run_planner_llm(tmp_path, "## Planner plan\n- Do A then B.")
+    assert result.success is True
+    assert result.plan.startswith("## Planner plan")
+
+
+def test_planner_llm_runner_missing_heading_fails(tmp_path):
+    result = _run_planner_llm(tmp_path, "No heading")
+    assert result.success is False
+    assert result.error is not None
+
+
+def test_planner_llm_runner_strips_reasoning_preamble(tmp_path):
+    result = _run_planner_llm(
+        tmp_path, "Thinking...\n\n## Planner plan\n- Step 1\n- Step 2"
+    )
+    assert result.success is True
+    assert result.plan.startswith("## Planner plan")
+
+
 def test_delegate_architect_on_adds_plan_above_brief(tmp_path, monkeypatch):
+    """Legacy spec key architect_pass: true still works (P11-008 backward compat)."""
     ws = _setup_workspace(tmp_path, spec_text=STEP_SPEC_ARCH_ON)
     monkeypatch.setenv("MCP_CODER_HOME", str(tmp_path / "home"))
     monkeypatch.setenv("MCP_CODER_CONTEXT_BUILDER_ENABLED", "0")
@@ -258,16 +365,16 @@ def test_delegate_architect_on_adds_plan_above_brief(tmp_path, monkeypatch):
     captured: dict[str, str] = {}
     fake = ExecutionResult(success=True, output="ok", files_changed=["pkg/cli.py"], model="m")
     engine = _make_mock_engine(fake, captured)
-    arch = ArchitectPassLlmResult(
+    arch = PlannerPassLlmResult(
         success=True,
-        plan="## Architect plan\n- Touch cli first\n- Do not change core API",
+        plan="## Planner plan\n- Touch cli first\n- Do not change core API",
         model="cheap-model",
         duration_ms=25,
-        tokens={"input": 10, "output": 5, "total": 15, "source": "architect_pass"},
+        tokens={"input": 10, "output": 5, "total": 15, "source": "planner_pass"},
     )
 
     with patch("server.mcp_server.get_engine", return_value=engine), patch(
-        "core.engine.architect_pass_llm.run_architect_pass_llm", return_value=arch
+        "core.engine.planner_pass_llm.run_planner_pass_llm", return_value=arch
     ):
         raw = delegate_to_agent(
             task="Implement CLI",
@@ -279,10 +386,47 @@ def test_delegate_architect_on_adds_plan_above_brief(tmp_path, monkeypatch):
 
     payload = json.loads(raw)
     brief = captured["brief"]
-    assert brief.startswith("## Architect plan")
+    assert brief.startswith("## Planner plan")
     assert "## Builder brief" not in brief
-    assert payload["model_roles"]["architect_pass"]["tokens"]["source"] == "architect_pass"
-    assert _phase_status(payload["delegation_pipeline"], "architect_pass") == "ok"
+    assert payload["model_roles"]["planner_pass"]["tokens"]["source"] == "planner_pass"
+    assert _phase_status(payload["delegation_pipeline"], "planner_pass") == "ok"
+
+
+def test_delegate_planner_on_adds_plan_above_brief(tmp_path, monkeypatch):
+    """Canonical spec key planner_pass: true works (P11-008)."""
+    ws = _setup_workspace(tmp_path, spec_text=STEP_SPEC_PLANNER_ON)
+    monkeypatch.setenv("MCP_CODER_HOME", str(tmp_path / "home"))
+    monkeypatch.setenv("MCP_CODER_CONTEXT_BUILDER_ENABLED", "0")
+    monkeypatch.setenv("MCP_CODER_CONTEXT_BUILDER_LLM", "0")
+    monkeypatch.chdir(ws)
+
+    captured: dict[str, str] = {}
+    fake = ExecutionResult(success=True, output="ok", files_changed=["pkg/cli.py"], model="m")
+    engine = _make_mock_engine(fake, captured)
+    arch = PlannerPassLlmResult(
+        success=True,
+        plan="## Planner plan\n- Touch cli first",
+        model="cheap-model",
+        duration_ms=25,
+        tokens={"input": 10, "output": 5, "total": 15, "source": "planner_pass"},
+    )
+
+    with patch("server.mcp_server.get_engine", return_value=engine), patch(
+        "core.engine.planner_pass_llm.run_planner_pass_llm", return_value=arch
+    ):
+        raw = delegate_to_agent(
+            task="Implement CLI",
+            target_files=["pkg/cli.py"],
+            context_summary="",
+            spec_path="tasks/step-b.md",
+            mode="implement",
+        )
+
+    payload = json.loads(raw)
+    brief = captured["brief"]
+    assert brief.startswith("## Planner plan")
+    assert payload["model_roles"]["planner_pass"]["tokens"]["source"] == "planner_pass"
+    assert _phase_status(payload["delegation_pipeline"], "planner_pass") == "ok"
 
 
 def test_delegate_architect_error_falls_back_and_pipeline_error(tmp_path, monkeypatch):
@@ -295,17 +439,17 @@ def test_delegate_architect_error_falls_back_and_pipeline_error(tmp_path, monkey
     captured: dict[str, str] = {}
     fake = ExecutionResult(success=True, output="ok", files_changed=["pkg/cli.py"], model="m")
     engine = _make_mock_engine(fake, captured)
-    arch = ArchitectPassLlmResult(
+    arch = PlannerPassLlmResult(
         success=False,
         plan="",
         model="cheap-model",
         error="timeout",
         duration_ms=10,
-        tokens={"input": None, "output": None, "total": None, "source": "architect_pass"},
+        tokens={"input": None, "output": None, "total": None, "source": "planner_pass"},
     )
 
     with patch("server.mcp_server.get_engine", return_value=engine), patch(
-        "core.engine.architect_pass_llm.run_architect_pass_llm", return_value=arch
+        "core.engine.planner_pass_llm.run_planner_pass_llm", return_value=arch
     ):
         raw = delegate_to_agent(
             task="Implement CLI",
@@ -317,8 +461,8 @@ def test_delegate_architect_error_falls_back_and_pipeline_error(tmp_path, monkey
 
     payload = json.loads(raw)
     assert payload["success"] is True
-    assert not captured["brief"].startswith("## Architect plan")
-    assert _phase_status(payload["delegation_pipeline"], "architect_pass") == "error"
+    assert not captured["brief"].startswith("## Planner plan")
+    assert _phase_status(payload["delegation_pipeline"], "planner_pass") == "error"
 
 
 def test_delegate_architect_heuristic_skips_trivial_single_file(tmp_path, monkeypatch):
@@ -346,8 +490,8 @@ def test_delegate_architect_heuristic_skips_trivial_single_file(tmp_path, monkey
 
     payload = json.loads(raw)
     phases = payload["delegation_pipeline"]
-    assert _phase_status(phases, "architect_pass") == "skipped"
-    assert _phase_detail(phases, "architect_pass") == "heuristic_trivial_task"
+    assert _phase_status(phases, "planner_pass") == "skipped"
+    assert _phase_detail(phases, "planner_pass") == "heuristic_trivial_task"
 
 
 def test_delegate_architect_spec_override_true_runs_single_file(tmp_path, monkeypatch):
@@ -359,16 +503,16 @@ def test_delegate_architect_spec_override_true_runs_single_file(tmp_path, monkey
 
     fake = ExecutionResult(success=True, output="ok", files_changed=["pkg/cli.py"], model="m")
     engine = _make_mock_engine(fake)
-    arch = ArchitectPassLlmResult(
+    arch = PlannerPassLlmResult(
         success=True,
-        plan="## Architect plan\n- Step one",
+        plan="## Planner plan\n- Step one",
         model="cheap-model",
         duration_ms=20,
     )
 
     with patch("server.mcp_server.get_engine", return_value=engine), patch(
-        "core.engine.architect_pass_llm.run_architect_pass_llm", return_value=arch
-    ) as architect_llm:
+        "core.engine.planner_pass_llm.run_planner_pass_llm", return_value=arch
+    ) as planner_llm:
         raw = delegate_to_agent(
             task="Implement CLI",
             target_files=["pkg/cli.py"],
@@ -376,10 +520,10 @@ def test_delegate_architect_spec_override_true_runs_single_file(tmp_path, monkey
             spec_path="tasks/step-b.md",
             mode="implement",
         )
-        architect_llm.assert_called_once()
+        planner_llm.assert_called_once()
 
     payload = json.loads(raw)
-    assert _phase_status(payload["delegation_pipeline"], "architect_pass") == "ok"
+    assert _phase_status(payload["delegation_pipeline"], "planner_pass") == "ok"
 
 
 def test_delegate_architect_spec_override_false_skips(tmp_path, monkeypatch):
@@ -393,8 +537,8 @@ def test_delegate_architect_spec_override_false_skips(tmp_path, monkeypatch):
     engine = _make_mock_engine(fake)
 
     with patch("server.mcp_server.get_engine", return_value=engine), patch(
-        "core.engine.architect_pass_llm.run_architect_pass_llm"
-    ) as architect_llm:
+        "core.engine.planner_pass_llm.run_planner_pass_llm"
+    ) as planner_llm:
         raw = delegate_to_agent(
             task="Refactor CLI and core",
             target_files=["pkg/cli.py", "pkg/core.py"],
@@ -402,9 +546,9 @@ def test_delegate_architect_spec_override_false_skips(tmp_path, monkeypatch):
             spec_path="tasks/step-b.md",
             mode="implement",
         )
-        architect_llm.assert_not_called()
+        planner_llm.assert_not_called()
 
     payload = json.loads(raw)
     phases = payload["delegation_pipeline"]
-    assert _phase_status(phases, "architect_pass") == "skipped"
-    assert _phase_detail(phases, "architect_pass") == "spec_override_false"
+    assert _phase_status(phases, "planner_pass") == "skipped"
+    assert _phase_detail(phases, "planner_pass") == "spec_override_false"

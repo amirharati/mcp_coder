@@ -5,7 +5,7 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Any
 
-from core.config.architect_pass import architect_pass_enabled
+from core.config.planner_pass import planner_pass_enabled
 from core.config.context_builder import context_builder_enabled, context_builder_llm_enabled
 from core.config.spec_validation import spec_validation_enabled
 from core.context.inspect import inspect_context_package
@@ -59,7 +59,7 @@ def prepare_delegation_context(
         include_prompt=True,
         host_transcript=host_transcript,
         run_spec_validation=spec_validation_enabled(ws),
-        run_architect=architect_pass_enabled(ws),
+        run_architect=planner_pass_enabled(ws),
         run_builder_llm=context_builder_enabled(ws) and context_builder_llm_enabled(ws),
         respect_workspace_flags=True,
         force_helpers=False,

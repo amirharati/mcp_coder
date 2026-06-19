@@ -14,6 +14,8 @@ ROLE_REVIEW = "review"
 ROLE_CONTEXT_BUILDER = "context_builder"
 ROLE_CRITIC = "critic"
 ROLE_SUPERVISOR = "supervisor"
+ROLE_PLANNER = "planner_pass"
+ROLE_REVIEWER = "reviewer_pass"
 
 # Documented OpenRouter dogfood default — set MCP_CODER_CONTEXT_BUILDER_MODEL in .env
 # (do not rely on a hardcoded provider id in code).

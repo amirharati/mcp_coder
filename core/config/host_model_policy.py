@@ -16,7 +16,8 @@ HOST_TO_INTERNAL_ROLE: dict[str, str] = {
 }
 
 RUNTIME_ROLE_TO_POLICY_ROLE: dict[str, str] = {
-    "architect_pass": "architect",
+    "planner_pass": "architect",   # canonical (P11-008)
+    "architect_pass": "architect",  # legacy alias
     "spec_review": "review",
     "review": "review",
     "supervisor": "supervisor",

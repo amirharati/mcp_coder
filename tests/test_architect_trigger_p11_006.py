@@ -147,3 +147,70 @@ def test_front_matter_fallback_when_no_meta():
     )
     assert run is True
     assert reason == REASON_SPEC_OVERRIDE_TRUE
+
+
+# ── planner_pass key precedence tests (P11-008) ────────────────────────────────
+
+
+def test_planner_pass_key_runs():
+    spec = _FakeSpec(meta={"planner_pass": True})
+    run, reason = should_run_architect_pass(
+        workspace="/tmp",
+        task="tiny change",
+        target_files=["a.py"],
+        spec_read=spec,
+    )
+    assert run is True
+    assert reason == REASON_SPEC_OVERRIDE_TRUE
+
+
+def test_planner_pass_key_false_skips():
+    spec = _FakeSpec(meta={"planner_pass": False})
+    run, reason = should_run_architect_pass(
+        workspace="/tmp",
+        task="refactor everything",
+        target_files=["a.py", "b.py", "c.py"],
+        spec_read=spec,
+    )
+    assert run is False
+    assert reason == REASON_SPEC_OVERRIDE_FALSE
+
+
+def test_planner_pass_key_takes_precedence_over_architect_pass_key():
+    """If both keys present, planner_pass wins."""
+    spec = _FakeSpec(meta={"planner_pass": False, "architect_pass": True})
+    run, reason = should_run_architect_pass(
+        workspace="/tmp",
+        task="refactor",
+        target_files=["a.py", "b.py"],
+        spec_read=spec,
+    )
+    assert run is False
+    assert reason == REASON_SPEC_OVERRIDE_FALSE
+
+
+def test_canonical_planner_env_disables(monkeypatch):
+    monkeypatch.setenv("MCP_CODER_PLANNER_PASS", "0")
+    monkeypatch.delenv("MCP_CODER_ARCHITECT_PASS", raising=False)
+    run, reason = should_run_architect_pass(
+        workspace="/tmp",
+        task="refactor core",
+        target_files=["a.py", "b.py"],
+        spec_read=None,
+    )
+    assert run is False
+    assert reason == REASON_ENV_DISABLED
+
+
+def test_canonical_env_overrides_legacy_env(monkeypatch):
+    """Canonical planner env disabled takes precedence over legacy enabled."""
+    monkeypatch.setenv("MCP_CODER_PLANNER_PASS", "false")
+    monkeypatch.setenv("MCP_CODER_ARCHITECT_PASS", "1")
+    run, reason = should_run_architect_pass(
+        workspace="/tmp",
+        task="refactor",
+        target_files=["a.py", "b.py"],
+        spec_read=None,
+    )
+    assert run is False
+    assert reason == REASON_ENV_DISABLED

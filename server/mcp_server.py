@@ -80,7 +80,7 @@ from core.context.budget import apply_context_budget, resolve_context_budget_tok
 from core.context.capability_adjust import apply_backend_capabilities
 from core.context.helper_llm_pipeline import (
     SPEC_VALIDATION_BLOCK_OUTPUT,
-    apply_architect_pass as _shared_apply_architect_pass,
+    apply_planner_pass as _shared_apply_planner_pass,
     apply_builder_llm as _shared_apply_builder_llm,
     apply_clarity_check as _shared_apply_clarity_check,
     apply_reviewer_pass as _shared_apply_reviewer_pass,
@@ -742,7 +742,7 @@ def _apply_architect_pass(
     timing: dict[str, int | float],
     delegation_id: str,
 ) -> tuple[str | None, str | None, dict[str, Any] | None, dict[str, Any]]:
-    return _shared_apply_architect_pass(
+    return _shared_apply_planner_pass(
         context_package=context_package,
         spec_read=spec_read,
         picker_result=picker_result,
@@ -1758,7 +1758,7 @@ def delegate_to_agent(
                     )
                     if architect_enabled:
                         if pipeline_recorder is not None:
-                            pipeline_recorder.start("architect_pass")
+                            pipeline_recorder.start("planner_pass")
                         (
                             architect_plan,
                             architect_pass_error,
@@ -1789,16 +1789,16 @@ def delegate_to_agent(
                         if pipeline_recorder is not None:
                             if architect_pass_error:
                                 pipeline_recorder.end(
-                                    "architect_pass",
+                                    "planner_pass",
                                     status="error",
                                     detail=architect_pass_error[:200],
                                 )
                             else:
-                                pipeline_recorder.end("architect_pass", status="ok")
+                                pipeline_recorder.end("planner_pass", status="ok")
                     else:
                         if pipeline_recorder is not None:
                             pipeline_recorder.mark(
-                                "architect_pass",
+                                "planner_pass",
                                 status="skipped",
                                 detail=architect_reason,
                             )
@@ -1972,7 +1972,7 @@ def delegate_to_agent(
                             detail="context_package_disabled",
                         )
                         pipeline_recorder.mark(
-                            "architect_pass",
+                            "planner_pass",
                             status="skipped",
                             detail="context_package_disabled",
                         )
@@ -2176,10 +2176,10 @@ def delegate_to_agent(
                 )
                 context_block["repo_map_count"] = pkg_meta.get("repo_map_count", 0)
                 context_block["context_builder_llm_enabled"] = builder_llm_enabled
-                context_block["architect_pass_enabled"] = architect_enabled
-                context_block["architect_plan_applied"] = architect_plan_applied
+                context_block["planner_pass_enabled"] = architect_enabled
+                context_block["planner_plan_applied"] = architect_plan_applied
                 if architect_pass_error:
-                    context_block["architect_pass_error"] = architect_pass_error
+                    context_block["planner_pass_error"] = architect_pass_error
                 if builder_llm_enabled:
                     context_block["builder_brief_applied"] = builder_brief_applied
                     if builder_llm_error:

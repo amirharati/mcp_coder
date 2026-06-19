@@ -27,7 +27,8 @@ _CONFIG_FINGERPRINT_KEYS = (
     "observability_retention",
     "context_builder",
     "context_builder_llm",
-    "architect_pass",
+    "planner_pass",
+    "architect_pass",  # legacy alias — kept for fingerprint stability
     "spec_validation",
     "auto_verify",
     "rag_enabled",
@@ -96,7 +97,7 @@ def build_config_fingerprint(workspace: str | Path) -> str:
 
 def build_pipeline_flags(workspace: str | Path) -> dict[str, bool]:
     """Resolved pipeline feature flags from workspace config."""
-    from core.config.architect_pass import architect_pass_enabled
+    from core.config.planner_pass import planner_pass_enabled
     from core.config.auto_verify import auto_verify_enabled
     from core.config.context_builder import (
         context_builder_enabled,
@@ -105,10 +106,12 @@ def build_pipeline_flags(workspace: str | Path) -> dict[str, bool]:
     from core.config.spec_validation import spec_validation_enabled
     from core.rag.search import rag_enabled
 
+    planner_on = planner_pass_enabled(workspace)
     flags: dict[str, bool] = {
         "context_builder": context_builder_enabled(workspace),
         "context_builder_llm": context_builder_llm_enabled(workspace),
-        "architect_pass": architect_pass_enabled(workspace),
+        "planner_pass": planner_on,
+        "architect_pass": planner_on,  # deprecated alias for old log consumers
         "spec_validation": spec_validation_enabled(workspace),
         "auto_verify": auto_verify_enabled(workspace),
         "rag_enabled": rag_enabled(workspace),

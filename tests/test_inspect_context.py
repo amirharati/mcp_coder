@@ -11,6 +11,7 @@ from unittest.mock import MagicMock, patch
 from core.cli.inspect_context import main_inspect_context
 from core.context.inspect import inspect_context_package
 from core.engine.architect_pass_llm import ArchitectPassLlmResult
+from core.engine.planner_pass_llm import PlannerPassLlmResult
 from core.engine.context_builder_llm import BuilderLlmResult
 from core.engine.spec_validation_llm import SpecValidationLlmResult
 from server.mcp_server import inspect_context
@@ -344,13 +345,13 @@ def test_env_run_builder_llm_backward_compat(tmp_path, monkeypatch):
 
 def test_run_architect_merges_plan_above_brief(tmp_path):
     ws = _setup_workspace(tmp_path)
-    _write_workspace_config(ws, "architect_pass: true\n")
-    arch = ArchitectPassLlmResult(
+    _write_workspace_config(ws, "planner_pass: true\n")
+    arch = PlannerPassLlmResult(
         success=True,
-        plan="## Architect plan\n- Step one\n- Step two",
+        plan="## Planner plan\n- Step one\n- Step two",
         model="cheap-model",
     )
-    with patch("core.engine.architect_pass_llm.run_architect_pass_llm", return_value=arch):
+    with patch("core.engine.planner_pass_llm.run_planner_pass_llm", return_value=arch):
         result = inspect_context_package(
             workspace=ws,
             task="Add comment",
@@ -359,16 +360,17 @@ def test_run_architect_merges_plan_above_brief(tmp_path):
             run_architect=True,
         )
     brief = result["context_package"]["brief"]
-    assert brief.startswith("## Architect plan")
-    assert result["helper_phases"]["architect_pass"]["applied"] is True
+    assert brief.startswith("## Planner plan")
+    assert result["helper_phases"]["planner_pass"]["applied"] is True
+    assert result["helper_phases"]["architect_pass"]["applied"] is True  # legacy alias
 
 
 def test_architect_above_builder_order(tmp_path):
     ws = _setup_workspace(tmp_path)
-    _write_workspace_config(ws, "architect_pass: true\n")
-    arch = ArchitectPassLlmResult(
+    _write_workspace_config(ws, "planner_pass: true\n")
+    arch = PlannerPassLlmResult(
         success=True,
-        plan="## Architect plan\n- Plan first",
+        plan="## Planner plan\n- Plan first",
         model="cheap-model",
     )
     builder = BuilderLlmResult(
@@ -376,7 +378,7 @@ def test_architect_above_builder_order(tmp_path):
         brief="Builder narrative.",
         model="cheap-model",
     )
-    with patch("core.engine.architect_pass_llm.run_architect_pass_llm", return_value=arch), patch(
+    with patch("core.engine.planner_pass_llm.run_planner_pass_llm", return_value=arch), patch(
         "core.engine.context_builder_llm.run_context_builder_llm", return_value=builder
     ):
         result = inspect_context_package(
@@ -388,8 +390,8 @@ def test_architect_above_builder_order(tmp_path):
             run_builder_llm=True,
         )
     brief = result["context_package"]["brief"]
-    assert brief.startswith("## Architect plan")
-    arch_pos = brief.index("## Architect plan")
+    assert brief.startswith("## Planner plan")
+    arch_pos = brief.index("## Planner plan")
     builder_pos = brief.index("## Builder brief")
     assert arch_pos < builder_pos
 
@@ -425,13 +427,13 @@ def test_spec_validation_would_block_but_inspect_ok(tmp_path):
 
 def test_force_helpers_runs_architect_when_disabled(tmp_path):
     ws = _setup_workspace(tmp_path)
-    _write_workspace_config(ws, "architect_pass: false\n")
-    arch = ArchitectPassLlmResult(
+    _write_workspace_config(ws, "planner_pass: false\n")
+    arch = PlannerPassLlmResult(
         success=True,
-        plan="## Architect plan\n- Forced run",
+        plan="## Planner plan\n- Forced run",
         model="cheap-model",
     )
-    with patch("core.engine.architect_pass_llm.run_architect_pass_llm", return_value=arch):
+    with patch("core.engine.planner_pass_llm.run_planner_pass_llm", return_value=arch):
         result = inspect_context_package(
             workspace=ws,
             task="t",
@@ -440,7 +442,8 @@ def test_force_helpers_runs_architect_when_disabled(tmp_path):
             run_architect=True,
             force_helpers=True,
         )
-    assert result["helper_phases"]["architect_pass"]["applied"] is True
+    assert result["helper_phases"]["planner_pass"]["applied"] is True
+    assert result["helper_phases"]["architect_pass"]["applied"] is True  # legacy alias
 
 
 def test_cli_fail_on_validation_block_exit_two(tmp_path, monkeypatch, capsys):

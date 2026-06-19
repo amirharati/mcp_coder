@@ -32,7 +32,8 @@ from core.config.role_models import (
 # Logging/attribution roles. The first four are also model-resolution roles known
 # to role_models.py; the rest are helper labels that resolve their model via an
 # underlying role (see _ROLE_MODEL_ALIAS).
-ROLE_ARCHITECT = "architect"
+ROLE_PLANNER_PASS = "planner_pass"
+ROLE_ARCHITECT = "architect"  # legacy label kept for backward compat
 ROLE_SPEC_VALIDATION = "spec_validation"
 ROLE_SPEC_REVIEW = "spec_review"
 ROLE_WORKSPACE_SUMMARIZER = "workspace_summarizer"
@@ -42,6 +43,7 @@ ROLES: tuple[str, ...] = (
     ROLE_CONTEXT_BUILDER,
     ROLE_REVIEW,
     ROLE_CRITIC,
+    ROLE_PLANNER_PASS,
     ROLE_ARCHITECT,
     ROLE_SPEC_VALIDATION,
     ROLE_SPEC_REVIEW,
@@ -52,7 +54,8 @@ ROLES: tuple[str, ...] = (
 # behaviour: the cheap helpers all run on the context_builder model; spec review on
 # the review model.
 _ROLE_MODEL_ALIAS: dict[str, str] = {
-    ROLE_ARCHITECT: ROLE_CONTEXT_BUILDER,
+    ROLE_PLANNER_PASS: ROLE_CONTEXT_BUILDER,
+    ROLE_ARCHITECT: ROLE_CONTEXT_BUILDER,  # legacy alias
     ROLE_SPEC_VALIDATION: ROLE_CONTEXT_BUILDER,
     ROLE_WORKSPACE_SUMMARIZER: ROLE_CONTEXT_BUILDER,
     ROLE_SPEC_REVIEW: ROLE_REVIEW,

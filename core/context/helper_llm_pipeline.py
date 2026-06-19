@@ -160,6 +160,72 @@ def apply_builder_llm(
     return context_package, False, llm_result.error, builder_record, provenance
 
 
+def apply_planner_pass(
+    *,
+    context_package: ContextPackage,
+    spec_read: Any,
+    picker_result: CandidateFilesResult | None,
+    workspace: str,
+    task: str,
+    context_summary: str,
+    host_transcript: str | None,
+    timing: dict[str, int | float] | None = None,
+    delegation_id: str | None = None,
+    log_warn: LogWarnFn | None = None,
+) -> tuple[str | None, str | None, dict[str, Any] | None, dict[str, Any]]:
+    """Run planner pass and return (planner_plan, error, model_record, provenance)."""
+    from core.context.planner_prompt import build_planner_pass_prompt
+    from core.engine.planner_pass_llm import run_planner_pass_llm
+
+    t_plan = time.perf_counter()
+    prompt = build_planner_pass_prompt(
+        spec_read=spec_read,
+        mechanical_brief=context_package.brief,
+        picker_result=picker_result,
+        host_transcript=host_transcript,
+        task=task,
+        context_summary=context_summary,
+    )
+    with role_context("planner_pass"):
+        llm_result = run_planner_pass_llm(prompt, workspace_path=workspace)
+    if timing is not None:
+        timing["planner_pass_ms"] = int((time.perf_counter() - t_plan) * 1000)
+
+    planner_record = build_role_usage_record(
+        role="planner_pass",
+        model=llm_result.model,
+        input_tokens=llm_result.tokens.get("input"),
+        output_tokens=llm_result.tokens.get("output"),
+        total_tokens=llm_result.tokens.get("total"),
+        duration_ms=llm_result.duration_ms,
+        source=str(llm_result.tokens.get("source") or "planner_pass"),
+    )
+
+    if llm_result.success:
+        provenance = _helper_provenance(
+            input_prompt=prompt,
+            output_text=llm_result.plan,
+            raw_output=llm_result.raw_output,
+        )
+        return llm_result.plan, None, planner_record, provenance
+
+    if log_warn is not None:
+        log_warn(
+            "planner_pass_failed",
+            {
+                "delegation_id": delegation_id,
+                "model": llm_result.model,
+                "error": llm_result.error,
+            },
+        )
+    provenance = _helper_provenance(
+        input_prompt=prompt,
+        error_text=llm_result.error,
+        raw_output=llm_result.raw_output,
+    )
+    return None, llm_result.error, planner_record, provenance
+
+
 def apply_architect_pass(
     *,
     context_package: ContextPackage,
@@ -173,57 +239,19 @@ def apply_architect_pass(
     delegation_id: str | None = None,
     log_warn: LogWarnFn | None = None,
 ) -> tuple[str | None, str | None, dict[str, Any] | None, dict[str, Any]]:
-    """Run architect pass and return (architect_plan, error, model_record, provenance)."""
-    from core.context.architect_prompt import build_architect_pass_prompt
-    from core.engine.architect_pass_llm import run_architect_pass_llm
-
-    t_arch = time.perf_counter()
-    prompt = build_architect_pass_prompt(
+    """Backward-compat shim — delegates to apply_planner_pass (P11-008)."""
+    return apply_planner_pass(
+        context_package=context_package,
         spec_read=spec_read,
-        mechanical_brief=context_package.brief,
         picker_result=picker_result,
-        host_transcript=host_transcript,
+        workspace=workspace,
         task=task,
         context_summary=context_summary,
+        host_transcript=host_transcript,
+        timing=timing,
+        delegation_id=delegation_id,
+        log_warn=log_warn,
     )
-    with role_context("architect_pass"):
-        llm_result = run_architect_pass_llm(prompt, workspace_path=workspace)
-    if timing is not None:
-        timing["architect_pass_ms"] = int((time.perf_counter() - t_arch) * 1000)
-
-    architect_record = build_role_usage_record(
-        role="architect_pass",
-        model=llm_result.model,
-        input_tokens=llm_result.tokens.get("input"),
-        output_tokens=llm_result.tokens.get("output"),
-        total_tokens=llm_result.tokens.get("total"),
-        duration_ms=llm_result.duration_ms,
-        source=str(llm_result.tokens.get("source") or "architect_pass"),
-    )
-
-    if llm_result.success:
-        provenance = _helper_provenance(
-            input_prompt=prompt,
-            output_text=llm_result.plan,
-            raw_output=llm_result.raw_output,
-        )
-        return llm_result.plan, None, architect_record, provenance
-
-    if log_warn is not None:
-        log_warn(
-            "architect_pass_failed",
-            {
-                "delegation_id": delegation_id,
-                "model": llm_result.model,
-                "error": llm_result.error,
-            },
-        )
-    provenance = _helper_provenance(
-        input_prompt=prompt,
-        error_text=llm_result.error,
-        raw_output=llm_result.raw_output,
-    )
-    return None, llm_result.error, architect_record, provenance
 
 
 def apply_spec_validation(

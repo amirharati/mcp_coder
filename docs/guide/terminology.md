@@ -97,7 +97,7 @@ Precedence everywhere: **default → env → `.mcp-coder/config.yaml`** (yaml wi
 | `context_builder` | on | file picker + repo map |
 | `context_builder_llm` | on | builder LLM narrative brief |
 | `spec_validation` | off | pre-delegate coherence check (can block) |
-| `architect_pass` | off | architect plan in brief |
+| `planner_pass` | off | planner plan in brief (was: `architect_pass`, deprecated) |
 | `auto_verify` | off | post-delegate verify command |
 | `auto_merge_spec_read` | on | append spec Read paths to executor file list (list union — not git merge) |
 | `host_transcript` | off | dump host transcript tail for helper LLMs |

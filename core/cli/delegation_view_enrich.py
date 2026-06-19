@@ -221,12 +221,19 @@ _COMPILE_STAGE_MAP: dict[str, tuple[str, str, str] | None] = {
 # compile_event name → llm_call role that goes with it
 _COMPILE_NAME_TO_ROLE: dict[str, str] = {
     "mcp.spec_validation": "spec_validation",
-    "mcp.architect":       "architect_pass",
+    "mcp.architect":       "planner_pass",
     "mcp.context_builder": "context_builder",
 }
 
 # llm_call roles that are folded into other events — never shown as own rows
-_FOLD_LLM_ROLES = frozenset({"spec_validation", "architect_pass", "context_builder", "executor"})
+# Keep "architect_pass" so old traces still fold correctly (P11-008 backward compat).
+_FOLD_LLM_ROLES = frozenset({
+    "spec_validation",
+    "planner_pass",
+    "architect_pass",  # legacy — old traces
+    "context_builder",
+    "executor",
+})
 
 _INDEX_ROLE = "workspace_summarizer"
 
