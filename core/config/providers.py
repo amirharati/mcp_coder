@@ -1,5 +1,12 @@
 from __future__ import annotations
 
+"""
+Provider helpers and constants for supported LLM providers.
+
+This module provides configuration utilities for various LLM API providers,
+including environment variable resolution and provider-specific settings.
+"""
+
 import os
 
 # LiteLLM / Aider read OPENROUTER_API_BASE (see https://docs.litellm.ai/docs/providers/openrouter)

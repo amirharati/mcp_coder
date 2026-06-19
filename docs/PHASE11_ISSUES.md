@@ -44,3 +44,4 @@
 | ID | Status | Severity | Summary | Milestone | Notes |
 |----|--------|----------|---------|-----------|-------|
 | P11-ISS-001 | open | medium | Pre-dogfood log integrity review required after P11-008 (validate full phase/mechanical/helper trace coverage) | P11-008 / phase-exit | Gate: do not start full live small-project dogfood until this check passes |
+| P11-ISS-002 | open | low | `trace inspect <id>` fails for specless CLI runs — trace file exists but not indexed in workspace_history.db; users can only inspect traces via raw JSONL in that case | CLI UX gap | Fix: either skip workspace_history lookup and fall back to trace file scan, or document the limitation |
