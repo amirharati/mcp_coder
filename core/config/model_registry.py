@@ -313,6 +313,17 @@ def policy_applied(cp: CallParams, role: str) -> dict:
             out[field_name] = value
     if cp.extra_params:
         out["extra_params"] = cp.extra_params
+    if role == ROLE_EXECUTOR:
+        ignored: list[str] = []
+        for name in ("temperature", "top_p", "max_tokens"):
+            if getattr(cp, name) is not None:
+                ignored.append(name)
+        if ignored:
+            out["ignored"] = ignored
+            out["note"] = (
+                "Executor backend ignores these fields; use "
+                "MCP_CODER_EXECUTOR_EXTRA_PARAMS for provider-native knobs."
+            )
     if cp.sources:
         out["sources"] = dict(cp.sources)
     return out

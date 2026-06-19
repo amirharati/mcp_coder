@@ -202,3 +202,27 @@ def test_main_dispatch_trace_inspect(monkeypatch):
         except SystemExit as exc:
             assert exc.code == 0
     inspect_mock.assert_called_once_with(["trace", "inspect", "deleg-1", "--format", "json"])
+
+
+def test_inspect_summary_human(tmp_path, monkeypatch, capsys):
+    workspace, delegation_id = _seed_workspace(tmp_path, monkeypatch)
+    rc = main_trace_inspect([delegation_id, "--workspace", str(workspace), "--summary"])
+    assert rc == 0
+    out = capsys.readouterr().out
+    assert "Trace summary" in out
+    assert "event_counts_by_type" in out
+    assert "policy_applied_coverage" in out
+    assert "proxy_alignment" in out
+
+
+def test_inspect_summary_json(tmp_path, monkeypatch, capsys):
+    workspace, delegation_id = _seed_workspace(tmp_path, monkeypatch)
+    rc = main_trace_inspect(
+        [delegation_id, "--workspace", str(workspace), "--summary", "--format", "json"]
+    )
+    assert rc == 0
+    payload = json.loads(capsys.readouterr().out)
+    assert "event_counts_by_type" in payload
+    assert "token_totals" in payload
+    assert "policy_applied_coverage" in payload
+    assert "proxy_alignment" in payload

@@ -10,7 +10,7 @@
 
 This document is the **delivery plan**: what to build, in what order, and how we validate each step. Vision and rationale live in [IDEA.md](./IDEA.md) · doc map: [VISION_DOCS.md](./VISION_DOCS.md). Implementation happens in focused coding sessions once a phase (or sub-step) is agreed.
 
-**Status:** Phase 1 **complete** (P1-199). Phase 2 **complete** (P2-499). Phase 3 **complete** (P3-499). Phase 4 **complete** (2026-06-09). Phase 5 **complete** (2026-06-13). Phase 6 **complete** (2026-06-13). Phase 7 **complete** (2026-06-13; optional capstone met). Phase 8 **complete** (2026-06-14; P8-001..P8-006 delivered). Phase 9 **complete** (2026-06-17; P9-001..P9-013 shipped, P9-015 superseded). **Phase 10 active** (opened 2026-06-18) — executor option wiring + MCP visibility + stall supervision + backlog clearance. See [PHASE10_MVP.md](./PHASE10_MVP.md).
+**Status:** Phase 1 **complete** (P1-199). Phase 2 **complete** (P2-499). Phase 3 **complete** (P3-499). Phase 4 **complete** (2026-06-09). Phase 5 **complete** (2026-06-13). Phase 6 **complete** (2026-06-13). Phase 7 **complete** (2026-06-13; optional capstone met). Phase 8 **complete** (2026-06-14; P8-001..P8-006 delivered). Phase 9 **complete** (2026-06-17; P9-001..P9-013 shipped, P9-015 superseded). **Phase 10 complete** (closed 2026-06-18; P10-001..P10-004 shipped). See [PHASE10_MVP.md](./PHASE10_MVP.md).
 
 ---
 
@@ -53,7 +53,7 @@ This document is the **delivery plan**: what to build, in what order, and how we
 | **7** *(complete)* | **Executor loop ownership + unified LLM boundary** — own every executor turn (BL-350); `LlmGateway` proxy for all LLM calls (BL-368); compile provenance bundle; per-turn trace events | Closed 2026-06-13 — see `PHASE7_MVP.md` |
 | **8** *(complete)* | **Backend interception: full Aider visibility** — `ObservableModel` captures Aider inner-loop calls; backend interception contract; CLI bootstrap hardening; transcript byte-range provenance; streaming dedup hardening | [PHASE8_MVP.md](./PHASE8_MVP.md) **complete** 2026-06-14 |
 | **9** *(complete)* | **Write-always + universal proxy + replay** — `LocalLlmProxy` between litellm and provider captures raw HTTP before normalization; write-always storage; context package blobs; `mcp-coder replay <id>`; storage GC first slice | [PHASE9_MVP.md](./PHASE9_MVP.md) **complete** 2026-06-17 |
-| **10** *(active)* | **Trustable real-project dogfood** — executor behavior shaping (`system_prompt_prefix` / `edit_format`); MCP `ctx.info` progress notifications + `logs tail`; stall detection → `needs_input`; Phase 9 backlog clearance | [PHASE10_MVP.md](./PHASE10_MVP.md) **active** |
+| **10** *(complete)* | **Trustable real-project dogfood** — executor behavior shaping (`system_prompt_prefix` / `edit_format`); MCP `ctx.info` progress notifications + `logs tail`; stall detection → `needs_input`; Phase 9 backlog clearance | [PHASE10_MVP.md](./PHASE10_MVP.md) **complete** 2026-06-18 |
 | **10+** | Full outer-loop supervision, host-set model policy (BL-512), AI-suggested params (BL-513), dynamic escalation (BL-514), out-of-process backend proxy, multi-model ensemble | BL-350, BL-351, BL-512–515, BL-321, BL-160, BL-007 |
 
 **Principle (Phase 3+ attribution):** MCP reports `files_changed` from **delegation-scoped workspace manifest delta** — git-agnostic, backend-agnostic. User git is complementary; optional `git_tracked` metadata later (trivial).
@@ -888,9 +888,9 @@ Phase 11+ — multi-backend + full outer-loop control
 
 ---
 
-## Phase 10: Trustable real-project dogfood *(active)*
+## Phase 10: Trustable real-project dogfood *(complete)*
 
-**Status:** Active — opened 2026-06-18; milestones P10-001..P10-004 scoped; worker specs pending.
+**Status:** Complete — closed 2026-06-18; P10-001..P10-004 shipped.
 **PM doc:** [PHASE10_MVP.md](./PHASE10_MVP.md) · **Issues:** [PHASE10_ISSUES.md](./PHASE10_ISSUES.md) · **Bootstrap:** [notes/phase10-master-session-bootstrap.md](./notes/phase10-master-session-bootstrap.md)
 
 ### One-line goal
@@ -945,4 +945,5 @@ Shape Aider's behavior before problems occur, see what is happening while it run
 - [x] Phase 6 — observability substrate + reasoning buffer (P6-001…P6-008); recommended exit + post-dogfood fixes met 2026-06-13; [PHASE6_MVP.md](./PHASE6_MVP.md).
 - [x] **Phase 8 complete** — backend interception (P8-001..P8-006); `ObservableModel` + `InterceptionProfile` + bootstrap + byte-range provenance + streaming dedup; see `PHASE8_MVP.md` (closed 2026-06-14).
 - [x] **Phase 9 complete** — write-always storage + `LocalLlmProxy` + context blobs + replay CLI + GC + v2 boundary viewer (P9-001..P9-013); closed 2026-06-17; see [PHASE9_MVP.md](./PHASE9_MVP.md).
-- [ ] **Phase 10 active** — ✅ P10-001 done (executor option wiring), ✅ P10-002 done (MCP visibility + `logs tail`), ✅ P10-003 done (stall detection → structured `needs_input` with e2e host dogfood validation); next: P10-004 backlog clearance BL-516/517/518/519; see [PHASE10_MVP.md](./PHASE10_MVP.md).
+- [x] **Phase 10 complete** — P10-001..P10-004 shipped (executor options, visibility, structured `needs_input`, and deferred Phase 9 polish). See [PHASE10_MVP.md](./PHASE10_MVP.md).
+- [ ] **Next planning** — Phase 11+ focus selection (full supervision continuation, model policy Stages 2–4, or out-of-process backend proxy extension).

@@ -18,6 +18,7 @@ from core.observability.gateway import (
     set_llm_gateway,
 )
 from core.observability.local import LocalObservability
+from core.proxy.local_proxy import get_local_llm_proxy
 
 
 @pytest.fixture(autouse=True)
@@ -93,3 +94,17 @@ def test_bootstrap_starts_proxy_once_and_sets_api_base(monkeypatch):
     ensure_observability_bootstrap()
     second_base = __import__("os").environ.get("OPENROUTER_API_BASE")
     assert second_base == first_base
+
+
+def test_bootstrap_proxy_disabled_does_not_start_proxy(monkeypatch):
+    monkeypatch.setenv("MCP_CODER_PROXY_ENABLED", "0")
+    monkeypatch.setenv("OPENROUTER_API_BASE", "https://openrouter.ai/api/v1")
+    monkeypatch.setenv("OPENAI_API_BASE", "https://api.openai.com/v1")
+    monkeypatch.setenv("ANTHROPIC_API_BASE", "https://api.anthropic.com/v1")
+
+    ensure_observability_bootstrap()
+
+    assert get_local_llm_proxy() is None
+    assert __import__("os").environ.get("OPENROUTER_API_BASE") == "https://openrouter.ai/api/v1"
+    assert __import__("os").environ.get("OPENAI_API_BASE") == "https://api.openai.com/v1"
+    assert __import__("os").environ.get("ANTHROPIC_API_BASE") == "https://api.anthropic.com/v1"

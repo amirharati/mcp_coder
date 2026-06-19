@@ -32,8 +32,8 @@ Use this page so **main vision** ([IDEA.md](./IDEA.md)) is not lost when editing
 | **2 — P8 gaps** | [PHASE8_ISSUES.md](./PHASE8_ISSUES.md) | Issues from Phase 8 implementation | **Frozen** |
 | **2 — Phase 9 PM** | [PHASE9_MVP.md](./PHASE9_MVP.md) | Write-always + universal proxy + replay | **Frozen** — closed 2026-06-17 |
 | **2 — P9 gaps** | [PHASE9_ISSUES.md](./PHASE9_ISSUES.md) | Issues from Phase 9 implementation | **Frozen**; deferred → BL-516..BL-519 (now Phase 10) |
-| **2 — Phase 10 PM** | [PHASE10_MVP.md](./PHASE10_MVP.md) | Trustable real-project dogfood — executor options, visibility, stall supervision | **Active** — opened 2026-06-18 |
-| **2 — P10 gaps** | [PHASE10_ISSUES.md](./PHASE10_ISSUES.md) | Promoted backlog items + implementation issues | **Active**; BL-334/106/520/351/516/517/518/519 → P10-001..P10-004 |
+| **2 — Phase 10 PM** | [PHASE10_MVP.md](./PHASE10_MVP.md) | Trustable real-project dogfood — executor options, visibility, stall supervision | **Frozen** — closed 2026-06-18 |
+| **2 — P10 gaps** | [PHASE10_ISSUES.md](./PHASE10_ISSUES.md) | Promoted backlog items + implementation issues | **Frozen**; BL-334/106/520/351/516/517/518/519 shipped as P10-001..P10-004 (with BL-516/518 partial residuals in backlog) |
 | **2 — Deferred** | [BACKLOG.md](./BACKLOG.md) | BL-* items, priorities, post–P1/P2 focus | Add/defer with user; do not delete rows silently |
 | **2 — P1 gaps** | [PHASE1_ISSUES.md](./PHASE1_ISSUES.md) | Issues from P1 — **frozen / historical at P1-199** | Read-only; new gaps → BACKLOG |
 | **2 — P2 gaps** | [PHASE2_ISSUES.md](./PHASE2_ISSUES.md) | Issues from Phase 2 — **frozen at P2-499** | Read-only; carried → PHASE3_ISSUES |
@@ -89,7 +89,7 @@ Use this page so **main vision** ([IDEA.md](./IDEA.md)) is not lost when editing
 - **Phase 7 (closed 2026-06-13):** Executor loop ownership (**BL-350** partial) — per-turn LLM I/O, bounded outer loop, compile provenance; unified **LlmGateway** (**BL-368**). See [PHASE7_MVP.md](./PHASE7_MVP.md) (frozen).
 - **Phase 8 (closed 2026-06-14):** Backend interception — `ObservableModel`, `InterceptionProfile`, streaming dedup. See [PHASE8_MVP.md](./PHASE8_MVP.md) (frozen).
 - **Phase 9 (closed 2026-06-17):** Write-always + `LocalLlmProxy` + context blobs + replay/compare/inspect + model registry Stage 1. See [PHASE9_MVP.md](./PHASE9_MVP.md) (frozen).
-- **Phase 10 (active 2026-06-18):** Trustable real-project dogfood — executor option wiring (BL-334), MCP visibility + `logs tail` (BL-106/520), stall → `needs_input` (BL-351 v0), backlog clearance (BL-516/517/518/519). See [PHASE10_MVP.md](./PHASE10_MVP.md) · [PHASE10_ISSUES.md](./PHASE10_ISSUES.md).
+- **Phase 10 (closed 2026-06-18):** Trustable real-project dogfood shipped — executor option wiring (BL-334), MCP visibility + `logs tail` (BL-106/520 POF), stall → `needs_input` (BL-351 v0), backlog clearance (BL-517/519 full; BL-516/518 partial). See [PHASE10_MVP.md](./PHASE10_MVP.md) · [PHASE10_ISSUES.md](./PHASE10_ISSUES.md).
 - **Phase 11+:** Full outer-loop supervision (BL-350/351), host-set model policy (BL-512), AI-suggested params (BL-513), dynamic escalation (BL-514), out-of-process backend proxy, multi-host, ensemble (BL-007).
 - **Executor:** Aider-first; OpenCode/other hosts very low priority.
 
@@ -97,6 +97,7 @@ Use this page so **main vision** ([IDEA.md](./IDEA.md)) is not lost when editing
 
 | Date | Change |
 |------|--------|
+| 2026-06-18 | **Phase 10 closed** — P10-001..P10-004 shipped; P10 docs frozen; residual partial scope tracked in BACKLOG (BL-516/518). |
 | 2026-06-18 | **Phase 10 opened** — PHASE10_MVP + PHASE10_ISSUES + phase10-master-session-bootstrap; BL-334/106/520/351/516/517/518/519 promoted to P10-001..P10-004; PHASES.md updated |
 | 2026-06-13 | **Phase 6 closed** — PHASE6_MVP + PHASE6_ISSUES frozen; BL-368, BL-367; Phase 7 direction (BL-350 + BL-368 → BL-367) |
 | 2026-06-13 | **Phase 7 + Phase 8 scoped** — full 100% capture prerequisites mapped; Phase 7 = proxy + loop ownership; Phase 8 = write-always + blobs + replay; scope in PHASES.md § Phase 7 / § Phase 8 |

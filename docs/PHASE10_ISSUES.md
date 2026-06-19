@@ -133,7 +133,7 @@ See [PHASE10_MVP.md](./PHASE10_MVP.md) § P10-003.
 **Type:** Backlog promotion → active milestone (batch)
 **Milestone:** P10-004
 **Severity:** low–medium — logging correctness + operator DX
-**Status:** `promoted` — pending worker spec
+**Status:** `done` — implemented 2026-06-18 (worker session)
 **Opened:** 2026-06-18 (planning session)
 **Backlog:** [BL-516](./BACKLOG.md#bl-516-cli-log-health-table--trace-inspect-summary) · [BL-517](./BACKLOG.md#bl-517-executor-policy_applied-ignored-params) · [BL-518](./BACKLOG.md#bl-518-runtime-log-level--verbosity-dx) · [BL-519](./BACKLOG.md#bl-519-mcp_coder_proxy_enabled-env-toggle)
 
@@ -151,6 +151,14 @@ Four items deferred at Phase 9 close (P9-014 → BL-516; P9-ISS-007 → BL-517; 
 ### Exit criteria
 
 See [PHASE10_MVP.md](./PHASE10_MVP.md) § P10-004.
+
+### Result summary
+
+- BL-517 shipped: executor-only `policy_applied.ignored` + `note` (non-executor compatibility preserved).
+- BL-519 shipped: `MCP_CODER_PROXY_ENABLED` gate in bootstrap (default on; disabled mode skips proxy override + logs warning).
+- BL-516 partial shipped: `trace inspect --summary` (human/json) with event counts, token totals, policy coverage %, and best-effort proxy alignment.
+- BL-518 partial shipped: `.env.example` parity updates + new `docs/guide/env-vars.md` linked from guide README.
+- Validation: focused `35 passed`; full suite `1009 passed, 1 skipped`.
 
 ---
 

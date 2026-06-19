@@ -48,6 +48,7 @@ T-04 = how context is compiled (tiers, picker, builder). T-06 = every step on a 
 |----------|-------|
 | [reference/mcp-tools.md](./reference/mcp-tools.md) | MCP tools — parameters, response fields, Cursor call rules |
 | [reference/cli.md](./reference/cli.md) | CLI subcommands — all flags, examples, env vars |
+| [env-vars.md](./env-vars.md) | Logging/observability/proxy env matrix and write-vs-display semantics |
 
 ## Gap analysis & RAG design
 

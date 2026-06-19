@@ -7,15 +7,17 @@ from unittest.mock import patch
 import pytest
 
 from core.config.model_registry import (
+    ROLE_ARCHITECT,
+    ROLE_CONTEXT_BUILDER,
+    ROLE_EXECUTOR,
     ROLES,
     CallParams,
     _aider_defaults,
+    policy_applied,
     resolve,
 )
 from core.config.models import resolve_model_name
 from core.config.role_models import (
-    ROLE_CONTEXT_BUILDER,
-    ROLE_EXECUTOR,
     resolve_role_budget_tokens,
     resolve_role_model_name,
 )
@@ -104,3 +106,21 @@ def test_all_roles_resolvable(monkeypatch):
     for role in ROLES:
         cp = resolve(role, include_aider_metadata=False)
         assert cp.model, f"role {role} resolved empty model"
+
+
+def test_policy_applied_executor_ignored_fields_and_note():
+    cp = CallParams(temperature=0.5, top_p=0.9, max_tokens=1024)
+    out = policy_applied(cp, ROLE_EXECUTOR)
+    assert out["ignored"] == ["max_tokens", "temperature", "top_p"] or out["ignored"] == [
+        "temperature",
+        "top_p",
+        "max_tokens",
+    ]
+    assert "MCP_CODER_EXECUTOR_EXTRA_PARAMS" in out["note"]
+
+
+def test_policy_applied_non_executor_no_ignored():
+    cp = CallParams(temperature=0.2)
+    out = policy_applied(cp, ROLE_ARCHITECT)
+    assert "ignored" not in out
+    assert "note" not in out

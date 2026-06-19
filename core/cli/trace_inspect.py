@@ -7,6 +7,7 @@ import json
 from pathlib import Path
 from typing import Any
 
+from core.cli.compare import pair_dual_capture_events
 from core.cli.replay import _find_delegation_row, _load_trace, _resolve_workspace, _session_dir_for_row
 
 
@@ -102,6 +103,98 @@ def _event_summary(event: dict[str, Any]) -> str:
     return f"{etype:<18} {ts}"
 
 
+def _as_int(value: Any) -> int | None:
+    if isinstance(value, int):
+        return value
+    if isinstance(value, float):
+        return int(value)
+    if isinstance(value, str) and value.isdigit():
+        return int(value)
+    return None
+
+
+def _token_totals(events: list[dict[str, Any]]) -> dict[str, int]:
+    totals = {"input": 0, "output": 0, "thinking": 0, "counted_events": 0}
+    for event in events:
+        usage = event.get("usage")
+        tokens = event.get("tokens")
+        source = usage if isinstance(usage, dict) else (tokens if isinstance(tokens, dict) else {})
+        if not source:
+            continue
+        counted = False
+        for key, aliases in (
+            ("input", ("input", "input_tokens", "prompt_tokens")),
+            ("output", ("output", "output_tokens", "completion_tokens")),
+            ("thinking", ("thinking", "thinking_tokens", "reasoning_tokens")),
+        ):
+            value = None
+            for alias in aliases:
+                value = _as_int(source.get(alias))
+                if value is not None:
+                    break
+            if value is not None:
+                totals[key] += value
+                counted = True
+        if counted:
+            totals["counted_events"] += 1
+    return totals
+
+
+def _policy_applied_coverage(events: list[dict[str, Any]]) -> dict[str, Any]:
+    targets = [
+        event
+        for event in events
+        if event.get("type") in ("llm_call", "backend_llm_call")
+    ]
+    total = len(targets)
+    with_policy = sum(
+        1
+        for event in targets
+        if isinstance(event.get("policy_applied"), dict) and bool(event.get("policy_applied"))
+    )
+    pct = round((with_policy / total) * 100, 1) if total else None
+    return {
+        "events_total": total,
+        "events_with_policy_applied": with_policy,
+        "coverage_pct": pct,
+        "label": "n/a (no llm_call/backend_llm_call events)" if total == 0 else "computed",
+    }
+
+
+def _proxy_alignment_summary(events: list[dict[str, Any]]) -> dict[str, Any]:
+    paired = pair_dual_capture_events(events)
+    summary = paired.get("summary") if isinstance(paired, dict) else {}
+    if not isinstance(summary, dict):
+        summary = {}
+    total = _as_int(summary.get("total_calls")) or 0
+    matched = _as_int(summary.get("matched")) or 0
+    if total > 0:
+        pct = round((matched / total) * 100, 1)
+        label = "best_effort (paired by compare CLI logic)"
+    else:
+        pct = None
+        label = "unavailable (no comparable proxy/backend pairs)"
+    return {
+        "matched": matched,
+        "total_pairs": total,
+        "alignment_pct": pct,
+        "label": label,
+    }
+
+
+def _build_summary(events: list[dict[str, Any]]) -> dict[str, Any]:
+    counts: dict[str, int] = {}
+    for event in events:
+        etype = str(event.get("type") or "unknown")
+        counts[etype] = counts.get(etype, 0) + 1
+    return {
+        "event_counts_by_type": dict(sorted(counts.items(), key=lambda kv: kv[0])),
+        "token_totals": _token_totals(events),
+        "policy_applied_coverage": _policy_applied_coverage(events),
+        "proxy_alignment": _proxy_alignment_summary(events),
+    }
+
+
 def _parse_args(argv: list[str] | None) -> argparse.Namespace:
     incoming = list(argv or [])
     if incoming[:2] == ["trace", "inspect"]:
@@ -125,6 +218,11 @@ def _parse_args(argv: list[str] | None) -> argparse.Namespace:
         help="Select Nth matching event (1-based)",
     )
     parser.add_argument("--field", default=None, help="Print only this field from each event")
+    parser.add_argument(
+        "--summary",
+        action="store_true",
+        help="Print a delegation health summary (counts/tokens/policy/proxy alignment)",
+    )
     parser.add_argument("--format", choices=("human", "json"), default="human")
     return parser.parse_args(incoming)
 
@@ -139,6 +237,36 @@ def main_trace_inspect(argv: list[str] | None = None) -> int:
         return 1
 
     events = _load_trace_events(trace_path)
+    if args.summary:
+        summary = _build_summary(events)
+        if args.format == "json":
+            print(json.dumps(summary, ensure_ascii=False, indent=2))
+            return 0
+        print(f"Trace summary: {args.delegation_id}")
+        print(f"- event_counts_by_type: {summary['event_counts_by_type']}")
+        token_totals = summary["token_totals"]
+        print(
+            "- token_totals:"
+            f" input={token_totals.get('input', 0)}"
+            f" output={token_totals.get('output', 0)}"
+            f" thinking={token_totals.get('thinking', 0)}"
+            f" counted_events={token_totals.get('counted_events', 0)}"
+        )
+        coverage = summary["policy_applied_coverage"]
+        print(
+            "- policy_applied_coverage:"
+            f" pct={coverage.get('coverage_pct')}"
+            f" ({coverage.get('events_with_policy_applied', 0)}/{coverage.get('events_total', 0)})"
+            f" [{coverage.get('label')}]"
+        )
+        alignment = summary["proxy_alignment"]
+        print(
+            "- proxy_alignment:"
+            f" pct={alignment.get('alignment_pct')}"
+            f" ({alignment.get('matched', 0)}/{alignment.get('total_pairs', 0)})"
+            f" [{alignment.get('label')}]"
+        )
+        return 0
     matching = events
     if args.event_type:
         matching = [event for event in matching if event.get("type") == args.event_type]

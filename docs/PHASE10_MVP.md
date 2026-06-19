@@ -9,7 +9,7 @@
 
 # Phase 10 — Trustable real-project dogfood
 
-**Status:** **Active** — Phase 10 opened 2026-06-18. **P10-001, P10-002, and P10-003 done**; P10-004 pending.
+**Status:** **Complete** — Phase 10 closed 2026-06-18. P10-001..P10-004 shipped.
 **Purpose:** Make `mcp-coder` usable in real projects by adding three partial/POC capabilities — executor behavior shaping, live visibility during delegation, and supervised stall handling — plus clearing high-ROI deferred items from Phase 9.
 **PM board:** this file · **Issues:** [PHASE10_ISSUES.md](./PHASE10_ISSUES.md)
 **Phase 9 (frozen):** [PHASE9_MVP.md](./PHASE9_MVP.md) · [PHASE9_ISSUES.md](./PHASE9_ISSUES.md)
@@ -86,7 +86,7 @@ P10-004: Backlog clearance           (high-ROI deferred items from Phase 9)
 | 1 | P10-001 | [P10-001](../tasks/P10-001-executor-options-v0.md) | done | Executor options wired; tests green (focused 32/32; full suite 986 passed, 1 skipped, 1 pre-existing failure) |
 | 2 | P10-002 | [P10-002](../tasks/P10-002-visibility-v0.md) | done | `ctx.info` milestones + `logs tail` shipped; focused `25 passed`, full suite `994 passed, 1 skipped` |
 | 3 | P10-003 | [P10-003](../tasks/P10-003-stall-needs-input-v0.md) | done | Structured `needs_input` + optional one-shot auto-retry shipped; focused `20 passed`, full suite `1004 passed, 1 skipped`; e2e host dogfood verified |
-| 4 | P10-004 | — | pending_spec | Backlog clearance: BL-517 + BL-519 + BL-516 partial + BL-518 partial |
+| 4 | P10-004 | [P10-004](../tasks/P10-004-backlog-clearance-v0.md) | done | BL-517/519 full + BL-516/518 partial shipped; focused `35 passed`, full suite `1009 passed, 1 skipped` |
 
 ---
 
@@ -239,7 +239,7 @@ P10-004: Backlog clearance           (high-ROI deferred items from Phase 9)
 
 ### P10-004 — Backlog clearance *(BL-517 + BL-519 + BL-516 partial + BL-518 partial)*
 
-**Status:** `pending_spec`
+**Status:** `done` — worker delivered implementation + tests; accepted in master session 2026-06-18.
 
 **Goal:** Clear four high-ROI deferred items from Phase 9 that are small, related to Phase 10 themes, and have been waiting too long.
 
@@ -270,6 +270,17 @@ P10-004: Backlog clearance           (high-ROI deferred items from Phase 9)
 - BL-516: `mcp-coder trace inspect <id> --summary` prints health scorecard in under 2 seconds on any existing delegation trace
 - BL-518: env var guide section exists and covers the full matrix
 - Full suite green
+
+**Implementation notes (worker report):**
+- `core/config/model_registry.py`: executor `policy_applied` now reports `ignored` (executor-inapplicable resolved fields) plus `note` for `MCP_CODER_EXECUTOR_EXTRA_PARAMS`.
+- `core/observability/bootstrap.py`: `MCP_CODER_PROXY_ENABLED` gate added (default enabled; `0/false/no/off` disables proxy bootstrap and API base override) with `proxy_bootstrap_disabled` warning event.
+- `core/cli/trace_inspect.py`: added `--summary` mode (human/json) with event counts, token totals, `policy_applied` coverage %, and best-effort proxy alignment %.
+- `.env.example`: added observability/proxy stubs (`MCP_CODER_PROXY_ENABLED`, `MCP_CODER_OBS_VERBOSITY`, `MCP_CODER_OBS_RETENTION`, `MCP_CODER_CAPTURE_REASONING`, `MCP_CODER_REASONING_BUFFER_SIZE`, `MCP_CODER_CAPTURE_FOR_TRAINING`).
+- Guide docs: added `docs/guide/env-vars.md` and linked from `docs/guide/README.md`.
+
+**Validation evidence (worker + master rerun):**
+- Focused: `35 passed`.
+- Full suite: `1009 passed`, `1 skipped`.
 
 ---
 
@@ -304,11 +315,13 @@ P10-004: Backlog clearance           (high-ROI deferred items from Phase 9)
 
 ## § Results
 
-**Progress update (2026-06-18):**
-- ✅ P10-001 completed.
-- ✅ P10-002 completed.
-- ✅ P10-003 completed.
-- ⏳ Next: P10-004 (backlog clearance).
+**Phase closeout (2026-06-18):**
+- ✅ P10-001 completed (executor options wiring).
+- ✅ P10-002 completed (`ctx.info` + `logs tail`).
+- ✅ P10-003 completed (structured `needs_input` + auto-retry gate).
+- ✅ P10-004 completed (Phase 9 deferred polish batch).
+
+**Residual note:** Cursor chat-side progress visibility remains host-version dependent; terminal `logs tail` is the reliable fallback and remains part of the accepted Phase 10 UX.
 
 ---
 
@@ -316,6 +329,8 @@ P10-004: Backlog clearance           (high-ROI deferred items from Phase 9)
 
 | Date | Change |
 |------|--------|
+| 2026-06-18 | P10-004 marked **done** from worker implementation: BL-517/519 full + BL-516/518 partial shipped; focused `35 passed`, full suite `1009 passed, 1 skipped`. |
+| 2026-06-18 | **Phase 10 closed.** All four milestones complete; follow-up scope moves to Phase 11+ and backlog residuals. |
 | 2026-06-18 | P10-003 marked **done** from worker implementation: stall classifier + structured `needs_input` + optional one-shot auto-retry + delegation stall audit fields + tests (focused `20 passed`, full suite `1004 passed, 1 skipped`); real Cursor-host dogfood in `mcp_coder_phase9_e2e` verified `needs_input` payload with requested file path extraction. |
 | 2026-06-18 | P10-002 marked **done** from worker implementation: `ctx.info` live notifications + `logs tail` CLI + tests (focused `25 passed`, full suite `994 passed, 1 skipped`). |
 | 2026-06-18 | P10-001 marked **done** from worker implementation: executor `system_prompt_prefix` + `edit_format` wiring, delegation audit fields, env docs, and focused/full test evidence recorded. |

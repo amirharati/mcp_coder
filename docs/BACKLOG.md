@@ -24,10 +24,10 @@ Status: `idea` | `deferred` | `blocked` | `in_phase` | `done`
 | BL-106 | P10-002 | ✅ Done (POF) — `ctx.info` milestone notifications shipped | Capture→egress bridge, `report_progress`, richer step details → backlog |
 | BL-520 | P10-002 | ✅ Done (POF) — `logs tail --latest/--delegation-id` on trace JSONL shipped | `server.jsonl` filter, BL-160b tee → backlog |
 | BL-351 | P10-003 | ✅ Done (v0) — stall detect → structured `needs_input` (with `files_requested`) | Full supervisor + `InputOutput` + outer-loop resume → Phase 11 |
-| BL-517 | P10-004 | `policy_applied.ignored` | — |
-| BL-519 | P10-004 | `MCP_CODER_PROXY_ENABLED` toggle | — |
-| BL-516 | P10-004 | `trace inspect --summary` only | `mcp-coder log` table, `--no-truncate` → backlog |
-| BL-518 | P10-004 | Env matrix docs + `.env.example` stubs | Unified log level, proxy debug → backlog |
+| BL-517 | P10-004 | ✅ Done — executor `policy_applied.ignored` shipped | — |
+| BL-519 | P10-004 | ✅ Done — `MCP_CODER_PROXY_ENABLED` toggle shipped | — |
+| BL-516 | P10-004 | ✅ Partial done — `trace inspect --summary` shipped | `mcp-coder log` table, `--no-truncate` → backlog |
+| BL-518 | P10-004 | ✅ Partial done — env matrix docs + `.env.example` parity shipped | Unified log level, proxy debug → backlog |
 
 ---
 
@@ -1837,7 +1837,7 @@ Tier 3: thinking  ← claude-opus-thinking, o3, gemini-2.5-pro (high thinking)
 
 ### BL-516: CLI log health table + `trace inspect --summary`
 
-**Status:** `in_phase` — **Phase 10 P10-004** (partial: `trace inspect --summary` only). Cross-delegation `mcp-coder log` table + `--no-truncate` → backlog.
+**Status:** `partial_done` — **Phase 10 P10-004 shipped `trace inspect --summary`**. Cross-delegation `mcp-coder log` table + `--no-truncate` remain backlog.
 
 **What:** Three CLI conveniences for batch R&D scanning across delegations:
 
@@ -1853,7 +1853,7 @@ Tier 3: thinking  ← claude-opus-thinking, o3, gemini-2.5-pro (high thinking)
 
 ### BL-517: Executor `policy_applied` ignored params
 
-**Status:** `in_phase` — **Phase 10 P10-004** (full). Migrated from Phase 9 issue **P9-ISS-007**.
+**Status:** `done` — **Phase 10 P10-004 shipped**. Migrated from Phase 9 issue **P9-ISS-007**.
 
 **What:** `_apply_executor_model_params` applies `reasoning_effort`, `thinking_budget`, `extra_params`, and `weak_model` to the Aider `Model` — but **not** `temperature`, `top_p`, or `max_tokens` (Aider owns those). Today `policy_applied()` can still log env-resolved values for those fields, implying they were applied.
 
@@ -1869,7 +1869,7 @@ Tier 3: thinking  ← claude-opus-thinking, o3, gemini-2.5-pro (high thinking)
 
 ### BL-518: Runtime log level / verbosity DX
 
-**Status:** `in_phase` — **Phase 10 P10-004** (partial: env matrix docs + `.env.example` stubs). Unified master level + proxy debug logging → backlog.
+**Status:** `partial_done` — **Phase 10 P10-004 shipped env matrix docs + `.env.example` parity**. Unified master level + proxy debug logging remain backlog.
 
 **Problem:** Logging and verbosity knobs are fragmented across several env vars and yaml keys with overlapping names and different semantics:
 
@@ -1899,7 +1899,7 @@ Operators tuning dogfood/debug runs must know this matrix by heart; `.env.exampl
 
 ### BL-519: `MCP_CODER_PROXY_ENABLED` env toggle
 
-**Status:** `in_phase` — **Phase 10 P10-004** (full).
+**Status:** `done` — **Phase 10 P10-004 shipped**.
 
 **Problem:** `ensure_observability_bootstrap()` always starts `LocalLlmProxy` and rewrites `OPENROUTER_API_BASE` / `OPENAI_API_BASE` / `ANTHROPIC_API_BASE` to the local proxy URL. There is no env escape hatch to run litellm direct-to-provider without editing code or test hooks.
 
@@ -1986,6 +1986,7 @@ Operators tuning dogfood/debug runs must know this matrix by heart; `.env.exampl
 
 | Date | Change |
 |------|--------|
+| 2026-06-18 | **P10-004 shipped** — BL-517/519 completed; BL-516/518 partial shipped (`trace inspect --summary`, env matrix docs + `.env.example` parity). |
 | 2026-06-18 | **P10-003 shipped** — BL-351 v0 completed (regex stall classification, structured `needs_input` with `files_requested`, optional one-shot auto-retry, delegation stall audit fields). Real Cursor-host dogfood validated in `mcp_coder_phase9_e2e` (delegation `79eb11a6-0d38-42e1-a10f-2ab325c28b0a`). |
 | 2026-06-18 | **P10-002 shipped** — BL-106 POF + BL-520 POF completed (`ctx.info` milestones + thread bridge; `mcp-coder logs tail` with `--latest`/`--delegation-id`). Follow-up scope remains in backlog. |
 | 2026-06-18 | **P10-001 shipped** — BL-334 v0 completed (executor `system_prompt_prefix` + `edit_format` wiring + delegation audit fields + env docs + tests). BL-334 status moved to `done`; Phase 11 keeps BL-512 per-delegation override. |
