@@ -14,7 +14,23 @@ Status: `idea` | `deferred` | `blocked` | `in_phase` | `done`
 
 ---
 
-## Phase 10 active (pulled from backlog 2026-06-18)
+## Phase 11 active (opened 2026-06-18)
+
+**PM board:** [PHASE11_MVP.md](./PHASE11_MVP.md) · **Issues:** [PHASE11_ISSUES.md](./PHASE11_ISSUES.md) · **Bootstrap:** [notes/phase11-master-session-bootstrap.md](./notes/phase11-master-session-bootstrap.md)
+
+| Backlog | Milestone | Phase 11 scope | Remainder |
+|---------|-----------|----------------|-----------|
+| BL-521 (new) | P11-001 | Spec clarity pass v0: cheap LLM pre-delegation Q&A | Cross-session intent history → Phase 12 |
+| BL-351 | P11-002 | SupervisedIO + DelegationSupervisor + decision log + abort-on-escalate | Async outer-loop resume → Phase 12 |
+| BL-354 | P11-003 | Executor-pull v0: system prefix `/read` hint | Full sidecar HTTP tool server → Phase 12 |
+| BL-522 (new) | P11-004 | Mid-run human gate: `answer_delegation_question` + Event bridge (experimental) | Protocol-level async gate → Phase 12 |
+| BL-358 | P11-005 | Tier-1 reviewer v0: cheap model scan on `files_changed` | Tier-2 epic-boundary review → Phase 12 |
+| — | P11-006 | Smart architect trigger: heuristic skip + spec front-matter override | — |
+| BL-512 | P11-007 | Host `model_policy` arg on `delegate_to_agent` (Stage 2) | BL-513 AI-suggested, BL-514 dynamic escalation → Phase 12 |
+
+---
+
+## Phase 10 shipped (closed 2026-06-18)
 
 **PM board:** [PHASE10_MVP.md](./PHASE10_MVP.md) · **Issues:** [PHASE10_ISSUES.md](./PHASE10_ISSUES.md) · **Bootstrap:** [notes/phase10-master-session-bootstrap.md](./notes/phase10-master-session-bootstrap.md)
 
@@ -23,7 +39,7 @@ Status: `idea` | `deferred` | `blocked` | `in_phase` | `done`
 | BL-334 | P10-001 | ✅ Done — `system_prompt_prefix` + `edit_format` wiring + delegation audit shipped | Per-delegation `model_policy` → BL-512 (Phase 11) |
 | BL-106 | P10-002 | ✅ Done (POF) — `ctx.info` milestone notifications shipped | Capture→egress bridge, `report_progress`, richer step details → backlog |
 | BL-520 | P10-002 | ✅ Done (POF) — `logs tail --latest/--delegation-id` on trace JSONL shipped | `server.jsonl` filter, BL-160b tee → backlog |
-| BL-351 | P10-003 | ✅ Done (v0) — stall detect → structured `needs_input` (with `files_requested`) | Full supervisor + `InputOutput` + outer-loop resume → Phase 11 |
+| BL-351 | P10-003 | ✅ Done (v0) — stall detect → structured `needs_input` (with `files_requested`) | Full supervisor + `InputOutput` + outer-loop resume → Phase 11 P11-002 |
 | BL-517 | P10-004 | ✅ Done — executor `policy_applied.ignored` shipped | — |
 | BL-519 | P10-004 | ✅ Done — `MCP_CODER_PROXY_ENABLED` toggle shipped | — |
 | BL-516 | P10-004 | ✅ Partial done — `trace inspect --summary` shipped | `mcp-coder log` table, `--no-truncate` → backlog |
@@ -272,7 +288,7 @@ Phase 1 deferred executor conversation carry-over to here (BL-155); see P1-130 `
 
 ### BL-351: Simulated interactive mode + host escalation (human intervention)
 
-**Status:** `in_phase` — **Phase 10 P10-003 v0 shipped** (stall detect → structured `needs_input` with `files_requested`; optional one-shot auto-retry). Full vision (supervised `InputOutput`, cheap LLM supervisor, outer-loop resume) remains Phase 11.
+**Status:** `in_phase` — **Phase 10 P10-003 shipped** (v0: stall detect → structured `needs_input` with `files_requested`; optional one-shot auto-retry via `MCP_CODER_STALL_AUTO_RETRY=1`). **Phase 11 P11-002 owns full vision**: `SupervisedIO` subclass + `DelegationSupervisor` LLM + in-memory decision log + abort-on-escalate.
 
 **Problem:** Headless Aider uses `InputOutput(yes=True)` — every confirm (“add file?”, “run shell?”) is auto-approved without mcp-coder judgment. When the model asks for files in prose, we fail the delegation rather than help. There is no path for the **executor to route a decision back to the Cursor planner** for human intervention inside a supervised delegate.
 
@@ -383,7 +399,7 @@ Hard to answer: “What exact prompt did the builder LLM see?” “What did Aid
 
 ### BL-354: Executor context tools (pull) — RAG/history/read during backend loop
 
-**Status:** `idea` — 2026-06-11. Surfaced T-04 pass — alternative/complement to **BL-350** outer-loop control.
+**Status:** `in_phase` — **Phase 11 P11-003 owns v0** (system prefix `/read` hint only). Full sidecar HTTP tool server (Sketch B below) deferred to Phase 12.
 
 **Dual model (intentional):**
 
@@ -533,7 +549,7 @@ We want **good stuff** (worked patterns, promoted digests, spec outcomes) withou
 
 ### BL-358: Post-executor polish pass — reviewer model (comments, tests, alignment)
 
-**Status:** `idea` — 2026-06-12. Planning discussion — some models (e.g. Gemini Flash) may be better at **holistic read** of a module than at SEARCH/REPLACE execution.
+**Status:** `in_phase` — **Phase 11 P11-005 owns tier-1 v0** (cheap model scan on `files_changed`, review note in spec report, opt-in). Tier-2 epic-boundary review + polish pass (v2) deferred to Phase 12.
 
 **Problem:** Aider/executor optimizes for **making the change work** — not for comments, test coverage, naming consistency with the rest of the repo, or light alignment with neighboring modules. Planner or human often does that cleanup in a follow-up pass.
 
@@ -1752,7 +1768,7 @@ Blobs stored at `sessions/<id>/blobs/<sha256>` (or a session-shared store). At a
 
 ### BL-512: Model policy layer — Stage 2 (host-set policy)
 
-**Status:** `idea` — 2026-06-16; depends on BL-511.  
+**Status:** `in_phase` — **Phase 11 P11-007 owns Stage 2** (`model_policy` arg on `delegate_to_agent`, host > env precedence, all roles configurable).  
 **Design note:** [docs/notes/model-policy-layer.md § Stage 2](./notes/model-policy-layer.md)
 
 **What:** The MCP host (Cursor, Claude Code, CI automation) passes an optional `model_policy` object inside the `delegate_to_agent` call arguments. This overrides the env layer for the duration of that single delegation. The host knows its own context (latency budget, cost cap, task urgency) better than a static `.env` file does.
@@ -1921,7 +1937,7 @@ Operators tuning dogfood/debug runs must know this matrix by heart; `.env.exampl
 
 ### BL-106: MCP live progress + logging notifications
 
-**Status:** `in_phase` — **Phase 10 P10-002 POF shipped** (`ctx.info` milestones + thread bridge). Capture→egress bridge + `report_progress` remain backlog follow-ups.
+**Status:** `done` (POF) — **Phase 10 P10-002 shipped** (`ctx.info` milestones + thread bridge). Capture→egress bridge + `report_progress` remain backlog follow-ups. Cursor chat rendering is host-version dependent.
 
 **Problem:** Long `delegate_to_agent` runs show only a spinner in Cursor until the tool returns. Today mcp-coder emits **brief stderr** (`MCP_CODER_LOG_BRIEF`) at start/end and writes **full detail to disk** (trace JSONL, `server.jsonl`) — but does not send **MCP protocol notifications** mid-run. Users cannot see pipeline phase or executor step progress in the host UI.
 
@@ -1944,7 +1960,7 @@ Operators tuning dogfood/debug runs must know this matrix by heart; `.env.exampl
 
 ### BL-520: Live log tail / follow delegation
 
-**Status:** `in_phase` — **Phase 10 P10-002 POF shipped** (`mcp-coder logs tail` on trace JSONL with `--latest` / `--delegation-id`). `server.jsonl` filter + BL-160b tee remain backlog follow-ups.
+**Status:** `done` (POF) — **Phase 10 P10-002 shipped** (`mcp-coder logs tail` on trace JSONL with `--latest` / `--delegation-id`). `server.jsonl` filter + BL-160b tee remain backlog follow-ups.
 
 **Problem:** Even with **BL-106**, host UIs vary (Cursor progress visibility flaky across versions). Operators need a **reliable local view** while a delegation runs without opening the full viewer.
 
@@ -1967,6 +1983,47 @@ Operators tuning dogfood/debug runs must know this matrix by heart; `.env.exampl
 
 ---
 
+### BL-521: Pre-delegation spec clarity pass *(Phase 11 P11-001)*
+
+**Status:** `in_phase` — **Phase 11 P11-001**. Added 2026-06-18.
+
+**Problem:** Delegations start immediately from whatever spec text is given. If the task is ambiguous, the executor either stalls (wastes 2–3 minutes) or produces a misaligned output. There is no pre-flight check that verifies the task is clear enough to delegate with confidence.
+
+**Goal:** A cheap LLM call before delegation checks whether the task description and spec Files contract are sufficient. If key decisions are missing or ambiguous, return `clarification_needed` with 2–3 targeted questions. Only run the executor after the task is validated as `CLEAR`.
+
+**Design:**
+- New pipeline phase `clarity_check` inserted before `compile` when `clarity_pass: true` (spec yaml) or `MCP_CODER_CLARITY_PASS=1` (env)
+- Cheap model (Flash/Haiku tier), small context: task description + spec Files section + last 3 delegation titles in session (~3k tokens)
+- Prompt: "What is unclear or missing? List at most 3 specific questions. If nothing is unclear, return CLEAR."
+- On `CLEAR` → proceed normally (latency overhead = one cheap LLM call, ~100ms)
+- On questions → return `clarification_needed: [...]` early (same field shape as BL-329 spec validation)
+- Distinct from BL-329: validation checks spec coherence; clarity pass checks task completeness and intent
+- Trace event: `clarity_check_result: {status: clear | clarification_needed, questions: [...]}
+
+**Related:** BL-329 (spec validation), BL-351 (supervised IO), P11-001.
+
+---
+
+### BL-522: Mid-run human gate — `answer_delegation_question` *(Phase 11 P11-004, experimental)*
+
+**Status:** `in_phase` — **Phase 11 P11-004**. Added 2026-06-18.
+
+**Problem:** When the supervisor (P11-002) determines that a decision requires human judgment, the current path is abort-and-resume. The Aider thread stops, the delegation returns `needs_input`, and the user must re-delegate from scratch. The coder loses its in-run context.
+
+**Goal:** Instead of aborting, the supervisor blocks the Aider thread on a `threading.Event` and emits `ctx.info` with the question. A new MCP tool `answer_delegation_question(delegation_id, answer)` from Cursor sets the event. The Aider thread unblocks with the human answer and continues from where it paused. No restart, no re-run.
+
+**Design:**
+- `core/engine/question_registry.py`: in-process registry `{delegation_id: {question, event: threading.Event, answer: str | None}}`
+- `SupervisedIO` escalation path: posts to registry, emits `ctx.info` with question + `delegation_id`, then `event.wait(timeout=120s)`
+- On timeout (120s default): falls back to abort-and-resume (P10-003 pattern); no deadlock
+- New MCP tool `answer_delegation_question(delegation_id: str, answer: str)`: looks up registry, sets answer, signals event
+- Trace events: `supervisor_human_gate_opened`, `supervisor_human_gate_answered | supervisor_human_gate_timeout`
+- **Experimental:** depends on Cursor MCP client supporting concurrent tool calls from the same session. If not supported, timeout path always triggers. Dogfood will determine viability.
+
+**Related:** BL-351 (supervised IO), P11-002, P11-004, BL-501 (async/long-running adjacency).
+
+---
+
 ## Done
 
 | ID | Item | Completed |
@@ -1986,6 +2043,8 @@ Operators tuning dogfood/debug runs must know this matrix by heart; `.env.exampl
 
 | Date | Change |
 |------|--------|
+| 2026-06-18 | **Phase 11 opened.** BL-521 (new) + BL-351 → P11-002; BL-354 (v0) → P11-003; BL-522 (new) → P11-004; BL-358 (v0) → P11-005; BL-512 (Stage 2) → P11-007. § Phase 11 active table added; BL-351/354/358/512 status updated to `in_phase`. Cross-arch decisions D-ARCH-1..6 locked. See [PHASE11_MVP.md](./PHASE11_MVP.md). |
+| 2026-06-18 | **Phase 10 closed.** Promoted backlog items moved from `in_phase` to `done` (v0/POF/partial as scoped); § Phase 10 table frozen. Residuals: BL-516/518 partial, BL-106/520 follow-ups, BL-351 full vision → Phase 11. |
 | 2026-06-18 | **P10-004 shipped** — BL-517/519 completed; BL-516/518 partial shipped (`trace inspect --summary`, env matrix docs + `.env.example` parity). |
 | 2026-06-18 | **P10-003 shipped** — BL-351 v0 completed (regex stall classification, structured `needs_input` with `files_requested`, optional one-shot auto-retry, delegation stall audit fields). Real Cursor-host dogfood validated in `mcp_coder_phase9_e2e` (delegation `79eb11a6-0d38-42e1-a10f-2ab325c28b0a`). |
 | 2026-06-18 | **P10-002 shipped** — BL-106 POF + BL-520 POF completed (`ctx.info` milestones + thread bridge; `mcp-coder logs tail` with `--latest`/`--delegation-id`). Follow-up scope remains in backlog. |

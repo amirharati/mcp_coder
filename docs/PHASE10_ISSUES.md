@@ -1,6 +1,6 @@
 # Phase 10 issues
 
-**Status:** **Active** — Phase 10 opened 2026-06-18.
+**Status:** **Frozen** — Phase 10 closed 2026-06-18 (P10-001..P10-004 shipped).
 **Open:** none
 **Promoted from backlog:** BL-334, BL-106, BL-520, BL-351 (v0), BL-516 (partial), BL-517, BL-518 (partial), BL-519 — see below
 **Related PM board:** [PHASE10_MVP.md](./PHASE10_MVP.md)

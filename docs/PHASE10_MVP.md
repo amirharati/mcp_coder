@@ -27,7 +27,7 @@ Shape Aider's behavior before problems occur, see what is happening while it run
 After live `delegate_to_agent` calls in a real project workspace:
 
 1. **System prefix applied** — `MCP_CODER_EXECUTOR_SYSTEM_PREFIX` is set, its content is prepended to Aider's system prompt, and `policy_applied` on `backend_llm_call` reflects it. Executor behavior measurably shaped by the prefix (e.g. "stay within spec files, don't ask to add more").
-2. **Live progress visible in Cursor** — `ctx.info` notifications appear in the Cursor chat as delegation progresses through compile → builder → executor steps. At least 5 milestone messages visible per delegation.
+2. **Live progress visible in Cursor** — `ctx.info` notifications appear in the Cursor chat as delegation progresses through compile → builder → executor steps. At least 5 milestone messages visible per delegation. *(Shipped in code; Cursor chat rendering is host-version dependent — `logs tail` is the reliable fallback.)*
 3. **Live tail in side terminal** — `mcp-coder logs tail --latest` follows a live delegation in a second terminal, printing one human-readable line per trace event in real time.
 4. **Stall → structured response** — when Aider asks to add files to chat, the delegation does not fail silently; it returns `{"status": "needs_input", "files_requested": [...]}` to Cursor so the planner knows exactly what to do.
 5. **`policy_applied.ignored`** — executor events no longer misleadingly imply `temperature` / `top_p` were applied; `ignored` key present.

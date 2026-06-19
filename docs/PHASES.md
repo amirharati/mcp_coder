@@ -54,7 +54,8 @@ This document is the **delivery plan**: what to build, in what order, and how we
 | **8** *(complete)* | **Backend interception: full Aider visibility** — `ObservableModel` captures Aider inner-loop calls; backend interception contract; CLI bootstrap hardening; transcript byte-range provenance; streaming dedup hardening | [PHASE8_MVP.md](./PHASE8_MVP.md) **complete** 2026-06-14 |
 | **9** *(complete)* | **Write-always + universal proxy + replay** — `LocalLlmProxy` between litellm and provider captures raw HTTP before normalization; write-always storage; context package blobs; `mcp-coder replay <id>`; storage GC first slice | [PHASE9_MVP.md](./PHASE9_MVP.md) **complete** 2026-06-17 |
 | **10** *(complete)* | **Trustable real-project dogfood** — executor behavior shaping (`system_prompt_prefix` / `edit_format`); MCP `ctx.info` progress notifications + `logs tail`; stall detection → `needs_input`; Phase 9 backlog clearance | [PHASE10_MVP.md](./PHASE10_MVP.md) **complete** 2026-06-18 |
-| **10+** | Full outer-loop supervision, host-set model policy (BL-512), AI-suggested params (BL-513), dynamic escalation (BL-514), out-of-process backend proxy, multi-model ensemble | BL-350, BL-351, BL-512–515, BL-321, BL-160, BL-007 |
+| **11** *(active)* | **Supervised execution + smarter context** — `SupervisedIO` + `DelegationSupervisor` (replace `yes=True`); pre-delegation clarity pass; executor-pull `/read` hint; mid-run human gate (experimental); tier-1 post-executor reviewer; smart architect trigger; host `model_policy` arg (BL-512 Stage 2) | [PHASE11_MVP.md](./PHASE11_MVP.md) **active** 2026-06-18 |
+| **12+** | Multi-step plan object + async resume token; full executor-pull sidecar; tier-2 epic-boundary review; BL-513 AI-suggested params; BL-514 dynamic escalation; cross-session reasoning (BL-333); out-of-process proxy extension | BL-350, BL-513–515, BL-321, BL-160, BL-007, BL-333 |
 
 **Principle (Phase 3+ attribution):** MCP reports `files_changed` from **delegation-scoped workspace manifest delta** — git-agnostic, backend-agnostic. User git is complementary; optional `git_tracked` metadata later (trivial).
 
@@ -919,11 +920,63 @@ Shape Aider's behavior before problems occur, see what is happening while it run
 ### Phase 10 acceptance (dogfood)
 
 1. `MCP_CODER_EXECUTOR_SYSTEM_PREFIX` measurably shapes executor behavior.
-2. `ctx.info` progress visible in Cursor during delegation (≥5 milestone messages).
+2. `ctx.info` progress visible in Cursor during delegation (≥5 milestone messages). *(Partial on some Cursor versions — `logs tail` is the reliable fallback.)*
 3. `mcp-coder logs tail --latest` follows a live delegation in a side terminal.
 4. Aider "add files to chat" stall returns `needs_input` with `files_requested[]` — not silent failure.
 5. Executor `policy_applied.ignored` present when temperature/top_p set but not applied.
 6. `MCP_CODER_PROXY_ENABLED=0` runs without proxy; `backend_llm_call` still captured.
+
+---
+
+## Phase 11: Supervised execution + smarter context
+
+**Status:** Active — opened 2026-06-18; P11-001..P11-007 in progress.
+**PM doc:** [PHASE11_MVP.md](./PHASE11_MVP.md) · **Issues:** [PHASE11_ISSUES.md](./PHASE11_ISSUES.md) · **Bootstrap:** [notes/phase11-master-session-bootstrap.md](./notes/phase11-master-session-bootstrap.md)
+
+### One-line goal
+
+Make the Aider/MCP boundary bidirectional and supervised: replace `yes=True` with a judgment-capable supervisor, verify intent before delegation, and scan output quality — all with bounded per-delegation cost.
+
+### What Phase 11 owns
+
+| Milestone | Theme | Backlog |
+|-----------|-------|---------|
+| P11-001 | Pre-delegation spec clarity pass | BL-521 (new) |
+| P11-002 | SupervisedIO + DelegationSupervisor + decision log | BL-351 full |
+| P11-003 | Executor-pull v0: system prefix `/read` hint | BL-354 v0 |
+| P11-004 | Mid-run human gate: `answer_delegation_question` tool (experimental) | BL-522 (new) |
+| P11-005 | Tier-1 post-executor reviewer (cheap model scan on files_changed) | BL-358 v0 |
+| P11-006 | Smart architect trigger: heuristic skip for trivial tasks | — |
+| P11-007 | Host `model_policy` arg on `delegate_to_agent` | BL-512 Stage 2 |
+
+### Cross-phase architectural decisions (locked in Phase 11)
+
+See full table in [PHASE11_MVP.md](./PHASE11_MVP.md) § Cross-phase architectural decisions. Summary:
+
+- **D-ARCH-1:** Context frugality — every LLM call gets a purpose-built bounded context (2k–32k depending on role)
+- **D-ARCH-2:** Strong LLM (Sonnet-class) for judgment calls (supervisor); cheap for review/clarity
+- **D-ARCH-3:** Aider thread stays alive through SupervisedIO — no restart on supervisor decision
+- **D-ARCH-4:** Per-delegation in-memory decision log — supervisor has cross-decision coherence
+- **D-ARCH-5:** Human escalation v1 = abort-and-resume; mid-run gate is experimental
+- **D-ARCH-6:** `model_policy` is additive — host > env > code defaults, per-role
+
+### What Phase 11 does NOT own
+
+| Item | Why deferred |
+|------|-------------|
+| Multi-step plan object + async resume token | Phase 12 |
+| Full executor-pull sidecar HTTP server | Phase 12 — P11 ships prompt-only |
+| Tier-2 epic-boundary review | Phase 12 — needs epic boundary concept |
+| BL-513 AI-suggested params / BL-514 dynamic escalation | Phase 12 |
+| Cross-session reasoning persistence (BL-333) | Phase 12 |
+
+### Phase 11 acceptance (dogfood)
+
+1. `SupervisedIO` fires on at least one real delegation; decision logged in trace; no regressions.
+2. Clarity pass returns `clarification_needed` for vague task; returns `CLEAR` and proceeds normally for clear spec.
+3. Executor-pull hint: `needs_input` stall frequency measurably lower in dogfood.
+4. Tier-1 reviewer note appears in spec report; non-fatal on reviewer error.
+5. `model_policy` overrides executor thinking budget from Cursor for one delegation.
 
 ---
 
@@ -946,4 +999,4 @@ Shape Aider's behavior before problems occur, see what is happening while it run
 - [x] **Phase 8 complete** — backend interception (P8-001..P8-006); `ObservableModel` + `InterceptionProfile` + bootstrap + byte-range provenance + streaming dedup; see `PHASE8_MVP.md` (closed 2026-06-14).
 - [x] **Phase 9 complete** — write-always storage + `LocalLlmProxy` + context blobs + replay CLI + GC + v2 boundary viewer (P9-001..P9-013); closed 2026-06-17; see [PHASE9_MVP.md](./PHASE9_MVP.md).
 - [x] **Phase 10 complete** — P10-001..P10-004 shipped (executor options, visibility, structured `needs_input`, and deferred Phase 9 polish). See [PHASE10_MVP.md](./PHASE10_MVP.md).
-- [ ] **Next planning** — Phase 11+ focus selection (full supervision continuation, model policy Stages 2–4, or out-of-process backend proxy extension).
+- [ ] **Phase 11 active** — P11-001..P11-007 scoped: supervised execution (SupervisedIO + DelegationSupervisor), clarity pass, executor-pull v0, mid-run human gate (experimental), tier-1 reviewer, smart architect trigger, host model policy. See [PHASE11_MVP.md](./PHASE11_MVP.md).

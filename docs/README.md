@@ -59,7 +59,7 @@ Each tier-0–2 file has an HTML **stewardship** comment at the top — agents m
 | [PHASE4_MVP.md](./PHASE4_MVP.md) | **Phase 4 PM** — closed P4 exit; active → Phase 5 / BACKLOG |
 | [PHASE4_ISSUES.md](./PHASE4_ISSUES.md) | **Phase 4 issues** — frozen; carried → BACKLOG |
 | [PHASE9_MVP.md](./PHASE9_MVP.md) | **Phase 9 PM** — closed 2026-06-17 (write-always + proxy + replay) |
-| [PHASE10_MVP.md](./PHASE10_MVP.md) | **Phase 10 PM** — active (trustable real-project dogfood) |
+| [PHASE10_MVP.md](./PHASE10_MVP.md) | **Phase 10 PM** — closed 2026-06-18 (trustable real-project dogfood) |
 | [BACKLOG.md](./BACKLOG.md) | Project backlog (deferred / later / nice-to-have) |
 | [PHASE1_ISSUES.md](./PHASE1_ISSUES.md) | **Phase 1 issue tracker** — gaps found during P1 (incl. server log) |
 | [TASK_SPEC_TEMPLATE.md](./TASK_SPEC_TEMPLATE.md) | Blank template — **do not edit**; copy into `docs/tasks/` |

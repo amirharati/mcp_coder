@@ -34,6 +34,8 @@ Use this page so **main vision** ([IDEA.md](./IDEA.md)) is not lost when editing
 | **2 — P9 gaps** | [PHASE9_ISSUES.md](./PHASE9_ISSUES.md) | Issues from Phase 9 implementation | **Frozen**; deferred → BL-516..BL-519 (now Phase 10) |
 | **2 — Phase 10 PM** | [PHASE10_MVP.md](./PHASE10_MVP.md) | Trustable real-project dogfood — executor options, visibility, stall supervision | **Frozen** — closed 2026-06-18 |
 | **2 — P10 gaps** | [PHASE10_ISSUES.md](./PHASE10_ISSUES.md) | Promoted backlog items + implementation issues | **Frozen**; BL-334/106/520/351/516/517/518/519 shipped as P10-001..P10-004 (with BL-516/518 partial residuals in backlog) |
+| **2 — Phase 11 PM** | [PHASE11_MVP.md](./PHASE11_MVP.md) | Supervised execution + smarter context — SupervisedIO, clarity pass, reviewer, model policy | **Active** — opened 2026-06-18 |
+| **2 — P11 gaps** | [PHASE11_ISSUES.md](./PHASE11_ISSUES.md) | Phase 11 promoted backlog + implementation issues | **Active** |
 | **2 — Deferred** | [BACKLOG.md](./BACKLOG.md) | BL-* items, priorities, post–P1/P2 focus | Add/defer with user; do not delete rows silently |
 | **2 — P1 gaps** | [PHASE1_ISSUES.md](./PHASE1_ISSUES.md) | Issues from P1 — **frozen / historical at P1-199** | Read-only; new gaps → BACKLOG |
 | **2 — P2 gaps** | [PHASE2_ISSUES.md](./PHASE2_ISSUES.md) | Issues from Phase 2 — **frozen at P2-499** | Read-only; carried → PHASE3_ISSUES |
@@ -49,7 +51,8 @@ Use this page so **main vision** ([IDEA.md](./IDEA.md)) is not lost when editing
 | **3 — Handoff** | [notes/phase6-master-session-bootstrap.md](./notes/phase6-master-session-bootstrap.md) | Phase 6 planning decisions + bootstrap — observability/logging refactor | Frozen at Phase 6 exit |
 | **3 — Handoff** | [notes/phase5-master-session-bootstrap.md](./notes/phase5-master-session-bootstrap.md) | Phase 5 master session decisions + bootstrap | Frozen at Phase 5 planning handoff |
 | **3 — Handoff** | [notes/phase9-master-session-bootstrap.md](./notes/phase9-master-session-bootstrap.md) | Phase 9 planning decisions + proxy architecture | Frozen at Phase 9 close 2026-06-17 |
-| **3 — Handoff** | [notes/phase10-master-session-bootstrap.md](./notes/phase10-master-session-bootstrap.md) | Phase 10 planning — trust/visibility/executor capability cluster | **Active** — opened 2026-06-18 |
+| **3 — Handoff** | [notes/phase10-master-session-bootstrap.md](./notes/phase10-master-session-bootstrap.md) | Phase 10 planning — trust/visibility/executor capability cluster | **Frozen** — closed 2026-06-18 |
+| **3 — Handoff** | [notes/phase11-master-session-bootstrap.md](./notes/phase11-master-session-bootstrap.md) | Phase 11 planning — supervised execution, multi-LLM pattern, cross-arch decisions (D-ARCH-1..6) | **Active** — 2026-06-18 |
 | **3 — Exit** | [notes/phase2-exit-validation.md](./notes/phase2-exit-validation.md) | P2-499 dogfood sign-off | Frozen at exit |
 | **3 — Related ideas** | [OTEHR_RELATED_IDEAS/](./OTEHR_RELATED_IDEAS/) | Gatekeeper, experiments — **not** canonical vision | Optional; may inform backlog only |
 
@@ -65,6 +68,7 @@ Use this page so **main vision** ([IDEA.md](./IDEA.md)) is not lost when editing
 | `docs/tasks/P3-*.md` | **Gitignored** Phase 3 worker specs |
 | `docs/tasks/P4-*.md` | **Gitignored** Phase 4 worker specs |
 | `docs/tasks/P10-*.md` | **Gitignored** Phase 10 worker specs |
+| `docs/tasks/P11-*.md` | **Gitignored** Phase 11 worker specs |
 | [README.md](./README.md) (this folder) | Workflow index |
 
 ## Rules for agents
