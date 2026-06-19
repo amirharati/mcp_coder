@@ -21,8 +21,8 @@ Status: `idea` | `deferred` | `blocked` | `in_phase` | `done`
 | Backlog | Milestone | Phase 10 scope | Remainder |
 |---------|-----------|----------------|-----------|
 | BL-334 | P10-001 | ✅ Done — `system_prompt_prefix` + `edit_format` wiring + delegation audit shipped | Per-delegation `model_policy` → BL-512 (Phase 11) |
-| BL-106 | P10-002 | `ctx.info` pipeline milestones (POF) | Capture→egress bridge, `report_progress` → backlog |
-| BL-520 | P10-002 | `logs tail --latest` on trace JSONL (POF) | `server.jsonl` filter, BL-160b tee → backlog |
+| BL-106 | P10-002 | ✅ Done (POF) — `ctx.info` milestone notifications shipped | Capture→egress bridge, `report_progress`, richer step details → backlog |
+| BL-520 | P10-002 | ✅ Done (POF) — `logs tail --latest/--delegation-id` on trace JSONL shipped | `server.jsonl` filter, BL-160b tee → backlog |
 | BL-351 | P10-003 | Stall detect → `needs_input` v0 | Full supervisor + `InputOutput` → Phase 11 |
 | BL-517 | P10-004 | `policy_applied.ignored` | — |
 | BL-519 | P10-004 | `MCP_CODER_PROXY_ENABLED` toggle | — |
@@ -1921,7 +1921,7 @@ Operators tuning dogfood/debug runs must know this matrix by heart; `.env.exampl
 
 ### BL-106: MCP live progress + logging notifications
 
-**Status:** `in_phase` — **Phase 10 P10-002** (POF: `ctx.info` pipeline milestones + thread bridge). Capture→egress bridge + `report_progress` → backlog.
+**Status:** `in_phase` — **Phase 10 P10-002 POF shipped** (`ctx.info` milestones + thread bridge). Capture→egress bridge + `report_progress` remain backlog follow-ups.
 
 **Problem:** Long `delegate_to_agent` runs show only a spinner in Cursor until the tool returns. Today mcp-coder emits **brief stderr** (`MCP_CODER_LOG_BRIEF`) at start/end and writes **full detail to disk** (trace JSONL, `server.jsonl`) — but does not send **MCP protocol notifications** mid-run. Users cannot see pipeline phase or executor step progress in the host UI.
 
@@ -1944,7 +1944,7 @@ Operators tuning dogfood/debug runs must know this matrix by heart; `.env.exampl
 
 ### BL-520: Live log tail / follow delegation
 
-**Status:** `in_phase` — **Phase 10 P10-002** (POF: `mcp-coder logs tail` on trace JSONL). `server.jsonl` filter + BL-160b tee → backlog.
+**Status:** `in_phase` — **Phase 10 P10-002 POF shipped** (`mcp-coder logs tail` on trace JSONL with `--latest` / `--delegation-id`). `server.jsonl` filter + BL-160b tee remain backlog follow-ups.
 
 **Problem:** Even with **BL-106**, host UIs vary (Cursor progress visibility flaky across versions). Operators need a **reliable local view** while a delegation runs without opening the full viewer.
 

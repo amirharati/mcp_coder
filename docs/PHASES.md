@@ -945,4 +945,4 @@ Shape Aider's behavior before problems occur, see what is happening while it run
 - [x] Phase 6 — observability substrate + reasoning buffer (P6-001…P6-008); recommended exit + post-dogfood fixes met 2026-06-13; [PHASE6_MVP.md](./PHASE6_MVP.md).
 - [x] **Phase 8 complete** — backend interception (P8-001..P8-006); `ObservableModel` + `InterceptionProfile` + bootstrap + byte-range provenance + streaming dedup; see `PHASE8_MVP.md` (closed 2026-06-14).
 - [x] **Phase 9 complete** — write-always storage + `LocalLlmProxy` + context blobs + replay CLI + GC + v2 boundary viewer (P9-001..P9-013); closed 2026-06-17; see [PHASE9_MVP.md](./PHASE9_MVP.md).
-- [ ] **Phase 10 active** — ✅ P10-001 done (executor option wiring); next: P10-002 MCP visibility + `logs tail`, P10-003 stall detection → `needs_input`, P10-004 backlog clearance BL-516/517/518/519; see [PHASE10_MVP.md](./PHASE10_MVP.md).
+- [ ] **Phase 10 active** — ✅ P10-001 done (executor option wiring), ✅ P10-002 done (MCP visibility + `logs tail`); next: P10-003 stall detection → `needs_input`, then P10-004 backlog clearance BL-516/517/518/519; see [PHASE10_MVP.md](./PHASE10_MVP.md).

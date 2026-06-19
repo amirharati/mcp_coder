@@ -1,12 +1,15 @@
 from __future__ import annotations
 
+import asyncio
 import json
 import os
+import queue
+import threading
 import time
 from pathlib import Path
 from typing import Any
 
-from mcp.server.fastmcp import FastMCP
+from mcp.server.fastmcp import Context, FastMCP
 
 from core.config.auto_merge import auto_merge_spec_read_enabled
 from core.config.auto_verify import (
@@ -138,6 +141,76 @@ from core.observability.bootstrap import ensure_observability_bootstrap
 ensure_observability_bootstrap(obs)
 
 
+def _sanitize_notification_text(text: str, *, max_chars: int = 180) -> str:
+    compact = " ".join((text or "").split())
+    if len(compact) <= max_chars:
+        return compact
+    return compact[: max_chars - 1] + "…"
+
+
+class _DelegationProgressBridge:
+    """Thread-safe bridge from sync delegate flow to async ctx.info()."""
+
+    def __init__(self, ctx: Context | None, *, throttle_seconds: float = 2.0) -> None:
+        self._ctx = ctx
+        self._throttle_seconds = throttle_seconds
+        self._last_emit = 0.0
+        self._loop: asyncio.AbstractEventLoop | None = None
+        self._queue: queue.Queue[str | None] = queue.Queue()
+        self._worker: threading.Thread | None = None
+        self._stopped = False
+
+        if ctx is None:
+            return
+        try:
+            self._loop = asyncio.get_running_loop()
+        except RuntimeError:
+            # No active loop in this thread (e.g. sync entrypoint).
+            self._loop = None
+
+        self._worker = threading.Thread(target=self._drain_worker, daemon=True)
+        self._worker.start()
+
+    def notify(self, message: str, *, force: bool = False) -> None:
+        if self._ctx is None or self._stopped:
+            return
+        now = time.monotonic()
+        if not force and self._last_emit and (now - self._last_emit) < self._throttle_seconds:
+            return
+        self._last_emit = now
+        self._queue.put(_sanitize_notification_text(message))
+
+    def _drain_worker(self) -> None:
+        while True:
+            try:
+                msg = self._queue.get(timeout=0.2)
+            except queue.Empty:
+                if self._stopped:
+                    return
+                continue
+            if msg is None:
+                return
+            if self._ctx is None:
+                continue
+            try:
+                if self._loop is not None:
+                    fut = asyncio.run_coroutine_threadsafe(self._ctx.info(msg), self._loop)
+                    fut.result(timeout=5)
+                else:
+                    asyncio.run(self._ctx.info(msg))
+            except Exception:
+                # Notification path must never fail a delegation.
+                pass
+
+    def close(self) -> None:
+        if self._stopped:
+            return
+        self._stopped = True
+        if self._worker is not None:
+            self._queue.put(None)
+            self._worker.join(timeout=1.0)
+
+
 def _emit_compile_event(
     *,
     delegation_id: str,
@@ -247,6 +320,7 @@ def _bounded_executor_loop(
     session_dir: "Path | str",
     workspace: str,
     obs_verbosity: str,
+    progress_notify: "Any | None" = None,
 ) -> "tuple[ExecutionResult, int]":
     """Bounded outer executor loop (P7-002, D-P7-2, Route A).
 
@@ -307,6 +381,16 @@ def _bounded_executor_loop(
             step_result = step_fn(step_timeout_s)
         step_ms = int((time.perf_counter() - step_t0) * 1000)
         executor_turns += 1
+        if progress_notify is not None:
+            try:
+                progress_notify(
+                    (
+                        f"[executor] Step {step_idx} complete "
+                        f"({len(step_result.files_changed or [])} file changes)."
+                    )
+                )
+            except Exception:
+                pass
 
         # Emit executor llm_call trace record.
         exec_llm_rec = build_executor_llm_trace_record(
@@ -744,10 +828,14 @@ def delegate_to_agent(
     spec_path: str | None = None,
     mode: str = "implement",
     cli_artifacts: bool = False,
+    ctx: Context | None = None,
 ) -> str:
     """Run one delegated implementation via the selected backend; append JSONL log."""
+    progress = _DelegationProgressBridge(ctx)
     delegation_id = obs.new_delegation_id()
-    with delegation_context(delegation_id):
+    _delegation_scope = delegation_context(delegation_id)
+    _delegation_scope.__enter__()
+    try:
         t0 = time.perf_counter()
         timestamp_start = obs.utc_now_iso()
 
@@ -779,6 +867,7 @@ def delegate_to_agent(
         ws = obs.default_workspace_path()
         usage_report_enabled = obs.resolve_usage_report_enabled(ws)
         ensure_workspace_spec_layout(ws)
+        progress.notify("[compile] Starting context compilation…", force=True)
 
         spec_rel_path: str | None = None
         spec_abs_path = None
@@ -1090,6 +1179,13 @@ def delegate_to_agent(
                 reason="disabled",
             )
 
+        validation_status = "skipped"
+        if spec_validation_blocked:
+            validation_status = "blocked (needs input)"
+        elif spec_validation_ran is True:
+            validation_status = "passed" if spec_validation_passed else "failed"
+        progress.notify(f"[validation] Spec validation {validation_status}.", force=True)
+
         if spec_invalid_reason:
             success = False
             error = spec_invalid_reason
@@ -1103,6 +1199,14 @@ def delegate_to_agent(
             error = None
             output = _SPEC_VALIDATION_BLOCK_OUTPUT
         else:
+            progress.notify(
+                (
+                    "[compile] Context ready — "
+                    f"targets={len(effective_target_files)} files."
+                ),
+                force=True,
+            )
+            progress.notify("[executor] Starting delegated run…", force=True)
             executor_phase_started = False
             _executor_turns = 0
             try:
@@ -1412,6 +1516,7 @@ def delegate_to_agent(
                         session_dir=storage.session_dir,
                         workspace=ws,
                         obs_verbosity=_loop_obs_verbosity,
+                        progress_notify=progress.notify,
                     )
                     executor_prompt = result.prompt_used or context_package.brief
                 else:
@@ -1511,6 +1616,7 @@ def delegate_to_agent(
                         session_dir=storage.session_dir,
                         workspace=ws,
                         obs_verbosity=_loop_obs_verbosity,
+                        progress_notify=progress.notify,
                     )
                 timing["engine_run_ms"] = int((time.perf_counter() - t_engine) * 1000)
 
@@ -1979,6 +2085,8 @@ def delegate_to_agent(
             delegation_pipeline=delegation_pipeline_payload,
             executor_turns=_executor_turns if _executor_turns > 0 else None,
         )
+        done_status = "needs_input" if outcome == OUTCOME_NEEDS_INPUT else ("success" if success else "failure")
+        progress.notify(f"[done] Delegation complete — {done_status}.", force=True)
 
         if auto_merged_read_paths:
             mcp_request["auto_merged_read_paths"] = auto_merged_read_paths
@@ -2132,6 +2240,9 @@ def delegate_to_agent(
             return json.dumps(envelope, ensure_ascii=False)
 
         return json.dumps(response, ensure_ascii=False)
+    finally:
+        _delegation_scope.__exit__(None, None, None)
+        progress.close()
 
 
 @mcp.tool(

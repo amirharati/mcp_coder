@@ -9,7 +9,7 @@
 
 # Phase 10 — Trustable real-project dogfood
 
-**Status:** **Active** — Phase 10 opened 2026-06-18. **P10-001 done**; P10-002..P10-004 pending.
+**Status:** **Active** — Phase 10 opened 2026-06-18. **P10-001 and P10-002 done**; P10-003..P10-004 pending.
 **Purpose:** Make `mcp-coder` usable in real projects by adding three partial/POC capabilities — executor behavior shaping, live visibility during delegation, and supervised stall handling — plus clearing high-ROI deferred items from Phase 9.
 **PM board:** this file · **Issues:** [PHASE10_ISSUES.md](./PHASE10_ISSUES.md)
 **Phase 9 (frozen):** [PHASE9_MVP.md](./PHASE9_MVP.md) · [PHASE9_ISSUES.md](./PHASE9_ISSUES.md)
@@ -84,7 +84,7 @@ P10-004: Backlog clearance           (high-ROI deferred items from Phase 9)
 | Order | Milestone | Spec | Status | Notes |
 |-------|-----------|------|--------|-------|
 | 1 | P10-001 | [P10-001](../tasks/P10-001-executor-options-v0.md) | done | Executor options wired; tests green (focused 32/32; full suite 986 passed, 1 skipped, 1 pre-existing failure) |
-| 2 | P10-002 | — | pending_spec | Visibility v0: MCP notifications + `logs tail` (BL-106 POF + BL-520 POF) |
+| 2 | P10-002 | [P10-002](../tasks/P10-002-visibility-v0.md) | done | `ctx.info` milestones + `logs tail` shipped; focused `25 passed`, full suite `994 passed, 1 skipped` |
 | 3 | P10-003 | — | pending_spec | Stall detection → `needs_input` v0 (BL-351 v0) |
 | 4 | P10-004 | — | pending_spec | Backlog clearance: BL-517 + BL-519 + BL-516 partial + BL-518 partial |
 
@@ -130,7 +130,7 @@ P10-004: Backlog clearance           (high-ROI deferred items from Phase 9)
 
 ### P10-002 — Visibility v0: MCP notifications + `logs tail` *(BL-106 POF + BL-520 POF)*
 
-**Status:** `pending_spec`
+**Status:** `done` — worker delivered implementation + tests; accepted in master session 2026-06-18.
 
 **Goal:** Emit live `ctx.info` notifications during delegation so Cursor shows progress, and add a `mcp-coder logs tail` CLI command that follows a running delegation in real time.
 
@@ -166,6 +166,19 @@ P10-004: Backlog clearance           (high-ROI deferred items from Phase 9)
 - Event format is human-readable (not raw JSON) by default; `--format json` available
 - No crash when trace file doesn't exist yet (graceful polling)
 - Full suite green
+
+**Implementation notes (worker report):**
+- `server/mcp_server.py` now accepts `ctx: Context | None = None` in `delegate_to_agent`.
+- Added `_DelegationProgressBridge` queue bridge to safely emit async `ctx.info(...)` from sync/threaded execution flow.
+- Milestone notifications added at compile start/ready, validation status, executor start, and final outcome (`success` / `needs_input` / `failure`), with throttled executor-step updates.
+- Notification failures are intentionally non-fatal.
+- New CLI module `core/cli/logs_tail.py` adds `mcp-coder logs tail` with `--latest` / `--delegation-id` and `--format human|json`.
+- `main.py` wired `logs tail` dispatch to `core.cli.logs_tail.main_logs_tail`.
+- New test file: `tests/test_visibility_p10_002.py`.
+
+**Validation evidence (worker + master rerun):**
+- Focused: `25 passed` (`tests/test_visibility_p10_002.py` + delegate/trace/replay related tests).
+- Full suite: `994 passed`, `1 skipped`.
 
 ---
 
@@ -275,7 +288,8 @@ P10-004: Backlog clearance           (high-ROI deferred items from Phase 9)
 
 **Progress update (2026-06-18):**
 - ✅ P10-001 completed.
-- ⏳ Next: P10-002 (live feedback), then P10-003 (stall safety), then P10-004 (backlog clearance).
+- ✅ P10-002 completed.
+- ⏳ Next: P10-003 (stall safety), then P10-004 (backlog clearance).
 
 ---
 
@@ -283,5 +297,6 @@ P10-004: Backlog clearance           (high-ROI deferred items from Phase 9)
 
 | Date | Change |
 |------|--------|
+| 2026-06-18 | P10-002 marked **done** from worker implementation: `ctx.info` live notifications + `logs tail` CLI + tests (focused `25 passed`, full suite `994 passed, 1 skipped`). |
 | 2026-06-18 | P10-001 marked **done** from worker implementation: executor `system_prompt_prefix` + `edit_format` wiring, delegation audit fields, env docs, and focused/full test evidence recorded. |
 | 2026-06-18 | Created — Phase 10 PM board; milestones P10-001..P10-004 scoped; D-P10-1..D-P10-7 locked in master planning session. |

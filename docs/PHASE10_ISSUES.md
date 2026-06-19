@@ -60,7 +60,7 @@ See [PHASE10_MVP.md](./PHASE10_MVP.md) § P10-001.
 **Type:** Backlog promotion → active milestone
 **Milestone:** P10-002
 **Severity:** high — blocks confident real-project dogfood on long runs
-**Status:** `promoted` — pending worker spec
+**Status:** `done` — implemented 2026-06-18 (worker session)
 **Opened:** 2026-06-18 (planning session)
 **Backlog:** [BL-106](./BACKLOG.md#bl-106-mcp-live-progress--logging-notifications) · [BL-520](./BACKLOG.md#bl-520-live-log-tail--follow-delegation)
 
@@ -76,6 +76,14 @@ Long `delegate_to_agent` runs show only a spinner in Cursor. Phase 9 write-alway
 ### Exit criteria
 
 See [PHASE10_MVP.md](./PHASE10_MVP.md) § P10-002.
+
+### Result summary
+
+- `delegate_to_agent` now accepts FastMCP context and emits milestone `ctx.info` notifications through a thread-safe queue bridge.
+- Notifications are short/redacted and non-fatal on send failure.
+- New CLI command `mcp-coder logs tail` shipped with `--latest` / `--delegation-id` and `--format human|json`.
+- New tests in `tests/test_visibility_p10_002.py` cover bridge behavior, formatting, selector resolution, missing-file handling, and CLI dispatch.
+- Validation: focused `25 passed`; full suite `994 passed, 1 skipped`.
 
 ---
 

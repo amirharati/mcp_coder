@@ -142,6 +142,35 @@ def main() -> None:
     )
     inspect_p.add_argument("--format", choices=("human", "json"), default="human")
 
+    logs_p = sub.add_parser(
+        "logs",
+        help="Log utilities (subcommands: tail)",
+    )
+    logs_sub = logs_p.add_subparsers(dest="logs_command", required=True)
+    logs_tail_p = logs_sub.add_parser(
+        "tail",
+        help="Tail delegation trace events in real time",
+    )
+    logs_tail_target = logs_tail_p.add_mutually_exclusive_group()
+    logs_tail_target.add_argument(
+        "--latest",
+        action="store_true",
+        help="Tail the most recent delegation trace (default).",
+    )
+    logs_tail_target.add_argument(
+        "--delegation-id",
+        default=None,
+        help="Tail this specific delegation trace id.",
+    )
+    logs_tail_p.add_argument("--workspace", default=None, help="Repo root (default: cwd)")
+    logs_tail_p.add_argument("--format", choices=("human", "json"), default="human")
+    logs_tail_p.add_argument(
+        "--poll-interval-s",
+        type=float,
+        default=0.5,
+        help="File polling interval in seconds (default: 0.5)",
+    )
+
     view_p = sub.add_parser(
         "view",
         help="Open browser UIs for inspection (subcommands: delegations, …)",
@@ -352,6 +381,14 @@ def main() -> None:
 
         trace_argv = sys.argv[sys.argv.index("trace") :]
         raise SystemExit(main_trace_inspect(trace_argv))
+
+    if args.command == "logs":
+        if args.logs_command == "tail":
+            from core.cli.logs_tail import main_logs_tail
+
+            logs_argv = sys.argv[sys.argv.index("tail") + 1 :]
+            raise SystemExit(main_logs_tail(logs_argv))
+        parser.error(f"unknown logs subcommand: {args.logs_command}")
 
     # Bare invocation from an interactive terminal: the stdio server would just
     # sit waiting for JSON-RPC on stdin (looks like a hang). Cursor runs us with
