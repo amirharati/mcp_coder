@@ -185,6 +185,7 @@ def apply_post_delegation_report_updates(
     capability_warnings: list[str] | None = None,
     reverted_paths: list[str] | None = None,
     revert_skipped: list[str] | None = None,
+    reviewer_note: str | None = None,
 ) -> tuple[str, str]:
     """Append Run log on report file; update Status, Blockers, Worker feedback; sync YAML status."""
     raw = path.read_text(encoding="utf-8")
@@ -279,6 +280,9 @@ def apply_post_delegation_report_updates(
             "Suggested next (hints only)",
             _failure_suggestions(error, delegate_mode),
         )
+
+    if reviewer_note and reviewer_note.strip():
+        body = replace_section_body(body, "Tier-1 Review", reviewer_note.strip())
 
     front_matter["status"] = status
     if task_spec:

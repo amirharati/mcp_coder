@@ -62,3 +62,13 @@ def clarity_pass_enabled(workspace: str | Path) -> bool:
         yaml_key="clarity_pass",
         default=False,
     )
+
+
+def reviewer_pass_enabled(workspace: str | Path) -> bool:
+    """Default False. Env MCP_CODER_REVIEWER_PASS=1 or yaml reviewer_pass: true → True."""
+    return _resolve_flag(
+        workspace,
+        env_var="MCP_CODER_REVIEWER_PASS",
+        yaml_key="reviewer_pass",
+        default=False,
+    )

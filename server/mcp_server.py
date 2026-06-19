@@ -4,6 +4,7 @@ import asyncio
 import json
 import os
 import queue
+import subprocess
 import threading
 import time
 from pathlib import Path
@@ -35,7 +36,11 @@ from core.config.rag import (
     rag_enabled,
     workspace_file_hints_enabled,
 )
-from core.config.spec_validation import clarity_pass_enabled, spec_validation_enabled
+from core.config.spec_validation import (
+    clarity_pass_enabled,
+    reviewer_pass_enabled,
+    spec_validation_enabled,
+)
 from core.config.models import resolve_model_name
 from core.config.observability import resolve_observability_verbosity
 from core.config.role_models import (
@@ -74,6 +79,7 @@ from core.context.helper_llm_pipeline import (
     apply_architect_pass as _shared_apply_architect_pass,
     apply_builder_llm as _shared_apply_builder_llm,
     apply_clarity_check as _shared_apply_clarity_check,
+    apply_reviewer_pass as _shared_apply_reviewer_pass,
     apply_spec_validation as _shared_apply_spec_validation,
     merge_architect_plan as _merge_architect_plan,
     merge_brief as _merge_brief,
@@ -805,6 +811,64 @@ def _apply_clarity_check(
     )
 
 
+def _apply_reviewer_pass(
+    *,
+    spec_read: "Any",
+    workspace: str,
+    task: str,
+    files_changed: list[str],
+    unified_diff: str,
+    timing: dict[str, int | float],
+    delegation_id: str,
+) -> tuple[
+    bool,
+    str,
+    str | None,
+    dict[str, Any] | None,
+    dict[str, Any] | None,
+    dict[str, Any],
+]:
+    return _shared_apply_reviewer_pass(
+        workspace=workspace,
+        task=task,
+        spec_read=spec_read,
+        files_changed=files_changed,
+        unified_diff=unified_diff,
+        timing=timing,
+        delegation_id=delegation_id,
+        log_warn=obs.warn,
+    )
+
+
+def _collect_reviewer_unified_diff(workspace: str, files_changed: list[str]) -> str:
+    """Git unified diff for reviewer prompt; raises on collection failure."""
+    from core.engine.git_diff import normalize_repo_path
+
+    if not files_changed:
+        return ""
+    paths = [normalize_repo_path(p) for p in files_changed]
+    last_err = "git diff failed"
+    try:
+        for args in (
+            ["git", "diff", "HEAD", "--", *paths],
+            ["git", "diff", "--", *paths],
+        ):
+            proc = subprocess.run(
+                args,
+                cwd=workspace,
+                capture_output=True,
+                text=True,
+                timeout=30,
+                check=False,
+            )
+            if proc.returncode == 0:
+                return proc.stdout or ""
+            last_err = (proc.stderr or proc.stdout or last_err).strip()[:500]
+        raise RuntimeError(last_err)
+    except (OSError, subprocess.TimeoutExpired) as exc:
+        raise RuntimeError(str(exc)) from exc
+
+
 _SPEC_VALIDATION_BLOCK_OUTPUT = SPEC_VALIDATION_BLOCK_OUTPUT
 _CLARITY_CHECK_BLOCK_OUTPUT = (
     "Clarity check found the task unclear. Answer the questions in Cursor, "
@@ -823,6 +887,7 @@ def _build_model_roles_payload(
     builder_record: dict[str, Any] | None = None,
     spec_validation_record: dict[str, Any] | None = None,
     clarity_check_record: dict[str, Any] | None = None,
+    reviewer_record: dict[str, Any] | None = None,
     architect_record: dict[str, Any] | None = None,
     supervisor_record: dict[str, Any] | None = None,
 ) -> dict[str, Any] | None:
@@ -877,6 +942,11 @@ def _build_model_roles_payload(
         if roles is None:
             roles = {}
         roles["clarity_check"] = clarity_check_record
+
+    if reviewer_record:
+        if roles is None:
+            roles = {}
+        roles["reviewer_pass"] = reviewer_record
 
     if supervisor_record:
         if roles is None:
@@ -1342,6 +1412,12 @@ def delegate_to_agent(
         clarity_check_audit: dict[str, Any] | None = None
         clarity_check_record: dict[str, Any] | None = None
         clarity_check_error: str | None = None
+        reviewer_pass_ran = False
+        reviewer_pass_outcome: str | None = None
+        reviewer_pass_note: str | None = None
+        reviewer_pass_error: str | None = None
+        reviewer_pass_audit: dict[str, Any] | None = None
+        reviewer_pass_record: dict[str, Any] | None = None
         builder_provenance: dict[str, Any] = {}
         architect_provenance: dict[str, Any] = {}
         builder_history_rag_on = False
@@ -1435,6 +1511,7 @@ def delegate_to_agent(
             )
 
         clarity_pass_on = clarity_pass_enabled(ws)
+        reviewer_pass_on = reviewer_pass_enabled(ws)
         if (
             pipeline_recorder is not None
             and not review_target_files_error
@@ -2133,6 +2210,75 @@ def delegate_to_agent(
         post_gateway: dict[str, Any] | None = None
         spec_report_rel_path: str | None = None
 
+        reviewer_applicable = (
+            reviewer_pass_on
+            and delegate_mode == DELEGATE_MODE_IMPLEMENT
+            and success
+            and bool(files_changed)
+            and not spec_invalid_reason
+            and spec_path
+            and delegation_policies is not None
+            and spec_read is not None
+        )
+        if pipeline_recorder is not None:
+            if reviewer_applicable:
+                pipeline_recorder.start("reviewer_pass")
+                try:
+                    unified_diff = _collect_reviewer_unified_diff(ws, files_changed)
+                except Exception as diff_exc:
+                    reviewer_pass_error = str(diff_exc)
+                    pipeline_recorder.end(
+                        "reviewer_pass",
+                        status="error",
+                        detail=reviewer_pass_error[:200],
+                    )
+                else:
+                    (
+                        reviewer_pass_ran,
+                        reviewer_pass_outcome,
+                        reviewer_pass_note,
+                        reviewer_pass_audit,
+                        reviewer_pass_record,
+                        _reviewer_prov,
+                    ) = _apply_reviewer_pass(
+                        spec_read=spec_read,
+                        workspace=ws,
+                        task=task,
+                        files_changed=files_changed,
+                        unified_diff=unified_diff,
+                        timing=timing,
+                        delegation_id=delegation_id,
+                    )
+                    if reviewer_pass_ran and reviewer_pass_outcome in ("lgtm", "issues"):
+                        pipeline_recorder.end("reviewer_pass", status="ok")
+                    else:
+                        reviewer_pass_error = reviewer_pass_error or (
+                            (reviewer_pass_audit or {}).get("error") or "reviewer_pass_failed"
+                        )
+                        pipeline_recorder.end(
+                            "reviewer_pass",
+                            status="error",
+                            detail=str(reviewer_pass_error)[:200],
+                        )
+            else:
+                pipeline_recorder.mark(
+                    "reviewer_pass",
+                    status="skipped",
+                    detail="disabled_or_not_applicable",
+                )
+
+        from core.logging.delegation_log import resolve_reviewer_pass_result
+
+        reviewer_pass_result = resolve_reviewer_pass_result(
+            enabled=reviewer_pass_on,
+            ran=reviewer_pass_ran,
+            outcome=reviewer_pass_outcome,
+            error=reviewer_pass_error,
+        )
+        context_block["reviewer_pass_result"] = reviewer_pass_result
+        if reviewer_pass_audit is not None:
+            context_block["reviewer_pass"] = reviewer_pass_audit
+
         if (
             spec_path
             and not spec_invalid_reason
@@ -2191,6 +2337,7 @@ def delegate_to_agent(
                     capability_warnings=cap_warnings or None,
                     reverted_paths=reverted_paths or None,
                     revert_skipped=revert_skipped or None,
+                    reviewer_note=reviewer_pass_note,
                 )
                 spec_read = read_task_spec(spec_abs_path, workspace=ws)
                 spec_sha256 = spec_read.sha256
@@ -2406,6 +2553,7 @@ def delegate_to_agent(
             builder_record=builder_record,
             spec_validation_record=spec_validation_record,
             clarity_check_record=clarity_check_record,
+            reviewer_record=reviewer_pass_record,
             architect_record=architect_record,
             supervisor_record=_supervisor_record_from_tokens(tokens),
         )

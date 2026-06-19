@@ -9,7 +9,7 @@ import time
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, Callable
 
-from core.config.role_models import ROLE_CONTEXT_BUILDER, resolve_role_budget_tokens
+from core.config.role_models import ROLE_CONTEXT_BUILDER, ROLE_REVIEW, resolve_role_budget_tokens
 from core.observability.context import role_context
 from core.usage.role_audit import build_role_usage_record
 
@@ -432,3 +432,100 @@ def apply_clarity_check(
         raw_output=llm_result.raw_output,
     )
     return True, questions, True, False, None, audit, model_record, provenance
+
+
+def apply_reviewer_pass(
+    *,
+    workspace: str,
+    task: str,
+    spec_read: Any,
+    files_changed: list[str],
+    unified_diff: str,
+    timing: dict[str, int | float] | None = None,
+    delegation_id: str | None = None,
+    log_warn: LogWarnFn | None = None,
+) -> tuple[
+    bool,
+    str,
+    str | None,
+    dict[str, Any] | None,
+    dict[str, Any] | None,
+    dict[str, Any],
+]:
+    """Run post-executor tier-1 reviewer LLM.
+
+    Returns (ran, result, review_note, audit_dict, model_record, provenance).
+    On failure: ran=False, result=error, note=None (non-fatal to caller).
+    """
+    from core.context.reviewer_prompt import build_reviewer_prompt
+    from core.engine.reviewer_llm import run_reviewer_llm
+    from core.logging.delegation_log import REVIEWER_PASS_ERROR, REVIEWER_PASS_LGTM
+
+    acceptance = (
+        (spec_read.sections.get("Done when") or spec_read.sections.get("Goal") or "")
+        .strip()
+    )
+    t_val = time.perf_counter()
+    prompt = build_reviewer_prompt(
+        task=task,
+        acceptance=acceptance,
+        files_changed=files_changed,
+        unified_diff=unified_diff,
+    )
+    with role_context(ROLE_REVIEW):
+        llm_result = run_reviewer_llm(prompt, workspace_path=workspace)
+    if timing is not None:
+        timing["reviewer_pass_ms"] = int((time.perf_counter() - t_val) * 1000)
+
+    model_record = build_role_usage_record(
+        role=ROLE_REVIEW,
+        model=llm_result.model,
+        input_tokens=llm_result.tokens.get("input"),
+        output_tokens=llm_result.tokens.get("output"),
+        total_tokens=llm_result.tokens.get("total"),
+        duration_ms=llm_result.duration_ms,
+        source=str(llm_result.tokens.get("source") or "reviewer_pass"),
+    )
+
+    if not llm_result.success or llm_result.outcome is None:
+        if log_warn is not None:
+            log_warn(
+                "reviewer_pass_failed",
+                {
+                    "delegation_id": delegation_id,
+                    "model": llm_result.model,
+                    "error": llm_result.error,
+                },
+            )
+        audit: dict[str, Any] = {
+            "ran": False,
+            "outcome": None,
+            "duration_ms": llm_result.duration_ms,
+        }
+        if llm_result.error:
+            audit["error"] = llm_result.error
+        provenance = _helper_provenance(
+            input_prompt=prompt,
+            error_text=llm_result.error,
+            raw_output=llm_result.raw_output,
+        )
+        return False, REVIEWER_PASS_ERROR, None, audit, model_record, provenance
+
+    outcome = llm_result.outcome
+    note = llm_result.note
+    if outcome == REVIEWER_PASS_LGTM:
+        report_note = f"LGTM — {note}" if note.strip() else "LGTM"
+    else:
+        report_note = note
+
+    audit = {
+        "ran": True,
+        "outcome": outcome,
+        "duration_ms": llm_result.duration_ms,
+    }
+    provenance = _helper_provenance(
+        input_prompt=prompt,
+        raw_output=llm_result.raw_output,
+        output_text=llm_result.raw_output,
+    )
+    return True, outcome, report_note, audit, model_record, provenance

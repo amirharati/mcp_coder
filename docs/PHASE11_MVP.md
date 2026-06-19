@@ -100,7 +100,7 @@ Phase 11:  MCP → Aider (supervised, decisions routed) ↔ Supervisor LLM → r
 | 2 | P11-002 | [P11-002](../tasks/P11-002-supervised-io-v1.md) | **done** 2026-06-19 | SupervisedIO + DelegationSupervisor + decision log |
 | 3 | P11-003 | [P11-003](../tasks/P11-003-executor-pull-v0.md) | **done** 2026-06-19 | Executor-pull v0: system prefix /read hint |
 | 4 | P11-004 | [P11-004](../tasks/P11-004-human-gate-v0.md) | **done** 2026-06-19 | Mid-run human gate event bridge + timeout fallback |
-| 5 | P11-005 | [P11-005](../tasks/P11-005-reviewer-tier1-v0.md) | pending | Tier-1 reviewer: cheap model post-executor scan |
+| 5 | P11-005 | [P11-005](../tasks/P11-005-reviewer-tier1-v0.md) | **done** 2026-06-19 | Tier-1 reviewer phase wired, non-fatal |
 | 6 | P11-006 | [P11-006](../tasks/P11-006-smart-architect-trigger.md) | pending | Smart architect trigger heuristic |
 | 7 | P11-007 | [P11-007](../tasks/P11-007-model-policy-host.md) | pending | model_policy arg on delegate_to_agent (BL-512) |
 | 8 | P11-008 | [P11-008](../tasks/P11-008-planner-rename-refactor.md) | pending | Naming refactor: architect_pass → planner_pass; role hierarchy constants |
@@ -204,7 +204,7 @@ Phase 11:  MCP → Aider (supervised, decisions routed) ↔ Supervisor LLM → r
 
 ### P11-005 — Tier-1 post-executor reviewer v0 *(BL-358 v0)*
 
-**Status:** `pending`
+**Status:** `done` — shipped 2026-06-19 (34 tests passed)
 **Goal:** After a successful delegation, run a cheap LLM scan on `files_changed`. Output is a brief review note appended to the spec report: obvious issues, missing docstrings, import alignment, naming.
 
 **Scope:**
@@ -365,12 +365,22 @@ Phase 11:  MCP → Aider (supervised, decisions routed) ↔ Supervisor LLM → r
 - **Deferred:** late-answer continuation after timeout tracked as BL-528 (resume-token concept, Phase 12 candidate).
 - **Dogfood follow-up:** validate real Cursor concurrent tool-call behavior in non-CLI small-project flow; confirm timeout fallback remains clean.
 
+### P11-005 — tier-1 reviewer v0 (2026-06-19)
+
+- **Shipped:** optional `reviewer_pass` phase (`executor -> reviewer_pass -> post_gateway -> spec_report`) for implement delegations.
+- **Enablement:** opt-in via `MCP_CODER_REVIEWER_PASS=1` or workspace `reviewer_pass: true`; default remains off.
+- **Modules:** `reviewer_prompt.py`, `reviewer_llm.py`, `apply_reviewer_pass()`, report writer `reviewer_note` support, reviewer audit resolver, server phase wiring.
+- **Behavior:** runs only on successful implement delegations with non-empty `files_changed`; writes `## Tier-1 Review` note to report on success; non-fatal on diff/LLM/parse errors.
+- **Audit:** `reviewer_pass_result` in `{lgtm, issues, skipped, error}` plus pipeline step visibility and role usage record when run.
+- **Tests:** 34 passed (10 new P11-005 + focused regression suites), with results recorded in `docs/tasks/P11-005-reviewer-tier1-v0.md`.
+
 ---
 
 ## Changelog
 
 | Date | Change |
 |------|--------|
+| 2026-06-19 | **P11-005 shipped** — tier-1 reviewer v0 (`reviewer_pass`) wired with opt-in enablement, report section append, non-fatal error handling, and audit field `reviewer_pass_result`. |
 | 2026-06-19 | **P11-004 shipped** — mid-run human gate v0 (`answer_delegation_question` + event bridge + timeout fallback). Late-answer continuation tracked as BL-528. |
 | 2026-06-19 | **P11-003 shipped** — executor-pull hint v0 (prompt-only `/read` guidance); BL-354 Phase 11 slice done; sidecar/tool-server deferred. |
 | 2026-06-19 | **P11-002 shipped** — supervised execution v1 (`SupervisedIO` + `DelegationSupervisor`); BL-351 Phase 11 scope done; async/mid-run resume remains deferred. |

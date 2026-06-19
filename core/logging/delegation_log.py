@@ -58,6 +58,31 @@ def resolve_clarity_check_result(
     return None
 
 
+REVIEWER_PASS_LGTM = "lgtm"
+REVIEWER_PASS_ISSUES = "issues"
+REVIEWER_PASS_SKIPPED = "skipped"
+REVIEWER_PASS_ERROR = "error"
+
+
+def resolve_reviewer_pass_result(
+    *,
+    enabled: bool,
+    ran: bool,
+    outcome: str | None,
+    error: str | None = None,
+) -> str:
+    """Map reviewer-pass phase state to delegation JSONL audit value."""
+    if not enabled:
+        return REVIEWER_PASS_SKIPPED
+    if ran and outcome in (REVIEWER_PASS_LGTM, REVIEWER_PASS_ISSUES):
+        return outcome
+    if error:
+        return REVIEWER_PASS_ERROR
+    if not ran:
+        return REVIEWER_PASS_SKIPPED
+    return REVIEWER_PASS_ERROR
+
+
 def supervisor_audit_fields(tokens: dict[str, Any] | None) -> dict[str, Any]:
     """Optional supervisor counters for delegation JSONL context block."""
     data = tokens or {}
