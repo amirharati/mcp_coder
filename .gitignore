@@ -12,3 +12,4 @@ build/
 # Worker session specs: one .md per implementation session, local dev only (never commit)
 docs/tasks/
 .aider*
+uv.lock
