@@ -18,7 +18,7 @@ from core.config.auto_verify import (
     resolve_verify_command,
     resolve_verify_timeout_s,
 )
-from core.config.architect_pass import architect_pass_enabled
+from core.engine.architect_trigger import should_run_architect_pass
 from core.config.aider_runtime import (
     OUTCOME_NEEDS_INPUT_FILES,
     build_needs_input_payload,
@@ -1729,7 +1729,12 @@ def delegate_to_agent(
                             obs_verbosity=_compile_verbosity,
                         )
 
-                    architect_enabled = architect_pass_enabled(ws)
+                    architect_enabled, architect_reason = should_run_architect_pass(
+                        workspace=ws,
+                        task=task,
+                        target_files=effective_target_files,
+                        spec_read=spec_read,
+                    )
                     if architect_enabled:
                         if pipeline_recorder is not None:
                             pipeline_recorder.start("architect_pass")
@@ -1774,7 +1779,7 @@ def delegate_to_agent(
                             pipeline_recorder.mark(
                                 "architect_pass",
                                 status="skipped",
-                                detail="disabled",
+                                detail=architect_reason,
                             )
                         _emit_compile_skip(
                             delegation_id=delegation_id,
@@ -1782,7 +1787,7 @@ def delegate_to_agent(
                             workspace=ws,
                             session_dir=storage.session_dir,
                             obs_verbosity=_compile_verbosity,
-                            reason="disabled",
+                            reason=architect_reason,
                         )
 
                     builder_llm_enabled = (

@@ -45,6 +45,68 @@ Do not touch database layer.
 - `pkg/core.py`
 """
 
+STEP_SPEC_ARCH_ON = """\
+---
+spec_id: step-b
+architect_pass: true
+files_edit:
+  - pkg/cli.py
+files_read:
+  - pkg/core.py
+edit_scope: discover
+---
+
+# Step task spec
+
+## Goal
+
+CLI uses core.
+
+## Constraints
+
+Do not touch database layer.
+
+## Files
+
+### Edit
+- `pkg/cli.py`
+
+### Read
+- `pkg/core.py`
+"""
+
+STEP_SPEC_ARCH_OFF = """\
+---
+spec_id: step-b
+architect_pass: false
+files_edit:
+  - pkg/cli.py
+  - pkg/core.py
+files_read:
+  - pkg/core.py
+edit_scope: discover
+---
+
+# Step task spec
+
+## Goal
+
+Refactor CLI and core integration.
+
+## Constraints
+
+Do not touch database layer.
+
+## Files
+
+### Edit
+- `pkg/cli.py`
+- `pkg/core.py`
+
+### Read
+- `pkg/core.py`
+"""
+
 
 def _write_workspace_config(workspace: Path, content: str) -> None:
     cfg = workspace / ".mcp-coder"
@@ -52,12 +114,12 @@ def _write_workspace_config(workspace: Path, content: str) -> None:
     (cfg / "config.yaml").write_text(content, encoding="utf-8")
 
 
-def _setup_workspace(tmp_path: Path) -> Path:
+def _setup_workspace(tmp_path: Path, *, spec_text: str | None = None) -> Path:
     ws = tmp_path / "workspace"
     ws.mkdir()
     spec_dir = ws / ".mcp-coder" / "specs" / "tasks"
     spec_dir.mkdir(parents=True)
-    (spec_dir / "step-b.md").write_text(STEP_SPEC, encoding="utf-8")
+    (spec_dir / "step-b.md").write_text(spec_text or STEP_SPEC, encoding="utf-8")
     pkg = ws / "pkg"
     pkg.mkdir()
     (pkg / "core.py").write_text("def api(): return 1\n", encoding="utf-8")
@@ -109,6 +171,13 @@ def _phase_status(phases: list[dict], phase_name: str) -> str | None:
     for item in phases:
         if item.get("phase") == phase_name:
             return item.get("status")
+    return None
+
+
+def _phase_detail(phases: list[dict], phase_name: str) -> str | None:
+    for item in phases:
+        if item.get("phase") == phase_name:
+            return item.get("detail")
     return None
 
 
@@ -180,12 +249,11 @@ def test_architect_llm_runner_strips_reasoning_preamble(tmp_path):
 
 
 def test_delegate_architect_on_adds_plan_above_brief(tmp_path, monkeypatch):
-    ws = _setup_workspace(tmp_path)
+    ws = _setup_workspace(tmp_path, spec_text=STEP_SPEC_ARCH_ON)
     monkeypatch.setenv("MCP_CODER_HOME", str(tmp_path / "home"))
     monkeypatch.setenv("MCP_CODER_CONTEXT_BUILDER_ENABLED", "0")
     monkeypatch.setenv("MCP_CODER_CONTEXT_BUILDER_LLM", "0")
     monkeypatch.chdir(ws)
-    _write_workspace_config(ws, "architect_pass: true\n")
 
     captured: dict[str, str] = {}
     fake = ExecutionResult(success=True, output="ok", files_changed=["pkg/cli.py"], model="m")
@@ -218,12 +286,11 @@ def test_delegate_architect_on_adds_plan_above_brief(tmp_path, monkeypatch):
 
 
 def test_delegate_architect_error_falls_back_and_pipeline_error(tmp_path, monkeypatch):
-    ws = _setup_workspace(tmp_path)
+    ws = _setup_workspace(tmp_path, spec_text=STEP_SPEC_ARCH_ON)
     monkeypatch.setenv("MCP_CODER_HOME", str(tmp_path / "home"))
     monkeypatch.setenv("MCP_CODER_CONTEXT_BUILDER_ENABLED", "0")
     monkeypatch.setenv("MCP_CODER_CONTEXT_BUILDER_LLM", "0")
     monkeypatch.chdir(ws)
-    _write_workspace_config(ws, "architect_pass: true\n")
 
     captured: dict[str, str] = {}
     fake = ExecutionResult(success=True, output="ok", files_changed=["pkg/cli.py"], model="m")
@@ -252,3 +319,92 @@ def test_delegate_architect_error_falls_back_and_pipeline_error(tmp_path, monkey
     assert payload["success"] is True
     assert not captured["brief"].startswith("## Architect plan")
     assert _phase_status(payload["delegation_pipeline"], "architect_pass") == "error"
+
+
+def test_delegate_architect_heuristic_skips_trivial_single_file(tmp_path, monkeypatch):
+    ws = _setup_workspace(tmp_path)
+    monkeypatch.setenv("MCP_CODER_HOME", str(tmp_path / "home"))
+    monkeypatch.setenv("MCP_CODER_CONTEXT_BUILDER_ENABLED", "0")
+    monkeypatch.setenv("MCP_CODER_CONTEXT_BUILDER_LLM", "0")
+    monkeypatch.chdir(ws)
+    _write_workspace_config(ws, "auto_merge_spec_read: false\n")
+
+    fake = ExecutionResult(success=True, output="ok", files_changed=["pkg/cli.py"], model="m")
+    engine = _make_mock_engine(fake)
+
+    with patch("server.mcp_server.get_engine", return_value=engine), patch(
+        "core.engine.architect_pass_llm.run_architect_pass_llm"
+    ) as architect_llm:
+        raw = delegate_to_agent(
+            task="Implement CLI",
+            target_files=["pkg/cli.py"],
+            context_summary="",
+            spec_path="tasks/step-b.md",
+            mode="implement",
+        )
+        architect_llm.assert_not_called()
+
+    payload = json.loads(raw)
+    phases = payload["delegation_pipeline"]
+    assert _phase_status(phases, "architect_pass") == "skipped"
+    assert _phase_detail(phases, "architect_pass") == "heuristic_trivial_task"
+
+
+def test_delegate_architect_spec_override_true_runs_single_file(tmp_path, monkeypatch):
+    ws = _setup_workspace(tmp_path, spec_text=STEP_SPEC_ARCH_ON)
+    monkeypatch.setenv("MCP_CODER_HOME", str(tmp_path / "home"))
+    monkeypatch.setenv("MCP_CODER_CONTEXT_BUILDER_ENABLED", "0")
+    monkeypatch.setenv("MCP_CODER_CONTEXT_BUILDER_LLM", "0")
+    monkeypatch.chdir(ws)
+
+    fake = ExecutionResult(success=True, output="ok", files_changed=["pkg/cli.py"], model="m")
+    engine = _make_mock_engine(fake)
+    arch = ArchitectPassLlmResult(
+        success=True,
+        plan="## Architect plan\n- Step one",
+        model="cheap-model",
+        duration_ms=20,
+    )
+
+    with patch("server.mcp_server.get_engine", return_value=engine), patch(
+        "core.engine.architect_pass_llm.run_architect_pass_llm", return_value=arch
+    ) as architect_llm:
+        raw = delegate_to_agent(
+            task="Implement CLI",
+            target_files=["pkg/cli.py"],
+            context_summary="",
+            spec_path="tasks/step-b.md",
+            mode="implement",
+        )
+        architect_llm.assert_called_once()
+
+    payload = json.loads(raw)
+    assert _phase_status(payload["delegation_pipeline"], "architect_pass") == "ok"
+
+
+def test_delegate_architect_spec_override_false_skips(tmp_path, monkeypatch):
+    ws = _setup_workspace(tmp_path, spec_text=STEP_SPEC_ARCH_OFF)
+    monkeypatch.setenv("MCP_CODER_HOME", str(tmp_path / "home"))
+    monkeypatch.setenv("MCP_CODER_CONTEXT_BUILDER_ENABLED", "0")
+    monkeypatch.setenv("MCP_CODER_CONTEXT_BUILDER_LLM", "0")
+    monkeypatch.chdir(ws)
+
+    fake = ExecutionResult(success=True, output="ok", files_changed=["pkg/cli.py"], model="m")
+    engine = _make_mock_engine(fake)
+
+    with patch("server.mcp_server.get_engine", return_value=engine), patch(
+        "core.engine.architect_pass_llm.run_architect_pass_llm"
+    ) as architect_llm:
+        raw = delegate_to_agent(
+            task="Refactor CLI and core",
+            target_files=["pkg/cli.py", "pkg/core.py"],
+            context_summary="",
+            spec_path="tasks/step-b.md",
+            mode="implement",
+        )
+        architect_llm.assert_not_called()
+
+    payload = json.loads(raw)
+    phases = payload["delegation_pipeline"]
+    assert _phase_status(phases, "architect_pass") == "skipped"
+    assert _phase_detail(phases, "architect_pass") == "spec_override_false"

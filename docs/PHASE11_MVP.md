@@ -101,7 +101,7 @@ Phase 11:  MCP → Aider (supervised, decisions routed) ↔ Supervisor LLM → r
 | 3 | P11-003 | [P11-003](../tasks/P11-003-executor-pull-v0.md) | **done** 2026-06-19 | Executor-pull v0: system prefix /read hint |
 | 4 | P11-004 | [P11-004](../tasks/P11-004-human-gate-v0.md) | **done** 2026-06-19 | Mid-run human gate event bridge + timeout fallback |
 | 5 | P11-005 | [P11-005](../tasks/P11-005-reviewer-tier1-v0.md) | **done** 2026-06-19 | Tier-1 reviewer phase wired, non-fatal |
-| 6 | P11-006 | [P11-006](../tasks/P11-006-smart-architect-trigger.md) | pending | Smart architect trigger heuristic |
+| 6 | P11-006 | [P11-006](../tasks/P11-006-smart-architect-trigger.md) | **done** 2026-06-19 | Smart trigger + skip-reason audit |
 | 7 | P11-007 | [P11-007](../tasks/P11-007-model-policy-host.md) | pending | model_policy arg on delegate_to_agent (BL-512) |
 | 8 | P11-008 | [P11-008](../tasks/P11-008-planner-rename-refactor.md) | pending | Naming refactor: architect_pass → planner_pass; role hierarchy constants |
 
@@ -225,7 +225,7 @@ Phase 11:  MCP → Aider (supervised, decisions routed) ↔ Supervisor LLM → r
 
 ### P11-006 — Smart architect trigger *(heuristic upgrade)*
 
-**Status:** `pending`
+**Status:** `done` — shipped 2026-06-19 (24 tests passed)
 **Goal:** Architect pass is currently global on/off via env. Replace with a smart heuristic trigger: on by default, but automatically skipped for trivial tasks. Override via spec front-matter.
 
 **Scope:**
@@ -323,7 +323,18 @@ Phase 11:  MCP → Aider (supervised, decisions routed) ↔ Supervisor LLM → r
 |-------|----------|
 | **Minimum** | P11-002 supervisor fires on at least one real delegation; decision logged; no regressions |
 | **Recommended** | P11-001 + P11-002 + P11-003: clarity pass + supervised execution + /read hint; `needs_input` stalls measurably reduced in dogfood |
-| **Full** | All P11-001..P11-007 shipped; dogfood shows supervisor decision log in traces; reviewer notes in spec reports; Cursor model_policy working |
+| **Full** | All P11-001..P11-008 shipped; pre-dogfood log review passes (pipeline + helper/mechanical traces complete); dogfood shows supervisor decisions, reviewer notes, and model-policy behavior end-to-end |
+
+### Pre-dogfood log review gate *(run after P11-008, before live small-project dogfood)*
+
+Run a focused observability validation pass on 3-5 delegations and confirm:
+
+1. `delegation_pipeline` includes every expected step with `ok|error|skipped` statuses (including skipped reasons).
+2. `model_roles` captures all helper + executor calls used in that run (`spec_validation`, `clarity_check`, `architect_pass`, `builder_llm`, `supervisor`, `reviewer_pass`, `executor` when applicable).
+3. Compile/provenance stages exist for mechanical and helper phases (input/output or explicit skip events with reasons).
+4. New P11 audit fields are present and stable (`supervisor_*`, `human_gate_*`, `executor_pull_hint_applied`, `reviewer_pass_result`).
+5. `trace inspect` + JSONL records agree on phase ordering and outcomes.
+6. Any missing/ambiguous logging becomes a P11 issue before starting full dogfood.
 
 ---
 
@@ -374,12 +385,21 @@ Phase 11:  MCP → Aider (supervised, decisions routed) ↔ Supervisor LLM → r
 - **Audit:** `reviewer_pass_result` in `{lgtm, issues, skipped, error}` plus pipeline step visibility and role usage record when run.
 - **Tests:** 34 passed (10 new P11-005 + focused regression suites), with results recorded in `docs/tasks/P11-005-reviewer-tier1-v0.md`.
 
+### P11-006 — smart architect trigger v0 (2026-06-19)
+
+- **Shipped:** `should_run_architect_pass()` trigger module with explicit precedence: spec override -> env hard disable -> default-on heuristic.
+- **Heuristic:** skip only when task is trivial (`<2` target files, no `epic_step`, no architecture keyword in task); otherwise run architect pass.
+- **Server wiring:** `mcp_server` now uses trigger decision + reason, including skip reason propagation into `delegation_pipeline` detail and compile skip events.
+- **Compatibility:** spec override supports both `.meta` and `.front_matter`; existing architect-pass execution/error behavior unchanged when enabled.
+- **Tests:** 24 passed (`tests/test_architect_trigger_p11_006.py` + updated `tests/test_architect_pass.py` integration coverage).
+
 ---
 
 ## Changelog
 
 | Date | Change |
 |------|--------|
+| 2026-06-19 | **P11-006 shipped** — smart architect trigger v0 with spec/env/heuristic precedence and skip-reason audit wiring; 24 tests passed. |
 | 2026-06-19 | **P11-005 shipped** — tier-1 reviewer v0 (`reviewer_pass`) wired with opt-in enablement, report section append, non-fatal error handling, and audit field `reviewer_pass_result`. |
 | 2026-06-19 | **P11-004 shipped** — mid-run human gate v0 (`answer_delegation_question` + event bridge + timeout fallback). Late-answer continuation tracked as BL-528. |
 | 2026-06-19 | **P11-003 shipped** — executor-pull hint v0 (prompt-only `/read` guidance); BL-354 Phase 11 slice done; sidecar/tool-server deferred. |

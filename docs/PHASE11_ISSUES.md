@@ -18,7 +18,7 @@
 | **BL-354** | **P11-003** ✅ | Executor-pull v0: system prefix `/read` hint only | Full sidecar HTTP tool server → Phase 12 |
 | **BL-522** | **P11-004** ✅ | Mid-run human gate shipped: `answer_delegation_question` tool + Event bridge (experimental) | Protocol-level async mid-run gate + late-answer resume (BL-528) → Phase 12 |
 | **BL-358** | **P11-005** ✅ | Tier-1 reviewer shipped: cheap model scan on `files_changed`, appended to spec report | Tier-2 epic-boundary review, critic/redo → Phase 12 |
-| — | **P11-006** | Smart architect trigger: heuristic skip for trivial tasks, spec front-matter override | — |
+| — | **P11-006** ✅ | Smart architect trigger shipped: heuristic skip for trivial tasks + spec front-matter override + skip-reason audit detail | — |
 | **BL-512** | **P11-007** | Host model policy: `model_policy` arg on `delegate_to_agent`, precedence over env | BL-513 AI-suggested, BL-514 dynamic escalation → Phase 12 |
 
 ---
@@ -32,9 +32,12 @@
 | P11-003 | 2026-06-19 | Executor-pull `/read` prompt hint shipped; merge-safe with existing system prefix; code uncommitted pending review |
 | P11-004 | 2026-06-19 | Mid-run human gate shipped (`QuestionRegistry` + answer tool); timeout fallback clean; 30 tests passed |
 | P11-005 | 2026-06-19 | Tier-1 reviewer shipped (`reviewer_pass` + report section append); non-fatal error path; 34 tests passed |
+| P11-006 | 2026-06-19 | Smart architect trigger shipped (`should_run_architect_pass` + pipeline skip-reason wiring); 24 tests passed |
 
 ---
 
 ## Open implementation issues
 
-*None yet — issues opened here during worker sessions (P11-ISS-NNN format).*
+| ID | Status | Severity | Summary | Milestone | Notes |
+|----|--------|----------|---------|-----------|-------|
+| P11-ISS-001 | open | medium | Pre-dogfood log integrity review required after P11-008 (validate full phase/mechanical/helper trace coverage) | P11-008 / phase-exit | Gate: do not start full live small-project dogfood until this check passes |

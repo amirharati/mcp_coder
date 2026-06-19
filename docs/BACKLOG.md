@@ -24,8 +24,8 @@ Status: `idea` | `deferred` | `blocked` | `in_phase` | `done`
 | BL-351 | P11-002 | ✅ Done — `SupervisedIO` + `DelegationSupervisor` + decision log + abort-on-escalate shipped | Async outer-loop resume / mid-run async resume → Phase 12 |
 | BL-354 | P11-003 | ✅ Done — executor-pull hint v0 shipped (`/read` prompt guidance + audit field) | Full sidecar HTTP tool server → Phase 12 |
 | BL-522 (new) | P11-004 | ✅ Done — mid-run human gate shipped (`answer_delegation_question` + Event bridge, timeout fallback) | Protocol-level async gate + late-answer resume (BL-528) → Phase 12 |
-| BL-358 | P11-005 | Tier-1 reviewer v0: cheap model scan on `files_changed` | Tier-2 epic-boundary review → Phase 12 |
-| — | P11-006 | Smart architect trigger: heuristic skip + spec front-matter override | — |
+| BL-358 | P11-005 | ✅ Done — tier-1 reviewer v0 shipped (`reviewer_pass` + report append, non-fatal on reviewer error) | Tier-2 epic-boundary review → Phase 12 |
+| — | P11-006 | ✅ Done — smart architect trigger shipped (spec/env/heuristic precedence + skip-reason detail) | — |
 | BL-512 | P11-007 | Host `model_policy` arg on `delegate_to_agent` (Stage 2) | BL-513 AI-suggested, BL-514 dynamic escalation → Phase 12 |
 
 ---
@@ -2187,6 +2187,8 @@ The MCP-facilitated path is the architectural win: the junior PM host calls `mcp
 
 | Date | Change |
 |------|--------|
+| 2026-06-19 | **P11-006 shipped** — smart architect trigger v0 shipped (spec/env/heuristic precedence + skip-reason audit detail). |
+| 2026-06-19 | **P11-005 shipped** — BL-358 Phase 11 slice done (`reviewer_pass` + report append + non-fatal error path). |
 | 2026-06-19 | **BL-528 added** — late-answer resume after P11-004 human-gate timeout (`resume_token` continuation concept). Tracks the gap where late `answer_delegation_question` currently returns `not_found`. |
 | 2026-06-19 | **P11-003 shipped** — BL-354 Phase 11 slice done (prompt-only `/read` hint + audit). Full sidecar/tool-server remains Phase 12. |
 | 2026-06-19 | **P11-002 shipped** — BL-351 Phase 11 scope done (`SupervisedIO` + `DelegationSupervisor` + abort-on-escalate); async/mid-run resume remains deferred to Phase 12. |
