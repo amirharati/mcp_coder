@@ -43,7 +43,8 @@ Use this page so **main vision** ([IDEA.md](./IDEA.md)) is not lost when editing
 | **3 — Direction notes** | [notes/spec-based-development.md](./notes/spec-based-development.md) | Spec-as-contract — **shipped experiment** (P1-151) | Update when workflow changes |
 | **3 — Direction notes** | [notes/spec-review-loop.md](./notes/spec-review-loop.md) | Review vs implement modes | Same |
 | **3 — Direction notes** | [notes/phase2-owned-context.md](./notes/phase2-owned-context.md) | Context compiler design — locked P1-199 | Update as Phase 2 decisions land |
-| **3 — Direction notes** | [notes/multi-model-roles.md](./notes/multi-model-roles.md) | Per-role models (D-P4-8) + future escalation/critic/swarm | Update as multi-model decisions land |
+| **3 — Direction notes** | [notes/multi-model-roles.md](./notes/multi-model-roles.md) | Per-role models (D-P4-8) + role hierarchy + host hedging (BL-527) | Update as multi-model decisions land |
+| **3 — Direction notes** | [notes/delegation-workflow-vision.md](./notes/delegation-workflow-vision.md) | Full role hierarchy + delegation lifecycle + planner/executor separation + host hedging — living target state | Update as roles ship and vocabulary is confirmed |
 | **3 — Direction notes** | [notes/rag-gap-analysis.md](./notes/rag-gap-analysis.md) | RAG vs not-RAG gaps, corpora, Phase 5 sequencing — **living** (T-04 / observability pass) | Update as we dogfood and plan Phase 5 |
 | **3 — Direction notes** | [notes/workflow-turns.md](./notes/workflow-turns.md) | Special turns (polish, refactor, document, digest) + cadence — **living** | Update as workflow modes are planned |
 | **3 — Handoff** | [notes/phase3-master-session-bootstrap.md](./notes/phase3-master-session-bootstrap.md) | Phase 3 master session prompt + summary | Frozen at P3-499 |
@@ -101,6 +102,7 @@ Use this page so **main vision** ([IDEA.md](./IDEA.md)) is not lost when editing
 
 | Date | Change |
 |------|--------|
+| 2026-06-19 | **delegation-workflow-vision.md created** — full role hierarchy, delegation lifecycle, planner/executor separation, host hedging principle (BL-527), naming table; BL-523/524/525/526/527 added; P11-008 planner rename planned; registered in doc map. |
 | 2026-06-19 | **P11-001 shipped** — clarity_check pipeline phase (BL-521); Phase 11 active. |
 | 2026-06-18 | **Phase 10 closed** — P10-001..P10-004 shipped; P10 docs frozen; residual partial scope tracked in BACKLOG (BL-516/518). |
 | 2026-06-18 | **Phase 10 opened** — PHASE10_MVP + PHASE10_ISSUES + phase10-master-session-bootstrap; BL-334/106/520/351/516/517/518/519 promoted to P10-001..P10-004; PHASES.md updated |

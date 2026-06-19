@@ -946,7 +946,7 @@ Make the Aider/MCP boundary bidirectional and supervised: replace `yes=True` wit
 | P11-003 | Executor-pull v0: system prefix `/read` hint | BL-354 v0 |
 | P11-004 | Mid-run human gate: `answer_delegation_question` tool (experimental) | BL-522 (new) |
 | P11-005 | Tier-1 post-executor reviewer (cheap model scan on files_changed) | BL-358 v0 |
-| P11-006 | Smart architect trigger: heuristic skip for trivial tasks | — |
+| P11-006 | Smart planner-pass trigger: heuristic skip for trivial tasks *(named architect trigger until P11-008 rename)* | — |
 | P11-007 | Host `model_policy` arg on `delegate_to_agent` | BL-512 Stage 2 |
 
 ### Cross-phase architectural decisions (locked in Phase 11)

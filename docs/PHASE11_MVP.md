@@ -103,6 +103,7 @@ Phase 11:  MCP → Aider (supervised, decisions routed) ↔ Supervisor LLM → r
 | 5 | P11-005 | [P11-005](../tasks/P11-005-reviewer-tier1-v0.md) | pending | Tier-1 reviewer: cheap model post-executor scan |
 | 6 | P11-006 | [P11-006](../tasks/P11-006-smart-architect-trigger.md) | pending | Smart architect trigger heuristic |
 | 7 | P11-007 | [P11-007](../tasks/P11-007-model-policy-host.md) | pending | model_policy arg on delegate_to_agent (BL-512) |
+| 8 | P11-008 | [P11-008](../tasks/P11-008-planner-rename-refactor.md) | pending | Naming refactor: architect_pass → planner_pass; role hierarchy constants |
 
 ---
 
@@ -269,6 +270,35 @@ Phase 11:  MCP → Aider (supervised, decisions routed) ↔ Supervisor LLM → r
 - Delegation with `model_policy: {executor: {thinking_budget: 12000}}` → executor uses high thinking budget
 - Delegation without `model_policy` → unchanged behavior
 - `trace inspect` shows `model_policy_applied` with override fields
+
+---
+
+### P11-008 — Naming refactor: architect_pass → planner_pass *(end-of-phase cleanup)*
+
+**Status:** `pending`
+**Goal:** The current `architect_pass` is architecturally a task-level planner, not the CTO-level architect role now defined in BL-526. Rename all code references so "architect" is free for the epic-boundary role in Phase 12+, and install role hierarchy constants as the foundation for Phase 12 planner/supervisor infrastructure.
+
+**Scope:**
+- Pure rename — no logic changes:
+  - `core/engine/architect_pass_llm.py` → `core/engine/planner_pass_llm.py`
+  - `core/context/architect_prompt.py` → `core/context/planner_prompt.py`
+  - `core/config/architect_pass.py` → `core/config/planner_pass.py` (if exists; else inline rename)
+  - All references in `core/engine/aider_engine.py`, `server/mcp_server.py`, `core/context/helper_llm_pipeline.py`, tests, `.env.example`
+  - Env var: `MCP_CODER_ARCHITECT_PASS` → `MCP_CODER_PLANNER_PASS` (keep old var as deprecated alias with warning)
+- Add role constants to `core/config/role_models.py`:
+  ```python
+  ROLE_PLANNER = "planner_pass"        # task-level planner (was architect_pass)
+  ROLE_SUPERVISOR = "supervisor"        # P11-002
+  ROLE_REVIEWER = "reviewer_pass"       # P11-005
+  # ROLE_ARCHITECT reserved for epic-boundary role (Phase 12+, BL-526)
+  ```
+- Update `docs/notes/multi-model-roles.md` role table to reflect final Phase 11 naming
+
+**Acceptance:**
+- Full test suite green after rename
+- No references to `architect_pass` as a role name remain in core/server (legacy alias only)
+- `ROLE_PLANNER` constant used in tracing/audit output
+- `docs/notes/multi-model-roles.md` role hierarchy table updated
 
 ---
 

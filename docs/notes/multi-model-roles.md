@@ -89,8 +89,96 @@ Highest cost, lowest priority. Only after Stage 1–2 prove value and we have co
 
 ---
 
+## Full role hierarchy (Phase 11+ model)
+
+This section captures the complete conceptual model agreed 2026-06-19. Not all roles are implemented yet.
+
+```
+User  (CEO)
+  — ultimate authority; sets goals; approves direction
+  — outside the system; communicates via Host only
+
+Host  (CEO assistant)
+  — bridge: translates user intent into mcp-coder calls
+  — manages overall work flow; doc updates; routing decisions
+  — cheap/mid model by default ("junior PM")
+  — capability hedged by mcp-coder internal layers (BL-527)
+  — if host is expensive, internal layers can be lighter; never assumed capable
+
+[mcp-coder boundary]
+
+Architect  (CTO)                                            [Phase 12+, BL-526]
+  — epic scope only
+  — context: epic goal + milestones delivered + risks — NO diffs, NO file details
+  — fires at epic open + epic boundary reviews
+  — job: "is this epic evolving correctly?"
+
+Planner  (Senior engineer / manager)                        [Phase 12 full, BL-525]
+  — session-bounded (can span multiple delegations)
+  — context: spec + RAG (prior similar plans) + session state
+  — owns mutable plan artifact; updates it mid-run and post-run
+  — may merge with Supervisor after Phase 11 dogfood
+  — NOTE: current code `architect_pass` = task-level planner; rename → planner_pass at P11-008
+
+Supervisor  (Tech lead on call)                             [Phase 11 P11-002, BL-351]
+  — decision-bounded (per confirm_ask from executor)
+  — context: spec + decision log + output tail (~2k tokens, D-ARCH-1)
+  — intercepts executor decisions: approve / deny / abort
+  — possible merge with Planner in Phase 12 (same context scope)
+
+Executor  (Implementation engineer)                         [Shipped — Aider]
+  — delegation-bounded
+  — context: full compiled brief (~32k tokens)
+  — writes code; surfaces questions via confirm_ask
+
+Reviewer  (QA / code reviewer)                              [Phase 11 P11-005, BL-358]
+  — post-execution, per delegation
+  — context: diff + acceptance criteria (~8k tokens)
+  — surfaces obvious issues; feeds report to Planner / spec report
+```
+
+### Host capability hedging (BL-527)
+
+mcp-coder internal layers must work correctly **regardless** of host model tier. The system compensates for a cheap host:
+
+| Host tier | mcp-coder compensation |
+|-----------|----------------------|
+| Cheap / junior | Clarity pass + Planner do heavier lifting; Architect holds epic integrity |
+| Mid (typical) | Balanced — internal layers add judgment; host handles routing + docs |
+| Expensive | Internal layers can be lighter / optional; host may handle some planning |
+
+**Consequence:** never design an internal role that assumes a capable host. Every quality gate must be independently effective.
+
+---
+
+## Host layer — the "junior PM" pattern *(BL-523 / BL-524)*
+
+The existing stage model covers roles **within** mcp-coder (executor, builder, architect, supervisor, reviewer). This section captures the complementary pattern at the **host layer**.
+
+**Framing:** The MCP host (Cursor or any client) runs as a **junior PM** by default. Its model tier governs cost for:
+- User conversation
+- Updating planning docs (status rows, `§ Results`)
+- Routing decisions + small judgments
+
+For heavyweight one-shots — spec authoring, epic decomposition, architecture decisions — a junior PM model is insufficient. Two resolution paths:
+
+| Path | How | Owner |
+|------|-----|-------|
+| **User manual** | User switches host model for the heavy task | Today; works but random |
+| **MCP-facilitated** | mcp-coder exposes bounded senior-model tools (`plan_task`, `draft_spec`) the host calls one-shot | Phase 12+ |
+
+The MCP-facilitated path generalises the existing `architect_pass` pattern: a bounded, logged, senior-model call inside mcp-coder, invisible to the host's model tier. The junior PM host stays cheap; expensive intelligence is a one-shot inside the pipeline.
+
+**Host model detection (BL-524):** eventually mcp-coder detects or receives `host_model` and emits advisory suggestions (`ctx.info` / response metadata) when the task warrants an upgrade. No automatic switching — advisory only.
+
+**See:** BL-523 (escalation paths), BL-524 (detection + suggestion), BL-512 (host-set `model_policy` for executor roles).
+
+---
+
 ## Changelog
 
 | Date | Change |
 |------|--------|
+| 2026-06-19 | Added § Full role hierarchy — 6-layer model (User/Host/Architect/Planner/Supervisor/Executor/Reviewer); host hedging principle (BL-527); Supervisor+Planner merger decision deferred to Phase 12; P11-008 naming refactor planned. |
+| 2026-06-19 | Added § Host layer — "junior PM" framing; BL-523 / BL-524 captured. |
 | 2026-06-09 | Created — Wave 2 discussion; D-P4-8 (Stage 1) locked; Stages 2–3 recorded as direction |

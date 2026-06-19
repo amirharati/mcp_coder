@@ -2039,10 +2039,136 @@ Operators tuning dogfood/debug runs must know this matrix by heart; `.env.exampl
 
 ---
 
+---
+
+### BL-525: Planner role — session-bounded, mutable plan, RAG-aware
+
+**Status:** `idea` — 2026-06-19.  
+**Related:** BL-350 (outer loop), BL-161 (internal pipeline), BL-526 (Architect), BL-351 (Supervisor — possible merge in Phase 12).  
+**Design note:** [docs/notes/multi-model-roles.md § Role hierarchy](./notes/multi-model-roles.md)
+
+**Problem:** The current `architect_pass` is a one-shot task-level planner — it fires once before the executor and produces a static prompt prefix. There is no role that owns a mutable plan for the full task lifecycle (before / during / after executor) or that carries session context across delegations.
+
+**Goal:** Formalise a **Planner** role (senior engineer / manager tier) that:
+- Owns a mutable plan artifact for the current task
+- Fires before the executor with RAG access to prior similar plans and delegation history
+- Receives updates from the Supervisor when executor surfaces questions/scope changes
+- Reviews executor report at end; decides "done" or "needs another step"
+- Is session-bounded: plan state persists across multiple delegations in the same MCP session
+
+**Relationship to Supervisor (P11-002):** Both Planner and Supervisor operate at task scope with similar context budgets. They may merge into one "task intelligence" role in Phase 12 once the plan object exists. For now, keep separate: Supervisor is reactive (intercepts decisions), Planner is proactive (owns the plan). Review post-Phase-11 dogfood.
+
+**Naming:** Current `architect_pass` in code is actually a task-level planner. Rename → `planner_pass` at end of Phase 11 (P11-008) to free up "architect" for the epic-level role (BL-526).
+
+**Phase placement:** Phase 12 (depends on plan object from Phase 12). P11-008 is prerequisite (naming + role constants).
+
+---
+
+### BL-526: Architect role — CTO, epic-boundary, high-level context only
+
+**Status:** `idea` — 2026-06-19.  
+**Related:** BL-525 (Planner), BL-006 (critic/reviewer at epic boundary), BL-350 (outer loop).  
+**Design note:** [docs/notes/multi-model-roles.md § Role hierarchy](./notes/multi-model-roles.md)
+
+**Problem:** No role today holds the strategic view of an epic. Each delegation is planned in isolation. When a task decision contradicts an earlier epic direction, there is no role to catch that.
+
+**Goal:** Formalise an **Architect** role (CTO tier) that:
+- Fires at epic open and epic boundary reviews (not per delegation)
+- Receives only high-level context: epic goal, milestones delivered, outstanding risks — NO diffs, NO file contents, NO implementation details
+- Job: "Is this epic evolving correctly? Does the next planned step fit the overall direction?"
+- Can flag strategic misalignment back to the Planner or Host
+- Context budget: ~4k tokens (epic brief only — strictly enforced)
+
+**What Architect does NOT do:**
+- Read code diffs or file contents
+- Plan individual task implementations (that's Planner)
+- Intercept individual executor decisions (that's Supervisor)
+
+**Phase placement:** Phase 12+ — depends on epic/plan object. Tier-2 epic-boundary review (BL-006) is the adjacent concept.
+
+---
+
+### BL-527: Host capability hedging principle
+
+**Status:** `idea` — 2026-06-19.  
+**Related:** BL-523 (host escalation), BL-524 (host detection), BL-525/526 (internal roles).  
+**Design note:** [docs/notes/multi-model-roles.md § Host layer](./notes/multi-model-roles.md)
+
+**Principle:** mcp-coder's internal layers (Planner, Architect, Supervisor, Reviewer) must **hedge** the host's capability gaps. The system should work correctly regardless of whether the host is a cheap or expensive model.
+
+| Host tier | mcp-coder compensation |
+|-----------|----------------------|
+| Cheap / junior | Planner does heavier planning; clarity pass catches gaps; Architect holds epic integrity |
+| Mid (typical) | Balanced — mcp-coder adds judgment; host handles routing + doc updates |
+| Expensive | Internal layers can be lighter / optional; host may do its own planning |
+
+**Consequence for design:** mcp-coder must never assume a capable host. Every quality gate (clarity, planning, supervision, review) must be independently effective. A cheap host + strong mcp-coder layers should produce comparable results to an expensive host + no mcp-coder layers.
+
+**Corollary:** When host declares its model (BL-524), mcp-coder can adapt layer weights — but this is an optimisation, not a correctness dependency.
+
+**Phase placement:** Direction principle, not a discrete milestone. Influences design of every new mcp-coder role. BL-524 (host detection) is the implementation prerequisite for adaptive behaviour.
+
+---
+
+### BL-523: Host-tier model escalation — "junior PM" host + senior for spec/epic tasks
+
+**Status:** `idea` — 2026-06-19.  
+**Related:** BL-162 (multi-model executor roles), BL-321 (tiered escalation), BL-512 (host-set policy), BL-524 (host model detection).  
+**Design note:** [docs/notes/multi-model-roles.md § Host layer](./notes/multi-model-roles.md)
+
+**Problem:** The host (Cursor) runs the same model for everything — lightweight status updates and heavyweight spec authoring use the same budget. Expensive model time is wasted on junior-PM work; cheap model is insufficient for high-stakes decisions.
+
+**Framing:** Treat the host as a **junior PM** by default:
+- Routine work (user chat, updating doc status rows, small planning decisions, filling `§ Results`) → cheap/mid model is sufficient.
+- High-value one-shots (authoring a new spec, planning an epic, architecture decision, initial delegation plan) → warrant a senior model.
+
+**Two escalation paths:**
+
+| Path | Mechanism | Notes |
+|------|-----------|-------|
+| **User-triggered** | User manually switches host model for the heavy task, switches back | Works today; random/manual |
+| **MCP-facilitated** | mcp-coder exposes a tool (e.g. `plan_task`, `draft_spec`) that runs a senior-model call internally, returns structured output | Host stays cheap; expensive call is a bounded one-shot inside mcp-coder |
+
+The MCP-facilitated path is the architectural win: the junior PM host calls `mcp-coder.plan_task(task, context)` and gets back a detailed plan without needing to be a senior model itself. mcp-coder controls the model tier for that call (e.g. Sonnet-class), keeps it bounded (D-ARCH-1 context frugality), and logs the usage.
+
+**Concrete examples where senior model is warranted:**
+- Authoring a new worker spec (P11-002, P11-003 …)
+- Decomposing an epic into steps
+- Initial architect pass on a large refactor
+- Reviewing whether a phase should be closed (PM judgment call)
+
+**Phase placement:** Phase 12+ (depends on multi-step plan object from Phase 12). MCP-facilitated tools (e.g. `draft_spec`, `plan_task`) can be added independently as new MCP tools.
+
+**See also:** The `architect_pass` (Phase 4) is already a bounded senior-model call inside mcp-coder — this generalises that pattern to the orchestration layer.
+
+---
+
+### BL-524: Host model detection + suggestion
+
+**Status:** `idea` — 2026-06-19.  
+**Related:** BL-523 (host escalation), BL-512 (host-set policy).
+
+**Problem:** mcp-coder has no visibility into which model the host is currently using. When a host running a cheap model delegates a complex spec-authoring task, there is no way to surface "this task would benefit from a stronger model" to the user.
+
+**Goal:** mcp-coder detects (or receives) the host model and can emit a suggestion when the task complexity warrants an upgrade.
+
+**Detection approaches (in order of preference):**
+1. **Host declares it** — new optional `host_model` field in `delegate_to_agent` args; host sets it when known.
+2. **Infer from behavior** — if `model_policy.executor.thinking_budget` is unset and architect pass is producing thin plans, heuristic flag.
+3. **Response metadata** — return `suggested_host_model_upgrade: true` in delegation response when complexity signals warrant it (file count, epic keywords, prior failed attempts).
+
+**Not in scope early:** automatic model switching for the host (MCP doesn't control the host's model). Only detection + advisory.
+
+**Phase placement:** Phase 12+ or as a small BL-512 extension. Advisory `ctx.info` message is the v0.
+
+---
+
 ## Changelog
 
 | Date | Change |
 |------|--------|
+| 2026-06-19 | **BL-525 + BL-526 + BL-527 added** — Planner role (session-bounded, mutable), Architect role (CTO, epic-boundary), host capability hedging principle. Full role hierarchy captured in `multi-model-roles.md`. P11-008 naming refactor planned. |
+| 2026-06-19 | **BL-523 + BL-524 added** — host-tier model escalation ("junior PM" host) and host model detection; Phase 12+ direction. See `multi-model-roles.md § Host layer`. |
 | 2026-06-19 | **P11-001 shipped** — `clarity_check` pipeline phase (BL-521 Phase 11 scope done); opt-in `MCP_CODER_CLARITY_PASS`; 16 tests; cross-session intent → Phase 12. |
 | 2026-06-18 | **Phase 11 opened.** BL-521 (new) + BL-351 → P11-002; BL-354 (v0) → P11-003; BL-522 (new) → P11-004; BL-358 (v0) → P11-005; BL-512 (Stage 2) → P11-007. § Phase 11 active table added; BL-351/354/358/512 status updated to `in_phase`. Cross-arch decisions D-ARCH-1..6 locked. See [PHASE11_MVP.md](./PHASE11_MVP.md). |
 | 2026-06-18 | **Phase 10 closed.** Promoted backlog items moved from `in_phase` to `done` (v0/POF/partial as scoped); § Phase 10 table frozen. Residuals: BL-516/518 partial, BL-106/520 follow-ups, BL-351 full vision → Phase 11. |

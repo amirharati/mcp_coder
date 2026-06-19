@@ -149,8 +149,12 @@ Yes — for the "have we seen this pattern before?" dimension. BL-354 v0 (P11-00
 Based on what Phase 11 does, Phase 12 will likely own:
 
 - **Multi-step plan object** — goal + ordered steps + state, persisted to `plans.db`; `resume_token` on `delegate_to_agent`; outer-loop supervisor decides next step
+- **Mutable plan artifact** — plan is patched mid-run by the supervisor based on executor questions and discoveries, not just a fixed prompt prefix; state carries forward between steps (from 2026-06-19 planning discussion)
 - **True async mid-run human gate** — if Cursor concurrent tool calls don't work for P11-004, Phase 12 designs a protocol-level solution
 - **Full executor-pull sidecar** — lightweight HTTP server exposing `rag_search`, `read_file`, `search_history`; injected as tools in Aider's function-calling context
 - **Tier-2 epic-boundary review** — plan knows "last step of epic", triggers serious reviewer at that boundary
 - **BL-513/514 AI-suggested + dynamic escalation** — built on Phase 11 supervisor infrastructure
 - **Cross-session reasoning persistence** — BL-333 remainder, Phase 11 traces as bootstrap corpus
+- **MCP-facilitated host escalation** — `plan_task` / `draft_spec` tools for junior PM hosts; senior-model one-shots inside mcp-coder (BL-523)
+- **Planner / Supervisor merger decision** — after Phase 11 dogfood, decide if they collapse into one "task intelligence" role; depends on whether mutable plan object makes the separation obvious or redundant
+- **Architect role (CTO)** — epic-boundary context only; no diffs/files; strategic misalignment detection (BL-526)
