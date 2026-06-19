@@ -2,6 +2,7 @@ from core.config.aider_runtime import (
     delegation_auto_commits,
     delegation_coder_kwargs,
     infer_run_success,
+    supervised_execution_enabled,
 )
 
 
@@ -35,3 +36,8 @@ def test_infer_run_success_empty_output():
 
     ok, err = infer_run_success(io=FakeIo(), output="", partial_response="")
     assert ok is False
+
+
+def test_supervised_execution_disabled_by_default(monkeypatch, tmp_path):
+    monkeypatch.delenv("MCP_CODER_SUPERVISED_EXEC", raising=False)
+    assert supervised_execution_enabled(tmp_path) is False

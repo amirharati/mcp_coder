@@ -102,6 +102,8 @@ Use this page so **main vision** ([IDEA.md](./IDEA.md)) is not lost when editing
 
 | Date | Change |
 |------|--------|
+| 2026-06-19 | **P11-003 shipped** — executor-pull hint v0 (`/read` prompt guidance); Phase 11 remains active. |
+| 2026-06-19 | **P11-002 shipped** — supervised execution v1 (`SupervisedIO` + `DelegationSupervisor`); Phase 11 remains active. |
 | 2026-06-19 | **delegation-workflow-vision.md created** — full role hierarchy, delegation lifecycle, planner/executor separation, host hedging principle (BL-527), naming table; BL-523/524/525/526/527 added; P11-008 planner rename planned; registered in doc map. |
 | 2026-06-19 | **P11-001 shipped** — clarity_check pipeline phase (BL-521); Phase 11 active. |
 | 2026-06-18 | **Phase 10 closed** — P10-001..P10-004 shipped; P10 docs frozen; residual partial scope tracked in BACKLOG (BL-516/518). |

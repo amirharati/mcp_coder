@@ -97,8 +97,8 @@ Phase 11:  MCP → Aider (supervised, decisions routed) ↔ Supervisor LLM → r
 | Order | Milestone | Spec | Status | Notes |
 |-------|-----------|------|--------|-------|
 | 1 | P11-001 | [P11-001](../tasks/P11-001-clarity-pass-v0.md) | **done** 2026-06-19 | Clarity pass: cheap LLM pre-delegation Q&A |
-| 2 | P11-002 | [P11-002](../tasks/P11-002-supervised-io-v1.md) | pending | SupervisedIO + DelegationSupervisor + decision log |
-| 3 | P11-003 | [P11-003](../tasks/P11-003-executor-pull-v0.md) | pending | Executor-pull v0: system prefix /read hint |
+| 2 | P11-002 | [P11-002](../tasks/P11-002-supervised-io-v1.md) | **done** 2026-06-19 | SupervisedIO + DelegationSupervisor + decision log |
+| 3 | P11-003 | [P11-003](../tasks/P11-003-executor-pull-v0.md) | **done** 2026-06-19 | Executor-pull v0: system prefix /read hint |
 | 4 | P11-004 | [P11-004](../tasks/P11-004-mid-run-human-gate.md) | pending | answer_delegation_question tool (experimental) |
 | 5 | P11-005 | [P11-005](../tasks/P11-005-reviewer-tier1-v0.md) | pending | Tier-1 reviewer: cheap model post-executor scan |
 | 6 | P11-006 | [P11-006](../tasks/P11-006-smart-architect-trigger.md) | pending | Smart architect trigger heuristic |
@@ -133,7 +133,7 @@ Phase 11:  MCP → Aider (supervised, decisions routed) ↔ Supervisor LLM → r
 
 ### P11-002 — Supervised executor v1 *(BL-351 full)*
 
-**Status:** `pending`
+**Status:** `done` — shipped 2026-06-19 (uncommitted; 15 tests in `test_supervised_io_p11_002.py`)
 **Goal:** Replace blind `yes=True` with a `SupervisedIO` subclass that routes Aider's `confirm_ask` decisions to a `DelegationSupervisor` LLM. The supervisor reads the spec contract, prior decisions, and current context to approve / deny / abort — not blindly approve.
 
 **Scope:**
@@ -161,7 +161,7 @@ Phase 11:  MCP → Aider (supervised, decisions routed) ↔ Supervisor LLM → r
 
 ### P11-003 — Executor-pull context v0 *(BL-354 v0)*
 
-**Status:** `pending`
+**Status:** `done` — shipped 2026-06-19 (uncommitted; 9 tests in `test_executor_pull_hint_p11_003.py`)
 **Goal:** Instead of always asking to "add files to chat" (causing stalls), Aider is instructed to use `/read` to pull additional context read-only during its run. Zero new infrastructure — uses already-shipped `system_prompt_prefix` (P10-001).
 
 **Scope:**
@@ -338,11 +338,31 @@ Phase 11:  MCP → Aider (supervised, decisions routed) ↔ Supervisor LLM → r
 - **Dogfood follow-up:** tune false-positive rate before default-on; optional pipeline skip detail `spec_validation_blocked` vs `disabled` (worker note).
 - **Deferred:** cross-session intent history in clarity context → Phase 12 (BL-521 remainder).
 
+### P11-002 — supervised executor v1 (2026-06-19)
+
+- **Shipped:** supervised confirm handling (`MCP_CODER_SUPERVISED_EXEC=1` / `supervised_execution: true`) replacing blind `yes=True` path with risk-tiered routing.
+- **Modules:** `supervisor.py`, `supervised_io.py`, `ROLE_SUPERVISOR` model mapping, `aider_engine` supervised wiring, `mcp_server` escalation payload/trace wiring, delegation-log supervisor audit fields.
+- **Behavior:** low-risk confirms auto-approve; high-risk/unknown routed to supervisor; `abort|escalate` returns structured `needs_input` (`reason=supervisor_escalation`); disabled path unchanged.
+- **Tests:** 15 new; focused suites 56 passed; full suite 1042 passed, 1 skipped (pre-existing).
+- **Deferred:** mid-run human gate remains P11-004 (abort-and-resume only in P11-002).
+- **Dogfood follow-up:** tune risk-classifier false positives and document `supervisor_decision` trace events in guides.
+
+### P11-003 — executor-pull hint v0 (2026-06-19)
+
+- **Shipped:** prompt-only executor-pull hint (`MCP_CODER_EXECUTOR_PULL_HINT=1` / `executor_pull_hint: true`) appended to executor `system_prompt_prefix`.
+- **Behavior:** when enabled, Aider is instructed to use `/read <path>` for additional read-only context and avoid "add files to chat" asks; existing `MCP_CODER_EXECUTOR_SYSTEM_PREFIX` preserved and merged via separator; disabled path unchanged.
+- **Audit:** `executor_pull_hint_applied: bool` in delegation context row (via executor options audit context).
+- **Tests:** 9 new; focused suites 63 passed; full suite 1051 passed, 1 skipped (pre-existing).
+- **Deferred:** full BL-354 sidecar/tool-server remains Phase 12 scope.
+- **Dogfood follow-up:** compare `needs_input_files` stall rate with and without hint.
+
 ---
 
 ## Changelog
 
 | Date | Change |
 |------|--------|
+| 2026-06-19 | **P11-003 shipped** — executor-pull hint v0 (prompt-only `/read` guidance); BL-354 Phase 11 slice done; sidecar/tool-server deferred. |
+| 2026-06-19 | **P11-002 shipped** — supervised execution v1 (`SupervisedIO` + `DelegationSupervisor`); BL-351 Phase 11 scope done; async/mid-run resume remains deferred. |
 | 2026-06-19 | **P11-001 shipped** — clarity_check pipeline phase; BL-521 Phase 11 scope done; remainder → Phase 12. |
 | 2026-06-18 | Created — Phase 11 PM board; milestones P11-001..P11-007 scoped; D-P11-* and D-ARCH-* locked in master planning session. |

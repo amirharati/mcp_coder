@@ -21,8 +21,8 @@ Status: `idea` | `deferred` | `blocked` | `in_phase` | `done`
 | Backlog | Milestone | Phase 11 scope | Remainder |
 |---------|-----------|----------------|-----------|
 | BL-521 (new) | P11-001 | ✅ Done — `clarity_check` pipeline phase shipped (opt-in `MCP_CODER_CLARITY_PASS`) | Cross-session intent history → Phase 12 |
-| BL-351 | P11-002 | SupervisedIO + DelegationSupervisor + decision log + abort-on-escalate | Async outer-loop resume → Phase 12 |
-| BL-354 | P11-003 | Executor-pull v0: system prefix `/read` hint | Full sidecar HTTP tool server → Phase 12 |
+| BL-351 | P11-002 | ✅ Done — `SupervisedIO` + `DelegationSupervisor` + decision log + abort-on-escalate shipped | Async outer-loop resume / mid-run async resume → Phase 12 |
+| BL-354 | P11-003 | ✅ Done — executor-pull hint v0 shipped (`/read` prompt guidance + audit field) | Full sidecar HTTP tool server → Phase 12 |
 | BL-522 (new) | P11-004 | Mid-run human gate: `answer_delegation_question` + Event bridge (experimental) | Protocol-level async gate → Phase 12 |
 | BL-358 | P11-005 | Tier-1 reviewer v0: cheap model scan on `files_changed` | Tier-2 epic-boundary review → Phase 12 |
 | — | P11-006 | Smart architect trigger: heuristic skip + spec front-matter override | — |
@@ -288,7 +288,7 @@ Phase 1 deferred executor conversation carry-over to here (BL-155); see P1-130 `
 
 ### BL-351: Simulated interactive mode + host escalation (human intervention)
 
-**Status:** `in_phase` — **Phase 10 P10-003 shipped** (v0: stall detect → structured `needs_input` with `files_requested`; optional one-shot auto-retry via `MCP_CODER_STALL_AUTO_RETRY=1`). **Phase 11 P11-002 owns full vision**: `SupervisedIO` subclass + `DelegationSupervisor` LLM + in-memory decision log + abort-on-escalate.
+**Status:** `done` — **Phase 10 P10-003 + Phase 11 P11-002 shipped**: stall detect + structured `needs_input` plus supervised confirm handling (`SupervisedIO` + `DelegationSupervisor`, abort-on-escalate). Remainder deferred: mid-run async resume / outer-loop continuation in Phase 12.
 
 **Problem:** Headless Aider uses `InputOutput(yes=True)` — every confirm (“add file?”, “run shell?”) is auto-approved without mcp-coder judgment. When the model asks for files in prose, we fail the delegation rather than help. There is no path for the **executor to route a decision back to the Cursor planner** for human intervention inside a supervised delegate.
 
@@ -399,7 +399,7 @@ Hard to answer: “What exact prompt did the builder LLM see?” “What did Aid
 
 ### BL-354: Executor context tools (pull) — RAG/history/read during backend loop
 
-**Status:** `in_phase` — **Phase 11 P11-003 owns v0** (system prefix `/read` hint only). Full sidecar HTTP tool server (Sketch B below) deferred to Phase 12.
+**Status:** `done` — **Phase 11 P11-003 v0 shipped** (system prefix `/read` hint only, prompt-level behavior). Full sidecar HTTP tool server (Sketch B below) deferred to Phase 12.
 
 **Dual model (intentional):**
 
@@ -2167,6 +2167,8 @@ The MCP-facilitated path is the architectural win: the junior PM host calls `mcp
 
 | Date | Change |
 |------|--------|
+| 2026-06-19 | **P11-003 shipped** — BL-354 Phase 11 slice done (prompt-only `/read` hint + audit). Full sidecar/tool-server remains Phase 12. |
+| 2026-06-19 | **P11-002 shipped** — BL-351 Phase 11 scope done (`SupervisedIO` + `DelegationSupervisor` + abort-on-escalate); async/mid-run resume remains deferred to Phase 12. |
 | 2026-06-19 | **BL-525 + BL-526 + BL-527 added** — Planner role (session-bounded, mutable), Architect role (CTO, epic-boundary), host capability hedging principle. Full role hierarchy captured in `multi-model-roles.md`. P11-008 naming refactor planned. |
 | 2026-06-19 | **BL-523 + BL-524 added** — host-tier model escalation ("junior PM" host) and host model detection; Phase 12+ direction. See `multi-model-roles.md § Host layer`. |
 | 2026-06-19 | **P11-001 shipped** — `clarity_check` pipeline phase (BL-521 Phase 11 scope done); opt-in `MCP_CODER_CLARITY_PASS`; 16 tests; cross-session intent → Phase 12. |

@@ -3,6 +3,8 @@ from __future__ import annotations
 import io
 import os
 import re
+from collections.abc import Callable
+from pathlib import Path
 from typing import Any
 
 OUTCOME_SUCCESS = "success"
@@ -21,6 +23,64 @@ def _env_bool(name: str, default: bool) -> bool:
     if raw is None or raw.strip() == "":
         return default
     return raw.strip().lower() in ("1", "true", "yes", "on")
+
+
+def _yaml_env_bool(raw: Any) -> bool | None:
+    if isinstance(raw, bool):
+        return raw
+    if isinstance(raw, str):
+        lowered = raw.strip().lower()
+        if lowered in ("1", "true", "yes", "on"):
+            return True
+        if lowered in ("0", "false", "no", "off"):
+            return False
+    return None
+
+
+def _resolve_flag(
+    workspace: str | Path,
+    *,
+    env_var: str,
+    yaml_key: str,
+    default: bool,
+) -> bool:
+    """Shared precedence: default → env → workspace yaml (later wins)."""
+    from core.storage.workspace_config import load_workspace_config
+
+    enabled = default
+
+    env_raw = os.environ.get(env_var, "").strip()
+    if env_raw:
+        parsed = _yaml_env_bool(env_raw)
+        if parsed is not None:
+            enabled = parsed
+
+    ws_value = load_workspace_config(workspace).get(yaml_key)
+    parsed = _yaml_env_bool(ws_value)
+    if parsed is not None:
+        enabled = parsed
+
+    return enabled
+
+
+def supervised_execution_enabled(workspace: str | Path) -> bool:
+    """Default False → env MCP_CODER_SUPERVISED_EXEC → yaml supervised_execution."""
+    return _resolve_flag(
+        workspace,
+        env_var="MCP_CODER_SUPERVISED_EXEC",
+        yaml_key="supervised_execution",
+        default=False,
+    )
+
+
+def executor_pull_hint_enabled(workspace: str | Path) -> bool:
+    """Default False. Env MCP_CODER_EXECUTOR_PULL_HINT=1 or yaml executor_pull_hint: true."""
+    return _resolve_flag(
+        workspace,
+        env_var="MCP_CODER_EXECUTOR_PULL_HINT",
+        yaml_key="executor_pull_hint",
+        default=False,
+    )
 
 
 def delegation_auto_commits() -> bool:
@@ -137,7 +197,10 @@ def resolve_executor_total_timeout_s() -> float:
     return 1800.0
 
 
-def create_delegation_io() -> tuple[Any, io.StringIO]:
+def create_delegation_io(
+    *,
+    io_factory: Callable[[io.StringIO], Any] | None = None,
+) -> tuple[Any, io.StringIO]:
     """
   InputOutput for headless delegation (~ aider --yes-always --no-auto-commits).
 
@@ -151,12 +214,15 @@ def create_delegation_io() -> tuple[Any, io.StringIO]:
     from core.engine.stdio_isolation import bind_aider_io_to_buffer
 
     buffer = io.StringIO()
-    io_obj = InputOutput(
-        pretty=False,
-        yes=True,
-        fancy_input=False,
-        output=buffer,
-    )
+    if io_factory is not None:
+        io_obj = io_factory(buffer)
+    else:
+        io_obj = InputOutput(
+            pretty=False,
+            yes=True,
+            fancy_input=False,
+            output=buffer,
+        )
     bind_aider_io_to_buffer(io_obj, buffer)
     return io_obj, buffer
 
@@ -357,15 +423,16 @@ def classify_executor_outcome(
 def build_needs_input_payload(classification: dict[str, Any]) -> dict[str, Any]:
     """Structured needs_input block for MCP response."""
     stall_type = classification.get("outcome")
-    reason = (
-        "executor_requested_files"
-        if stall_type == OUTCOME_NEEDS_INPUT_FILES
-        else "executor_requested_clarification"
-    )
+    if classification.get("supervisor_reason"):
+        reason = "supervisor_escalation"
+    elif stall_type == OUTCOME_NEEDS_INPUT_FILES:
+        reason = "executor_requested_files"
+    else:
+        reason = "executor_requested_clarification"
     payload: dict[str, Any] = {
         "status": "needs_input",
         "reason": reason,
-        "message": classification.get("message") or "",
+        "message": classification.get("message") or classification.get("supervisor_reason") or "",
         "executor_output_tail": classification.get("executor_output_tail") or "",
     }
     files_requested = classification.get("files_requested") or []

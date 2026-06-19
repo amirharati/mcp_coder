@@ -42,6 +42,7 @@ from core.config.role_models import (
     ROLE_CONTEXT_BUILDER,
     ROLE_EXECUTOR,
     ROLE_REVIEW,
+    ROLE_SUPERVISOR,
     resolve_role_model_name,
 )
 from core.engine.base import ExecutionResult
@@ -487,11 +488,77 @@ def _stall_from_tokens(tokens: dict[str, Any] | None) -> dict[str, Any]:
     stall_type = data.get("stall_type")
     if not stall_type:
         return {}
-    return {
+    out: dict[str, Any] = {
         "stall_type": stall_type,
         "files_requested": list(data.get("files_requested") or []),
         "executor_output_tail": data.get("executor_output_tail") or "",
     }
+    if data.get("supervisor_reason"):
+        out["supervisor_reason"] = data.get("supervisor_reason")
+    if data.get("supervisor_decisions_count") is not None:
+        out["supervisor_decisions_count"] = data.get("supervisor_decisions_count")
+    if data.get("supervisor_aborts_count") is not None:
+        out["supervisor_aborts_count"] = data.get("supervisor_aborts_count")
+    if data.get("supervisor_decisions"):
+        out["supervisor_decisions"] = list(data.get("supervisor_decisions") or [])
+    return out
+
+
+def _emit_supervisor_decision_traces(
+    *,
+    delegation_id: str,
+    session_dir: Path | str,
+    workspace: str,
+    decisions: list[dict[str, Any]],
+    step_index: int = 1,
+) -> None:
+    import json
+
+    for row in decisions:
+        snippet = {
+            "decision": row.get("decision"),
+            "risk_tier": row.get("risk_tier"),
+            "question": (row.get("question") or "")[:160],
+        }
+        action_rec = build_action_trace_record(
+            delegation_id=delegation_id,
+            step_index=step_index,
+            kind="supervisor_decision",
+            detail=json.dumps(snippet, ensure_ascii=False),
+        )
+        append_trace_record(
+            action_rec,
+            session_dir=session_dir,
+            delegation_id=delegation_id,
+            workspace=workspace,
+        )
+
+
+def _supervisor_record_from_tokens(tokens: dict[str, Any] | None) -> dict[str, Any] | None:
+    data = tokens or {}
+    usage = data.get("supervisor_usage")
+    if isinstance(usage, dict) and usage.get("model"):
+        return obs.build_role_usage_record(
+            role=ROLE_SUPERVISOR,
+            model=str(usage.get("model")),
+            input_tokens=usage.get("input_tokens"),
+            output_tokens=usage.get("output_tokens"),
+            total_tokens=usage.get("total_tokens"),
+            duration_ms=usage.get("duration_ms"),
+            source=str(usage.get("source") or "supervisor"),
+        )
+    count = data.get("supervisor_decisions_count")
+    if count:
+        return obs.build_role_usage_record(
+            role=ROLE_SUPERVISOR,
+            model=resolve_role_model_name(ROLE_SUPERVISOR, os.environ.get("MCP_CODER_WORKSPACE", os.getcwd())),
+            input_tokens=None,
+            output_tokens=None,
+            total_tokens=None,
+            duration_ms=None,
+            source="supervisor_auto_only",
+        )
+    return None
 
 
 def _append_read_paths_to_context_package(
@@ -757,6 +824,7 @@ def _build_model_roles_payload(
     spec_validation_record: dict[str, Any] | None = None,
     clarity_check_record: dict[str, Any] | None = None,
     architect_record: dict[str, Any] | None = None,
+    supervisor_record: dict[str, Any] | None = None,
 ) -> dict[str, Any] | None:
     """Per-role audit block for JSONL + MCP response (D-P4-8 Stage 1)."""
     engine_ms = timing.get("engine_run_ms")
@@ -809,6 +877,11 @@ def _build_model_roles_payload(
         if roles is None:
             roles = {}
         roles["clarity_check"] = clarity_check_record
+
+    if supervisor_record:
+        if roles is None:
+            roles = {}
+        roles["supervisor"] = supervisor_record
 
     roles = obs.overlay_model_roles_tokens(
         roles,
@@ -1874,9 +1947,11 @@ def delegate_to_agent(
                     stall_type = str(stall_info["stall_type"])
                     stall_files_requested = list(stall_info.get("files_requested") or [])
                     success = False
+                    supervisor_reason = stall_info.get("supervisor_reason")
                     classification = {
                         "outcome": stall_type,
-                        "message": error
+                        "message": supervisor_reason
+                        or error
                         or (
                             "Aider needs additional files. Add them to target_files and retry."
                             if stall_type == OUTCOME_NEEDS_INPUT_FILES
@@ -1889,6 +1964,8 @@ def delegate_to_agent(
                         "executor_output_tail": stall_info.get("executor_output_tail")
                         or output[-500:],
                     }
+                    if supervisor_reason:
+                        classification["supervisor_reason"] = supervisor_reason
                     needs_input_payload = build_needs_input_payload(classification)
                     error_class = stall_type
                     error = classification.get("message")
@@ -1896,6 +1973,15 @@ def delegate_to_agent(
                     _ec, error_message = classify_delegation_error(error)
                     if not error_class:
                         error_class = _ec
+                supervisor_decisions_trace = list((tokens or {}).get("supervisor_decisions") or [])
+                if supervisor_decisions_trace:
+                    _emit_supervisor_decision_traces(
+                        delegation_id=delegation_id,
+                        session_dir=storage.session_dir,
+                        workspace=ws,
+                        decisions=supervisor_decisions_trace,
+                        step_index=_executor_turns or 1,
+                    )
                 executor_reused = result.executor_reused
                 executor_recreated = result.executor_recreated
                 workspace_snapshot = result.workspace_snapshot
@@ -1966,6 +2052,9 @@ def delegate_to_agent(
             context_block["clarity_check_result"] = clarity_check_result
         if clarity_check_audit is not None:
             context_block["clarity_check"] = clarity_check_audit
+        from core.logging.delegation_log import supervisor_audit_fields
+
+        context_block.update(supervisor_audit_fields(tokens))
         if context_package is not None:
             read_entries_in_prompt = [
                 e
@@ -2318,6 +2407,7 @@ def delegate_to_agent(
             spec_validation_record=spec_validation_record,
             clarity_check_record=clarity_check_record,
             architect_record=architect_record,
+            supervisor_record=_supervisor_record_from_tokens(tokens),
         )
 
         suggested_edit_paths_payload: list[str] | None = (

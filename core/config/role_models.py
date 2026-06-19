@@ -13,6 +13,7 @@ ROLE_EXECUTOR = "executor"
 ROLE_REVIEW = "review"
 ROLE_CONTEXT_BUILDER = "context_builder"
 ROLE_CRITIC = "critic"
+ROLE_SUPERVISOR = "supervisor"
 
 # Documented OpenRouter dogfood default — set MCP_CODER_CONTEXT_BUILDER_MODEL in .env
 # (do not rely on a hardcoded provider id in code).
@@ -22,12 +23,14 @@ _ROLE_MODEL_YAML: dict[str, str] = {
     ROLE_REVIEW: "review_model",
     ROLE_CONTEXT_BUILDER: "context_builder_model",
     ROLE_CRITIC: "critic_model",
+    ROLE_SUPERVISOR: "supervisor_model",
 }
 
 _ROLE_MODEL_ENV: dict[str, str] = {
     ROLE_REVIEW: "MCP_CODER_REVIEW_MODEL",
     ROLE_CONTEXT_BUILDER: "MCP_CODER_CONTEXT_BUILDER_MODEL",
     ROLE_CRITIC: "MCP_CODER_CRITIC_MODEL",
+    ROLE_SUPERVISOR: "MCP_CODER_SUPERVISOR_MODEL",
 }
 
 _ROLE_BUDGET_YAML: dict[str, str] = {
@@ -62,6 +65,8 @@ def _role_default_model(role: str, workspace: str | Path) -> str:
     if role == ROLE_EXECUTOR:
         return resolve_model_name()
     if role == ROLE_CONTEXT_BUILDER:
+        return _context_builder_base_default()
+    if role == ROLE_SUPERVISOR:
         return _context_builder_base_default()
     return resolve_model_name()
 

@@ -9,11 +9,15 @@ from typing import Any
 from core.config.aider_runtime import (
     OUTCOME_NEEDS_INPUT_CLARIFICATION,
     OUTCOME_NEEDS_INPUT_FILES,
+    STALL_OUTPUT_TAIL_CHARS,
+    _executor_output_tail,
     classify_executor_outcome,
     create_delegation_io,
     delegation_coder_kwargs,
     delegation_timeout_seconds,
+    executor_pull_hint_enabled,
     infer_run_success,
+    supervised_execution_enabled,
 )
 from typing import TYPE_CHECKING
 
@@ -35,6 +39,68 @@ from core.workspace.snapshot import begin_delegation_snapshot, resolve_delegatio
 from core.engine.stdio_isolation import isolated_stdio, merged_capture
 
 BACKEND_ID = "aider"
+
+EXECUTOR_PULL_HINT_BLOCK = (
+    "If you need additional context, use /read <path> to add files as read-only.\n"
+    "Do not ask to add files to the chat.\n"
+    "Do not expand edit scope beyond the spec Files contract."
+)
+
+
+def _merge_executor_pull_hint(existing_prefix: str | None) -> str:
+    existing = (existing_prefix or "").strip()
+    if not existing:
+        return EXECUTOR_PULL_HINT_BLOCK
+    return f"{existing}\n\n---\n\n{EXECUTOR_PULL_HINT_BLOCK}"
+
+
+def _apply_executor_pull_hint(model: Any, *, workspace_path: str) -> bool:
+    """Append pull-hint block to model.system_prompt_prefix when enabled."""
+    if not executor_pull_hint_enabled(workspace_path):
+        return False
+    try:
+        model.system_prompt_prefix = _merge_executor_pull_hint(
+            getattr(model, "system_prompt_prefix", None)
+        )
+        return True
+    except Exception:
+        return False
+
+
+def _supervisor_metadata_from_io(io: Any) -> dict[str, Any]:
+    """Attach supervisor audit fields from SupervisedIO when present."""
+    decisions = getattr(io, "supervisor_decisions", None)
+    if not decisions:
+        return {}
+    payload: dict[str, Any] = {
+        "supervisor_decisions": list(decisions),
+        "supervisor_decisions_count": int(getattr(io, "supervisor_decisions_count", 0) or 0),
+        "supervisor_aborts_count": int(getattr(io, "supervisor_aborts_count", 0) or 0),
+    }
+    last = decisions[-1]
+    payload["supervisor_last_decision"] = str(last.get("decision") or "")
+    supervisor = getattr(io, "_supervisor", None)
+    if supervisor is not None and hasattr(supervisor, "usage_record"):
+        payload["supervisor_usage"] = supervisor.usage_record
+    return payload
+
+
+def _extract_architect_plan(brief: str | None) -> str | None:
+    text = (brief or "").strip()
+    if not text or "## Architect plan" not in text:
+        return None
+    start = text.find("## Architect plan")
+    end = text.find("\n---\n", start)
+    if end == -1:
+        return text[start:].strip()
+    return text[start:end].strip()
+
+
+def _build_spec_contract(contract_paths: list[str] | None) -> str | None:
+    paths = sorted({p.replace("\\", "/").lstrip("./") for p in (contract_paths or []) if p})
+    if not paths:
+        return None
+    return "### Allowed paths\n" + "\n".join(f"- `{p}`" for p in paths)
 
 
 def _apply_executor_model_params(model: Any, params: Any) -> None:
@@ -215,6 +281,8 @@ class AiderEngine(ExecutionEngine):
         contract_paths: list[str] | None = None,
         timestamp_start: str | None = None,
         timeout_s: float | None = None,
+        spec_contract: str | None = None,
+        architect_plan: str | None = None,
     ) -> ExecutionResult:
         """Core Aider execution shared by run() and run_context().
 
@@ -233,6 +301,8 @@ class AiderEngine(ExecutionEngine):
         snapshot_session = None
         contract = contract_paths or edit_paths_rel
         policy_token = None
+        supervised_on = supervised_execution_enabled(workspace_path)
+        effective_spec_contract = spec_contract or _build_spec_contract(contract)
         try:
             os.chdir(workspace_path)
             resolved_files = [
@@ -246,6 +316,7 @@ class AiderEngine(ExecutionEngine):
 
             exec_params = resolve(ROLE_EXECUTOR, workspace_path)
             _apply_executor_model_params(model, exec_params)
+            pull_hint_applied = _apply_executor_pull_hint(model, workspace_path=workspace_path)
             policy_token = model_policy_var.set(policy_applied(exec_params, ROLE_EXECUTOR))
             from core.logging.delegation_log import executor_options_audit_var
 
@@ -253,6 +324,7 @@ class AiderEngine(ExecutionEngine):
                 {
                     "system_prefix_applied": bool(exec_params.system_prompt_prefix),
                     "edit_format": exec_params.edit_format,
+                    "executor_pull_hint_applied": pull_hint_applied,
                 }
             )
             before_git = snapshot_git_dirty(workspace_path)
@@ -267,7 +339,42 @@ class AiderEngine(ExecutionEngine):
             )
 
             def _make_coder() -> tuple[Any, Any, Any]:
-                io, out_buffer = create_delegation_io()
+                if supervised_on:
+                    supervisor_holder: dict[str, Any] = {}
+
+                    def _io_factory(buffer: Any) -> Any:
+                        from core.engine.supervised_io import SupervisedIO
+                        from core.engine.supervisor import DelegationSupervisor
+
+                        target_set = {
+                            p.replace("\\", "/").lstrip("./") for p in edit_paths_rel if p
+                        }
+                        contract_set = {
+                            p.replace("\\", "/").lstrip("./") for p in (contract or []) if p
+                        }
+                        supervisor = DelegationSupervisor(
+                            workspace_path=workspace_path,
+                            delegation_id=delegation_id,
+                            spec_contract=effective_spec_contract,
+                            architect_plan=architect_plan,
+                            output_tail_provider=lambda: _executor_output_tail(
+                                buffer.getvalue() if hasattr(buffer, "getvalue") else "",
+                                max_chars=STALL_OUTPUT_TAIL_CHARS,
+                            ),
+                        )
+                        supervisor_holder["supervisor"] = supervisor
+                        return SupervisedIO(
+                            output=buffer,
+                            supervisor=supervisor,
+                            target_files=target_set,
+                            contract_paths=contract_set,
+                        )
+
+                    io, out_buffer = create_delegation_io(io_factory=_io_factory)
+                    if supervisor_holder.get("supervisor") is not None:
+                        pass  # supervisor attached via SupervisedIO
+                else:
+                    io, out_buffer = create_delegation_io()
                 coder = Coder.create(
                     main_model=model,
                     io=io,
@@ -279,6 +386,7 @@ class AiderEngine(ExecutionEngine):
             def _run_coder() -> Any:
                 # Lazy import: top-level import loads core.session.__init__ → policy →
                 # delegation_log before mcp_server finishes importing logging (P2-210 cycle).
+                from core.engine.supervised_io import SupervisorAbort
                 from core.session.executor_cache import get_or_create_coder
 
                 with block_webbrowser_open(), isolated_stdio() as (stdout_cap, stderr_cap):
@@ -292,17 +400,15 @@ class AiderEngine(ExecutionEngine):
                             )
                         )
                     else:
-                        io, out_buffer = create_delegation_io()
-                        coder = Coder.create(
-                            main_model=model,
-                            io=io,
-                            fnames=resolved_files,
-                            **delegation_coder_kwargs(exec_params.edit_format),
-                        )
+                        coder, io, out_buffer = _make_coder()
                         executor_reused_local = False
                         executor_recreated_local = False
 
-                    partial = coder.run(prompt)
+                    try:
+                        partial = coder.run(prompt)
+                    except SupervisorAbort as exc:
+                        captured = merged_capture(out_buffer, stdout_cap, stderr_cap)
+                        raise exc
                     captured = merged_capture(out_buffer, stdout_cap, stderr_cap)
                     return coder, io, partial, captured, executor_reused_local, executor_recreated_local
 
@@ -354,7 +460,53 @@ class AiderEngine(ExecutionEngine):
                     workspace_snapshot=workspace_snapshot_t,
                     workspace_snapshot_ms=snapshot_ms_t or None,
                 )
-            except Exception:
+            except Exception as exc:
+                from core.engine.supervised_io import SupervisorAbort
+
+                if isinstance(exc, SupervisorAbort):
+                    if not pool_shutdown:
+                        pool.shutdown(wait=False, cancel_futures=True)
+                        pool_shutdown = True
+                    (
+                        files_changed_a,
+                        files_unexpected_a,
+                        workspace_snapshot_a,
+                        _used_git_a,
+                        snapshot_ms_a,
+                    ) = resolve_delegation_attribution(
+                        workspace_path=workspace_path,
+                        snapshot_session=snapshot_session,
+                        contract_paths=contract,
+                        edit_paths_rel=edit_paths_rel,
+                        before_git=before_git,
+                        before_mtimes=before_mtimes,
+                        delegation_id=delegation_id,
+                    )
+                    output_tail = _executor_output_tail(
+                        exc.reasoning,
+                        max_chars=STALL_OUTPUT_TAIL_CHARS,
+                    )
+                    tokens_abort: dict[str, Any] = {
+                        "source": "unavailable",
+                        "stall_type": OUTCOME_NEEDS_INPUT_CLARIFICATION,
+                        "supervisor_reason": exc.reasoning,
+                        "supervisor_decisions_count": exc.decisions_count,
+                        "supervisor_aborts_count": exc.aborts_count,
+                        "supervisor_decisions": exc.decisions,
+                        "executor_output_tail": output_tail,
+                    }
+                    return ExecutionResult(
+                        success=False,
+                        output=exc.reasoning,
+                        files_changed=files_changed_a,
+                        files_unexpected=files_unexpected_a,
+                        model=self._model_name,
+                        error=exc.reasoning,
+                        error_class=OUTCOME_NEEDS_INPUT_CLARIFICATION,
+                        tokens=tokens_abort,
+                        workspace_snapshot=workspace_snapshot_a,
+                        workspace_snapshot_ms=snapshot_ms_a or None,
+                    )
                 if not pool_shutdown:
                     pool.shutdown(wait=False, cancel_futures=True)
                     pool_shutdown = True
@@ -387,6 +539,9 @@ class AiderEngine(ExecutionEngine):
                 coder_tokens=_extract_tokens(coder, partial),
                 output=output,
             )
+            supervisor_meta = _supervisor_metadata_from_io(io)
+            if supervisor_meta:
+                tokens.update(supervisor_meta)
             classification = classify_executor_outcome(
                 io=io,
                 output=output,
@@ -549,6 +704,7 @@ class AiderEngine(ExecutionEngine):
             contract_paths=contract_paths,
             timestamp_start=timestamp_start,
             timeout_s=timeout_s,
+            architect_plan=_extract_architect_plan(package.brief),
         )
         result.prompt_used = req.prompt
         return result

@@ -76,6 +76,18 @@ def test_build_needs_input_payload_shape():
     assert payload["executor_output_tail"] == "tail"
 
 
+def test_build_needs_input_payload_supervisor_escalation():
+    payload = build_needs_input_payload(
+        {
+            "outcome": OUTCOME_NEEDS_INPUT_CLARIFICATION,
+            "supervisor_reason": "Supervisor blocked shell command",
+            "executor_output_tail": "tail",
+        }
+    )
+    assert payload["reason"] == "supervisor_escalation"
+    assert payload["message"] == "Supervisor blocked shell command"
+
+
 def test_infer_run_success_still_false_for_stall():
     ok, err = infer_run_success(
         io=_Io(),

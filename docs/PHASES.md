@@ -930,7 +930,7 @@ Shape Aider's behavior before problems occur, see what is happening while it run
 
 ## Phase 11: Supervised execution + smarter context
 
-**Status:** Active — opened 2026-06-18; **P11-001 shipped** 2026-06-19; P11-002..P11-007 pending.
+**Status:** Active — opened 2026-06-18; **P11-001 + P11-002 + P11-003 shipped** 2026-06-19; P11-004..P11-008 pending.
 **PM doc:** [PHASE11_MVP.md](./PHASE11_MVP.md) · **Issues:** [PHASE11_ISSUES.md](./PHASE11_ISSUES.md) · **Bootstrap:** [notes/phase11-master-session-bootstrap.md](./notes/phase11-master-session-bootstrap.md)
 
 ### One-line goal
@@ -942,8 +942,8 @@ Make the Aider/MCP boundary bidirectional and supervised: replace `yes=True` wit
 | Milestone | Theme | Backlog |
 |-----------|-------|---------|
 | P11-001 | Pre-delegation spec clarity pass | BL-521 (new) |
-| P11-002 | SupervisedIO + DelegationSupervisor + decision log | BL-351 full |
-| P11-003 | Executor-pull v0: system prefix `/read` hint | BL-354 v0 |
+| P11-002 | SupervisedIO + DelegationSupervisor + decision log | ✅ BL-351 Phase 11 scope shipped |
+| P11-003 | Executor-pull v0: system prefix `/read` hint | ✅ BL-354 Phase 11 slice shipped |
 | P11-004 | Mid-run human gate: `answer_delegation_question` tool (experimental) | BL-522 (new) |
 | P11-005 | Tier-1 post-executor reviewer (cheap model scan on files_changed) | BL-358 v0 |
 | P11-006 | Smart planner-pass trigger: heuristic skip for trivial tasks *(named architect trigger until P11-008 rename)* | — |
@@ -1000,4 +1000,6 @@ See full table in [PHASE11_MVP.md](./PHASE11_MVP.md) § Cross-phase architectura
 - [x] **Phase 9 complete** — write-always storage + `LocalLlmProxy` + context blobs + replay CLI + GC + v2 boundary viewer (P9-001..P9-013); closed 2026-06-17; see [PHASE9_MVP.md](./PHASE9_MVP.md).
 - [x] **Phase 10 complete** — P10-001..P10-004 shipped (executor options, visibility, structured `needs_input`, and deferred Phase 9 polish). See [PHASE10_MVP.md](./PHASE10_MVP.md).
 - [x] **P11-001 shipped** — clarity_check pipeline phase (BL-521); opt-in `MCP_CODER_CLARITY_PASS`; 2026-06-19.
-- [ ] **Phase 11 active** — P11-002..P11-007: supervised execution (SupervisedIO + DelegationSupervisor), executor-pull v0, mid-run human gate (experimental), tier-1 reviewer, smart architect trigger, host model policy. See [PHASE11_MVP.md](./PHASE11_MVP.md).
+- [x] **P11-002 shipped** — supervised execution v1 (`SupervisedIO` + `DelegationSupervisor`), structured `needs_input` escalation, 2026-06-19.
+- [x] **P11-003 shipped** — executor-pull hint v0 (`/read` prompt guidance + audit field), 2026-06-19.
+- [ ] **Phase 11 active** — P11-004..P11-008: mid-run human gate (experimental), tier-1 reviewer, smart planner-pass trigger, host model policy, naming refactor. See [PHASE11_MVP.md](./PHASE11_MVP.md).

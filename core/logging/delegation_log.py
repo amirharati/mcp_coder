@@ -57,6 +57,22 @@ def resolve_clarity_check_result(
         return CLARITY_CHECK_ERROR
     return None
 
+
+def supervisor_audit_fields(tokens: dict[str, Any] | None) -> dict[str, Any]:
+    """Optional supervisor counters for delegation JSONL context block."""
+    data = tokens or {}
+    out: dict[str, Any] = {}
+    count = data.get("supervisor_decisions_count")
+    if count is not None:
+        out["supervisor_decisions_count"] = int(count)
+    aborts = data.get("supervisor_aborts_count")
+    if aborts is not None:
+        out["supervisor_aborts_count"] = int(aborts)
+    last = data.get("supervisor_last_decision")
+    if last:
+        out["supervisor_last_decision"] = str(last)[:120]
+    return out
+
 # delegations.jsonl record schema (lean — see D-P6-3)
 # Each line is a delegation audit row. Bodies live in:
 #   - Aider output:    response_digest.output_sha256 (full text → Cursor received it)
@@ -210,6 +226,7 @@ def build_delegation_record(
     trace_ref: str | None = None,
     system_prefix_applied: bool = False,
     edit_format_applied: str | None = None,
+    executor_pull_hint_applied: bool = False,
     stall_type: str | None = None,
     stall_files_requested: list[str] | None = None,
     auto_retried: bool = False,
@@ -220,6 +237,8 @@ def build_delegation_record(
         system_prefix_applied = bool(_audit.get("system_prefix_applied", False))
     if edit_format_applied is None:
         edit_format_applied = _audit.get("edit_format") or None
+    if not executor_pull_hint_applied:
+        executor_pull_hint_applied = bool(_audit.get("executor_pull_hint_applied", False))
 
     session_dir_str = str(Path(session_dir).resolve())
     log_path_str = str(Path(log_path).resolve())
@@ -260,6 +279,7 @@ def build_delegation_record(
             "executor_reused": executor_reused,
             "executor_recreated": executor_recreated,
             "system_prefix_applied": system_prefix_applied,
+            "executor_pull_hint_applied": executor_pull_hint_applied,
             **({"edit_format": edit_format_applied} if edit_format_applied is not None else {}),
             **({"stall_type": stall_type} if stall_type else {}),
             **(
