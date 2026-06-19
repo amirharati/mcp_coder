@@ -50,6 +50,11 @@ _LOW_RISK_MARKERS = (
     "patch",
 )
 
+# Aider's confirm_ask when loading a file into chat context (e.g. "Add file to the chat?",
+# "Add `core/foo.py` to the chat?"). Generic without a path = always low-risk (just read
+# context). With a specific path: only low-risk if the path is in the allowed set.
+_FILE_TO_CHAT_RE = re.compile(r"\badd\b.*\bto\s+the\s+chat\b", re.IGNORECASE)
+
 
 class SupervisorAbort(Exception):
     """Raised when supervisor decides abort or escalate."""
@@ -96,6 +101,16 @@ def classify_confirm_risk(
             if allowed and normalized not in allowed:
                 if any(tok in lower for tok in ("add", "create", "new file", "include")):
                     return "high"
+
+    # "Add file to the chat?" / "Add `core/foo.py` to the chat?" — Aider loads read context.
+    # If no specific path is mentioned, it's unconditionally low-risk. If a specific path is
+    # mentioned and it's in the allowed set, also low-risk. Out-of-spec file already caught
+    # by the high-risk branch above.
+    if _FILE_TO_CHAT_RE.search(q):
+        if not mentioned or all(
+            p.replace("\\", "/").lstrip("./") in allowed for p in mentioned
+        ):
+            return "low"
 
     if any(marker in lower for marker in _LOW_RISK_MARKERS):
         if mentioned and all(p.replace("\\", "/").lstrip("./") in allowed for p in mentioned):
@@ -202,8 +217,11 @@ class SupervisedIO:
         question: str,
         default: bool | None = None,
         subject: str | None = None,
+        explicit_yes_required: bool = False,
+        group: object = None,
+        allow_never: bool = False,
     ) -> bool:
-        del default, subject  # supervised path ignores defaults
+        del default, subject, explicit_yes_required, group, allow_never  # supervised path ignores these
         risk_tier = classify_confirm_risk(
             question,
             target_files=self._target_files,
