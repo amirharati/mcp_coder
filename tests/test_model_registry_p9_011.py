@@ -83,6 +83,30 @@ def test_overrides_apply_and_record_source(monkeypatch):
     assert cp.sources["temperature"] == "override"
 
 
+def test_host_policy_override_precedence_over_env(monkeypatch):
+    monkeypatch.setenv("AIDER_MODEL", "openrouter/openai/gpt-4o-mini")
+    monkeypatch.setenv("MCP_CODER_EXECUTOR_TEMPERATURE", "0.8")
+    cp = resolve(
+        ROLE_EXECUTOR,
+        host_policy_override={"temperature": 0.1},
+        include_aider_metadata=False,
+    )
+    assert cp.temperature == 0.1
+    assert cp.sources["temperature"] == "host_policy"
+
+
+def test_host_policy_override_loses_to_runtime_override(monkeypatch):
+    monkeypatch.setenv("AIDER_MODEL", "openrouter/openai/gpt-4o-mini")
+    cp = resolve(
+        ROLE_EXECUTOR,
+        host_policy_override={"temperature": 0.1},
+        overrides={"temperature": 0.5},
+        include_aider_metadata=False,
+    )
+    assert cp.temperature == 0.5
+    assert cp.sources["temperature"] == "override"
+
+
 def test_aider_defaults_known_model_returns_metadata():
     info = _aider_defaults("anthropic/claude-sonnet-4-5")
     assert info.get("edit_format")  # diff/whole/etc.

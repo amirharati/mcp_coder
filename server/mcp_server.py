@@ -12,6 +12,10 @@ from typing import Any
 
 from mcp.server.fastmcp import Context, FastMCP
 
+from core.config.host_model_policy import (
+    normalize_host_model_policy,
+    summarize_model_policy_applied,
+)
 from core.config.auto_merge import auto_merge_spec_read_enabled
 from core.config.auto_verify import (
     auto_verify_enabled,
@@ -102,6 +106,7 @@ from core.host.cursor_transcript import (
     load_cursor_transcript,
     transcript_log_context,
 )
+from core.observability.context import host_model_policy_var
 from core.observability import (
     CONTEXT_MODE_FALLBACK,
     CONTEXT_MODE_HOST_TRANSCRIPT,
@@ -1129,6 +1134,7 @@ def _response_payload(
         "context_summary (decisions from chat—the delegate cannot see history). "
         "Optional spec_path: step task under .mcp-coder/specs/tasks/ (e.g. tasks/my-epic-02-cli.md). "
         "mode: implement (default) edits target_files; review asks questions only (target_files must be []). "
+        "Optional model_policy: per-delegation role overrides (executor, reviewer, supervisor, architect). "
         "MCP appends audit to specs/reports/<same-name>.md. Returns success, output, files_changed, outcome; "
         "implement mode may include delegation_diff and judgment_checklist for post-delegate verification. "
         "Default backend: aider."
@@ -1142,6 +1148,7 @@ def delegate_to_agent(
     spec_path: str | None = None,
     mode: str = "implement",
     cli_artifacts: bool = False,
+    model_policy: dict | None = None,
     ctx: Context | None = None,
 ) -> str:
     """Run one delegated implementation via the selected backend; append JSONL log."""
@@ -1149,7 +1156,15 @@ def delegate_to_agent(
     delegation_id = obs.new_delegation_id()
     _delegation_scope = delegation_context(delegation_id)
     _delegation_scope.__enter__()
+    host_policy_token = None
+    host_policy_overrides: dict[str, dict] = {}
+    model_policy_warnings: list[str] = []
     try:
+        host_policy_overrides, model_policy_warnings = normalize_host_model_policy(model_policy)
+        host_policy_token = host_model_policy_var.set(
+            host_policy_overrides if host_policy_overrides else None
+        )
+
         t0 = time.perf_counter()
         timestamp_start = obs.utc_now_iso()
 
@@ -1159,6 +1174,12 @@ def delegate_to_agent(
             "context_summary": context_summary,
             "backend": backend,
         }
+        if host_policy_overrides:
+            mcp_request["model_policy_applied"] = summarize_model_policy_applied(
+                host_policy_overrides
+            )
+        if model_policy_warnings:
+            mcp_request["model_policy_warnings"] = model_policy_warnings
         if spec_path is not None:
             mcp_request["spec_path"] = spec_path
         try:
@@ -2621,6 +2642,12 @@ def delegate_to_agent(
             auto_retried=stall_auto_retried,
             stall_type=stall_type,
         )
+        if host_policy_overrides:
+            response["model_policy_applied"] = summarize_model_policy_applied(
+                host_policy_overrides
+            )
+        if model_policy_warnings:
+            response["model_policy_warnings"] = model_policy_warnings
         done_status = "needs_input" if outcome == OUTCOME_NEEDS_INPUT else ("success" if success else "failure")
         progress.notify(f"[done] Delegation complete — {done_status}.", force=True)
 
@@ -2645,6 +2672,13 @@ def delegate_to_agent(
                 reasoning_summary,
                 buffer_size=obs.resolve_reasoning_buffer_size(ws),
             )
+
+        if host_policy_overrides:
+            context_block["model_policy_applied"] = summarize_model_policy_applied(
+                host_policy_overrides
+            )
+        if model_policy_warnings:
+            context_block["model_policy_warnings"] = model_policy_warnings
 
         _obs_verbosity = resolve_observability_verbosity(ws)
         _trace_ref = (
@@ -2777,6 +2811,8 @@ def delegate_to_agent(
 
         return json.dumps(response, ensure_ascii=False)
     finally:
+        if host_policy_token is not None:
+            host_model_policy_var.reset(host_policy_token)
         _delegation_scope.__exit__(None, None, None)
         progress.close()
 

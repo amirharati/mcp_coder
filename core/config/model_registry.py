@@ -176,13 +176,13 @@ def resolve(
     workspace: str | Path = "",
     overrides: Optional[dict] = None,
     *,
+    host_policy_override: Optional[dict] = None,
     include_aider_metadata: bool = True,
 ) -> CallParams:
     """Resolve the full model config for a role.
 
-    Precedence (highest wins): overrides kwarg → env/workspace (via role_models) →
-    role defaults → Aider metadata. This milestone fills model + budget; generation
-    params remain unset (P9-012).
+    Precedence (highest wins): runtime overrides kwarg → host_policy_override →
+    env/workspace (via role_models + env vars) → role defaults → Aider metadata.
     """
     model_role = _ROLE_MODEL_ALIAS.get(role, role)
     model = resolve_role_model_name(model_role, workspace)
@@ -216,14 +216,22 @@ def resolve(
             cp.weak_model = default_weak
             cp.sources["weak_model"] = "registry_default"
 
-    # Layer 4: explicit runtime overrides (highest).
+    # Layer 4: host model_policy override (per-delegation).
+    if host_policy_override:
+        _apply_field_layer(cp, host_policy_override, source="host_policy")
+
+    # Layer 5: explicit runtime overrides (highest).
     if overrides:
-        for key, value in overrides.items():
-            if value is not None and hasattr(cp, key):
-                setattr(cp, key, value)
-                cp.sources[key] = "override"
+        _apply_field_layer(cp, overrides, source="override")
 
     return cp
+
+
+def _apply_field_layer(cp: CallParams, layer: dict, *, source: str) -> None:
+    for key, value in layer.items():
+        if value is not None and hasattr(cp, key):
+            setattr(cp, key, value)
+            cp.sources[key] = source
 
 
 def _apply_env_overrides(cp: CallParams, role: str) -> None:

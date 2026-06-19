@@ -102,7 +102,7 @@ Phase 11:  MCP → Aider (supervised, decisions routed) ↔ Supervisor LLM → r
 | 4 | P11-004 | [P11-004](../tasks/P11-004-human-gate-v0.md) | **done** 2026-06-19 | Mid-run human gate event bridge + timeout fallback |
 | 5 | P11-005 | [P11-005](../tasks/P11-005-reviewer-tier1-v0.md) | **done** 2026-06-19 | Tier-1 reviewer phase wired, non-fatal |
 | 6 | P11-006 | [P11-006](../tasks/P11-006-smart-architect-trigger.md) | **done** 2026-06-19 | Smart trigger + skip-reason audit |
-| 7 | P11-007 | [P11-007](../tasks/P11-007-model-policy-host.md) | pending | model_policy arg on delegate_to_agent (BL-512) |
+| 7 | P11-007 | [P11-007](../tasks/P11-007-model-policy-host.md) | **done** 2026-06-19 | Host model_policy arg wired, additive precedence |
 | 8 | P11-008 | [P11-008](../tasks/P11-008-planner-rename-refactor.md) | pending | Naming refactor: architect_pass → planner_pass; role hierarchy constants |
 
 ---
@@ -247,7 +247,7 @@ Phase 11:  MCP → Aider (supervised, decisions routed) ↔ Supervisor LLM → r
 
 ### P11-007 — Host model policy (BL-512 Stage 2)
 
-**Status:** `pending`
+**Status:** `done` — shipped 2026-06-19 (36 tests passed; 41 with helper-path regression checks)
 **Goal:** Cursor (or any host) can pass a `model_policy` object in `delegate_to_agent` args to tune which model and parameters are used for each role in that delegation — without restarting the MCP server or changing env vars.
 
 **Scope:**
@@ -393,12 +393,23 @@ Run a focused observability validation pass on 3-5 delegations and confirm:
 - **Compatibility:** spec override supports both `.meta` and `.front_matter`; existing architect-pass execution/error behavior unchanged when enabled.
 - **Tests:** 24 passed (`tests/test_architect_trigger_p11_006.py` + updated `tests/test_architect_pass.py` integration coverage).
 
+### P11-007 — host model_policy arg v0 (2026-06-19)
+
+- **Shipped:** `delegate_to_agent(..., model_policy=None)` supports per-delegation host overrides for executor/reviewer/supervisor/architect roles.
+- **Normalization:** new `host_model_policy.py` validates role keys + allowed fields, emits non-fatal warnings, and maps host labels to runtime roles.
+- **Precedence:** runtime override > host model_policy > env/workspace > defaults (resolver layering in `model_registry.resolve`).
+- **Runtime wiring:** host policy stored in contextvar for delegation lifetime; helper path (gateway) and executor path both consume per-role host overrides.
+- **Audit:** `model_policy_applied` + `model_policy_warnings` included in request/context/response; `model_roles.*.sources` shows host-policy provenance.
+- **Compatibility hardening:** model id is overridden only when host explicitly sets role `model`; otherwise existing caller-selected model behavior is preserved.
+- **Tests:** 36 passed target suite (plus helper-path regression checks -> 41 passed total with extended run).
+
 ---
 
 ## Changelog
 
 | Date | Change |
 |------|--------|
+| 2026-06-19 | **P11-007 shipped** — host `model_policy` arg (BL-512 Stage 2) wired with per-role normalization, additive precedence, delegation-lifetime context binding, and non-fatal warning behavior. |
 | 2026-06-19 | **P11-006 shipped** — smart architect trigger v0 with spec/env/heuristic precedence and skip-reason audit wiring; 24 tests passed. |
 | 2026-06-19 | **P11-005 shipped** — tier-1 reviewer v0 (`reviewer_pass`) wired with opt-in enablement, report section append, non-fatal error handling, and audit field `reviewer_pass_result`. |
 | 2026-06-19 | **P11-004 shipped** — mid-run human gate v0 (`answer_delegation_question` + event bridge + timeout fallback). Late-answer continuation tracked as BL-528. |

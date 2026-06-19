@@ -22,6 +22,10 @@ step_index_var: ContextVar[int | None] = ContextVar("step_index", default=None)
 # the trace layer to annotate backend_llm_call / llm_call events (P9-012).
 model_policy_var: ContextVar[dict | None] = ContextVar("model_policy", default=None)
 
+host_model_policy_var: ContextVar[dict[str, dict[str, Any]] | None] = ContextVar(
+    "host_model_policy", default=None
+)
+
 # Set by ObservableModel.send_completion(); litellm_callback skips Route A when True.
 _backend_call_active: ContextVar[bool] = ContextVar("_backend_call_active", default=False)
 
@@ -164,3 +168,4 @@ def clear_delegation_context() -> None:
     mcp_session_id_var.set(None)
     step_index_var.set(None)
     model_policy_var.set(None)
+    host_model_policy_var.set(None)

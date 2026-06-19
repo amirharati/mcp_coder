@@ -309,12 +309,25 @@ class AiderEngine(ExecutionEngine):
                 str(Path(workspace_path) / f) if not Path(f).is_absolute() else f
                 for f in fnames_rel
             ]
-            model = ObservableModel(self._model_name)
-
+            from core.config.host_model_policy import pick_host_override
             from core.config.model_registry import ROLE_EXECUTOR, policy_applied, resolve
-            from core.observability.context import model_policy_var
+            from core.observability.context import host_model_policy_var, model_policy_var
 
-            exec_params = resolve(ROLE_EXECUTOR, workspace_path)
+            host_policy = host_model_policy_var.get()
+            executor_override = pick_host_override(host_policy, ROLE_EXECUTOR)
+            exec_params = resolve(
+                ROLE_EXECUTOR,
+                workspace_path,
+                host_policy_override=executor_override,
+            )
+            # Preserve the engine-selected executor model unless host model_policy
+            # explicitly overrides executor.model for this delegation.
+            executor_model_name = (
+                str(executor_override.get("model")).strip()
+                if isinstance(executor_override, dict) and executor_override.get("model")
+                else self._model_name
+            )
+            model = ObservableModel(executor_model_name)
             _apply_executor_model_params(model, exec_params)
             pull_hint_applied = _apply_executor_pull_hint(model, workspace_path=workspace_path)
             policy_token = model_policy_var.set(policy_applied(exec_params, ROLE_EXECUTOR))

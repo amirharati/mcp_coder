@@ -103,10 +103,29 @@ class LlmGateway:
 
         def _call() -> GatewayCompletion:
             active_token = _gateway_call_active.set(True)
+            from core.config.host_model_policy import pick_host_override
             from core.config.model_registry import policy_applied, resolve
-            from core.observability.context import model_policy_var, workspace_var
+            from core.observability.context import (
+                host_model_policy_var,
+                model_policy_var,
+                workspace_var,
+            )
 
-            params = resolve(role, workspace_var.get() or "", include_aider_metadata=False)
+            host_policy = host_model_policy_var.get()
+            role_override = pick_host_override(host_policy, role)
+            params = resolve(
+                role,
+                workspace_var.get() or "",
+                host_policy_override=role_override,
+                include_aider_metadata=False,
+            )
+            # Preserve caller-selected model by default; only override when host
+            # explicitly sets a per-role model in model_policy.
+            effective_model = (
+                str(role_override.get("model")).strip()
+                if isinstance(role_override, dict) and role_override.get("model")
+                else model
+            )
             policy_token = model_policy_var.set(policy_applied(params, role))
             try:
                 with isolated_stdio() as (stdout_cap, stderr_cap):
@@ -114,7 +133,7 @@ class LlmGateway:
 
                     litellm.suppress_debug_info = True
                     completion_kwargs: dict[str, Any] = {
-                        "model": model,
+                        "model": effective_model,
                         "messages": messages,
                         "max_tokens": params.max_tokens or max_tokens,
                         "drop_params": True,
@@ -142,7 +161,7 @@ class LlmGateway:
                     try:
                         tokens = self._backend.record_llm_call(
                             role=role,
-                            model=model,
+                            model=effective_model,
                             messages=messages,
                             response_obj=response,
                             duration_ms=duration_ms,
@@ -152,7 +171,7 @@ class LlmGateway:
 
                     return GatewayCompletion(
                         text=text,
-                        model=model,
+                        model=effective_model,
                         tokens=tokens,
                         duration_ms=duration_ms,
                         reasoning_text=reasoning_text,
@@ -160,7 +179,7 @@ class LlmGateway:
             except Exception as exc:
                 return GatewayCompletion(
                     text="",
-                    model=model,
+                    model=effective_model,
                     tokens=_unavailable_tokens(),
                     duration_ms=int((time.perf_counter() - t0) * 1000),
                     error=f"{type(exc).__name__}: {exc}",
