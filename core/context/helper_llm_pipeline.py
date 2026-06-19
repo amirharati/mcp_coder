@@ -329,3 +329,106 @@ def apply_spec_validation(
         raw_output=llm_result.raw_output,
     )
     return True, clarifications, True, False, None, audit, model_record, provenance
+
+
+def apply_clarity_check(
+    *,
+    spec_read: Any,
+    workspace: str,
+    task: str,
+    recent_delegation_titles: list[str],
+    timing: dict[str, int | float] | None = None,
+    delegation_id: str | None = None,
+    log_warn: LogWarnFn | None = None,
+) -> tuple[
+    bool,
+    list[str] | None,
+    bool,
+    bool | None,
+    str | None,
+    dict[str, Any] | None,
+    dict[str, Any] | None,
+    dict[str, Any],
+]:
+    """Run pre-delegate clarity check LLM.
+
+    Returns (blocked, questions, ran, passed, error, audit_dict, model_record, provenance).
+    On failure: not blocked (non-fatal), ran=False, provenance includes error.
+    """
+    from core.context.clarity_prompt import build_clarity_check_prompt
+    from core.engine.clarity_llm import run_clarity_check_llm
+
+    t_val = time.perf_counter()
+    prompt = build_clarity_check_prompt(
+        task=task,
+        spec_read=spec_read,
+        recent_delegation_titles=recent_delegation_titles,
+    )
+    with role_context("clarity_check"):
+        llm_result = run_clarity_check_llm(prompt, workspace_path=workspace)
+    if timing is not None:
+        timing["clarity_check_ms"] = int((time.perf_counter() - t_val) * 1000)
+
+    model_record = build_role_usage_record(
+        role="clarity_check",
+        model=llm_result.model,
+        input_tokens=llm_result.tokens.get("input"),
+        output_tokens=llm_result.tokens.get("output"),
+        total_tokens=llm_result.tokens.get("total"),
+        duration_ms=llm_result.duration_ms,
+        source=str(llm_result.tokens.get("source") or "clarity_check"),
+    )
+
+    if not llm_result.success or llm_result.passed is None:
+        if log_warn is not None:
+            log_warn(
+                "clarity_check_failed",
+                {
+                    "delegation_id": delegation_id,
+                    "model": llm_result.model,
+                    "error": llm_result.error,
+                },
+            )
+        audit: dict[str, Any] = {
+            "ran": False,
+            "passed": None,
+            "questions_count": 0,
+            "duration_ms": llm_result.duration_ms,
+        }
+        if llm_result.error:
+            audit["error"] = llm_result.error
+        provenance = _helper_provenance(
+            input_prompt=prompt,
+            error_text=llm_result.error,
+            raw_output=llm_result.raw_output,
+        )
+        return False, None, False, None, llm_result.error, audit, model_record, provenance
+
+    if llm_result.passed is True:
+        audit = {
+            "ran": True,
+            "passed": True,
+            "questions_count": 0,
+            "duration_ms": llm_result.duration_ms,
+        }
+        provenance = _helper_provenance(
+            input_prompt=prompt,
+            raw_output=llm_result.raw_output,
+            output_text=llm_result.raw_output,
+        )
+        return False, None, True, True, None, audit, model_record, provenance
+
+    questions = llm_result.questions
+    audit = {
+        "ran": True,
+        "passed": False,
+        "questions_count": len(questions),
+        "duration_ms": llm_result.duration_ms,
+    }
+    output_text = llm_result.raw_output or "\n".join(f"- {q}" for q in questions)
+    provenance = _helper_provenance(
+        input_prompt=prompt,
+        output_text=output_text,
+        raw_output=llm_result.raw_output,
+    )
+    return True, questions, True, False, None, audit, model_record, provenance

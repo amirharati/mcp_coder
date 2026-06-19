@@ -32,6 +32,31 @@ CONTEXT_MODE_FALLBACK = "fallback"
 CONTEXT_MODE_HOST_TRANSCRIPT = "host_transcript"
 PROMPT_PREVIEW_CHARS = 500
 
+CLARITY_CHECK_CLEAR = "clear"
+CLARITY_CHECK_CLARIFICATION_NEEDED = "clarification_needed"
+CLARITY_CHECK_SKIPPED = "skipped"
+CLARITY_CHECK_ERROR = "error"
+
+
+def resolve_clarity_check_result(
+    *,
+    enabled: bool,
+    ran: bool | None,
+    passed: bool | None,
+    blocked: bool,
+    error: str | None = None,
+) -> str | None:
+    """Map clarity-check phase state to delegation JSONL audit value."""
+    if not enabled:
+        return CLARITY_CHECK_SKIPPED
+    if blocked:
+        return CLARITY_CHECK_CLARIFICATION_NEEDED
+    if ran is True and passed is True:
+        return CLARITY_CHECK_CLEAR
+    if error or ran is False:
+        return CLARITY_CHECK_ERROR
+    return None
+
 # delegations.jsonl record schema (lean — see D-P6-3)
 # Each line is a delegation audit row. Bodies live in:
 #   - Aider output:    response_digest.output_sha256 (full text → Cursor received it)

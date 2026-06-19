@@ -101,6 +101,7 @@ Use this page so **main vision** ([IDEA.md](./IDEA.md)) is not lost when editing
 
 | Date | Change |
 |------|--------|
+| 2026-06-19 | **P11-001 shipped** — clarity_check pipeline phase (BL-521); Phase 11 active. |
 | 2026-06-18 | **Phase 10 closed** — P10-001..P10-004 shipped; P10 docs frozen; residual partial scope tracked in BACKLOG (BL-516/518). |
 | 2026-06-18 | **Phase 10 opened** — PHASE10_MVP + PHASE10_ISSUES + phase10-master-session-bootstrap; BL-334/106/520/351/516/517/518/519 promoted to P10-001..P10-004; PHASES.md updated |
 | 2026-06-13 | **Phase 6 closed** — PHASE6_MVP + PHASE6_ISSUES frozen; BL-368, BL-367; Phase 7 direction (BL-350 + BL-368 → BL-367) |

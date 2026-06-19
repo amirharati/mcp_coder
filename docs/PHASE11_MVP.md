@@ -96,7 +96,7 @@ Phase 11:  MCP → Aider (supervised, decisions routed) ↔ Supervisor LLM → r
 
 | Order | Milestone | Spec | Status | Notes |
 |-------|-----------|------|--------|-------|
-| 1 | P11-001 | [P11-001](../tasks/P11-001-clarity-pass-v0.md) | pending | Clarity pass: cheap LLM pre-delegation Q&A |
+| 1 | P11-001 | [P11-001](../tasks/P11-001-clarity-pass-v0.md) | **done** 2026-06-19 | Clarity pass: cheap LLM pre-delegation Q&A |
 | 2 | P11-002 | [P11-002](../tasks/P11-002-supervised-io-v1.md) | pending | SupervisedIO + DelegationSupervisor + decision log |
 | 3 | P11-003 | [P11-003](../tasks/P11-003-executor-pull-v0.md) | pending | Executor-pull v0: system prefix /read hint |
 | 4 | P11-004 | [P11-004](../tasks/P11-004-mid-run-human-gate.md) | pending | answer_delegation_question tool (experimental) |
@@ -110,7 +110,7 @@ Phase 11:  MCP → Aider (supervised, decisions routed) ↔ Supervisor LLM → r
 
 ### P11-001 — Spec clarity pass v0 *(BL-521)*
 
-**Status:** `pending`
+**Status:** `done` — shipped 2026-06-19 (uncommitted; 16 tests in `test_clarity_pass_p11_001.py`)
 **Goal:** Before delegating, run a cheap LLM call that checks whether the task description and spec are clear enough to proceed. If ambiguous or missing key decisions, return `clarification_needed` with targeted questions rather than running an executor that will stall.
 
 **Scope:**
@@ -299,7 +299,14 @@ Phase 11:  MCP → Aider (supervised, decisions routed) ↔ Supervisor LLM → r
 
 ## § Results
 
-*(Fill in as milestones complete.)*
+### P11-001 — clarity pass v0 (2026-06-19)
+
+- **Shipped:** `clarity_check` pipeline phase (opt-in via `MCP_CODER_CLARITY_PASS=1` / `clarity_pass: true`); runs after `spec_validation`, before compile.
+- **Modules:** `clarity_prompt.py`, `clarity_llm.py`, `apply_clarity_check()`, `clarity_pass_enabled()`, `resolve_clarity_check_result()` in delegation log.
+- **Behavior:** vague task → `clarification_needed` early return (executor not run); clear task → proceeds; LLM error non-fatal; skipped when `spec_validation_blocked`.
+- **Tests:** 16 new; full suite 1025 passed, 1 skipped (pre-existing).
+- **Dogfood follow-up:** tune false-positive rate before default-on; optional pipeline skip detail `spec_validation_blocked` vs `disabled` (worker note).
+- **Deferred:** cross-session intent history in clarity context → Phase 12 (BL-521 remainder).
 
 ---
 
@@ -307,4 +314,5 @@ Phase 11:  MCP → Aider (supervised, decisions routed) ↔ Supervisor LLM → r
 
 | Date | Change |
 |------|--------|
+| 2026-06-19 | **P11-001 shipped** — clarity_check pipeline phase; BL-521 Phase 11 scope done; remainder → Phase 12. |
 | 2026-06-18 | Created — Phase 11 PM board; milestones P11-001..P11-007 scoped; D-P11-* and D-ARCH-* locked in master planning session. |

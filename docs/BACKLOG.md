@@ -20,7 +20,7 @@ Status: `idea` | `deferred` | `blocked` | `in_phase` | `done`
 
 | Backlog | Milestone | Phase 11 scope | Remainder |
 |---------|-----------|----------------|-----------|
-| BL-521 (new) | P11-001 | Spec clarity pass v0: cheap LLM pre-delegation Q&A | Cross-session intent history → Phase 12 |
+| BL-521 (new) | P11-001 | ✅ Done — `clarity_check` pipeline phase shipped (opt-in `MCP_CODER_CLARITY_PASS`) | Cross-session intent history → Phase 12 |
 | BL-351 | P11-002 | SupervisedIO + DelegationSupervisor + decision log + abort-on-escalate | Async outer-loop resume → Phase 12 |
 | BL-354 | P11-003 | Executor-pull v0: system prefix `/read` hint | Full sidecar HTTP tool server → Phase 12 |
 | BL-522 (new) | P11-004 | Mid-run human gate: `answer_delegation_question` + Event bridge (experimental) | Protocol-level async gate → Phase 12 |
@@ -1985,7 +1985,7 @@ Operators tuning dogfood/debug runs must know this matrix by heart; `.env.exampl
 
 ### BL-521: Pre-delegation spec clarity pass *(Phase 11 P11-001)*
 
-**Status:** `in_phase` — **Phase 11 P11-001**. Added 2026-06-18.
+**Status:** `done` — **Phase 11 P11-001 shipped** 2026-06-19. Remainder: cross-session intent history in clarity context → Phase 12.
 
 **Problem:** Delegations start immediately from whatever spec text is given. If the task is ambiguous, the executor either stalls (wastes 2–3 minutes) or produces a misaligned output. There is no pre-flight check that verifies the task is clear enough to delegate with confidence.
 
@@ -2043,6 +2043,7 @@ Operators tuning dogfood/debug runs must know this matrix by heart; `.env.exampl
 
 | Date | Change |
 |------|--------|
+| 2026-06-19 | **P11-001 shipped** — `clarity_check` pipeline phase (BL-521 Phase 11 scope done); opt-in `MCP_CODER_CLARITY_PASS`; 16 tests; cross-session intent → Phase 12. |
 | 2026-06-18 | **Phase 11 opened.** BL-521 (new) + BL-351 → P11-002; BL-354 (v0) → P11-003; BL-522 (new) → P11-004; BL-358 (v0) → P11-005; BL-512 (Stage 2) → P11-007. § Phase 11 active table added; BL-351/354/358/512 status updated to `in_phase`. Cross-arch decisions D-ARCH-1..6 locked. See [PHASE11_MVP.md](./PHASE11_MVP.md). |
 | 2026-06-18 | **Phase 10 closed.** Promoted backlog items moved from `in_phase` to `done` (v0/POF/partial as scoped); § Phase 10 table frozen. Residuals: BL-516/518 partial, BL-106/520 follow-ups, BL-351 full vision → Phase 11. |
 | 2026-06-18 | **P10-004 shipped** — BL-517/519 completed; BL-516/518 partial shipped (`trace inspect --summary`, env matrix docs + `.env.example` parity). |

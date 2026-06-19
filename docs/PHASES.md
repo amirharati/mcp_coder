@@ -930,7 +930,7 @@ Shape Aider's behavior before problems occur, see what is happening while it run
 
 ## Phase 11: Supervised execution + smarter context
 
-**Status:** Active — opened 2026-06-18; P11-001..P11-007 in progress.
+**Status:** Active — opened 2026-06-18; **P11-001 shipped** 2026-06-19; P11-002..P11-007 pending.
 **PM doc:** [PHASE11_MVP.md](./PHASE11_MVP.md) · **Issues:** [PHASE11_ISSUES.md](./PHASE11_ISSUES.md) · **Bootstrap:** [notes/phase11-master-session-bootstrap.md](./notes/phase11-master-session-bootstrap.md)
 
 ### One-line goal
@@ -999,4 +999,5 @@ See full table in [PHASE11_MVP.md](./PHASE11_MVP.md) § Cross-phase architectura
 - [x] **Phase 8 complete** — backend interception (P8-001..P8-006); `ObservableModel` + `InterceptionProfile` + bootstrap + byte-range provenance + streaming dedup; see `PHASE8_MVP.md` (closed 2026-06-14).
 - [x] **Phase 9 complete** — write-always storage + `LocalLlmProxy` + context blobs + replay CLI + GC + v2 boundary viewer (P9-001..P9-013); closed 2026-06-17; see [PHASE9_MVP.md](./PHASE9_MVP.md).
 - [x] **Phase 10 complete** — P10-001..P10-004 shipped (executor options, visibility, structured `needs_input`, and deferred Phase 9 polish). See [PHASE10_MVP.md](./PHASE10_MVP.md).
-- [ ] **Phase 11 active** — P11-001..P11-007 scoped: supervised execution (SupervisedIO + DelegationSupervisor), clarity pass, executor-pull v0, mid-run human gate (experimental), tier-1 reviewer, smart architect trigger, host model policy. See [PHASE11_MVP.md](./PHASE11_MVP.md).
+- [x] **P11-001 shipped** — clarity_check pipeline phase (BL-521); opt-in `MCP_CODER_CLARITY_PASS`; 2026-06-19.
+- [ ] **Phase 11 active** — P11-002..P11-007: supervised execution (SupervisedIO + DelegationSupervisor), executor-pull v0, mid-run human gate (experimental), tier-1 reviewer, smart architect trigger, host model policy. See [PHASE11_MVP.md](./PHASE11_MVP.md).

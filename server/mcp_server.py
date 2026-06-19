@@ -35,7 +35,7 @@ from core.config.rag import (
     rag_enabled,
     workspace_file_hints_enabled,
 )
-from core.config.spec_validation import spec_validation_enabled
+from core.config.spec_validation import clarity_pass_enabled, spec_validation_enabled
 from core.config.models import resolve_model_name
 from core.config.observability import resolve_observability_verbosity
 from core.config.role_models import (
@@ -72,6 +72,7 @@ from core.context.helper_llm_pipeline import (
     SPEC_VALIDATION_BLOCK_OUTPUT,
     apply_architect_pass as _shared_apply_architect_pass,
     apply_builder_llm as _shared_apply_builder_llm,
+    apply_clarity_check as _shared_apply_clarity_check,
     apply_spec_validation as _shared_apply_spec_validation,
     merge_architect_plan as _merge_architect_plan,
     merge_brief as _merge_brief,
@@ -708,7 +709,40 @@ def _apply_spec_validation(
     )
 
 
+def _apply_clarity_check(
+    *,
+    spec_read: "Any",
+    workspace: str,
+    task: str,
+    recent_delegation_titles: list[str],
+    timing: dict[str, int | float],
+    delegation_id: str,
+) -> tuple[
+    bool,
+    list[str] | None,
+    bool,
+    bool | None,
+    str | None,
+    dict[str, Any] | None,
+    dict[str, Any] | None,
+    dict[str, Any],
+]:
+    return _shared_apply_clarity_check(
+        spec_read=spec_read,
+        workspace=workspace,
+        task=task,
+        recent_delegation_titles=recent_delegation_titles,
+        timing=timing,
+        delegation_id=delegation_id,
+        log_warn=obs.warn,
+    )
+
+
 _SPEC_VALIDATION_BLOCK_OUTPUT = SPEC_VALIDATION_BLOCK_OUTPUT
+_CLARITY_CHECK_BLOCK_OUTPUT = (
+    "Clarity check found the task unclear. Answer the questions in Cursor, "
+    "then retry delegate_to_agent."
+)
 
 
 def _build_model_roles_payload(
@@ -721,6 +755,7 @@ def _build_model_roles_payload(
     workspace: str,
     builder_record: dict[str, Any] | None = None,
     spec_validation_record: dict[str, Any] | None = None,
+    clarity_check_record: dict[str, Any] | None = None,
     architect_record: dict[str, Any] | None = None,
 ) -> dict[str, Any] | None:
     """Per-role audit block for JSONL + MCP response (D-P4-8 Stage 1)."""
@@ -769,6 +804,11 @@ def _build_model_roles_payload(
         if roles is None:
             roles = {}
         roles["spec_validation"] = spec_validation_record
+
+    if clarity_check_record:
+        if roles is None:
+            roles = {}
+        roles["clarity_check"] = clarity_check_record
 
     roles = obs.overlay_model_roles_tokens(
         roles,
@@ -1222,6 +1262,13 @@ def delegate_to_agent(
         spec_validation_audit: dict[str, Any] | None = None
         spec_validation_record: dict[str, Any] | None = None
         spec_validation_provenance: dict[str, Any] = {}
+        clarity_check_blocked = False
+        clarity_check_questions: list[str] | None = None
+        clarity_check_ran: bool | None = None
+        clarity_check_passed: bool | None = None
+        clarity_check_audit: dict[str, Any] | None = None
+        clarity_check_record: dict[str, Any] | None = None
+        clarity_check_error: str | None = None
         builder_provenance: dict[str, Any] = {}
         architect_provenance: dict[str, Any] = {}
         builder_history_rag_on = False
@@ -1314,6 +1361,49 @@ def delegate_to_agent(
                 reason="disabled",
             )
 
+        clarity_pass_on = clarity_pass_enabled(ws)
+        if (
+            pipeline_recorder is not None
+            and not review_target_files_error
+            and not spec_validation_blocked
+            and clarity_pass_on
+        ):
+            from core.context.builder_history import gather_builder_history
+
+            _history = gather_builder_history(Path(ws), spec_path=spec_rel_path)
+            _titles = [r.get("task", "")[:80] for r in _history.same_spec[:3]]
+            if not _titles:
+                _titles = [r.get("task", "")[:80] for r in _history.project_recent[:3]]
+
+            pipeline_recorder.start("clarity_check")
+            (
+                clarity_check_blocked,
+                clarity_check_questions,
+                clarity_check_ran,
+                clarity_check_passed,
+                clarity_check_error,
+                clarity_check_audit,
+                clarity_check_record,
+                _clarity_provenance,
+            ) = _apply_clarity_check(
+                spec_read=spec_read,
+                workspace=ws,
+                task=task,
+                recent_delegation_titles=_titles,
+                timing=timing,
+                delegation_id=delegation_id,
+            )
+            if clarity_check_blocked:
+                pipeline_recorder.end("clarity_check", status="blocked")
+            elif clarity_check_error:
+                pipeline_recorder.end(
+                    "clarity_check", status="error", detail=clarity_check_error[:200]
+                )
+            else:
+                pipeline_recorder.end("clarity_check", status="ok")
+        elif pipeline_recorder is not None and not review_target_files_error:
+            pipeline_recorder.mark("clarity_check", status="skipped", detail="disabled")
+
         validation_status = "skipped"
         if spec_validation_blocked:
             validation_status = "blocked (needs input)"
@@ -1333,6 +1423,10 @@ def delegate_to_agent(
             success = False
             error = None
             output = _SPEC_VALIDATION_BLOCK_OUTPUT
+        elif clarity_check_blocked:
+            success = False
+            error = None
+            output = _CLARITY_CHECK_BLOCK_OUTPUT
         else:
             progress.notify(
                 (
@@ -1859,6 +1953,19 @@ def delegate_to_agent(
             context_block["executor_turns"] = _executor_turns
         if spec_validation_audit is not None:
             context_block["spec_validation"] = spec_validation_audit
+        from core.logging.delegation_log import resolve_clarity_check_result
+
+        clarity_check_result = resolve_clarity_check_result(
+            enabled=clarity_pass_on,
+            ran=clarity_check_ran,
+            passed=clarity_check_passed,
+            blocked=clarity_check_blocked,
+            error=clarity_check_error,
+        )
+        if clarity_check_result is not None:
+            context_block["clarity_check_result"] = clarity_check_result
+        if clarity_check_audit is not None:
+            context_block["clarity_check"] = clarity_check_audit
         if context_package is not None:
             read_entries_in_prompt = [
                 e
@@ -1967,7 +2074,7 @@ def delegate_to_agent(
             if pipeline_recorder is not None and not spec_validation_blocked:
                 pipeline_recorder.end("post_gateway", status="ok")
 
-        if spec_validation_blocked:
+        if spec_validation_blocked or clarity_check_blocked:
             outcome = OUTCOME_NEEDS_INPUT
         elif spec_path:
             if spec_invalid_reason:
@@ -2042,6 +2149,7 @@ def delegate_to_agent(
             and success
             and files_changed
             and not spec_validation_blocked
+            and not clarity_check_blocked
         ):
             if pipeline_recorder is not None:
                 pipeline_recorder.start("auto_verify")
@@ -2208,6 +2316,7 @@ def delegate_to_agent(
             workspace=ws,
             builder_record=builder_record,
             spec_validation_record=spec_validation_record,
+            clarity_check_record=clarity_check_record,
             architect_record=architect_record,
         )
 
@@ -2260,7 +2369,7 @@ def delegate_to_agent(
             builder_brief_applied=builder_brief_applied if builder_llm_enabled else None,
             auto_verify_enabled_flag=verify_enabled if verify_result is not None else None,
             verify_result=verify_result.to_response_dict() if verify_result is not None else None,
-            clarification_needed=clarification_needed,
+            clarification_needed=clarification_needed or clarity_check_questions,
             spec_validation_ran=spec_validation_ran,
             spec_validation_passed=spec_validation_passed,
             delegation_pipeline=delegation_pipeline_payload,
@@ -2409,7 +2518,7 @@ def delegate_to_agent(
                     e.path for e in context_package.entries if e.tier == TIER_EDIT_FULL
                 )
             envelope = delegation_envelope(
-                ok=bool(success) and not spec_validation_blocked,
+                ok=bool(success) and not spec_validation_blocked and not clarity_check_blocked,
                 stop_after="full",
                 artifacts=full_run_artifacts(
                     caller_response=response,
@@ -2419,7 +2528,7 @@ def delegate_to_agent(
                     capability_warnings=cap_warnings or None,
                 ),
                 caller_response=response,
-                error=error if (not success or spec_validation_blocked) else None,
+                error=error if (not success or spec_validation_blocked or clarity_check_blocked) else None,
             )
             return json.dumps(envelope, ensure_ascii=False)
 

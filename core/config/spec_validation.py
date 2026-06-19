@@ -52,3 +52,13 @@ def spec_validation_enabled(workspace: str | Path) -> bool:
         yaml_key="spec_validation",
         default=False,
     )
+
+
+def clarity_pass_enabled(workspace: str | Path) -> bool:
+    """Default False. Env MCP_CODER_CLARITY_PASS=1 or yaml clarity_pass: true → True."""
+    return _resolve_flag(
+        workspace,
+        env_var="MCP_CODER_CLARITY_PASS",
+        yaml_key="clarity_pass",
+        default=False,
+    )
