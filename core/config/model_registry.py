@@ -284,6 +284,16 @@ def _apply_env_overrides(cp: CallParams, role: str) -> None:
         cp.weak_model = weak
         cp.sources["weak_model"] = "env"
 
+    prefix = _env(role, "SYSTEM_PREFIX")
+    if prefix:
+        cp.system_prompt_prefix = prefix
+        cp.sources["system_prompt_prefix"] = "env"
+
+    edit_fmt = _env(role, "EDIT_FORMAT")
+    if edit_fmt:
+        cp.edit_format = edit_fmt
+        cp.sources["edit_format"] = "env"
+
 
 def policy_applied(cp: CallParams, role: str) -> dict:
     """Compact, log-friendly view of an applied policy for trace `policy_applied`."""
@@ -295,6 +305,8 @@ def policy_applied(cp: CallParams, role: str) -> dict:
         "temperature",
         "top_p",
         "weak_model",
+        "system_prompt_prefix",
+        "edit_format",
     ):
         value = getattr(cp, field_name)
         if value is not None:

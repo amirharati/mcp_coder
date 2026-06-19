@@ -1,7 +1,7 @@
 # Phase 10 issues
 
 **Status:** **Active** — Phase 10 opened 2026-06-18.
-**Open:** none (implementation not started)
+**Open:** none
 **Promoted from backlog:** BL-334, BL-106, BL-520, BL-351 (v0), BL-516 (partial), BL-517, BL-518 (partial), BL-519 — see below
 **Related PM board:** [PHASE10_MVP.md](./PHASE10_MVP.md)
 
@@ -29,7 +29,7 @@
 **Type:** Backlog promotion → active milestone
 **Milestone:** P10-001
 **Severity:** medium — reduces stall frequency; prerequisite for dogfood behavior shaping
-**Status:** `promoted` — pending worker spec
+**Status:** `done` — implemented 2026-06-18 (worker session)
 **Opened:** 2026-06-18 (planning session)
 **Backlog:** [BL-334](./BACKLOG.md#bl-334-backend-prompt-customization-system-prompt-prefix--edit-format-control)
 
@@ -44,6 +44,14 @@ Apply both fields via `aider_runtime.py`; audit `system_prefix_applied` + `edit_
 ### Exit criteria
 
 See [PHASE10_MVP.md](./PHASE10_MVP.md) § P10-001.
+
+### Result summary
+
+- Resolver now maps `MCP_CODER_EXECUTOR_SYSTEM_PREFIX` / `MCP_CODER_EXECUTOR_EDIT_FORMAT` into executor `CallParams`.
+- Runtime applies `model.system_prompt_prefix` and forwards `edit_format` through coder kwargs on cached + non-cached paths.
+- Delegation logging now captures `system_prefix_applied` and `edit_format` audit fields.
+- `.env.example` updated with both env vars.
+- Tests: focused `32/32` passed; full suite `986 passed`, `1 skipped`, `1 pre-existing failure` (`test_schema_migration_from_322a_db`).
 
 ---
 

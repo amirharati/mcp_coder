@@ -9,7 +9,7 @@
 
 # Phase 10 — Trustable real-project dogfood
 
-**Status:** **Active** — planning session 2026-06-18. Milestones P10-001..P10-004 scoped.
+**Status:** **Active** — Phase 10 opened 2026-06-18. **P10-001 done**; P10-002..P10-004 pending.
 **Purpose:** Make `mcp-coder` usable in real projects by adding three partial/POC capabilities — executor behavior shaping, live visibility during delegation, and supervised stall handling — plus clearing high-ROI deferred items from Phase 9.
 **PM board:** this file · **Issues:** [PHASE10_ISSUES.md](./PHASE10_ISSUES.md)
 **Phase 9 (frozen):** [PHASE9_MVP.md](./PHASE9_MVP.md) · [PHASE9_ISSUES.md](./PHASE9_ISSUES.md)
@@ -83,7 +83,7 @@ P10-004: Backlog clearance           (high-ROI deferred items from Phase 9)
 
 | Order | Milestone | Spec | Status | Notes |
 |-------|-----------|------|--------|-------|
-| 1 | P10-001 | — | pending_spec | Executor option wiring v0 (BL-334 v0) |
+| 1 | P10-001 | [P10-001](../tasks/P10-001-executor-options-v0.md) | done | Executor options wired; tests green (focused 32/32; full suite 986 passed, 1 skipped, 1 pre-existing failure) |
 | 2 | P10-002 | — | pending_spec | Visibility v0: MCP notifications + `logs tail` (BL-106 POF + BL-520 POF) |
 | 3 | P10-003 | — | pending_spec | Stall detection → `needs_input` v0 (BL-351 v0) |
 | 4 | P10-004 | — | pending_spec | Backlog clearance: BL-517 + BL-519 + BL-516 partial + BL-518 partial |
@@ -94,7 +94,7 @@ P10-004: Backlog clearance           (high-ROI deferred items from Phase 9)
 
 ### P10-001 — Executor option wiring v0 *(BL-334a/b/c)*
 
-**Status:** `pending_spec`
+**Status:** `done` — worker delivered implementation + tests; accepted in master session 2026-06-18.
 
 **Goal:** Apply the two Aider options that `CallParams` already resolves but never passes to Aider: `system_prompt_prefix` and `edit_format`. Add audit fields to the delegation record.
 
@@ -113,6 +113,18 @@ P10-004: Backlog clearance           (high-ROI deferred items from Phase 9)
 - Delegation record includes `system_prefix_applied: true` / `edit_format: "whole"` in the context block
 - Default (no env): byte-identical behavior to today
 - Full suite green
+
+**Implementation notes (worker report):**
+- `core/config/model_registry.py` now resolves env overrides for `MCP_CODER_EXECUTOR_SYSTEM_PREFIX` and `MCP_CODER_EXECUTOR_EDIT_FORMAT`, and emits both in `policy_applied` when set.
+- `core/config/aider_runtime.py` now supports optional `edit_format` in `delegation_coder_kwargs(...)`.
+- `core/engine/aider_engine.py` applies `model.system_prompt_prefix` and passes resolved `edit_format` on both cached and non-cached execution paths.
+- `core/logging/delegation_log.py` now records delegation audit fields (`system_prefix_applied`, `edit_format`) using a contextvar bridge from runtime to logging layer.
+- `.env.example` includes the two executor env vars.
+- New test file: `tests/test_executor_options_p10_001.py`.
+
+**Validation evidence (worker report):**
+- Focused: `32/32` passed (`test_executor_options_p10_001.py` + related runtime/registry tests).
+- Full suite: `986 passed`, `1 skipped`, `1 pre-existing failure` (`test_schema_migration_from_322a_db`).
 
 ---
 
@@ -261,7 +273,9 @@ P10-004: Backlog clearance           (high-ROI deferred items from Phase 9)
 
 ## § Results
 
-*(To be filled when Phase 10 closes.)*
+**Progress update (2026-06-18):**
+- ✅ P10-001 completed.
+- ⏳ Next: P10-002 (live feedback), then P10-003 (stall safety), then P10-004 (backlog clearance).
 
 ---
 
@@ -269,4 +283,5 @@ P10-004: Backlog clearance           (high-ROI deferred items from Phase 9)
 
 | Date | Change |
 |------|--------|
+| 2026-06-18 | P10-001 marked **done** from worker implementation: executor `system_prompt_prefix` + `edit_format` wiring, delegation audit fields, env docs, and focused/full test evidence recorded. |
 | 2026-06-18 | Created — Phase 10 PM board; milestones P10-001..P10-004 scoped; D-P10-1..D-P10-7 locked in master planning session. |

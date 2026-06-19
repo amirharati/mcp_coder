@@ -153,9 +153,13 @@ def create_delegation_io() -> tuple[Any, io.StringIO]:
     return io_obj, buffer
 
 
-def delegation_coder_kwargs() -> dict[str, Any]:
-    """Keyword args for Coder.create() during MCP delegations."""
-    return {
+def delegation_coder_kwargs(edit_format: str | None = None) -> dict[str, Any]:
+    """Keyword args for Coder.create() during MCP delegations.
+
+    Pass `edit_format` (e.g. "whole", "diff") to override the model-native format
+    resolved from CallParams.  None → let Aider pick based on the model.
+    """
+    kwargs: dict[str, Any] = {
         "auto_commits": delegation_auto_commits(),
         "dirty_commits": delegation_dirty_commits(),
         "use_git": delegation_use_git(),
@@ -167,6 +171,9 @@ def delegation_coder_kwargs() -> dict[str, Any]:
         # Default False for MCP delegations (P2-125 BL-309a); opt in via env.
         "detect_urls": delegation_detect_urls(),
     }
+    if edit_format:
+        kwargs["edit_format"] = edit_format
+    return kwargs
 
 
 _IMPLEMENT_QUESTION_MARKERS = (

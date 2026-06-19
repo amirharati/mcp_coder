@@ -70,6 +70,12 @@ def _apply_executor_model_params(model: Any, params: Any) -> None:
         except Exception:
             pass
 
+    if params.system_prompt_prefix:
+        try:
+            model.system_prompt_prefix = params.system_prompt_prefix
+        except Exception:
+            pass
+
 
 _READ_CONTEXT_HEADER = (
     "\n\n---\n\n## Read context (read-only — do not edit unless spec allows)\n"
@@ -238,6 +244,14 @@ class AiderEngine(ExecutionEngine):
             exec_params = resolve(ROLE_EXECUTOR, workspace_path)
             _apply_executor_model_params(model, exec_params)
             policy_token = model_policy_var.set(policy_applied(exec_params, ROLE_EXECUTOR))
+            from core.logging.delegation_log import executor_options_audit_var
+
+            executor_options_audit_var.set(
+                {
+                    "system_prefix_applied": bool(exec_params.system_prompt_prefix),
+                    "edit_format": exec_params.edit_format,
+                }
+            )
             before_git = snapshot_git_dirty(workspace_path)
             before_mtimes = snapshot_mtimes(workspace_path, edit_paths_rel)
             snapshot_session = begin_delegation_snapshot(
@@ -255,7 +269,7 @@ class AiderEngine(ExecutionEngine):
                     main_model=model,
                     io=io,
                     fnames=resolved_files,
-                    **delegation_coder_kwargs(),
+                    **delegation_coder_kwargs(exec_params.edit_format),
                 )
                 return coder, io, out_buffer
 
@@ -280,7 +294,7 @@ class AiderEngine(ExecutionEngine):
                             main_model=model,
                             io=io,
                             fnames=resolved_files,
-                            **delegation_coder_kwargs(),
+                            **delegation_coder_kwargs(exec_params.edit_format),
                         )
                         executor_reused_local = False
                         executor_recreated_local = False

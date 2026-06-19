@@ -20,7 +20,7 @@ Status: `idea` | `deferred` | `blocked` | `in_phase` | `done`
 
 | Backlog | Milestone | Phase 10 scope | Remainder |
 |---------|-----------|----------------|-----------|
-| BL-334 | P10-001 | `system_prompt_prefix` + `edit_format` wiring + audit | Per-delegation `model_policy` → BL-512 (Phase 11) |
+| BL-334 | P10-001 | ✅ Done — `system_prompt_prefix` + `edit_format` wiring + delegation audit shipped | Per-delegation `model_policy` → BL-512 (Phase 11) |
 | BL-106 | P10-002 | `ctx.info` pipeline milestones (POF) | Capture→egress bridge, `report_progress` → backlog |
 | BL-520 | P10-002 | `logs tail --latest` on trace JSONL (POF) | `server.jsonl` filter, BL-160b tee → backlog |
 | BL-351 | P10-003 | Stall detect → `needs_input` v0 | Full supervisor + `InputOutput` → Phase 11 |
@@ -1511,7 +1511,7 @@ delegate_to_agent(backend=…)
 
 ### BL-334: Backend prompt customization (system prompt prefix + edit-format control)
 
-**Status:** `in_phase` — **Phase 10 P10-001** (v0: env/yaml wiring + audit). Per-delegation override → BL-512 Stage 2 (Phase 11).
+**Status:** `done` — **Phase 10 P10-001 shipped** (v0: env/yaml wiring + audit). Per-delegation override remains deferred to BL-512 Stage 2 (Phase 11).
 
 **Origin:** Same Phase 4 discussion. We hand Aider a prompt, but Aider wraps it with **its own** system prompt (`main_system`), hard-coded example conversations, and a SEARCH/REPLACE `system_reminder`. We currently pass content only; we don't shape Aider's framing.
 
@@ -1986,6 +1986,7 @@ Operators tuning dogfood/debug runs must know this matrix by heart; `.env.exampl
 
 | Date | Change |
 |------|--------|
+| 2026-06-18 | **P10-001 shipped** — BL-334 v0 completed (executor `system_prompt_prefix` + `edit_format` wiring + delegation audit fields + env docs + tests). BL-334 status moved to `done`; Phase 11 keeps BL-512 per-delegation override. |
 | 2026-06-18 | **Phase 10 opened.** BL-334 → **P10-001**; BL-106 + BL-520 → **P10-002**; BL-351 (v0) → **P10-003**; BL-516/517/518/519 → **P10-004**. Status `in_phase` on promoted items; § Phase 10 active table added. See [PHASE10_MVP.md](./PHASE10_MVP.md). |
 | 2026-06-17 | **BL-106** expanded (MCP `report_progress` + `ctx.log` + capture→egress bridge) and **BL-520** added (`logs tail` / follow delegation on trace + server JSONL). Phase 9 closed — live visibility is Phase 10 read/notify layer on top of write-always capture. |
 | 2026-06-17 | **BL-518** (runtime log level / verbosity DX) and **BL-519** (`MCP_CODER_PROXY_ENABLED` toggle) added — post-Phase 9 operational polish; scope TBD. |

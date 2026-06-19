@@ -5,9 +5,17 @@ import json
 import os
 import sys
 import uuid
+from contextvars import ContextVar
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
+
+# Executor-options audit for the active delegation (P10-001).
+# Set by AiderEngine._execute_delegation before coder creation so that
+# build_delegation_record can include the fields without mcp_server.py changes.
+executor_options_audit_var: ContextVar[dict] = ContextVar(
+    "executor_options_audit", default={}
+)
 
 from core.logging.server_log import server_log_emit
 from core.logging.stderr import log_stderr
@@ -175,7 +183,16 @@ def build_delegation_record(
     model_roles: dict[str, Any] | None = None,
     context_refs: list[dict[str, Any]] | None = None,
     trace_ref: str | None = None,
+    system_prefix_applied: bool = False,
+    edit_format_applied: str | None = None,
 ) -> dict[str, Any]:
+    # Fall back to contextvar set by AiderEngine when params not explicitly passed.
+    _audit = executor_options_audit_var.get()
+    if not system_prefix_applied:
+        system_prefix_applied = bool(_audit.get("system_prefix_applied", False))
+    if edit_format_applied is None:
+        edit_format_applied = _audit.get("edit_format") or None
+
     session_dir_str = str(Path(session_dir).resolve())
     log_path_str = str(Path(log_path).resolve())
     record: dict[str, Any] = {
@@ -214,6 +231,8 @@ def build_delegation_record(
             "specstory_bytes": None,
             "executor_reused": executor_reused,
             "executor_recreated": executor_recreated,
+            "system_prefix_applied": system_prefix_applied,
+            **({"edit_format": edit_format_applied} if edit_format_applied is not None else {}),
             **context_block,
             **(host_context or {}),
         },
