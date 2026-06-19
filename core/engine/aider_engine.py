@@ -7,6 +7,9 @@ from pathlib import Path
 from typing import Any
 
 from core.config.aider_runtime import (
+    OUTCOME_NEEDS_INPUT_CLARIFICATION,
+    OUTCOME_NEEDS_INPUT_FILES,
+    classify_executor_outcome,
     create_delegation_io,
     delegation_coder_kwargs,
     delegation_timeout_seconds,
@@ -384,13 +387,27 @@ class AiderEngine(ExecutionEngine):
                 coder_tokens=_extract_tokens(coder, partial),
                 output=output,
             )
+            classification = classify_executor_outcome(
+                io=io,
+                output=output,
+                partial_response=partial_str,
+            )
             success, error = infer_run_success(
                 io=io,
                 output=output,
                 partial_response=partial_str,
             )
             error_class: str | None = None
-            if not success and error:
+            if classification["outcome"] in (
+                OUTCOME_NEEDS_INPUT_FILES,
+                OUTCOME_NEEDS_INPUT_CLARIFICATION,
+            ):
+                error_class = classification["outcome"]
+                tokens["stall_type"] = classification["outcome"]
+                tokens["files_requested"] = list(classification.get("files_requested") or [])
+                if classification.get("executor_output_tail"):
+                    tokens["executor_output_tail"] = classification["executor_output_tail"]
+            elif not success and error:
                 error_class, _short = classify_delegation_error(error)
                 output = sanitize_delegation_output(output, error_class=error_class)
             return ExecutionResult(

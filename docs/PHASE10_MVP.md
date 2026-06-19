@@ -9,7 +9,7 @@
 
 # Phase 10 — Trustable real-project dogfood
 
-**Status:** **Active** — Phase 10 opened 2026-06-18. **P10-001 and P10-002 done**; P10-003..P10-004 pending.
+**Status:** **Active** — Phase 10 opened 2026-06-18. **P10-001, P10-002, and P10-003 done**; P10-004 pending.
 **Purpose:** Make `mcp-coder` usable in real projects by adding three partial/POC capabilities — executor behavior shaping, live visibility during delegation, and supervised stall handling — plus clearing high-ROI deferred items from Phase 9.
 **PM board:** this file · **Issues:** [PHASE10_ISSUES.md](./PHASE10_ISSUES.md)
 **Phase 9 (frozen):** [PHASE9_MVP.md](./PHASE9_MVP.md) · [PHASE9_ISSUES.md](./PHASE9_ISSUES.md)
@@ -85,7 +85,7 @@ P10-004: Backlog clearance           (high-ROI deferred items from Phase 9)
 |-------|-----------|------|--------|-------|
 | 1 | P10-001 | [P10-001](../tasks/P10-001-executor-options-v0.md) | done | Executor options wired; tests green (focused 32/32; full suite 986 passed, 1 skipped, 1 pre-existing failure) |
 | 2 | P10-002 | [P10-002](../tasks/P10-002-visibility-v0.md) | done | `ctx.info` milestones + `logs tail` shipped; focused `25 passed`, full suite `994 passed, 1 skipped` |
-| 3 | P10-003 | — | pending_spec | Stall detection → `needs_input` v0 (BL-351 v0) |
+| 3 | P10-003 | [P10-003](../tasks/P10-003-stall-needs-input-v0.md) | done | Structured `needs_input` + optional one-shot auto-retry shipped; focused `20 passed`, full suite `1004 passed, 1 skipped`; e2e host dogfood verified |
 | 4 | P10-004 | — | pending_spec | Backlog clearance: BL-517 + BL-519 + BL-516 partial + BL-518 partial |
 
 ---
@@ -184,7 +184,7 @@ P10-004: Backlog clearance           (high-ROI deferred items from Phase 9)
 
 ### P10-003 — Stall detection → `needs_input` v0 *(BL-351 v0)*
 
-**Status:** `pending_spec`
+**Status:** `done` — worker delivered implementation + tests; accepted in master session 2026-06-18.
 
 **Goal:** When Aider asks to add files to the chat (the most common stall pattern), stop returning a generic failure. Instead return a structured `needs_input` response to Cursor with the list of requested files so the planner can act on it.
 
@@ -216,6 +216,24 @@ P10-004: Backlog clearance           (high-ROI deferred items from Phase 9)
 - When `MCP_CODER_STALL_AUTO_RETRY=1`: file is added as read-only and Aider retries once; `auto_retried: true` in delegation record
 - Hard failures (Aider crash, timeout) still return `status: failure` as before
 - Full suite green
+
+**Implementation notes (worker report):**
+- `core/config/aider_runtime.py` now provides regex-only stall classification (`classify_executor_outcome`) plus helpers for file-path extraction, payload building, and auto-retry env gate.
+- `core/engine/aider_engine.py` now emits stall audit metadata (`stall_type`, `files_requested`, `executor_output_tail`) on stall outcomes.
+- `server/mcp_server.py` now maps stall metadata to structured `needs_input` responses and supports one-shot retry when `MCP_CODER_STALL_AUTO_RETRY=1`.
+- `core/logging/delegation_log.py` now records `stall_type`, `stall_files_requested`, and `auto_retried` in delegation context.
+- New tests: `tests/test_stall_needs_input_p10_003.py`; related delegate/spec-review tests updated.
+
+**Validation evidence (worker report):**
+- Focused: `20 passed` (stall + delegate + aider related tests).
+- Full suite: `1004 passed`, `1 skipped`.
+
+**Real host dogfood evidence (master run):**
+- Workspace: `/Users/amir/Dropbox/CodingProjects/personal_tools/mcp_coder_phase9_e2e`
+- Delegation: `79eb11a6-0d38-42e1-a10f-2ab325c28b0a`
+- Host session: Cursor transcript resolved under `.../mcp_coder_phase9_e2e/...`
+- Result: `status=needs_input`, `stall_type=needs_input_files`, `files_requested=[\"src/missing_module.py\"]`
+- No repo edits in e2e run (`files_changed=[]`)
 
 ---
 
@@ -289,7 +307,8 @@ P10-004: Backlog clearance           (high-ROI deferred items from Phase 9)
 **Progress update (2026-06-18):**
 - ✅ P10-001 completed.
 - ✅ P10-002 completed.
-- ⏳ Next: P10-003 (stall safety), then P10-004 (backlog clearance).
+- ✅ P10-003 completed.
+- ⏳ Next: P10-004 (backlog clearance).
 
 ---
 
@@ -297,6 +316,7 @@ P10-004: Backlog clearance           (high-ROI deferred items from Phase 9)
 
 | Date | Change |
 |------|--------|
+| 2026-06-18 | P10-003 marked **done** from worker implementation: stall classifier + structured `needs_input` + optional one-shot auto-retry + delegation stall audit fields + tests (focused `20 passed`, full suite `1004 passed, 1 skipped`); real Cursor-host dogfood in `mcp_coder_phase9_e2e` verified `needs_input` payload with requested file path extraction. |
 | 2026-06-18 | P10-002 marked **done** from worker implementation: `ctx.info` live notifications + `logs tail` CLI + tests (focused `25 passed`, full suite `994 passed, 1 skipped`). |
 | 2026-06-18 | P10-001 marked **done** from worker implementation: executor `system_prompt_prefix` + `edit_format` wiring, delegation audit fields, env docs, and focused/full test evidence recorded. |
 | 2026-06-18 | Created — Phase 10 PM board; milestones P10-001..P10-004 scoped; D-P10-1..D-P10-7 locked in master planning session. |

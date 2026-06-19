@@ -196,4 +196,4 @@ def test_implement_rejects_chat_questions():
         partial_response=None,
     )
     assert ok is False
-    assert "mode=review" in (err or "")
+    assert "target_files" in (err or "")

@@ -185,6 +185,9 @@ def build_delegation_record(
     trace_ref: str | None = None,
     system_prefix_applied: bool = False,
     edit_format_applied: str | None = None,
+    stall_type: str | None = None,
+    stall_files_requested: list[str] | None = None,
+    auto_retried: bool = False,
 ) -> dict[str, Any]:
     # Fall back to contextvar set by AiderEngine when params not explicitly passed.
     _audit = executor_options_audit_var.get()
@@ -233,6 +236,13 @@ def build_delegation_record(
             "executor_recreated": executor_recreated,
             "system_prefix_applied": system_prefix_applied,
             **({"edit_format": edit_format_applied} if edit_format_applied is not None else {}),
+            **({"stall_type": stall_type} if stall_type else {}),
+            **(
+                {"stall_files_requested": stall_files_requested}
+                if stall_files_requested
+                else {}
+            ),
+            **({"auto_retried": True} if auto_retried else {}),
             **context_block,
             **(host_context or {}),
         },

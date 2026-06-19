@@ -23,7 +23,7 @@ Status: `idea` | `deferred` | `blocked` | `in_phase` | `done`
 | BL-334 | P10-001 | ✅ Done — `system_prompt_prefix` + `edit_format` wiring + delegation audit shipped | Per-delegation `model_policy` → BL-512 (Phase 11) |
 | BL-106 | P10-002 | ✅ Done (POF) — `ctx.info` milestone notifications shipped | Capture→egress bridge, `report_progress`, richer step details → backlog |
 | BL-520 | P10-002 | ✅ Done (POF) — `logs tail --latest/--delegation-id` on trace JSONL shipped | `server.jsonl` filter, BL-160b tee → backlog |
-| BL-351 | P10-003 | Stall detect → `needs_input` v0 | Full supervisor + `InputOutput` → Phase 11 |
+| BL-351 | P10-003 | ✅ Done (v0) — stall detect → structured `needs_input` (with `files_requested`) | Full supervisor + `InputOutput` + outer-loop resume → Phase 11 |
 | BL-517 | P10-004 | `policy_applied.ignored` | — |
 | BL-519 | P10-004 | `MCP_CODER_PROXY_ENABLED` toggle | — |
 | BL-516 | P10-004 | `trace inspect --summary` only | `mcp-coder log` table, `--no-truncate` → backlog |
@@ -272,7 +272,7 @@ Phase 1 deferred executor conversation carry-over to here (BL-155); see P1-130 `
 
 ### BL-351: Simulated interactive mode + host escalation (human intervention)
 
-**Status:** `in_phase` — **Phase 10 P10-003** (v0: stall detect → `needs_input`). Full vision (supervised `InputOutput`, cheap LLM supervisor, outer-loop resume) → Phase 11.
+**Status:** `in_phase` — **Phase 10 P10-003 v0 shipped** (stall detect → structured `needs_input` with `files_requested`; optional one-shot auto-retry). Full vision (supervised `InputOutput`, cheap LLM supervisor, outer-loop resume) remains Phase 11.
 
 **Problem:** Headless Aider uses `InputOutput(yes=True)` — every confirm (“add file?”, “run shell?”) is auto-approved without mcp-coder judgment. When the model asks for files in prose, we fail the delegation rather than help. There is no path for the **executor to route a decision back to the Cursor planner** for human intervention inside a supervised delegate.
 
@@ -1986,6 +1986,8 @@ Operators tuning dogfood/debug runs must know this matrix by heart; `.env.exampl
 
 | Date | Change |
 |------|--------|
+| 2026-06-18 | **P10-003 shipped** — BL-351 v0 completed (regex stall classification, structured `needs_input` with `files_requested`, optional one-shot auto-retry, delegation stall audit fields). Real Cursor-host dogfood validated in `mcp_coder_phase9_e2e` (delegation `79eb11a6-0d38-42e1-a10f-2ab325c28b0a`). |
+| 2026-06-18 | **P10-002 shipped** — BL-106 POF + BL-520 POF completed (`ctx.info` milestones + thread bridge; `mcp-coder logs tail` with `--latest`/`--delegation-id`). Follow-up scope remains in backlog. |
 | 2026-06-18 | **P10-001 shipped** — BL-334 v0 completed (executor `system_prompt_prefix` + `edit_format` wiring + delegation audit fields + env docs + tests). BL-334 status moved to `done`; Phase 11 keeps BL-512 per-delegation override. |
 | 2026-06-18 | **Phase 10 opened.** BL-334 → **P10-001**; BL-106 + BL-520 → **P10-002**; BL-351 (v0) → **P10-003**; BL-516/517/518/519 → **P10-004**. Status `in_phase` on promoted items; § Phase 10 active table added. See [PHASE10_MVP.md](./PHASE10_MVP.md). |
 | 2026-06-17 | **BL-106** expanded (MCP `report_progress` + `ctx.log` + capture→egress bridge) and **BL-520** added (`logs tail` / follow delegation on trace + server JSONL). Phase 9 closed — live visibility is Phase 10 read/notify layer on top of write-always capture. |

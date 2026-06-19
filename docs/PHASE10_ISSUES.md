@@ -92,7 +92,7 @@ See [PHASE10_MVP.md](./PHASE10_MVP.md) § P10-002.
 **Type:** Backlog promotion → active milestone (v0 only)
 **Milestone:** P10-003
 **Severity:** high — trust gap for real-project use
-**Status:** `promoted` — pending worker spec
+**Status:** `done` — implemented 2026-06-18 (worker session)
 **Opened:** 2026-06-18 (planning session)
 **Backlog:** [BL-351](./BACKLOG.md#bl-351-simulated-interactive-mode--host-escalation-human-intervention)
 
@@ -111,6 +111,20 @@ Cheap LLM supervisor, supervised `InputOutput`, outer-loop re-compile on expansi
 ### Exit criteria
 
 See [PHASE10_MVP.md](./PHASE10_MVP.md) § P10-003.
+
+### Result summary
+
+- Added regex-only stall classifier and file-request extraction helpers in `core/config/aider_runtime.py`.
+- Engine now attaches stall audit metadata (`stall_type`, `files_requested`, `executor_output_tail`).
+- `server/mcp_server.py` now returns structured `needs_input` payload for `needs_input_files` stalls and supports optional one-shot retry via `MCP_CODER_STALL_AUTO_RETRY=1`.
+- Delegation context now records stall audit fields (`stall_type`, `stall_files_requested`, `auto_retried`).
+- Added tests in `tests/test_stall_needs_input_p10_003.py`; related delegate/spec-review tests updated.
+- Validation: focused `20 passed`; full suite `1004 passed, 1 skipped`.
+- Master dogfood (real Cursor host in `mcp_coder_phase9_e2e`) verified extracted file request path in `needs_input.files_requested`:
+  - delegation `79eb11a6-0d38-42e1-a10f-2ab325c28b0a`
+  - `status=needs_input`
+  - `stall_type=needs_input_files`
+  - `files_requested=[\"src/missing_module.py\"]`
 
 ---
 

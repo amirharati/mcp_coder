@@ -2,7 +2,15 @@ from __future__ import annotations
 
 import io
 import os
+import re
 from typing import Any
+
+OUTCOME_SUCCESS = "success"
+OUTCOME_NEEDS_INPUT_FILES = "needs_input_files"
+OUTCOME_NEEDS_INPUT_CLARIFICATION = "needs_input_clarification"
+OUTCOME_FAILURE = "failure"
+
+STALL_OUTPUT_TAIL_CHARS = 500
 
 # Defaults for MCP delegations — non-interactive, no git commits from Aider.
 # Override via MCP_CODER_AIDER_* or AIDER_* env (see .env.example).
@@ -176,7 +184,7 @@ def delegation_coder_kwargs(edit_format: str | None = None) -> dict[str, Any]:
     return kwargs
 
 
-_IMPLEMENT_QUESTION_MARKERS = (
+_FILES_REQUEST_MARKERS = (
     "add these files to the chat",
     "add the following files to the chat",
     "could you please add",
@@ -185,7 +193,185 @@ _IMPLEMENT_QUESTION_MARKERS = (
     "i need access to the existing files",
     "i need access to",
     "add them to the chat",
+    "add it to the chat",
+    "add this file to the chat",
+    "add the file to the chat",
+    "add to the chat",
 )
+
+_CLARIFICATION_MARKERS = (
+    "i need to know",
+    "could you clarify",
+    "please clarify",
+    "can you clarify",
+    "which approach",
+    "which option",
+    "before i can proceed",
+    "before we proceed",
+    "can you tell me",
+    "would you prefer",
+    "do you want me to",
+    "should i use",
+)
+
+_PATH_IN_BACKTICKS_RE = re.compile(
+    r"`((?:[\w./-]+/)?[\w./-]+\.(?:py|md|yaml|yml|json|txt|ts|tsx|js|jsx|toml|cfg|ini|sh|html|css))`",
+    re.IGNORECASE,
+)
+_ADD_FILE_TO_CHAT_RE = re.compile(
+    r"(?:add|include)\s+[`'\"]?((?:[\w./-]+/)?[\w./-]+\.[\w]+)[`'\"]?\s+to\s+the\s+chat",
+    re.IGNORECASE,
+)
+_BARE_FILE_PATH_RE = re.compile(
+    r"(?<![\w./])([\w./-]+\.(?:py|md|yaml|yml|json|txt|ts|tsx|js|jsx|toml|cfg|ini|sh|html|css))(?![\w.])",
+    re.IGNORECASE,
+)
+
+
+def stall_auto_retry_enabled() -> bool:
+    """One-shot auto-retry when executor stalls asking for files (default off)."""
+    return _env_bool("MCP_CODER_STALL_AUTO_RETRY", False)
+
+
+def _executor_text(*, output: str, partial_response: str | None) -> str:
+    return "\n".join(filter(None, [output, partial_response or ""])).strip()
+
+
+def _executor_output_tail(text: str, *, max_chars: int = STALL_OUTPUT_TAIL_CHARS) -> str:
+    compact = text.strip()
+    if len(compact) <= max_chars:
+        return compact
+    return compact[-max_chars:]
+
+
+def _normalize_requested_path(raw: str) -> str | None:
+    path = (raw or "").strip().strip("`\"'")
+    if not path or path.startswith("http"):
+        return None
+    return path.replace("\\", "/")
+
+
+def extract_requested_file_paths(text: str) -> list[str]:
+    """Extract deduped repo-relative file paths from Aider stall output."""
+    found: list[str] = []
+    seen: set[str] = set()
+    for pattern in (_PATH_IN_BACKTICKS_RE, _ADD_FILE_TO_CHAT_RE):
+        for match in pattern.finditer(text):
+            normalized = _normalize_requested_path(match.group(1))
+            if normalized and normalized not in seen:
+                seen.add(normalized)
+                found.append(normalized)
+    lower = text.lower()
+    if any(marker in lower for marker in _FILES_REQUEST_MARKERS):
+        for match in _BARE_FILE_PATH_RE.finditer(text):
+            normalized = _normalize_requested_path(match.group(1))
+            if normalized and normalized not in seen:
+                seen.add(normalized)
+                found.append(normalized)
+    return found
+
+
+def _looks_like_files_request(lower: str) -> bool:
+    return any(marker in lower for marker in _FILES_REQUEST_MARKERS) or bool(
+        _ADD_FILE_TO_CHAT_RE.search(lower)
+    )
+
+
+def _looks_like_clarification(lower: str, text: str) -> bool:
+    if any(marker in lower for marker in _CLARIFICATION_MARKERS):
+        return True
+    if "?" in text and not _looks_like_files_request(lower):
+        return True
+    return False
+
+
+def classify_executor_outcome(
+    *,
+    io: Any,
+    output: str,
+    partial_response: str | None,
+) -> dict[str, Any]:
+    """Classify executor output into success / needs_input_* / failure (regex-only v0)."""
+    if getattr(io, "num_error_outputs", 0) > 0:
+        return {
+            "outcome": OUTCOME_FAILURE,
+            "message": "Aider reported one or more errors (see output)",
+            "files_requested": [],
+            "executor_output_tail": _executor_output_tail(_executor_text(output=output, partial_response=partial_response)),
+        }
+
+    text = _executor_text(output=output, partial_response=partial_response)
+    lower = text.lower()
+    error_markers = (
+        "litellm.",
+        "notfounderror",
+        "authenticationerror",
+        "ratelimiterror",
+        "openrouterexception",
+        "openaierror",
+        "playwright sync api",
+    )
+    if any(marker in lower for marker in error_markers):
+        return {
+            "outcome": OUTCOME_FAILURE,
+            "message": text[:2000] or "LLM provider error",
+            "files_requested": [],
+            "executor_output_tail": _executor_output_tail(text),
+        }
+    if not text:
+        return {
+            "outcome": OUTCOME_FAILURE,
+            "message": "Empty response from Aider (no edits applied?)",
+            "files_requested": [],
+            "executor_output_tail": "",
+        }
+
+    if _looks_like_files_request(lower):
+        files_requested = extract_requested_file_paths(text)
+        return {
+            "outcome": OUTCOME_NEEDS_INPUT_FILES,
+            "message": "Aider needs additional files. Add them to target_files and retry.",
+            "files_requested": files_requested,
+            "executor_output_tail": _executor_output_tail(text),
+        }
+
+    if _looks_like_clarification(lower, text):
+        return {
+            "outcome": OUTCOME_NEEDS_INPUT_CLARIFICATION,
+            "message": (
+                "Aider requested clarification before implementing "
+                "(use mode=review or expand context_summary)."
+            ),
+            "files_requested": [],
+            "executor_output_tail": _executor_output_tail(text),
+        }
+
+    return {
+        "outcome": OUTCOME_SUCCESS,
+        "message": None,
+        "files_requested": [],
+        "executor_output_tail": _executor_output_tail(text),
+    }
+
+
+def build_needs_input_payload(classification: dict[str, Any]) -> dict[str, Any]:
+    """Structured needs_input block for MCP response."""
+    stall_type = classification.get("outcome")
+    reason = (
+        "executor_requested_files"
+        if stall_type == OUTCOME_NEEDS_INPUT_FILES
+        else "executor_requested_clarification"
+    )
+    payload: dict[str, Any] = {
+        "status": "needs_input",
+        "reason": reason,
+        "message": classification.get("message") or "",
+        "executor_output_tail": classification.get("executor_output_tail") or "",
+    }
+    files_requested = classification.get("files_requested") or []
+    if files_requested:
+        payload["files_requested"] = list(files_requested)
+    return payload
 
 
 def infer_run_success(
@@ -195,27 +381,11 @@ def infer_run_success(
     partial_response: str | None,
 ) -> tuple[bool, str | None]:
     """Treat Aider/LiteLLM tool errors and interactive questions as implement failure."""
-    if getattr(io, "num_error_outputs", 0) > 0:
-        return False, "Aider reported one or more errors (see output)"
-    text = "\n".join(filter(None, [output, partial_response or ""]))
-    error_markers = (
-        "litellm.",
-        "NotFoundError",
-        "AuthenticationError",
-        "RateLimitError",
-        "OpenrouterException",
-        "OpenAIError",
-        "playwright sync api",
+    classification = classify_executor_outcome(
+        io=io,
+        output=output,
+        partial_response=partial_response,
     )
-    lower = text.lower()
-    if any(m.lower() in lower for m in error_markers):
-        return False, text.strip()[:2000] or "LLM provider error"
-    if not text.strip():
-        return False, "Empty response from Aider (no edits applied?)"
-    if any(marker in lower for marker in _IMPLEMENT_QUESTION_MARKERS):
-        return (
-            False,
-            "Worker requested clarification instead of implementing "
-            "(use mode=review, or expand target_files / context_summary)",
-        )
-    return True, None
+    if classification["outcome"] == OUTCOME_SUCCESS:
+        return True, None
+    return False, classification.get("message")

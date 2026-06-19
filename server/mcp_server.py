@@ -19,9 +19,12 @@ from core.config.auto_verify import (
 )
 from core.config.architect_pass import architect_pass_enabled
 from core.config.aider_runtime import (
+    OUTCOME_NEEDS_INPUT_FILES,
+    build_needs_input_payload,
     resolve_executor_max_steps,
     resolve_executor_step_timeout_s,
     resolve_executor_total_timeout_s,
+    stall_auto_retry_enabled,
 )
 from core.config.context_builder import (
     context_builder_enabled,
@@ -478,6 +481,124 @@ def _bounded_executor_loop(
     return result, executor_turns
 
 
+def _stall_from_tokens(tokens: dict[str, Any] | None) -> dict[str, Any]:
+    data = tokens or {}
+    stall_type = data.get("stall_type")
+    if not stall_type:
+        return {}
+    return {
+        "stall_type": stall_type,
+        "files_requested": list(data.get("files_requested") or []),
+        "executor_output_tail": data.get("executor_output_tail") or "",
+    }
+
+
+def _append_read_paths_to_context_package(
+    package: ContextPackage,
+    paths: list[str],
+    workspace: str,
+) -> ContextPackage:
+    from core.context.package import PathEntry, TIER_READ_FULL
+
+    existing = {entry.path for entry in package.entries}
+    entries = list(package.entries)
+    ws = Path(workspace)
+    for path in paths:
+        if path in existing:
+            continue
+        abs_path = ws / path
+        payload = None
+        byte_count = None
+        if abs_path.is_file():
+            try:
+                payload = abs_path.read_text(encoding="utf-8", errors="replace")
+                byte_count = len(payload.encode("utf-8"))
+            except OSError:
+                pass
+        entries.append(
+            PathEntry(path=path, tier=TIER_READ_FULL, bytes=byte_count, payload=payload)
+        )
+        existing.add(path)
+    return ContextPackage(
+        brief=package.brief,
+        entries=entries,
+        policies=package.policies,
+        metadata=dict(package.metadata),
+    )
+
+
+def _run_executor_with_optional_stall_retry(
+    *,
+    step_fn: Any,
+    delegation_id: str,
+    session_dir: "Path | str",
+    workspace: str,
+    obs_verbosity: str,
+    progress_notify: Any | None,
+    context_package: ContextPackage | None,
+    effective_target_files: list[str],
+    auto_merged_read_paths: list[str],
+    already_retried: bool,
+) -> tuple[
+    ExecutionResult,
+    int,
+    list[str],
+    list[str],
+    ContextPackage | None,
+    bool,
+]:
+    result, turns = _bounded_executor_loop(
+        step_fn=step_fn,
+        delegation_id=delegation_id,
+        session_dir=session_dir,
+        workspace=workspace,
+        obs_verbosity=obs_verbosity,
+        progress_notify=progress_notify,
+    )
+    stall = _stall_from_tokens(result.tokens)
+    if (
+        already_retried
+        or not stall_auto_retry_enabled()
+        or stall.get("stall_type") != OUTCOME_NEEDS_INPUT_FILES
+        or not stall.get("files_requested")
+    ):
+        return result, turns, effective_target_files, auto_merged_read_paths, context_package, False
+
+    new_paths = [
+        path
+        for path in stall["files_requested"]
+        if path not in set(effective_target_files)
+    ]
+    if not new_paths:
+        return result, turns, effective_target_files, auto_merged_read_paths, context_package, False
+
+    merged_targets = sorted(set(effective_target_files) | set(new_paths))
+    merged_reads = sorted(set(auto_merged_read_paths or []) | set(new_paths))
+    updated_package = context_package
+    if updated_package is not None:
+        updated_package = _append_read_paths_to_context_package(
+            updated_package,
+            new_paths,
+            workspace,
+        )
+    retry_result, extra_turns = _bounded_executor_loop(
+        step_fn=step_fn,
+        delegation_id=delegation_id,
+        session_dir=session_dir,
+        workspace=workspace,
+        obs_verbosity=obs_verbosity,
+        progress_notify=progress_notify,
+    )
+    return (
+        retry_result,
+        turns + extra_turns,
+        merged_targets,
+        merged_reads,
+        updated_package,
+        True,
+    )
+
+
 def use_context_package() -> bool:
     """Return True unless MCP_CODER_USE_CONTEXT_PACKAGE is explicitly 0/false/no."""
     raw = os.environ.get("MCP_CODER_USE_CONTEXT_PACKAGE", "1").strip().lower()
@@ -709,6 +830,9 @@ def _response_payload(
     delegation_pipeline: list[dict[str, Any]] | None = None,
     executor_turns: int | None = None,
     executor_stop_reason: str | None = None,
+    needs_input: dict[str, Any] | None = None,
+    auto_retried: bool = False,
+    stall_type: str | None = None,
 ) -> dict[str, Any]:
     payload: dict[str, Any] = {
         "success": success,
@@ -803,6 +927,13 @@ def _response_payload(
         payload["executor_turns"] = executor_turns
     if executor_stop_reason is not None:
         payload["executor_stop_reason"] = executor_stop_reason
+    if needs_input is not None:
+        payload["needs_input"] = needs_input
+        payload["status"] = needs_input.get("status")
+    if auto_retried:
+        payload["auto_retried"] = True
+    if stall_type:
+        payload["stall_type"] = stall_type
     return payload
 
 
@@ -1099,6 +1230,10 @@ def delegate_to_agent(
         rag_retrieval_refs: list[ContextRef] = []
         workspace_file_rag_refs: list[ContextRef] = []
         delegation_rag_refs: list[ContextRef] = []
+        stall_auto_retried = False
+        stall_type: str | None = None
+        stall_files_requested: list[str] = []
+        needs_input_payload: dict[str, Any] | None = None
 
         if (
             pipeline_recorder is not None
@@ -1510,13 +1645,19 @@ def delegate_to_agent(
                                 timeout_s=timeout_s,
                             )
 
-                    result, _executor_turns = _bounded_executor_loop(
-                        step_fn=_ctx_step_fn,
-                        delegation_id=delegation_id,
-                        session_dir=storage.session_dir,
-                        workspace=ws,
-                        obs_verbosity=_loop_obs_verbosity,
-                        progress_notify=progress.notify,
+                    result, _executor_turns, effective_target_files, auto_merged_read_paths, context_package, stall_auto_retried = (
+                        _run_executor_with_optional_stall_retry(
+                            step_fn=_ctx_step_fn,
+                            delegation_id=delegation_id,
+                            session_dir=storage.session_dir,
+                            workspace=ws,
+                            obs_verbosity=_loop_obs_verbosity,
+                            progress_notify=progress.notify,
+                            context_package=context_package,
+                            effective_target_files=effective_target_files,
+                            auto_merged_read_paths=auto_merged_read_paths,
+                            already_retried=stall_auto_retried,
+                        )
                     )
                     executor_prompt = result.prompt_used or context_package.brief
                 else:
@@ -1610,13 +1751,19 @@ def delegate_to_agent(
                                 timeout_s=timeout_s,
                             )
 
-                    result, _executor_turns = _bounded_executor_loop(
-                        step_fn=_legacy_step_fn,
-                        delegation_id=delegation_id,
-                        session_dir=storage.session_dir,
-                        workspace=ws,
-                        obs_verbosity=_loop_obs_verbosity,
-                        progress_notify=progress.notify,
+                    result, _executor_turns, effective_target_files, auto_merged_read_paths, _legacy_pkg, stall_auto_retried = (
+                        _run_executor_with_optional_stall_retry(
+                            step_fn=_legacy_step_fn,
+                            delegation_id=delegation_id,
+                            session_dir=storage.session_dir,
+                            workspace=ws,
+                            obs_verbosity=_loop_obs_verbosity,
+                            progress_notify=progress.notify,
+                            context_package=None,
+                            effective_target_files=effective_target_files,
+                            auto_merged_read_paths=auto_merged_read_paths,
+                            already_retried=stall_auto_retried,
+                        )
                     )
                 timing["engine_run_ms"] = int((time.perf_counter() - t_engine) * 1000)
 
@@ -1628,7 +1775,30 @@ def delegate_to_agent(
                 model = result.model or model
                 error = result.error
                 error_class = result.error_class
-                if not success and error:
+                stall_info = _stall_from_tokens(tokens)
+                if stall_info.get("stall_type"):
+                    stall_type = str(stall_info["stall_type"])
+                    stall_files_requested = list(stall_info.get("files_requested") or [])
+                    success = False
+                    classification = {
+                        "outcome": stall_type,
+                        "message": error
+                        or (
+                            "Aider needs additional files. Add them to target_files and retry."
+                            if stall_type == OUTCOME_NEEDS_INPUT_FILES
+                            else (
+                                "Aider requested clarification before implementing "
+                                "(use mode=review or expand context_summary)."
+                            )
+                        ),
+                        "files_requested": stall_files_requested,
+                        "executor_output_tail": stall_info.get("executor_output_tail")
+                        or output[-500:],
+                    }
+                    needs_input_payload = build_needs_input_payload(classification)
+                    error_class = stall_type
+                    error = classification.get("message")
+                elif not success and error:
                     _ec, error_message = classify_delegation_error(error)
                     if not error_class:
                         error_class = _ec
@@ -1738,6 +1908,13 @@ def delegate_to_agent(
         if caps is not None:
             context_block["backend_capabilities"] = caps.to_dict()
 
+        if stall_type:
+            context_block["stall_type"] = stall_type
+        if stall_files_requested:
+            context_block["stall_files_requested"] = stall_files_requested
+        if stall_auto_retried:
+            context_block["auto_retried"] = True
+
         usage_dict = obs.build_usage_report(
             model=resolved_model,
             prompt=executor_prompt,
@@ -1829,6 +2006,8 @@ def delegate_to_agent(
                     blockers_written=not success,
                     delegate_mode=delegate_mode,
                 )
+                if stall_type:
+                    outcome = OUTCOME_NEEDS_INPUT
                 if (
                     delegate_mode == DELEGATE_MODE_IMPLEMENT
                     and delegation_policies is not None
@@ -1850,6 +2029,8 @@ def delegate_to_agent(
                         )
                 if pipeline_recorder is not None:
                     pipeline_recorder.end("spec_report", status="ok")
+        elif stall_type:
+            outcome = OUTCOME_NEEDS_INPUT
 
         verify_result: VerifyResult | None = None
         verify_enabled = auto_verify_enabled(ws)
@@ -2084,6 +2265,9 @@ def delegate_to_agent(
             spec_validation_passed=spec_validation_passed,
             delegation_pipeline=delegation_pipeline_payload,
             executor_turns=_executor_turns if _executor_turns > 0 else None,
+            needs_input=needs_input_payload,
+            auto_retried=stall_auto_retried,
+            stall_type=stall_type,
         )
         done_status = "needs_input" if outcome == OUTCOME_NEEDS_INPUT else ("success" if success else "failure")
         progress.notify(f"[done] Delegation complete — {done_status}.", force=True)
