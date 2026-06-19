@@ -99,7 +99,7 @@ Phase 11:  MCP → Aider (supervised, decisions routed) ↔ Supervisor LLM → r
 | 1 | P11-001 | [P11-001](../tasks/P11-001-clarity-pass-v0.md) | **done** 2026-06-19 | Clarity pass: cheap LLM pre-delegation Q&A |
 | 2 | P11-002 | [P11-002](../tasks/P11-002-supervised-io-v1.md) | **done** 2026-06-19 | SupervisedIO + DelegationSupervisor + decision log |
 | 3 | P11-003 | [P11-003](../tasks/P11-003-executor-pull-v0.md) | **done** 2026-06-19 | Executor-pull v0: system prefix /read hint |
-| 4 | P11-004 | [P11-004](../tasks/P11-004-mid-run-human-gate.md) | pending | answer_delegation_question tool (experimental) |
+| 4 | P11-004 | [P11-004](../tasks/P11-004-human-gate-v0.md) | **done** 2026-06-19 | Mid-run human gate event bridge + timeout fallback |
 | 5 | P11-005 | [P11-005](../tasks/P11-005-reviewer-tier1-v0.md) | pending | Tier-1 reviewer: cheap model post-executor scan |
 | 6 | P11-006 | [P11-006](../tasks/P11-006-smart-architect-trigger.md) | pending | Smart architect trigger heuristic |
 | 7 | P11-007 | [P11-007](../tasks/P11-007-model-policy-host.md) | pending | model_policy arg on delegate_to_agent (BL-512) |
@@ -182,7 +182,7 @@ Phase 11:  MCP → Aider (supervised, decisions routed) ↔ Supervisor LLM → r
 
 ### P11-004 — Mid-run human gate *(BL-522, experimental)*
 
-**Status:** `pending`
+**Status:** `done` — shipped 2026-06-19 (30 tests: 15 new + 15 supervised regression)
 **Goal:** When the supervisor determines human input is required, an `answer_delegation_question` MCP tool call from Cursor unblocks the Aider thread in-flight. No restart, no re-run — the coder continues from where it paused.
 
 **Scope:**
@@ -356,12 +356,22 @@ Phase 11:  MCP → Aider (supervised, decisions routed) ↔ Supervisor LLM → r
 - **Deferred:** full BL-354 sidecar/tool-server remains Phase 12 scope.
 - **Dogfood follow-up:** compare `needs_input_files` stall rate with and without hint.
 
+### P11-004 — mid-run human gate v0 (2026-06-19)
+
+- **Shipped:** in-process gate bridge for supervisor `escalate` path: `QuestionRegistry` + `answer_delegation_question(delegation_id, answer)` MCP tool.
+- **Modules:** `core/engine/question_registry.py`, `SupervisedIO` gate wait/resume path, `aider_engine` registry wiring + safety cleanup pop, `mcp_server` answer tool, `delegation_log` human-gate audit helpers.
+- **Behavior:** on `escalate` with registry wired, thread blocks on event (120s); answer unblocks in-flight and returns bool (`yes|y|true|1` approve); timeout falls back to `SupervisorAbort(decision="abort")`; no-regression immediate abort when registry absent.
+- **Tests:** 30 passed total (15 new P11-004 + 15 supervised IO regression), output recorded in worker spec § Results.
+- **Deferred:** late-answer continuation after timeout tracked as BL-528 (resume-token concept, Phase 12 candidate).
+- **Dogfood follow-up:** validate real Cursor concurrent tool-call behavior in non-CLI small-project flow; confirm timeout fallback remains clean.
+
 ---
 
 ## Changelog
 
 | Date | Change |
 |------|--------|
+| 2026-06-19 | **P11-004 shipped** — mid-run human gate v0 (`answer_delegation_question` + event bridge + timeout fallback). Late-answer continuation tracked as BL-528. |
 | 2026-06-19 | **P11-003 shipped** — executor-pull hint v0 (prompt-only `/read` guidance); BL-354 Phase 11 slice done; sidecar/tool-server deferred. |
 | 2026-06-19 | **P11-002 shipped** — supervised execution v1 (`SupervisedIO` + `DelegationSupervisor`); BL-351 Phase 11 scope done; async/mid-run resume remains deferred. |
 | 2026-06-19 | **P11-001 shipped** — clarity_check pipeline phase; BL-521 Phase 11 scope done; remainder → Phase 12. |

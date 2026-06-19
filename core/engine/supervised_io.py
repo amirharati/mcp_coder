@@ -128,6 +128,8 @@ class SupervisedIO:
         target_files: set[str],
         contract_paths: set[str],
         on_decision: Callable[[dict[str, Any]], None] | None = None,
+        question_registry: "QuestionRegistry | None" = None,
+        delegation_id: str | None = None,
     ) -> None:
         from aider.io import InputOutput
 
@@ -141,6 +143,8 @@ class SupervisedIO:
         self._target_files = target_files
         self._contract_paths = contract_paths
         self._on_decision = on_decision
+        self._question_registry = question_registry
+        self._delegation_id = delegation_id
         self.supervisor_decisions: list[dict[str, Any]] = []
         self.supervisor_decisions_count = 0
         self.supervisor_aborts_count = 0
@@ -158,6 +162,16 @@ class SupervisedIO:
         except Exception:
             text = ""
         return _executor_output_tail(text, max_chars=STALL_OUTPUT_TAIL_CHARS)
+
+    def _human_gate_enabled(self) -> bool:
+        return self._question_registry is not None and bool(self._delegation_id)
+
+    @staticmethod
+    def _human_answer_to_bool(answer: str | None) -> bool:
+        """Treat 'yes'/'y'/'true'/'1' (case-insensitive) as True, everything else as False."""
+        if answer is None:
+            return False
+        return answer.strip().lower() in ("yes", "y", "true", "1")
 
     def _record_decision(
         self,
@@ -221,6 +235,56 @@ class SupervisedIO:
             return True
         if result.decision == "deny":
             return False
+        if result.decision == "escalate" and self._human_gate_enabled():
+            assert self._question_registry is not None
+            assert self._delegation_id is not None
+            pq = self._question_registry.post(self._delegation_id, question)
+
+            if self._on_decision is not None:
+                self._on_decision(
+                    {
+                        "question": question[:500],
+                        "decision": "human_gate_opened",
+                        "reasoning": "awaiting_human_answer",
+                        "risk_tier": risk_tier,
+                        "duration_ms": result.duration_ms,
+                    }
+                )
+
+            from core.engine.question_registry import _GATE_TIMEOUT_S
+
+            answered = pq.event.wait(timeout=_GATE_TIMEOUT_S)
+            self._question_registry.pop(self._delegation_id)
+
+            if answered:
+                human_bool = self._human_answer_to_bool(pq.answer)
+                self._record_decision(
+                    question=question,
+                    decision=None,
+                    decision_name="human_gate_answered",
+                    reasoning=f"human_answered: {str(pq.answer)[:80]}",
+                    risk_tier=risk_tier,
+                    duration_ms=result.duration_ms,
+                )
+                return human_bool
+
+            self._record_decision(
+                question=question,
+                decision=None,
+                decision_name="human_gate_timeout",
+                reasoning="human_gate_timeout_120s",
+                risk_tier=risk_tier,
+                duration_ms=result.duration_ms,
+            )
+            raise SupervisorAbort(
+                reasoning="human_gate_timeout",
+                decision="abort",
+                question=question,
+                decisions_count=self.supervisor_decisions_count,
+                aborts_count=self.supervisor_aborts_count,
+                decisions=self.supervisor_decisions,
+            )
+
         raise SupervisorAbort(
             reasoning=result.reasoning,
             decision=result.decision,

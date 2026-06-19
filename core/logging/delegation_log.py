@@ -73,6 +73,30 @@ def supervisor_audit_fields(tokens: dict[str, Any] | None) -> dict[str, Any]:
         out["supervisor_last_decision"] = str(last)[:120]
     return out
 
+
+HUMAN_GATE_DECISIONS = frozenset(
+    {"human_gate_opened", "human_gate_answered", "human_gate_timeout"}
+)
+
+
+def human_gate_audit_fields(supervisor_io: Any | None) -> dict[str, Any]:
+    """Extract human-gate trace fields from a SupervisedIO instance."""
+    if supervisor_io is None:
+        return {}
+    out: dict[str, Any] = {}
+    decisions: list[dict[str, Any]] = getattr(supervisor_io, "supervisor_decisions", [])
+    gate_events = [d for d in decisions if d.get("decision") in HUMAN_GATE_DECISIONS]
+    if not gate_events:
+        return {}
+    last = gate_events[-1]
+    out["human_gate_last_decision"] = last.get("decision")
+    out["human_gate_count"] = len(gate_events)
+    answered = any(d.get("decision") == "human_gate_answered" for d in gate_events)
+    timeout = any(d.get("decision") == "human_gate_timeout" for d in gate_events)
+    out["human_gate_result"] = "answered" if answered else ("timeout" if timeout else "opened")
+    return out
+
+
 # delegations.jsonl record schema (lean — see D-P6-3)
 # Each line is a delegation audit row. Bodies live in:
 #   - Aider output:    response_digest.output_sha256 (full text → Cursor received it)

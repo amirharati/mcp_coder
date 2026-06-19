@@ -363,11 +363,16 @@ class AiderEngine(ExecutionEngine):
                             ),
                         )
                         supervisor_holder["supervisor"] = supervisor
+                        from core.engine.question_registry import _REGISTRY as _question_registry
+
                         return SupervisedIO(
                             output=buffer,
                             supervisor=supervisor,
                             target_files=target_set,
                             contract_paths=contract_set,
+                            on_decision=None,
+                            question_registry=_question_registry,
+                            delegation_id=delegation_id,
                         )
 
                     io, out_buffer = create_delegation_io(io_factory=_io_factory)
@@ -615,6 +620,10 @@ class AiderEngine(ExecutionEngine):
                 from core.observability.context import model_policy_var
 
                 model_policy_var.reset(policy_token)
+            from core.engine.question_registry import _REGISTRY as _question_registry
+
+            if delegation_id:
+                _question_registry.pop(delegation_id)
 
     def run(
         self,

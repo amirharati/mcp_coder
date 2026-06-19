@@ -930,7 +930,7 @@ Shape Aider's behavior before problems occur, see what is happening while it run
 
 ## Phase 11: Supervised execution + smarter context
 
-**Status:** Active — opened 2026-06-18; **P11-001 + P11-002 + P11-003 shipped** 2026-06-19; P11-004..P11-008 pending.
+**Status:** Active — opened 2026-06-18; **P11-001 + P11-002 + P11-003 + P11-004 shipped** 2026-06-19; P11-005..P11-008 pending.
 **PM doc:** [PHASE11_MVP.md](./PHASE11_MVP.md) · **Issues:** [PHASE11_ISSUES.md](./PHASE11_ISSUES.md) · **Bootstrap:** [notes/phase11-master-session-bootstrap.md](./notes/phase11-master-session-bootstrap.md)
 
 ### One-line goal
@@ -944,7 +944,7 @@ Make the Aider/MCP boundary bidirectional and supervised: replace `yes=True` wit
 | P11-001 | Pre-delegation spec clarity pass | BL-521 (new) |
 | P11-002 | SupervisedIO + DelegationSupervisor + decision log | ✅ BL-351 Phase 11 scope shipped |
 | P11-003 | Executor-pull v0: system prefix `/read` hint | ✅ BL-354 Phase 11 slice shipped |
-| P11-004 | Mid-run human gate: `answer_delegation_question` tool (experimental) | BL-522 (new) |
+| P11-004 | Mid-run human gate: `answer_delegation_question` tool (experimental) | ✅ BL-522 Phase 11 scope shipped |
 | P11-005 | Tier-1 post-executor reviewer (cheap model scan on files_changed) | BL-358 v0 |
 | P11-006 | Smart planner-pass trigger: heuristic skip for trivial tasks *(named architect trigger until P11-008 rename)* | — |
 | P11-007 | Host `model_policy` arg on `delegate_to_agent` | BL-512 Stage 2 |
@@ -1002,4 +1002,5 @@ See full table in [PHASE11_MVP.md](./PHASE11_MVP.md) § Cross-phase architectura
 - [x] **P11-001 shipped** — clarity_check pipeline phase (BL-521); opt-in `MCP_CODER_CLARITY_PASS`; 2026-06-19.
 - [x] **P11-002 shipped** — supervised execution v1 (`SupervisedIO` + `DelegationSupervisor`), structured `needs_input` escalation, 2026-06-19.
 - [x] **P11-003 shipped** — executor-pull hint v0 (`/read` prompt guidance + audit field), 2026-06-19.
-- [ ] **Phase 11 active** — P11-004..P11-008: mid-run human gate (experimental), tier-1 reviewer, smart planner-pass trigger, host model policy, naming refactor. See [PHASE11_MVP.md](./PHASE11_MVP.md).
+- [x] **P11-004 shipped** — mid-run human gate v0 (`QuestionRegistry` + `answer_delegation_question` + timeout fallback), 2026-06-19.
+- [ ] **Phase 11 active** — P11-005..P11-008: tier-1 reviewer, smart planner-pass trigger, host model policy, naming refactor. See [PHASE11_MVP.md](./PHASE11_MVP.md).

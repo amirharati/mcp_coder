@@ -16,7 +16,7 @@
 | **BL-521** | **P11-001** ✅ | Clarity pass: cheap LLM pre-delegation Q&A, `clarification_needed` early return | Cross-session intent history → Phase 12 |
 | **BL-351** | **P11-002** ✅ | Supervised IO: `SupervisedIO` + `DelegationSupervisor` + in-memory decision log + abort-on-escalate | Mid-run async resume, cheap-LLM step planner, outer-loop resume → Phase 12 |
 | **BL-354** | **P11-003** ✅ | Executor-pull v0: system prefix `/read` hint only | Full sidecar HTTP tool server → Phase 12 |
-| **BL-522** | **P11-004** | Mid-run human gate: `answer_delegation_question` tool + Event bridge (experimental) | Protocol-level async mid-run gate → Phase 12 |
+| **BL-522** | **P11-004** ✅ | Mid-run human gate shipped: `answer_delegation_question` tool + Event bridge (experimental) | Protocol-level async mid-run gate + late-answer resume (BL-528) → Phase 12 |
 | **BL-358** | **P11-005** | Tier-1 reviewer: cheap model scan on `files_changed`, appended to spec report | Tier-2 epic-boundary review, critic/redo → Phase 12 |
 | — | **P11-006** | Smart architect trigger: heuristic skip for trivial tasks, spec front-matter override | — |
 | **BL-512** | **P11-007** | Host model policy: `model_policy` arg on `delegate_to_agent`, precedence over env | BL-513 AI-suggested, BL-514 dynamic escalation → Phase 12 |
@@ -30,6 +30,7 @@
 | P11-001 | 2026-06-19 | `clarity_check` phase; 16 tests; code uncommitted pending review |
 | P11-002 | 2026-06-19 | Supervised confirm handling shipped; structured `needs_input` escalation; code uncommitted pending review |
 | P11-003 | 2026-06-19 | Executor-pull `/read` prompt hint shipped; merge-safe with existing system prefix; code uncommitted pending review |
+| P11-004 | 2026-06-19 | Mid-run human gate shipped (`QuestionRegistry` + answer tool); timeout fallback clean; 30 tests passed |
 
 ---
 

@@ -23,7 +23,7 @@ Status: `idea` | `deferred` | `blocked` | `in_phase` | `done`
 | BL-521 (new) | P11-001 | ✅ Done — `clarity_check` pipeline phase shipped (opt-in `MCP_CODER_CLARITY_PASS`) | Cross-session intent history → Phase 12 |
 | BL-351 | P11-002 | ✅ Done — `SupervisedIO` + `DelegationSupervisor` + decision log + abort-on-escalate shipped | Async outer-loop resume / mid-run async resume → Phase 12 |
 | BL-354 | P11-003 | ✅ Done — executor-pull hint v0 shipped (`/read` prompt guidance + audit field) | Full sidecar HTTP tool server → Phase 12 |
-| BL-522 (new) | P11-004 | Mid-run human gate: `answer_delegation_question` + Event bridge (experimental) | Protocol-level async gate → Phase 12 |
+| BL-522 (new) | P11-004 | ✅ Done — mid-run human gate shipped (`answer_delegation_question` + Event bridge, timeout fallback) | Protocol-level async gate + late-answer resume (BL-528) → Phase 12 |
 | BL-358 | P11-005 | Tier-1 reviewer v0: cheap model scan on `files_changed` | Tier-2 epic-boundary review → Phase 12 |
 | — | P11-006 | Smart architect trigger: heuristic skip + spec front-matter override | — |
 | BL-512 | P11-007 | Host `model_policy` arg on `delegate_to_agent` (Stage 2) | BL-513 AI-suggested, BL-514 dynamic escalation → Phase 12 |
@@ -2024,6 +2024,26 @@ Operators tuning dogfood/debug runs must know this matrix by heart; `.env.exampl
 
 ---
 
+### BL-528: Late-answer resume after human-gate timeout
+
+**Status:** `idea` — 2026-06-19.  
+**Related:** BL-522 (mid-run human gate), BL-351 (needs_input fallback), BL-350 (outer-loop planner ownership).
+
+**Problem:** In P11-004, when `escalate` waits 120s and times out, the in-flight registry entry is popped and delegation exits via `needs_input`. If the human answer arrives later, `answer_delegation_question` returns `not_found`, so there is no native continuation from the exact paused state.
+
+**Goal:** Preserve a resumable continuation point when human-gate timeout occurs, so a late answer can continue from the last paused execution state rather than forcing full re-delegation from scratch.
+
+**Design sketch (Phase 12 candidate):**
+- On gate timeout, persist a `resume_token` artifact keyed by `delegation_id` (question, risk tier, minimal executor context digest, TTL).
+- Extend `needs_input` payload with `resume_token` + `resume_expires_at`.
+- Add MCP tool: `resume_delegation_question(resume_token: str, answer: str)`.
+- If token valid and executor context still reconstructable, resume from paused checkpoint; otherwise degrade gracefully to normal re-delegation with prefilled answer/context.
+- Keep strict TTL + single-use semantics to avoid stale/ambiguous resumes.
+
+**Why separate from BL-522:** BL-522 validates concurrent in-flight gating. BL-528 addresses the post-timeout path when concurrency windows are missed in real host UX.
+
+---
+
 ## Done
 
 | ID | Item | Completed |
@@ -2167,6 +2187,7 @@ The MCP-facilitated path is the architectural win: the junior PM host calls `mcp
 
 | Date | Change |
 |------|--------|
+| 2026-06-19 | **BL-528 added** — late-answer resume after P11-004 human-gate timeout (`resume_token` continuation concept). Tracks the gap where late `answer_delegation_question` currently returns `not_found`. |
 | 2026-06-19 | **P11-003 shipped** — BL-354 Phase 11 slice done (prompt-only `/read` hint + audit). Full sidecar/tool-server remains Phase 12. |
 | 2026-06-19 | **P11-002 shipped** — BL-351 Phase 11 scope done (`SupervisedIO` + `DelegationSupervisor` + abort-on-escalate); async/mid-run resume remains deferred to Phase 12. |
 | 2026-06-19 | **BL-525 + BL-526 + BL-527 added** — Planner role (session-bounded, mutable), Architect role (CTO, epic-boundary), host capability hedging principle. Full role hierarchy captured in `multi-model-roles.md`. P11-008 naming refactor planned. |

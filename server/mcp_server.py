@@ -2809,5 +2809,25 @@ def workspace_search_tool(
     return json.dumps(result, ensure_ascii=False)
 
 
+@mcp.tool(
+    name="answer_delegation_question",
+    description=(
+        "Unblock a paused delegation by providing a human answer to an escalated "
+        "supervisor question. Call this while delegate_to_agent is running and has "
+        "emitted a [gate] notification. "
+        "delegation_id: the active delegation ID shown in the notification. "
+        "answer: 'yes' or 'no' (or any text — 'yes'/'y'/'true'/'1' = approve)."
+    ),
+)
+def answer_delegation_question(delegation_id: str, answer: str) -> str:
+    """Route the human answer to the waiting delegation thread."""
+    from core.engine.question_registry import _REGISTRY
+
+    found = _REGISTRY.answer(delegation_id, answer)
+    if found:
+        return json.dumps({"status": "ok", "delegation_id": delegation_id, "answer": answer})
+    return json.dumps({"status": "not_found", "delegation_id": delegation_id})
+
+
 def run_stdio() -> None:
     mcp.run(transport="stdio")
