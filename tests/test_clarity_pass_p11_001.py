@@ -208,9 +208,9 @@ def _delegate(
 # --- config ---
 
 
-def test_clarity_pass_default_off(tmp_path, monkeypatch):
+def test_clarity_pass_default_on(tmp_path, monkeypatch):
     monkeypatch.delenv("MCP_CODER_CLARITY_PASS", raising=False)
-    assert clarity_pass_enabled(tmp_path) is False
+    assert clarity_pass_enabled(tmp_path) is True
 
 
 def test_clarity_pass_env_on(tmp_path, monkeypatch):
@@ -368,7 +368,7 @@ def test_delegate_clarity_clear_proceeds(tmp_path, monkeypatch):
 def test_delegate_clarity_default_off_no_behavior_change(tmp_path, monkeypatch):
     ws = _setup_workspace(tmp_path)
     captured: dict[str, bool] = {}
-    raw = _delegate(ws, monkeypatch, clarity_env=None, engine_captured=captured)
+    raw = _delegate(ws, monkeypatch, clarity_env="0", engine_captured=captured)
     payload = json.loads(raw)
     assert payload["success"] is True
     assert captured.get("called") is True

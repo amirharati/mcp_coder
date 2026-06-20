@@ -70,9 +70,9 @@ def _base_record_kwargs(storage) -> dict:
     )
 
 
-def test_executor_pull_hint_default_off(tmp_path, monkeypatch):
+def test_executor_pull_hint_default_on(tmp_path, monkeypatch):
     monkeypatch.delenv("MCP_CODER_EXECUTOR_PULL_HINT", raising=False)
-    assert executor_pull_hint_enabled(tmp_path) is False
+    assert executor_pull_hint_enabled(tmp_path) is True
 
 
 def test_executor_pull_hint_env_on(tmp_path, monkeypatch):
@@ -115,7 +115,7 @@ def test_apply_pull_hint_merges_with_existing_prefix(tmp_path, monkeypatch):
 
 
 def test_apply_pull_hint_off_leaves_prefix_unchanged(tmp_path, monkeypatch):
-    monkeypatch.delenv("MCP_CODER_EXECUTOR_PULL_HINT", raising=False)
+    monkeypatch.setenv("MCP_CODER_EXECUTOR_PULL_HINT", "0")
     model = _FakeModel()
     _apply_executor_model_params(
         model,

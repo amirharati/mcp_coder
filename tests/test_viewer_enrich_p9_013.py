@@ -311,7 +311,7 @@ def test_view_events_compile_stages_mapped():
     events = _build_view_events(_simple_record(), trace)
     names = [e["name"] for e in events]
     assert "mcp.spec_validation" in names
-    assert "mcp.architect" in names
+    assert "mcp.planner" in names
     assert "mcp.context_builder" in names
     # mcp→executor at final_executor_prompt timestamp
     assert "mcp→executor" in names

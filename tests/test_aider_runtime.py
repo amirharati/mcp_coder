@@ -38,6 +38,11 @@ def test_infer_run_success_empty_output():
     assert ok is False
 
 
-def test_supervised_execution_disabled_by_default(monkeypatch, tmp_path):
+def test_supervised_execution_enabled_by_default(monkeypatch, tmp_path):
     monkeypatch.delenv("MCP_CODER_SUPERVISED_EXEC", raising=False)
+    assert supervised_execution_enabled(tmp_path) is True
+
+
+def test_supervised_execution_disabled_via_env(monkeypatch, tmp_path):
+    monkeypatch.setenv("MCP_CODER_SUPERVISED_EXEC", "0")
     assert supervised_execution_enabled(tmp_path) is False

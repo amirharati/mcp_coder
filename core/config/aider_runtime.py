@@ -64,22 +64,22 @@ def _resolve_flag(
 
 
 def supervised_execution_enabled(workspace: str | Path) -> bool:
-    """Default False → env MCP_CODER_SUPERVISED_EXEC → yaml supervised_execution."""
+    """Default True → env MCP_CODER_SUPERVISED_EXEC=0 → yaml supervised_execution: false → False."""
     return _resolve_flag(
         workspace,
         env_var="MCP_CODER_SUPERVISED_EXEC",
         yaml_key="supervised_execution",
-        default=False,
+        default=True,
     )
 
 
 def executor_pull_hint_enabled(workspace: str | Path) -> bool:
-    """Default False. Env MCP_CODER_EXECUTOR_PULL_HINT=1 or yaml executor_pull_hint: true."""
+    """Default True. Env MCP_CODER_EXECUTOR_PULL_HINT=0 or yaml executor_pull_hint: false → False."""
     return _resolve_flag(
         workspace,
         env_var="MCP_CODER_EXECUTOR_PULL_HINT",
         yaml_key="executor_pull_hint",
-        default=False,
+        default=True,
     )
 
 
@@ -346,7 +346,11 @@ def _looks_like_files_request(lower: str) -> bool:
 def _looks_like_clarification(lower: str, text: str) -> bool:
     if any(marker in lower for marker in _CLARIFICATION_MARKERS):
         return True
-    if "?" in text and not _looks_like_files_request(lower):
+    # Only trigger on bare `?` in the *last 20 lines* — executor output, README
+    # content, and thinking text routinely contain `?` mid-body which must not
+    # be misclassified as a clarification request (P11-ISS-013).
+    last_lines = "\n".join(text.splitlines()[-20:])
+    if "?" in last_lines and not _looks_like_files_request(last_lines.lower()):
         return True
     return False
 
@@ -405,8 +409,8 @@ def classify_executor_outcome(
         return {
             "outcome": OUTCOME_NEEDS_INPUT_CLARIFICATION,
             "message": (
-                "Aider requested clarification before implementing "
-                "(use mode=review or expand context_summary)."
+                "Aider left an open question after edits "
+                "(review output; re-delegate with more context if needed)."
             ),
             "files_requested": [],
             "executor_output_tail": _executor_output_tail(text),

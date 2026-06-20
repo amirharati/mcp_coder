@@ -210,8 +210,11 @@ def _aggregate_tokens(events: list[dict[str, Any]]) -> dict[str, Any]:
 _COMPILE_STAGE_MAP: dict[str, tuple[str, str, str] | None] = {
     "validation_input":      ("mcp.spec_validation", "→", "mcp"),
     "validation_output":     ("mcp.spec_validation", "←", "mcp"),
-    "architect_input":       ("mcp.architect",       "→", "mcp"),
-    "architect_output":      ("mcp.architect",       "←", "mcp"),
+    "planner_input":         ("mcp.planner",         "→", "mcp"),
+    "planner_output":        ("mcp.planner",         "←", "mcp"),
+    # Backward-compat: old traces used architect_* names
+    "architect_input":       ("mcp.planner",         "→", "mcp"),
+    "architect_output":      ("mcp.planner",         "←", "mcp"),
     "builder_input":         ("mcp.context_builder", "→", "mcp"),
     "builder_output":        ("mcp.context_builder", "←", "mcp"),
     "mechanical_brief":      ("mcp.brief",           "→", "mcp"),  # always shown
@@ -221,7 +224,7 @@ _COMPILE_STAGE_MAP: dict[str, tuple[str, str, str] | None] = {
 # compile_event name → llm_call role that goes with it
 _COMPILE_NAME_TO_ROLE: dict[str, str] = {
     "mcp.spec_validation": "spec_validation",
-    "mcp.architect":       "planner_pass",
+    "mcp.planner":         "planner_pass",
     "mcp.context_builder": "context_builder",
 }
 

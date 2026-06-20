@@ -239,10 +239,10 @@ def test_architect_flag_yaml_enables(tmp_path, monkeypatch):
 # ── Planner pass canonical naming tests (P11-008) ─────────────────────────────
 
 
-def test_planner_flag_default_off(tmp_path, monkeypatch):
+def test_planner_flag_default_on(tmp_path, monkeypatch):
     monkeypatch.delenv("MCP_CODER_PLANNER_PASS", raising=False)
     monkeypatch.delenv("MCP_CODER_ARCHITECT_PASS", raising=False)
-    assert planner_pass_enabled(tmp_path) is False
+    assert planner_pass_enabled(tmp_path) is True
 
 
 def test_planner_flag_canonical_env_on(tmp_path, monkeypatch):

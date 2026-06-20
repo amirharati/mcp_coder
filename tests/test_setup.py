@@ -187,6 +187,9 @@ def test_test_model_all_passes(monkeypatch, capsys):
         "executor": "openrouter/test/executor",
         "context_builder": "openrouter/test/builder",
         "review": "openrouter/test/executor",  # falls back to executor
+        "supervisor": "openrouter/test/supervisor",
+        "planner_pass": "openrouter/test/planner",
+        "reviewer_pass": "openrouter/test/reviewer",
     }
 
     def fake_resolve(role, ws):
@@ -214,9 +217,9 @@ def test_test_model_all_passes(monkeypatch, capsys):
     out = capsys.readouterr().out
 
     assert rc == 0
-    assert call_count["n"] == 3
+    assert call_count["n"] == 6
     assert "OK" in out
-    assert "All 3 passed." in out
+    assert "All 6 passed." in out
     assert "(fallback from executor)" in out  # review falls back
 
 
@@ -231,6 +234,9 @@ def test_test_model_all_one_fail(monkeypatch, capsys):
         "executor": "openrouter/test/executor",
         "context_builder": "openrouter/test/builder",
         "review": "openrouter/test/executor",
+        "supervisor": "openrouter/test/supervisor",
+        "planner_pass": "openrouter/test/planner",
+        "reviewer_pass": "openrouter/test/reviewer",
     }
 
     def fake_resolve(role, ws):

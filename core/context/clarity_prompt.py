@@ -36,8 +36,8 @@ def build_clarity_check_prompt(
     recent_delegation_titles: list[str],
 ) -> str:
     """Assemble the clarity-check LLM prompt."""
-    goal = _truncate((spec_read.sections.get("Goal") or "").strip())
-    files = _truncate((spec_read.sections.get("Files") or "").strip())
+    goal = _truncate((spec_read.sections.get("Goal") or "").strip()) if spec_read else ""
+    files = _truncate((spec_read.sections.get("Files") or "").strip()) if spec_read else ""
     has_spec_sections = bool(goal or files)
 
     sections = [CLARITY_PREAMBLE]

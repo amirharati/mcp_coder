@@ -38,8 +38,11 @@ TRACE_TYPE_COMPILE_EVENT = "compile_event"
 STAGE_MECHANICAL_BRIEF = "mechanical_brief"
 STAGE_BUILDER_INPUT = "builder_input"
 STAGE_BUILDER_OUTPUT = "builder_output"
-STAGE_ARCHITECT_INPUT = "architect_input"
-STAGE_ARCHITECT_OUTPUT = "architect_output"
+STAGE_PLANNER_INPUT = "planner_input"
+STAGE_PLANNER_OUTPUT = "planner_output"
+# Backward-compat aliases (old traces used architect_* names; keep for reader tools)
+STAGE_ARCHITECT_INPUT = STAGE_PLANNER_INPUT
+STAGE_ARCHITECT_OUTPUT = STAGE_PLANNER_OUTPUT
 STAGE_VALIDATION_INPUT = "validation_input"
 STAGE_VALIDATION_OUTPUT = "validation_output"
 STAGE_FINAL_EXECUTOR_PROMPT = "final_executor_prompt"

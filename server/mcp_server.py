@@ -1239,13 +1239,10 @@ def delegate_to_agent(
         spec_read_duration_ms = int((time.perf_counter() - t_spec_read) * 1000)
 
         pipeline_recorder: Any | None = None
-        if (
-            delegate_mode == DELEGATE_MODE_IMPLEMENT
-            and spec_read is not None
-            and not spec_invalid_reason
-        ):
+        if delegate_mode == DELEGATE_MODE_IMPLEMENT:
             pipeline_recorder = obs.new_pipeline_recorder()
-            pipeline_recorder.mark("spec_read", status="ok", duration_ms=spec_read_duration_ms)
+            if spec_read is not None and not spec_invalid_reason:
+                pipeline_recorder.mark("spec_read", status="ok", duration_ms=spec_read_duration_ms)
         policy = resolve_session_policy(ws)
         host_transcript_policy = resolve_host_transcript_policy(ws)
 
@@ -1572,6 +1569,23 @@ def delegate_to_agent(
                 )
             else:
                 pipeline_recorder.end("clarity_check", status="ok")
+            # Emit structured clarity result as a trace event (P11-ISS-010)
+            append_trace_record(
+                {
+                    "type": "clarity_result",
+                    "delegation_id": delegation_id,
+                    "needs_clarification": clarity_check_blocked,
+                    "ran": clarity_check_ran,
+                    "passed": clarity_check_passed,
+                    "questions": clarity_check_questions or [],
+                    "questions_count": len(clarity_check_questions or []),
+                    "error": clarity_check_error,
+                    "timestamp": obs.utc_now_iso(),
+                },
+                delegation_id=delegation_id,
+                session_dir=storage.session_dir,
+                workspace=ws,
+            )
         elif pipeline_recorder is not None and not review_target_files_error:
             pipeline_recorder.mark("clarity_check", status="skipped", detail="disabled")
 
@@ -2059,8 +2073,8 @@ def delegate_to_agent(
                             "Aider needs additional files. Add them to target_files and retry."
                             if stall_type == OUTCOME_NEEDS_INPUT_FILES
                             else (
-                                "Aider requested clarification before implementing "
-                                "(use mode=review or expand context_summary)."
+                                "Aider left an open question after edits "
+                                "(review output; re-delegate with more context if needed)."
                             )
                         ),
                         "files_requested": stall_files_requested,
@@ -2242,9 +2256,6 @@ def delegate_to_agent(
             and success
             and bool(files_changed)
             and not spec_invalid_reason
-            and spec_path
-            and delegation_policies is not None
-            and spec_read is not None
         )
         if pipeline_recorder is not None:
             if reviewer_applicable:
@@ -3019,4 +3030,30 @@ def answer_delegation_question(delegation_id: str, answer: str) -> str:
 
 
 def run_stdio() -> None:
+    _log_role_model_startup()
     mcp.run(transport="stdio")
+
+
+def _log_role_model_startup() -> None:
+    """Emit one server log line per role showing the resolved model at startup (P11-ISS-009)."""
+    try:
+        from core.config.role_models import (
+            ROLE_CONTEXT_BUILDER,
+            ROLE_EXECUTOR,
+            ROLE_PLANNER,
+            ROLE_REVIEWER,
+            ROLE_SUPERVISOR,
+            resolve_role_model_name,
+        )
+        from core.logging.server_log import server_log_emit
+
+        roles = [ROLE_EXECUTOR, ROLE_PLANNER, ROLE_CONTEXT_BUILDER, ROLE_SUPERVISOR, ROLE_REVIEWER]
+        resolved = {role: resolve_role_model_name(role, workspace=".") for role in roles}
+        server_log_emit(
+            "role_models_resolved",
+            level="info",
+            models=resolved,
+            hint="restart MCP server after .env changes to pick up new models",
+        )
+    except Exception:
+        pass

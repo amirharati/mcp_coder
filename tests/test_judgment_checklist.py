@@ -164,12 +164,12 @@ def test_bundled_rules_judgment_loop_versions() -> None:
         rules_dir / "use-mcp-coder.strict.mdc",
     ):
         text = path.read_text(encoding="utf-8")
-        assert 'mcp_coder_rule_version: "14"' in text
+        assert 'mcp_coder_rule_version: "15"' in text
         assert "judgment_checklist" in text
         assert "reading source files" in text.lower() or "reading source" in text.lower()
 
     history = (rules_dir / "workspace-history.mdc").read_text(encoding="utf-8")
-    assert 'mcp_coder_rule_version: "6"' in history
+    assert 'mcp_coder_rule_version: "7"' in history
     assert "Order of operations" in history
     assert "Forbidden shortcuts" in history
     assert "Delegation judgment" in history

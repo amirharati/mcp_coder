@@ -55,20 +55,20 @@ def spec_validation_enabled(workspace: str | Path) -> bool:
 
 
 def clarity_pass_enabled(workspace: str | Path) -> bool:
-    """Default False. Env MCP_CODER_CLARITY_PASS=1 or yaml clarity_pass: true → True."""
+    """Default True. Env MCP_CODER_CLARITY_PASS=0 or yaml clarity_pass: false → False."""
     return _resolve_flag(
         workspace,
         env_var="MCP_CODER_CLARITY_PASS",
         yaml_key="clarity_pass",
-        default=False,
+        default=True,
     )
 
 
 def reviewer_pass_enabled(workspace: str | Path) -> bool:
-    """Default False. Env MCP_CODER_REVIEWER_PASS=1 or yaml reviewer_pass: true → True."""
+    """Default True. Env MCP_CODER_REVIEWER_PASS=0 or yaml reviewer_pass: false → False."""
     return _resolve_flag(
         workspace,
         env_var="MCP_CODER_REVIEWER_PASS",
         yaml_key="reviewer_pass",
-        default=False,
+        default=True,
     )

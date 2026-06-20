@@ -181,6 +181,50 @@ class SupervisedIO:
     def _human_gate_enabled(self) -> bool:
         return self._question_registry is not None and bool(self._delegation_id)
 
+    def _emit_gate_event(
+        self,
+        event_type: str,
+        *,
+        question: str,
+        risk_tier: str,
+        answer: str | None = None,
+        timeout_s: int | None = None,
+    ) -> None:
+        """Emit typed human gate trace events (P11-ISS-004)."""
+        try:
+            from core.observability.context import (
+                delegation_id_var,
+                session_dir_var,
+                workspace_var,
+            )
+            from core.observability.trace import append_trace_record
+            from core.logging.server_log import utc_now_iso
+
+            delegation_id = delegation_id_var.get()
+            session_dir = session_dir_var.get()
+            workspace = workspace_var.get()
+            if not delegation_id or not session_dir:
+                return
+            record: dict[str, Any] = {
+                "type": event_type,
+                "delegation_id": delegation_id,
+                "risk_tier": risk_tier,
+                "question_preview": question[:120],
+                "timestamp": utc_now_iso(),
+            }
+            if answer is not None:
+                record["answer_preview"] = answer
+            if timeout_s is not None:
+                record["timeout_s"] = timeout_s
+            append_trace_record(
+                record,
+                delegation_id=delegation_id,
+                session_dir=session_dir,
+                workspace=workspace or "",
+            )
+        except Exception:
+            pass  # observability must never break completions
+
     @staticmethod
     def _human_answer_to_bool(answer: str | None) -> bool:
         """Treat 'yes'/'y'/'true'/'1' (case-insensitive) as True, everything else as False."""
@@ -268,6 +312,7 @@ class SupervisedIO:
                         "duration_ms": result.duration_ms,
                     }
                 )
+            self._emit_gate_event("human_gate_opened", question=question, risk_tier=risk_tier)
 
             from core.engine.question_registry import _GATE_TIMEOUT_S
 
@@ -284,6 +329,12 @@ class SupervisedIO:
                     risk_tier=risk_tier,
                     duration_ms=result.duration_ms,
                 )
+                self._emit_gate_event(
+                    "human_gate_answered",
+                    question=question,
+                    risk_tier=risk_tier,
+                    answer=str(pq.answer)[:80],
+                )
                 return human_bool
 
             self._record_decision(
@@ -293,6 +344,12 @@ class SupervisedIO:
                 reasoning="human_gate_timeout_120s",
                 risk_tier=risk_tier,
                 duration_ms=result.duration_ms,
+            )
+            self._emit_gate_event(
+                "human_gate_timeout",
+                question=question,
+                risk_tier=risk_tier,
+                timeout_s=_GATE_TIMEOUT_S,
             )
             raise SupervisorAbort(
                 reasoning="human_gate_timeout",

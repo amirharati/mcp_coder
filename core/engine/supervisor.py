@@ -217,7 +217,7 @@ class DelegationSupervisor:
         if not reasoning:
             reasoning = f"supervisor {decision}"
 
-        return SupervisorDecision(
+        sd = SupervisorDecision(
             decision=decision,
             reasoning=reasoning,
             duration_ms=duration_ms,
@@ -225,6 +225,59 @@ class DelegationSupervisor:
             model=model,
             tokens=completion.tokens,
         )
+        self._emit_llm_call_event(
+            question=question,
+            prompt=prompt,
+            response=completion.text or "",
+            decision=sd,
+        )
+        return sd
+
+    def _emit_llm_call_event(
+        self,
+        *,
+        question: str,
+        prompt: str,
+        response: str,
+        decision: "SupervisorDecision",
+    ) -> None:
+        """Emit llm_call(role=supervisor) trace event for cost/latency visibility (P11-ISS-003)."""
+        try:
+            from core.observability.context import (
+                delegation_id_var,
+                session_dir_var,
+                workspace_var,
+            )
+            from core.observability.trace import append_trace_record, build_llm_call_record
+
+            delegation_id = delegation_id_var.get()
+            session_dir = session_dir_var.get()
+            workspace = workspace_var.get()
+            if not delegation_id or not session_dir:
+                return
+
+            record = build_llm_call_record(
+                delegation_id=delegation_id,
+                role=ROLE_SUPERVISOR,
+                model=decision.model or "",
+                call_index=1,
+                duration_ms=decision.duration_ms,
+                tokens=decision.tokens,
+                verbosity="full",
+                prompt_text=prompt,
+                response_text=response,
+            )
+            record["supervisor_decision"] = decision.decision
+            record["supervisor_risk_tier"] = decision.risk_tier
+            record["supervisor_question_preview"] = question[:120]
+            append_trace_record(
+                record,
+                delegation_id=delegation_id,
+                session_dir=session_dir,
+                workspace=workspace or "",
+            )
+        except Exception:
+            pass  # observability must never break completions
 
     def _accumulate_tokens(self, tokens: dict[str, Any]) -> None:
         for key in ("input", "output", "total"):

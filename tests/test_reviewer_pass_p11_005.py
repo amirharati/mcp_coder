@@ -225,9 +225,9 @@ def _delegate(
         )
 
 
-def test_reviewer_pass_flag_default_off(tmp_path, monkeypatch):
+def test_reviewer_pass_flag_default_on(tmp_path, monkeypatch):
     monkeypatch.delenv("MCP_CODER_REVIEWER_PASS", raising=False)
-    assert reviewer_pass_enabled(tmp_path) is False
+    assert reviewer_pass_enabled(tmp_path) is True
 
 
 def test_reviewer_pass_env_on(tmp_path, monkeypatch):
@@ -310,7 +310,7 @@ def test_resolve_reviewer_pass_result_mappings():
 def test_delegate_reviewer_pass_skipped_without_flag(tmp_path, monkeypatch):
     ws = _setup_workspace(tmp_path, with_git=True)
     with patch("core.engine.reviewer_llm.run_reviewer_llm") as reviewer_llm:
-        raw = _delegate(ws, monkeypatch, reviewer_env=None)
+        raw = _delegate(ws, monkeypatch, reviewer_env="0")
         reviewer_llm.assert_not_called()
 
     payload = json.loads(raw)

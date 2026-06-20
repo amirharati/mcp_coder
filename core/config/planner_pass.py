@@ -35,9 +35,9 @@ def planner_pass_enabled(workspace: str | Path) -> bool:
     2. Legacy env     MCP_CODER_ARCHITECT_PASS   (alias, warns)
     3. Canonical key  planner_pass  in workspace config.yaml
     4. Legacy key     architect_pass in workspace config.yaml  (alias, warns)
-    5. Default: False
+    5. Default: True
     """
-    enabled = False
+    enabled = True
     used_legacy = False
 
     canonical_env = os.environ.get("MCP_CODER_PLANNER_PASS", "").strip()

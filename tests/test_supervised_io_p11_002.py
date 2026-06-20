@@ -31,9 +31,9 @@ from core.logging.delegation_log import supervisor_audit_fields
 from server.mcp_server import delegate_to_agent
 
 
-def test_supervised_execution_default_off(tmp_path, monkeypatch):
+def test_supervised_execution_default_on(tmp_path, monkeypatch):
     monkeypatch.delenv("MCP_CODER_SUPERVISED_EXEC", raising=False)
-    assert supervised_execution_enabled(tmp_path) is False
+    assert supervised_execution_enabled(tmp_path) is True
 
 
 def test_supervised_execution_env_on(tmp_path, monkeypatch):

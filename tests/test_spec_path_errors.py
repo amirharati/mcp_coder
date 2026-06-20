@@ -61,7 +61,7 @@ def test_bundled_rules_use_mcp_coder_spec_paths() -> None:
     ):
         raw = path.read_text(encoding="utf-8")
         text = _resolve_includes(raw, rules_dir)  # compiled = what workspaces receive
-        assert 'mcp_coder_rule_version: "14"' in text
+        assert 'mcp_coder_rule_version: "15"' in text
         assert ".mcp-coder/specs/tasks/" in text
         assert "Never" in text and "repo root" in text
         assert not _has_bare_canonical_specs_path(text)
@@ -72,6 +72,6 @@ def test_bundled_workspace_history_version_and_paths() -> None:
     text = (bundled_cursor_rules_dir() / "workspace-history.mdc").read_text(
         encoding="utf-8"
     )
-    assert 'mcp_coder_rule_version: "6"' in text
+    assert 'mcp_coder_rule_version: "7"' in text
     assert ".mcp-coder/specs/tasks/calc-02-cli-v1.md" in text
     assert not _has_bare_canonical_specs_path(text)

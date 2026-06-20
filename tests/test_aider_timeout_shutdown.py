@@ -40,7 +40,7 @@ def mock_aider_slow_coder(monkeypatch):
     monkeypatch.setitem(sys.modules, "aider.models", fake_models)
     monkeypatch.setattr("core.engine.observable_model.ObservableModel", mock_observable_cls)
 
-    monkeypatch.setattr("core.engine.aider_engine.create_delegation_io", lambda: (mock_io, mock_buffer))
+    monkeypatch.setattr("core.engine.aider_engine.create_delegation_io", lambda **k: (mock_io, mock_buffer))
     monkeypatch.setattr("core.engine.aider_engine.snapshot_git_dirty", lambda ws: set())
     monkeypatch.setattr("core.engine.aider_engine.snapshot_mtimes", lambda ws, paths: {})
     monkeypatch.setattr("core.engine.aider_engine.begin_delegation_snapshot", lambda **k: None)
