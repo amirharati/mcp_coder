@@ -15,3 +15,20 @@
 ## Spec validation (`clarification_needed`)
 
 When `clarification_needed` is non-empty: answer each item in Cursor chat, update the spec (`revision++`) if needed, then retry `delegate_to_agent`. Do **not** implement on disk yourself.
+
+## Supervisor escalation (`needs_input` + human gate)
+
+When `delegate_to_agent` returns `ok: false` and the response includes a `question` field (or `needs_input: true` with question text), the supervisor paused the executor mid-run waiting for a human decision.
+
+**While the delegation is still running** (you will see a `[gate]` progress notification with the `delegation_id` and the question): call `answer_delegation_question(delegation_id=…, answer="yes"/"no")` immediately. If you do not answer within ~120 s the delegation times out and returns `human_gate_timeout`.
+
+After a timeout, re-delegate with `delegate_to_agent` — you cannot resume a timed-out delegation.
+
+## Pre-flight dry run (`inspect_context`)
+
+Before a complex or risky `delegate_to_agent` call, use `inspect_context(task=…, target_files=…, context_summary=…, spec_path=…)` to verify:
+- Which files are in the executor's read set (`adapter_preview.fnames`)
+- Estimated prompt size (avoid token-limit failures)
+- That the spec's read-deps are resolved correctly
+
+This is read-only — no files are edited. Use `include_prompt=true` for the full executor prompt text.

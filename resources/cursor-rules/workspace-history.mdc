@@ -2,7 +2,7 @@
 description: mcp-coder workspace checkpoints — verify delegations, judge diffs, debug retries (synced by MCP)
 mcp_coder_managed: true
 mcp_coder_rule_id: workspace-history
-mcp_coder_rule_version: "6"
+mcp_coder_rule_version: "7"
 globs:
 alwaysApply: true
 ---
@@ -103,6 +103,8 @@ Before re-delegating, **always**:
 | **get_checkpoint_detail** | Metadata + created/modified/deleted lists (no diff bodies) |
 | **get_delegation_diff** | Full judgment — `created` / `modified` / `deleted` + `diffs` |
 | **get_file_history** | One file's timeline across delegations |
+| **rag_search** | Keyword search over past delegation summaries and outcomes — use before writing a spec to find related prior work |
+| **workspace_search** | Keyword search over indexed workspace source files — use to discover existing modules before adding a new one |
 
 ## Example issues diffs reveal
 
