@@ -2044,6 +2044,76 @@ Operators tuning dogfood/debug runs must know this matrix by heart; `.env.exampl
 
 ---
 
+### BL-529: Supervisor context window — task + spec + Aider output tail
+
+**Status:** `idea` — 2026-06-19. **Phase 12 candidate.**
+**Related:** BL-351 (supervised IO), BL-530 (on-demand context retrieval), BL-532 (inter-model communication).
+
+**Problem:** `DelegationSupervisor.evaluate()` currently receives only `question` + `risk_tier` + `target_files`. It cannot see the task description, spec contract, or what Aider has done so far in the run. This makes every risk judgment context-free — the supervisor cannot distinguish "add `config.py` which is in the spec Files contract" from "add `config.py` which is out of scope".
+
+**Goal:** Pass a `SupervisorContext` struct into `evaluate()` containing: task summary, spec_path, files_contract, and a rolling tail of the last N lines of Aider's output stream. Supervisor prompt is rewritten to include this context before the confirm_ask question.
+
+**Design sketch:**
+- Add `context: SupervisorContext | None` param to `DelegationSupervisor.__init__()` and `evaluate()`
+- Populate from the compiled `ContextPackage` at engine start; update `output_tail` via `_executor_output_tail()` before each `confirm_ask`
+- Keep prompt additions concise (task + contract paths + last 20 lines) to stay within cheap model budget
+- Emit `supervisor_context_bytes` in trace for observability
+
+---
+
+### BL-530: On-demand context retrieval for all helper models
+
+**Status:** `idea` — 2026-06-19. **Phase 12 candidate.**
+**Related:** BL-529 (supervisor context), BL-354 (executor-pull sidecar), BL-531 (multi-turn loops).
+
+**Problem:** All helper models (clarity, planner, supervisor, reviewer) receive a single compiled context snapshot at call time and cannot request additional information. If the planner needs to see a dependency file that wasn't in the initial package, or the reviewer wants to check a test file that wasn't in `files_changed`, they simply don't — the result is lower quality with no recourse.
+
+**Goal:** Give each helper model a minimal tool interface for on-demand context retrieval: `read_file(path)`, `rag_search(query)`, `get_spec(spec_path)`. The helper LLM can call these tools once or twice before producing its output, turning a single-shot prompt into a lightweight agentic step.
+
+**Design sketch:**
+- Add a `HelperToolRunner` thin layer that proxies a small fixed tool set (no code edits, no shell)
+- Each helper role opts in via `tool_enabled: true` in its config; disabled by default
+- Tool calls logged as `tool_call(role=planner_pass, ...)` trace events
+- Start with planner and supervisor (highest value); clarity and reviewer can follow
+- Execution budget: max 3 tool calls per helper invocation to bound latency + cost
+
+---
+
+### BL-531: Multi-turn loops for helper models
+
+**Status:** `idea` — 2026-06-19. **Phase 12 candidate.**
+**Related:** BL-530 (on-demand context), BL-350 (outer-loop planner ownership), BL-532 (inter-model communication).
+
+**Problem:** All helper models are single-shot today: one prompt → one response. This is fine for simple tasks but breaks down for complex ones — the planner can't ask a clarifying question before writing its plan, the reviewer can't look at a related test file before flagging a bug, and the supervisor can't escalate with a proposed resolution.
+
+**Goal:** Allow each helper model to run an internal loop (up to N turns): produce → evaluate → optionally request context or ask a follow-up → produce final output. The loop is bounded by turn count and time budget. The host sees only the final output; intermediate turns are traced.
+
+**Design sketch:**
+- Wrap each helper call site in a `HelperLoop(max_turns=3, timeout_s=30)` harness
+- On each turn: model either produces `{done: true, result: ...}` or `{done: false, tool_call: ...}`
+- Tool calls handled by `HelperToolRunner` (BL-530); result appended to next turn context
+- Final `result` is what the pipeline consumes (same interface as today)
+- Trace records all turns as `helper_turn` events
+
+---
+
+### BL-532: Inter-model communication — Aider → pipeline, pipeline → Aider
+
+**Status:** `idea` — 2026-06-19. **Phase 12 candidate.**
+**Related:** BL-529 (supervisor context), BL-531 (multi-turn loops), BL-354 (executor sidecar), BL-350 (outer loop).
+
+**Problem:** Today all models are isolated silos. The planner writes a plan and never hears back. The supervisor makes decisions but Aider doesn't know why. The reviewer flags issues but the executor never sees them. There is no mechanism for mid-run signals in either direction.
+
+**Goal:** A structured message bus for inter-model signals within one delegation:
+- **Aider → supervisor/planner**: status events ("I edited file X", "I need context on Y") streamed via the existing tee/stall infrastructure
+- **Planner → executor**: mid-run guidance injection (if planner detects the executor is going off-track, it can append a correction to the system prompt prefix for the next Aider message)
+- **Reviewer → re-delegation**: reviewer result is fed back into the next delegation's context package as `prior_review_notes` — closes the feedback loop across steps
+- **Supervisor → context builder**: escalation can trigger a context-enrichment step before handing back to human
+
+**Why this matters:** Without inter-model communication, each model operates on a stale snapshot. With it, the delegation becomes a true multi-agent loop rather than a waterfall pipeline.
+
+---
+
 ## Done
 
 | ID | Item | Completed |
