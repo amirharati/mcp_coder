@@ -334,6 +334,7 @@ def run_test_model_all(
         ROLE_CONTEXT_BUILDER,
         ROLE_EXECUTOR,
         ROLE_REVIEW,
+        ROLE_SUPERVISOR,
         resolve_role_model_name,
     )
 
@@ -344,7 +345,7 @@ def run_test_model_all(
     executor_model = resolve_role_model_name(ROLE_EXECUTOR, ws)
 
     rows: list[tuple[str, str, ModelTestResult, bool]] = []
-    for role in (ROLE_EXECUTOR, ROLE_CONTEXT_BUILDER, ROLE_REVIEW):
+    for role in (ROLE_EXECUTOR, ROLE_CONTEXT_BUILDER, ROLE_REVIEW, ROLE_SUPERVISOR):
         model = resolve_role_model_name(role, ws)
         is_fallback = role != ROLE_EXECUTOR and model == executor_model
         result = run_test_model(
