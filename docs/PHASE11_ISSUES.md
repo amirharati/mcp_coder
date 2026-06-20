@@ -1,7 +1,7 @@
 # Phase 11 issues
 
 **Status:** **Active** — Phase 11 opened 2026-06-18.
-**Open:** P11-ISS-002 through P11-ISS-011 (6 new from timetracker dogfood 2026-06-19)
+**Open:** P11-ISS-002 through P11-ISS-013 (8 new from timetracker dogfood 2026-06-19)
 **Promoted from backlog:** BL-351 (full), BL-521 (new), BL-354 (v0), BL-358 (v0), BL-512 (Stage 2), BL-522 (new) — see [PHASE11_MVP.md](./PHASE11_MVP.md)
 **Related PM board:** [PHASE11_MVP.md](./PHASE11_MVP.md)
 
@@ -54,6 +54,8 @@
 | P11-ISS-009 | open | medium | `planner_pass` model resolution ignores env var at runtime — `MCP_CODER_PLANNER_PASS_MODEL=openrouter/anthropic/claude-sonnet-4` set in `.env` but planner ran gemini-2.5-flash; `policy_applied.sources.model = 'role_models'` confirms env lookup was bypassed; likely MCP server was started before env var was added (no hot-reload) | P11-008 / role_models | Found: delegation `54d12044`; fix: confirm env var name matches key in `_ROLE_MODEL_ENV`, add startup log for each resolved role model so mismatches are visible on launch |
 | P11-ISS-010 | open | low | `clarity_check` `llm_call` trace event has no structured `needs_clarification` field — decision must be inferred by parsing raw `response_body` text; makes programmatic log analysis fragile | P11-001 logging | Found: all 5 clarity-blocked delegations; fix: add `needs_clarification: bool` + `questions: list[str]` to `llm_call` event when `role=clarity_check` |
 | P11-ISS-011 | open | low | `context_mode: fallback` even when `spec_path` is explicitly provided — final timetracker delegation supplied `spec_path` yet context mode is `fallback`; spec wasn't compiled despite being passed | context compiler | Found: delegation `54d12044`; investigate spec compilation trigger condition when spec_path provided in `mcp_request` |
+| P11-ISS-012 | open | low | Trace viewer still labels planner phase as "architect" — `compile_event` stage constants `STAGE_ARCHITECT_INPUT`/`STAGE_ARCHITECT_OUTPUT` in `trace.py` and display mapping in `delegation_view_enrich.py` were not renamed in P11-008; viewer shows "mcp.architect" instead of "mcp.planner" | P11-008 rename gap | Fix: rename constants in `trace.py` + update `delegation_view_enrich.py` map; keep old string as alias for backward compat with existing traces |
+| P11-ISS-013 | open | **high** | `_looks_like_clarification()` too broad — fires on any `?` in output not matching a files-request; executor output (thinking text, README content, log strings) routinely contains `?`, triggering false `clarification_requested` failures even when all files were written; root cause of P11-ISS-007 | `aider_runtime.py` | Found: `54d12044` (6 files written, `?` in thinking output); fix: require `?` to appear in *last N lines* of output only, and/or require `?` without any `file_write` events in the same run |
 
 ---
 
