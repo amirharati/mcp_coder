@@ -26,6 +26,8 @@ _ROLE_MODEL_YAML: dict[str, str] = {
     ROLE_CONTEXT_BUILDER: "context_builder_model",
     ROLE_CRITIC: "critic_model",
     ROLE_SUPERVISOR: "supervisor_model",
+    ROLE_PLANNER: "planner_pass_model",
+    ROLE_REVIEWER: "reviewer_pass_model",
 }
 
 _ROLE_MODEL_ENV: dict[str, str] = {
@@ -33,6 +35,8 @@ _ROLE_MODEL_ENV: dict[str, str] = {
     ROLE_CONTEXT_BUILDER: "MCP_CODER_CONTEXT_BUILDER_MODEL",
     ROLE_CRITIC: "MCP_CODER_CRITIC_MODEL",
     ROLE_SUPERVISOR: "MCP_CODER_SUPERVISOR_MODEL",
+    ROLE_PLANNER: "MCP_CODER_PLANNER_PASS_MODEL",
+    ROLE_REVIEWER: "MCP_CODER_REVIEWER_PASS_MODEL",
 }
 
 _ROLE_BUDGET_YAML: dict[str, str] = {
@@ -70,6 +74,10 @@ def _role_default_model(role: str, workspace: str | Path) -> str:
         return _context_builder_base_default()
     if role == ROLE_SUPERVISOR:
         return _context_builder_base_default()
+    if role == ROLE_PLANNER:
+        return resolve_model_name()  # planner needs a strong model; default to executor
+    if role == ROLE_REVIEWER:
+        return _context_builder_base_default()  # reviewer is a cheap scan; default to context_builder
     return resolve_model_name()
 
 

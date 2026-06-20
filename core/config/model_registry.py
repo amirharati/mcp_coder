@@ -54,8 +54,7 @@ ROLES: tuple[str, ...] = (
 # behaviour: the cheap helpers all run on the context_builder model; spec review on
 # the review model.
 _ROLE_MODEL_ALIAS: dict[str, str] = {
-    ROLE_PLANNER_PASS: ROLE_CONTEXT_BUILDER,
-    ROLE_ARCHITECT: ROLE_CONTEXT_BUILDER,  # legacy alias
+    ROLE_ARCHITECT: ROLE_CONTEXT_BUILDER,  # legacy alias kept for backward compat
     ROLE_SPEC_VALIDATION: ROLE_CONTEXT_BUILDER,
     ROLE_WORKSPACE_SUMMARIZER: ROLE_CONTEXT_BUILDER,
     ROLE_SPEC_REVIEW: ROLE_REVIEW,
