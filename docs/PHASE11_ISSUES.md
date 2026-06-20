@@ -1,7 +1,7 @@
 # Phase 11 issues
 
 **Status:** **Active** — Phase 11 opened 2026-06-18.
-**Open:** none yet
+**Open:** P11-ISS-002 through P11-ISS-011 (6 new from timetracker dogfood 2026-06-19)
 **Promoted from backlog:** BL-351 (full), BL-521 (new), BL-354 (v0), BL-358 (v0), BL-512 (Stage 2), BL-522 (new) — see [PHASE11_MVP.md](./PHASE11_MVP.md)
 **Related PM board:** [PHASE11_MVP.md](./PHASE11_MVP.md)
 
@@ -48,6 +48,12 @@
 | P11-ISS-003 | open | medium | Supervisor LLM calls not emitted as `llm_call` trace events — supervisor `model_roles` entry has cost/model but no `role=supervisor` trace event; makes cost + latency invisible per turn | P11-002 logging | Fix: emit `llm_call(role=supervisor)` event in `DelegationSupervisor.evaluate()` |
 | P11-ISS-004 | open | medium | Human gate events not emitted as typed trace events — `supervisor_human_gate_opened` / `supervisor_human_gate_timeout` stored in action detail string rather than dedicated events per P11-004 spec | P11-004 logging | Fix: emit proper typed events from `SupervisedIO` escalation path |
 | P11-ISS-005 | **fixed** | high | Supervisor misclassifies "Add file to the chat?" as `unknown` risk → escalate; blocks every CLI delegation with SUPERVISED_EXEC=1 since no human is available to answer the gate | P11-002 classifier | Fixed: added `_FILE_TO_CHAT_RE` low-risk pattern in `supervised_io.py`; also aligned `confirm_ask()` kwargs with Aider API (`group`, `allow_never`); 15 tests pass |
+| P11-ISS-006 | open | **high** | `delegation_pipeline: {}` is empty in every delegation row — phase-level breakdown (ran/skipped/duration per phase) is never populated in `delegations.jsonl`; trace has the data but the structured summary field is always `{}` | cross-cutting | Found: timetracker dogfood 2026-06-19, all 6 delegations; fix: serialize pipeline phase summary from pipeline runner into delegation row on completion |
+| P11-ISS-007 | open | **high** | `success: false` despite executor writing files — if Aider makes a post-implementation comment after writing all files (e.g. "want me to run tests?"), the pipeline marks it as `clarification_requested` failure; 6 files were written but delegation shows error `"Aider requested clarification before implementing"` | P11-002 / engine | Found: delegation `54d12044`, 6 files written; fix: if `files_changed` is non-empty, treat post-work Aider questions as soft warning not hard failure |
+| P11-ISS-008 | open | medium | `reviewer_pass` never runs despite `reviewer_pass: true` in config — no `llm_call(role=reviewer_pass)` seen in any trace; delegation has `spec_path` but `context_mode: fallback`; reviewer probably requires compiled spec context | P11-005 | Found: timetracker dogfood 2026-06-19; investigate whether reviewer skip condition is tied to context_mode rather than presence of `files_changed` |
+| P11-ISS-009 | open | medium | `planner_pass` model resolution ignores env var at runtime — `MCP_CODER_PLANNER_PASS_MODEL=openrouter/anthropic/claude-sonnet-4` set in `.env` but planner ran gemini-2.5-flash; `policy_applied.sources.model = 'role_models'` confirms env lookup was bypassed; likely MCP server was started before env var was added (no hot-reload) | P11-008 / role_models | Found: delegation `54d12044`; fix: confirm env var name matches key in `_ROLE_MODEL_ENV`, add startup log for each resolved role model so mismatches are visible on launch |
+| P11-ISS-010 | open | low | `clarity_check` `llm_call` trace event has no structured `needs_clarification` field — decision must be inferred by parsing raw `response_body` text; makes programmatic log analysis fragile | P11-001 logging | Found: all 5 clarity-blocked delegations; fix: add `needs_clarification: bool` + `questions: list[str]` to `llm_call` event when `role=clarity_check` |
+| P11-ISS-011 | open | low | `context_mode: fallback` even when `spec_path` is explicitly provided — final timetracker delegation supplied `spec_path` yet context mode is `fallback`; spec wasn't compiled despite being passed | context compiler | Found: delegation `54d12044`; investigate spec compilation trigger condition when spec_path provided in `mcp_request` |
 
 ---
 
