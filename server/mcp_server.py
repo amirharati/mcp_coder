@@ -1453,6 +1453,7 @@ def delegate_to_agent(
             pipeline_recorder is not None
             and not review_target_files_error
             and spec_validation_enabled(ws)
+            and spec_read is not None  # spec_validation requires a loaded spec
         ):
             if host_transcript_text and host_transcript_text.strip():
                 pipeline_recorder.start("spec_validation")

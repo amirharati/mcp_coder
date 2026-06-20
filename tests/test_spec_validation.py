@@ -185,8 +185,13 @@ def _delegate_with_transcript(
 # --- config ---
 
 
-def test_spec_validation_default_off(tmp_path, monkeypatch):
+def test_spec_validation_default_on(tmp_path, monkeypatch):
     monkeypatch.delenv("MCP_CODER_SPEC_VALIDATION", raising=False)
+    assert spec_validation_enabled(tmp_path) is True
+
+
+def test_spec_validation_env_off(tmp_path, monkeypatch):
+    monkeypatch.setenv("MCP_CODER_SPEC_VALIDATION", "0")
     assert spec_validation_enabled(tmp_path) is False
 
 

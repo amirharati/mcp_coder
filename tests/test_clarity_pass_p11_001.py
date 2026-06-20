@@ -149,7 +149,7 @@ def _delegate(
     else:
         monkeypatch.setenv("MCP_CODER_CLARITY_PASS", clarity_env)
     if spec_validation_env is None:
-        monkeypatch.delenv("MCP_CODER_SPEC_VALIDATION", raising=False)
+        monkeypatch.setenv("MCP_CODER_SPEC_VALIDATION", "0")  # disable unless test explicitly wants it
     else:
         monkeypatch.setenv("MCP_CODER_SPEC_VALIDATION", spec_validation_env)
         yaml_bits.append("spec_validation: true\n")

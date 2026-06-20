@@ -45,12 +45,12 @@ def _resolve_flag(
 
 
 def spec_validation_enabled(workspace: str | Path) -> bool:
-    """Default False. Env MCP_CODER_SPEC_VALIDATION=1 then yaml spec_validation: true → True."""
+    """Default True. Env MCP_CODER_SPEC_VALIDATION=0 or yaml spec_validation: false → False."""
     return _resolve_flag(
         workspace,
         env_var="MCP_CODER_SPEC_VALIDATION",
         yaml_key="spec_validation",
-        default=False,
+        default=True,
     )
 
 
