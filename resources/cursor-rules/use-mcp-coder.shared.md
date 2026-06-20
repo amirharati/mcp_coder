@@ -16,6 +16,17 @@
 
 When `clarification_needed` is non-empty: answer each item in Cursor chat, update the spec (`revision++`) if needed, then retry `delegate_to_agent`. Do **not** implement on disk yourself.
 
+## Clarity check (automatic — never disable)
+
+A pre-delegation clarity check runs automatically before every `delegate_to_agent` call. It ensures the task is specific enough for the executor to proceed.
+
+**You must not** disable or bypass it (no `clarity_pass: false` in config, no `MCP_CODER_CLARITY_PASS=0` in env).
+
+When it returns `clarification_needed`:
+- Answer the listed questions directly in your `context_summary` or by updating the spec.
+- Re-call `delegate_to_agent` immediately — do **not** implement yourself.
+- The bar is **"clear enough to start"**, not "fully specified". If the task can be reasonably attempted with room to discover details, it passes. Only genuinely ambiguous tasks are blocked (unknown target file, contradictory scope, no acceptance signal).
+
 ## Supervisor escalation (`needs_input` + human gate)
 
 When `delegate_to_agent` returns `ok: false` and the response includes a `question` field (or `needs_input: true` with question text), the supervisor paused the executor mid-run waiting for a human decision.
