@@ -206,6 +206,23 @@ def _get_delegation_history_fn(workspace_path, project_key, limit=5) -> str:
     return json.dumps(summaries, ensure_ascii=False)[:_TOOL_RESULT_BUDGET]
 
 
+def _get_reviewer_findings_fn(project_state, files_arg: str | None = None) -> str:
+    """Return reviewer findings touching the given files (or all if files not specified)."""
+    import json
+
+    findings = project_state.reviewer_findings_summary
+    if files_arg:
+        target_files = {f.strip() for f in files_arg.split(",") if f.strip()}
+        findings = [
+            f
+            for f in findings
+            if any(tf in (f.get("files") or []) for tf in target_files)
+            or any(tf in (f.get("spec_path") or "") for tf in target_files)
+        ]
+    results = list(reversed(findings[-10:]))
+    return json.dumps(results, ensure_ascii=False)[:_TOOL_RESULT_BUDGET]
+
+
 def _read_file_fn(workspace_path, path) -> str:
     rel = str(path or "")
     if ".." in rel.replace("\\", "/").split("/"):
@@ -285,6 +302,26 @@ def build_phase12_tool_runner(
             "required": ["path"],
         },
         fn=lambda path: _read_file_fn(workspace_path, path),
+    )
+
+    runner.register_tool(
+        name="get_reviewer_findings",
+        description=(
+            "Get reviewer findings from past delegations on this project. "
+            "Optionally filter by comma-separated file paths. "
+            "Use when deciding whether to rerun or escalate after a reviewer flagged issues."
+        ),
+        schema={
+            "type": "object",
+            "properties": {
+                "files": {
+                    "type": "string",
+                    "description": "Comma-separated file paths to filter by (optional)",
+                }
+            },
+            "required": [],
+        },
+        fn=lambda files=None: _get_reviewer_findings_fn(project_state, files),
     )
 
     return runner

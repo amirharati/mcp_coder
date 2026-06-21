@@ -337,8 +337,62 @@ Add at least **7 tests**:
 
 ## § Results
 
-*(Worker fills this in when done.)*
+**Date completed:** 2026-06-21
 
-**Date completed:**  
-**Tests:**  
+**What was implemented:**
+
+1. **`core/engine/reviewer_findings_classifier.py`** (new)
+   - `ClassifiedFinding(text, severity)` dataclass; `_SEVERITIES`, `_PROMOTE_THRESHOLD`
+     module constants.
+   - `classify_reviewer_findings(note, *, spec_contract, workspace_path, delegation_id)`
+     builds a compact prompt (note capped to 1500 chars, spec to 400 chars), calls
+     `run_owned_helper_completion` with `ROLE_SUPERVISOR` model. Returns `[]` for empty
+     note. Falls back to `[ClassifiedFinding(text=note, severity="advisory")]` on:
+     `provider_hint_for_model`, `completion.error`, empty text, JSON parse failure, or any
+     exception. Caps at 10 findings.
+   - `_parse_findings` uses `re.search(r"\[.*\]", text, re.DOTALL)` to extract the JSON
+     block; invalid severities are normalised to `"advisory"`.
+   - Module-level imports (`run_owned_helper_completion`, `provider_hint_for_model`,
+     `apply_provider_env`, `resolve_role_model_name`, `ROLE_SUPERVISOR`) so tests can patch
+     cleanly.
+
+2. **`core/state/project_state.py`**
+   - Added `_FINDINGS_SUMMARY_MAX = 50` module constant.
+   - Added `add_reviewer_finding(text, severity, delegation_id, spec_path, files)` method:
+     appends `{text, severity, delegation_id, spec_path, files[:10], timestamp}` to
+     `reviewer_findings_summary`, then slices to the last `_FINDINGS_SUMMARY_MAX` entries.
+
+3. **`server/mcp_server.py`** — inserted promotion block immediately after
+   `context_block["reviewer_pass"] = reviewer_pass_audit`. Guard condition checks
+   `supervisor_agent is not None`, `reviewer_pass_ran`, `reviewer_pass_outcome == "issues"`,
+   `reviewer_pass_note`, and `supervisor_agent._project_state is not None`. Calls
+   `classify_reviewer_findings()`, loops findings calling `add_reviewer_finding()` on each
+   and `add_risk()` for notable/critical. Emits `reviewer_findings_classified` and (when
+   `promoted_count > 0`) `project_state_risks_updated` via `_supervisor_event_sink`.
+   Does **not** call `save()` — `supervisor_agent.finish()` handles that.
+
+4. **`core/engine/supervisor_tool_runner.py`**
+   - Added `_get_reviewer_findings_fn(project_state, files_arg)` helper: filters
+     `reviewer_findings_summary` by comma-separated file paths (membership in `files` list
+     or substring of `spec_path`), returns last 10 most-recent-first as JSON, capped to
+     `_TOOL_RESULT_BUDGET`.
+   - Registered `get_reviewer_findings` as a fourth tool in `build_phase12_tool_runner()`.
+
+**Tests:**
+- New `tests/test_reviewer_findings_p12_004.py` — 7 tests (all checklist items).
+- Required suite: `pytest -q tests/test_supervisor_state_p12_001.py
+  tests/test_supervisor_agent_p12_001.py tests/test_project_state_p12_002.py
+  tests/test_delegate_tool.py tests/test_supervisor_tool_runner_p12_003.py
+  tests/test_reviewer_findings_p12_004.py` → **71 passed**.
+
 **Notes / blockers:**
+- `apply_provider_env` is patched alongside `run_owned_helper_completion` and
+  `provider_hint_for_model` in tests to avoid real env-var side-effects.
+- The spec's prompt template uses `{note[:1500]}` inside an f-string; implemented
+  as `.format(note=note[:1500], spec_block=...)` for correctness.
+- `get_reviewer_findings` tool `fn` uses `files=None` default so it works both with
+  and without the `files` parameter from the LLM.
+
+**Suggested for master session:**
+- Phase 13 could add a `findings_since` timestamp filter to `get_reviewer_findings`
+  so the Supervisor can focus on findings from the current sprint.

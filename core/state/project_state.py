@@ -12,6 +12,7 @@ from core.storage.paths import mcp_coder_home
 logger = logging.getLogger(__name__)
 
 _RISK_SEVERITIES = {"advisory", "notable", "critical"}
+_FINDINGS_SUMMARY_MAX = 50
 
 
 class ProjectStateCorrupt(Exception):
@@ -103,6 +104,27 @@ class ProjectState:
                 "timestamp": _utc_now_iso(),
             }
         )
+
+    def add_reviewer_finding(
+        self,
+        text: str,
+        severity: str,
+        delegation_id: str,
+        spec_path: str | None = None,
+        files: list[str] | None = None,
+    ) -> None:
+        """Append to reviewer_findings_summary (bounded to _FINDINGS_SUMMARY_MAX)."""
+        entry = {
+            "text": text,
+            "severity": severity,
+            "delegation_id": delegation_id,
+            "spec_path": spec_path or "",
+            "files": list(files or [])[:10],
+            "timestamp": _utc_now_iso(),
+        }
+        self.reviewer_findings_summary.append(entry)
+        if len(self.reviewer_findings_summary) > _FINDINGS_SUMMARY_MAX:
+            self.reviewer_findings_summary = self.reviewer_findings_summary[-_FINDINGS_SUMMARY_MAX:]
 
     def update_hot_areas(self, files_changed: list[str]) -> None:
         max_items = _resolve_hot_areas_max()

@@ -2853,6 +2853,56 @@ def delegate_to_agent(
         if reviewer_pass_audit is not None:
             context_block["reviewer_pass"] = reviewer_pass_audit
 
+        # P12-004: promote reviewer findings to project state
+        if (
+            supervisor_agent is not None
+            and reviewer_pass_ran
+            and reviewer_pass_outcome == "issues"
+            and reviewer_pass_note
+            and supervisor_agent._project_state is not None
+        ):
+            from core.engine.reviewer_findings_classifier import classify_reviewer_findings
+
+            findings = classify_reviewer_findings(
+                reviewer_pass_note,
+                spec_contract=str(spec_read.sections.get("Contract", ""))[:400]
+                    if spec_read else None,
+                workspace_path=ws,
+                delegation_id=delegation_id,
+            )
+
+            promoted_count = 0
+            for finding in findings:
+                supervisor_agent._project_state.add_reviewer_finding(
+                    text=finding.text,
+                    severity=finding.severity,
+                    delegation_id=delegation_id,
+                    spec_path=spec_rel_path,
+                    files=list(files_changed or [])[:10],
+                )
+                if finding.severity in ("notable", "critical"):
+                    supervisor_agent._project_state.add_risk(
+                        text=finding.text,
+                        severity=finding.severity,
+                        source_delegation_id=delegation_id,
+                    )
+                    promoted_count += 1
+
+            _supervisor_event_sink({
+                "type": "reviewer_findings_classified",
+                "finding_count": len(findings),
+                "promoted_to_risks": promoted_count,
+                "severities": [f.severity for f in findings],
+                "delegation_id": delegation_id,
+            })
+            if promoted_count > 0:
+                _supervisor_event_sink({
+                    "type": "project_state_risks_updated",
+                    "new_risks": promoted_count,
+                    "total_open_risks": len(supervisor_agent._project_state.open_risks),
+                    "delegation_id": delegation_id,
+                })
+
         if supervisor_agent is not None:
             # Translate the reviewer signal into the agent's per-turn check summary, then
             # let the agent emit supervisor_turn_end + supervisor_decision and close the
