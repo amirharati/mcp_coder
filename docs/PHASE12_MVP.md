@@ -106,7 +106,9 @@ Phase 12:  SupervisorAgent maintains project memory + context + continuity acros
 | D-P12-3 | **Continuation brief is assembled by the Supervisor, not Aider.** After each completed executor turn, the Supervisor reads `files_changed` + `output_tail` + `reviewer_findings` and writes a structured brief. This brief is prepended to the next turn's context. Aider never "knows" it is in a multi-turn delegation — the Supervisor manages that abstraction. |
 | D-P12-4 | **`resume_token` on `delegate_to_agent` is optional and backward-compatible.** If absent: fresh delegation (current behavior). If present: load state and resume. Invalid/expired token: return `error: resume_token_expired` with clear message. Token TTL configurable via `MCP_CODER_RESUME_TOKEN_TTL` (default `86400` seconds). |
 | D-P12-5 | **Reviewer findings classification is Supervisor-owned.** After each `reviewer_pass`, the Supervisor classifies findings as `advisory | notable | critical`. Only `notable` and `critical` are promoted to `project_state.open_risks`. `advisory` findings stay in the spec report only. Classification prompt uses spec contract as reference to calibrate severity. |
-| D-P12-6 | **Planner reads project state as first-class context in Phase 12 (v1).** Before the planner LLM call, inject a `## Project state` section (compressed summary of decisions + open risks relevant to the current spec's files). Full Planner-as-agent evolution (BL-525 complete) deferred; Phase 12 delivers the "informed Planner" slice only. |
+| D-P12-6 | **Planner v1 uses pre-injection, not tool-calling loop.** P12-005 injects a `## Project state` section into the existing planner prompt before the LLM call (compressed decisions + open risks touching current spec files, max ~800 tokens). No `SupervisorToolRunner` wrapping for the Planner in Phase 12. Full tool-calling Planner is BL-525 complete / Phase 13. After planning, Supervisor extracts explicit decisions from plan text and writes them back to project state. |
+| D-P12-7 | **get_delegation_history uses workspace_history.db via list_delegations().** No new delegation index needed. Tool queries `snapshots` table filtered by `spec_path`, returns last N compact summaries. get_diff is out of Phase 12 scope — files_changed list + read_file are sufficient for supervisor routing decisions. |
+| D-P12-8 | **SupervisorToolRunner extends gateway.complete() with tools= param.** Add `tools: list | None` to `gw.complete()` and `tool_calls: list | None` to `GatewayCompletion`. SupervisorToolRunner calls gw.complete() directly. All other helper LLM calls unchanged. Text-based tool protocol (model-emits-JSON) not used. |
 
 ---
 
@@ -283,17 +285,17 @@ This is the structural foundation. All other Phase 12 items (project state, cont
 ### P12-005 — Planner reads project state *(BL-525 v1)*
 
 **Status:** `pending`
-**Goal:** Make the Planner context-aware of project history before it plans, using the same tool pattern as the Supervisor. The Planner call gets tier-1 base context (spec + task) plus access to `get_project_state()` and `get_reviewer_findings()` as tool calls. After planning, the Supervisor extracts key decisions and writes them back to project state.
+**Goal:** Make the Planner context-aware of project history before it plans, using simple pre-injection (D-P12-6). A `## Project state` section is added to the existing planner prompt: compressed decisions and open risks from `project_state.json` that touch the current spec's files. After planning, the Supervisor extracts explicit decisions from the plan text and writes them back to project state. No `SupervisorToolRunner` wrapping — that's BL-525 complete / Phase 13.
 
 **Scope:**
-- Planner pass uses `SupervisorToolRunner` (same mechanism as P12-003) with tier-1: spec + task, tier-2: project state + reviewer findings tools
-- `planner_context_sources: list[str]` field in planner trace event — lists which tools were called
-- After planning: Supervisor extracts explicit decisions from plan text → `project_state.add_decision()`
-- Tests: planner calls `get_project_state` when state non-empty; `planner_context_sources` populated; decisions extracted and written back; empty state → planner runs normally
+- Before the planner LLM call in `core/engine/planner_pass_llm.py` (or `architect_pass_llm.py`): load `ProjectState`, extract entries touching current spec's `Files` section (file-path matching), compress to `## Project state` section (max ~800 tokens), prepend to prompt
+- `planner_context_sources: list[str]` field added to the planner `llm_call` trace event (values: `["project_state"]` when injected, `[]` when empty)
+- After planner LLM returns: `SupervisorDecisionExtractor._extract_decisions(plan_text)` — light regex/heuristic extraction of explicit decisions from plan text; `project_state.add_decision(text, delegation_id)` for each; `project_state.save()`
+- Tests: project state injected into prompt when non-empty; empty state → prompt unchanged, no error; file-path matching returns only relevant entries; decisions extracted and written back; `planner_context_sources` reflects what was actually included
 
 **Acceptance:**
-- Third delegation on a project: `planner_context_sources` includes `"get_project_state"` in trace
-- `project_state.decisions[]` grows after each delegation where planner ran and found something to extract
+- Third delegation on a project: `planner_context_sources` includes `"project_state"` in trace
+- `project_state.decisions[]` grows after each delegation where planner ran and found extractable decisions and found something to extract
 
 ---
 

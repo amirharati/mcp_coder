@@ -21,12 +21,11 @@
 
 | Backlog | Milestone | Scope in Phase 12 | Full vision deferred |
 |---------|-----------|-------------------|----------------------|
-| **BL-540** | **P12-001** | Project state store: schema, load/save, Supervisor reads/writes per delegation | Full multi-session corpus, RAG index → Phase 13 |
-| **BL-529** | **P12-002** | Supervisor context window: task + spec + output tail + project state summary | Full HelperToolRunner sidecar (BL-530) → Phase 13 |
-| **BL-543** | **P12-003** | Continuation brief (turn handoff) + confirm_ask enrichment from project state | Full context router with RAG pull (BL-542 full) → Phase 13 |
-| **BL-544** | **P12-004** | Pause/resume: resume_token, session state serialization, skip-completed-stages on resume | Late-answer resume (BL-528 built on BL-544) → Phase 13 |
-| **BL-541** | **P12-005** | Reviewer findings classified + promoted to project state; Planner sees findings | Tier-2 epic-boundary review → Phase 13 |
-| **BL-525** / **BL-542** | **P12-006** | Planner reads project state + reviewer findings; decisions written back after planning | Full Planner-as-real-agent (multi-turn planner, mutable plan) → Phase 13 |
+| **BL-544** | **P12-001** | Stateful SupervisorAgent + pause/resume: `SupervisorState`, session serialization, `resume_token` on `delegate_to_agent`, skip-completed-stages on resume. Gateway not changed here. | Late-answer resume (BL-528 built on BL-544) → Phase 13 |
+| **BL-540** | **P12-002** | Persistent project state store: schema, load/save, Supervisor reads/writes per delegation; `ProjectState` built on `ProjectKeyResolver` from P12-001 | Full multi-session corpus, RAG index → Phase 13 |
+| **BL-530/542** | **P12-003** | `SupervisorToolRunner`: two-tier context model, tool-calling loop (extends `gw.complete()` with `tools=`), Phase 12 tool set: `get_project_state`, `get_delegation_history` (via history_db), `read_file`. Tier-1 continuation brief assembly from `completed_turn_artifacts`. | `get_diff`, `search_past_decisions` (RAG), full HelperToolRunner for other roles → Phase 13 |
+| **BL-541** | **P12-004** | Reviewer findings classified + promoted to project state; `get_reviewer_findings` tool available to SupervisorToolRunner | Tier-2 epic-boundary review → Phase 13 |
+| **BL-525** | **P12-005** | Planner reads project state via pre-injection (D-P12-6); decisions extracted and written back | Full tool-calling Planner (BL-525 complete) → Phase 13 |
 
 ---
 
