@@ -10,6 +10,7 @@ imports Aider APIs.
 from __future__ import annotations
 
 from collections.abc import Callable
+from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
@@ -19,6 +20,28 @@ from core.observability.gateway import GatewayCompletion, get_llm_gateway
 # Per-tool result budget in characters. Module constant for Phase 12 (D-P12-8);
 # Phase 13 may make it configurable via env.
 _TOOL_RESULT_BUDGET = 2000
+
+
+@dataclass
+class SupervisorToolRunnerResult:
+    text: str
+    tokens: dict[str, Any] = field(default_factory=dict)
+    llm_duration_ms: int = 0
+    llm_calls: int = 0
+
+
+def _merge_tokens(acc: dict[str, Any], cur: dict[str, Any]) -> dict[str, Any]:
+    """Sum numeric input/output/total; keep source='supervisor_tool_runner'."""
+    out: dict[str, Any] = dict(acc)
+    for key in ("input", "output", "total"):
+        a = acc.get(key)
+        c = cur.get(key)
+        if isinstance(c, (int, float)):
+            out[key] = (int(a) if isinstance(a, (int, float)) else 0) + int(c)
+        elif a is not None:
+            out[key] = a
+    out["source"] = "supervisor_tool_runner"
+    return out
 
 
 class SupervisorToolRunner:
@@ -63,12 +86,28 @@ class SupervisorToolRunner:
 
     def run(self, system_prompt: str, messages: list[dict]) -> str:
         """Run the tool-calling loop. Returns the Supervisor's final text response."""
+        return self.run_with_metrics(system_prompt, messages).text
+
+    def run_with_metrics(
+        self, system_prompt: str, messages: list[dict]
+    ) -> SupervisorToolRunnerResult:
+        """Run the tool-calling loop, returning text and aggregated LLM metrics."""
         gw = get_llm_gateway()
         all_messages: list[dict] = []
         if system_prompt:
             all_messages.append({"role": "system", "content": system_prompt})
         all_messages.extend(list(messages))
         tools_spec = self._build_tools_spec()
+
+        agg_tokens: dict[str, Any] = {}
+        agg_duration_ms = 0
+        agg_calls = 0
+
+        def _absorb(c: GatewayCompletion) -> None:
+            nonlocal agg_tokens, agg_duration_ms, agg_calls
+            agg_tokens = _merge_tokens(agg_tokens, c.tokens or {})
+            agg_duration_ms += c.duration_ms
+            agg_calls += 1
 
         for _round in range(self._max_tool_rounds):
             completion = gw.complete(
@@ -77,12 +116,23 @@ class SupervisorToolRunner:
                 role=ROLE_SUPERVISOR,
                 tools=tools_spec if tools_spec else None,
             )
+            _absorb(completion)
             if completion.error:
-                return ""
+                return SupervisorToolRunnerResult(
+                    text="",
+                    tokens=agg_tokens,
+                    llm_duration_ms=agg_duration_ms,
+                    llm_calls=agg_calls,
+                )
 
             if not completion.tool_calls:
                 # Final answer — no tool calls requested.
-                return completion.text
+                return SupervisorToolRunnerResult(
+                    text=completion.text,
+                    tokens=agg_tokens,
+                    llm_duration_ms=agg_duration_ms,
+                    llm_calls=agg_calls,
+                )
 
             # Append the assistant's tool-call message before the results.
             all_messages.append(
@@ -110,7 +160,13 @@ class SupervisorToolRunner:
             role=ROLE_SUPERVISOR,
             tools=None,
         )
-        return completion.text
+        _absorb(completion)
+        return SupervisorToolRunnerResult(
+            text=completion.text,
+            tokens=agg_tokens,
+            llm_duration_ms=agg_duration_ms,
+            llm_calls=agg_calls,
+        )
 
     def _build_tools_spec(self) -> list[dict]:
         """Build the OpenAI function-calling tool spec from the registry."""

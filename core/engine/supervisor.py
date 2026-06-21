@@ -204,13 +204,16 @@ class DelegationSupervisor:
                 event_sink=None,
                 model=model,
             )
-            text = runner.run(
+            tool_result = runner.run_with_metrics(
                 system_prompt="",
                 messages=[{"role": "user", "content": prompt}],
             )
+            text = tool_result.text
+            runner_tokens = tool_result.tokens
             completion_error: str | None = None
         except Exception as exc:
             text = ""
+            runner_tokens = {}
             completion_error = f"{type(exc).__name__}: {exc}"
         duration_ms = int((time.perf_counter() - t0) * 1000)
         self._total_duration_ms += duration_ms
@@ -236,13 +239,14 @@ class DelegationSupervisor:
         if not reasoning:
             reasoning = f"supervisor {decision}"
 
+        self._accumulate_tokens(runner_tokens)
         sd = SupervisorDecision(
             decision=decision,
             reasoning=reasoning,
             duration_ms=duration_ms,
             risk_tier=risk_tier,
             model=model,
-            tokens={},
+            tokens=runner_tokens,
         )
         self._emit_llm_call_event(
             question=question,

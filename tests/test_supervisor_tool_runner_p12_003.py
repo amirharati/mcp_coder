@@ -9,6 +9,7 @@ import pytest
 from core.engine.supervisor_tool_runner import (
     _TOOL_RESULT_BUDGET,
     SupervisorToolRunner,
+    SupervisorToolRunnerResult,
     build_phase12_tool_runner,
 )
 from core.observability.gateway import (
@@ -33,15 +34,19 @@ class _ScriptedGateway:
         return GatewayCompletion(text="", model=model, tokens={}, duration_ms=0)
 
 
-def _text(text: str) -> GatewayCompletion:
-    return GatewayCompletion(text=text, model="test/model", tokens={}, duration_ms=1)
+def _text(text: str, tokens: dict | None = None) -> GatewayCompletion:
+    return GatewayCompletion(
+        text=text, model="test/model", tokens=tokens or {}, duration_ms=1
+    )
 
 
-def _tool_call(call_id: str, name: str, arguments: str) -> GatewayCompletion:
+def _tool_call(
+    call_id: str, name: str, arguments: str, tokens: dict | None = None
+) -> GatewayCompletion:
     return GatewayCompletion(
         text="",
         model="test/model",
-        tokens={},
+        tokens=tokens or {},
         duration_ms=1,
         tool_calls=[{"id": call_id, "name": name, "arguments": arguments}],
     )
@@ -194,3 +199,50 @@ def test_supervisor_tool_call_event_emitted():
     assert len(tool_events) == 1
     assert tool_events[0]["tool"] == "noop"
     assert tool_events[0]["result_chars"] == 2
+
+
+# ── 9 (P12-ISS-004) ───────────────────────────────────────────────────────────
+
+
+def test_run_with_metrics_aggregates_tokens_across_rounds():
+    call1_tokens = {"input": 10, "output": 5, "total": 15}
+    call2_tokens = {"input": 4, "output": 6, "total": 10}
+    gw = _ScriptedGateway(
+        [
+            _tool_call("c1", "noop", "{}", tokens=call1_tokens),
+            _text("final answer", tokens=call2_tokens),
+        ]
+    )
+    set_llm_gateway(gw)
+    runner = SupervisorToolRunner(model="test/model", workspace_path="/tmp/ws")
+    runner.register_tool("noop", "noop", {"type": "object", "properties": {}}, lambda: "ok")
+
+    result = runner.run_with_metrics(
+        system_prompt="sys", messages=[{"role": "user", "content": "go"}]
+    )
+
+    assert isinstance(result, SupervisorToolRunnerResult)
+    assert result.text == "final answer"
+    assert result.llm_calls == 2
+    assert result.tokens.get("input") == 14
+    assert result.tokens.get("output") == 11
+    assert result.tokens.get("total") == 25
+    assert result.tokens.get("source") == "supervisor_tool_runner"
+
+
+# ── 10 (P12-ISS-004) ──────────────────────────────────────────────────────────
+
+
+def test_run_backcompat_returns_text_only():
+    set_llm_gateway(_ScriptedGateway([_text("## Action: DONE")]))
+    runner = SupervisorToolRunner(model="test/model", workspace_path="/tmp/ws")
+    text_result = runner.run(
+        system_prompt="sys", messages=[{"role": "user", "content": "hi"}]
+    )
+    # run() must equal run_with_metrics().text
+    set_llm_gateway(_ScriptedGateway([_text("## Action: DONE")]))
+    metrics_result = runner.run_with_metrics(
+        system_prompt="sys", messages=[{"role": "user", "content": "hi"}]
+    )
+    assert isinstance(text_result, str)
+    assert text_result == metrics_result.text

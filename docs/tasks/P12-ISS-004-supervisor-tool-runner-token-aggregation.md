@@ -176,8 +176,14 @@ pytest -q tests/test_supervisor_tool_runner_p12_003.py tests/test_supervisor_tok
 
 ## § Results
 
-*(Worker fills this in when done.)*
+**Date completed:** 2026-06-21
 
-**Date completed:**  
-**Tests:**  
+**Tests:** 13 passed — `tests/test_supervisor_tool_runner_p12_003.py` (10 tests, +2 new for P12-ISS-004) + `tests/test_supervisor_token_accounting_p12_iss_004.py` (3 new tests).
+
 **Notes / blockers:**
+
+- Added `SupervisorToolRunnerResult` dataclass and `_merge_tokens()` helper to `core/engine/supervisor_tool_runner.py`.
+- Added `run_with_metrics()` that aggregates `input`/`output`/`total` tokens and `llm_duration_ms` across every `gw.complete()` call in the tool loop (including the final no-tools fallback call). `run()` preserved as a backward-compatible text-only wrapper (`return self.run_with_metrics(...).text`).
+- `_llm_decide()` in `supervisor_agent.py` now uses `run_with_metrics()` and sets `SupervisorTurnDecision.tokens` from the runner result instead of `{}`.
+- `evaluate()` in `supervisor.py` now uses `run_with_metrics()`, sets `SupervisorDecision.tokens`, and calls `self._accumulate_tokens(runner_tokens)` so `usage_record` correctly sums across multiple `evaluate()` calls.
+- Patch targets in new tests: `core.config.providers.apply_provider_env` (not `supervisor_agent.*`) and `core.engine.supervisor_tool_runner.build_phase12_tool_runner` (source module), because those symbols are locally imported inside the function bodies.

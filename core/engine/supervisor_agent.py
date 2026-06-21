@@ -549,10 +549,11 @@ class SupervisorAgent:
                 event_sink=self._event_sink,
                 model=model,
             )
-            text = runner.run(
+            tool_result = runner.run_with_metrics(
                 system_prompt=_DECISION_PREAMBLE,
                 messages=[{"role": "user", "content": prompt}],
             )
+            text = tool_result.text
             duration_ms = int((time.perf_counter() - t0) * 1000)
             action = _parse_decision_action(text)
             if action is None:
@@ -565,7 +566,7 @@ class SupervisorAgent:
                 action=action,
                 reason=reason,
                 model=model,
-                tokens={},
+                tokens=tool_result.tokens,
                 duration_ms=duration_ms,
             )
         except Exception:
