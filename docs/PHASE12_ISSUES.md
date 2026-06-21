@@ -9,7 +9,7 @@
 # Phase 12 issues
 
 **Status:** **Active** — Phase 12 opened 2026-06-20.
-**Open:** P12-ISS-003, P12-ISS-004
+**Open:** P12-ISS-004
 **Promoted from backlog:** BL-540 (project state), BL-529 (supervisor context), BL-543 (context lifecycle), BL-544 (pause/resume), BL-541 (reviewer feedback loop), BL-525 v1 / BL-542 (planner project-aware)
 **Related PM board:** [PHASE12_MVP.md](./PHASE12_MVP.md)
 
@@ -35,7 +35,7 @@
 |----|--------|----------|---------|-----------|-------|
 | **P12-ISS-001** | **closed** | medium | `resume_token` should be internal; host should not need to pass it | P12-001 | Fixed in commit 16dfe7b |
 | **P12-ISS-002** | **closed** | high | `SupervisorAgent` recreated per delegation — should be a long-lived singleton per `project_key` | pre-P12-003 | Fixed in commit d8ff46c |
-| **P12-ISS-003** | **open** | low | Resume early-return path passes `mcp_session_id=None` to `_handle_resume`; storage not yet created at that code point | post-P12-003 | See note below |
+| **P12-ISS-003** | **closed** | low | Resume early-return path passes `mcp_session_id=None` to `_handle_resume`; storage not yet created at that code point | post-P12-003 | Fixed in commit 74d6f09 |
 | **P12-ISS-004** | **open** | low | `SupervisorToolRunner` multi-round LLM calls not rolled into supervisor decision token totals | Phase 13 | See note below |
 
 ---
@@ -170,12 +170,15 @@ therefore under-count supervisor LLM cost when tools are used.
 **Timing:** defer until after Phase 12 milestones ship; natural fit with D-ARCH-10
 (multi-model Supervisor observability).
 
+**Spec:** [P12-ISS-004](./tasks/P12-ISS-004-supervisor-tool-runner-token-aggregation.md)
+
 ---
 
 ## Changelog
 
 | Date | Event |
 |------|-------|
+| 2026-06-21 | P12-ISS-003 closed — resume branch moved after session acquisition; `_handle_resume` now receives acquired `mcp_session_id` (commit 74d6f09). |
 | 2026-06-21 | P12-ISS-004 filed — SupervisorToolRunner multi-round token totals not in supervisor decision records; Phase 13 observability cleanup. |
 | 2026-06-21 | P12-ISS-003 filed — resume early-return passes mcp_session_id=None; low-priority follow-up after P12-003. |
 | 2026-06-21 | P12-ISS-002 closed — singleton agent + Aider session fix (commit d8ff46c). |
