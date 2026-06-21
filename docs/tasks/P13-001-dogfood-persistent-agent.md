@@ -236,21 +236,33 @@ Steps 3–4 spec bodies are in the previous version of this doc — keep in mast
 
 ## § Results
 
-**Date:**  
-**A0:**  
-**CLI delegation IDs:**  
-**Cursor delegation IDs:**  
+**Date:** 2026-06-21  
+**Workspace:** `/tmp/mcp_p13_dogfood` (ephemeral; not in repo)  
+**A0 pytest:** ✅ 87 passed (prior session)  
+**A1 smoke:** skipped  
+**CLI delegation IDs:**
+- `f5fbc2bd-91fa-4258-b70a-31813a7edf77` — del 1 models — **success**
+- `db96b1ce-e5ed-490f-84aa-606282bfdf8d` — del 2 storage — **needs_input** (executor stall; storage.py partially written)
+
+**Part B Cursor:** not run yet
 
 ### Checklist
 
 | delegation_id | project_state_loaded | project_state_saved | planner project_state | notes |
 |---------------|---------------------|---------------------|----------------------|-------|
+| f5fbc2bd | ✅ | ✅ | n/a | reviewer false critical on Habit |
+| db96b1ce | ✅ (2 prior risks) | ✅ | ✅ in planner prompt | exec failed; memory worked |
 
 ### Issues
 
 | ID | Severity | Summary | Disposition |
 |----|----------|---------|-------------|
+| P13-ISS-001 | medium | project_key `mcp-coder/specs` | fix P13-004 |
+| P13-ISS-002 | low | epic stem `tasks/p13` | defer + docs |
+| P13-ISS-003 | low | reviewer false critical | defer |
 
 ### Follow-ups (P13-003 / P13-004)
 
-- 
+- Fix ISS-001 or use `MCP_CODER_PROJECT_KEY` before Cursor epic
+- Integration test for cross-delegation project_state
+- Cursor Part B after workaround
