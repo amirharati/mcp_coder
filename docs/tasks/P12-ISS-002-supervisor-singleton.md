@@ -228,12 +228,71 @@ No new trace events required. Existing `supervisor_loop_start`, `supervisor_loop
 
 ---
 
+### 3. `server/mcp_server.py` — fix stale Aider session on pause/resume (BL-545 interim)
+
+This is a small but important fix that falls naturally in this spec since we're already
+touching the pause and resume paths.
+
+**Problem:** When a delegation pauses (`needs_input`), the Aider Coder used for that turn
+stays cached in `executor_cache._CODERS[mcp_session_id]` (the pre-pause state). The resume
+turn always uses `mcp_session_id=None` (creates a fresh uncached Coder). The next normal
+delegation after resume then picks up the stale pre-pause Coder — a conversation history
+gap.
+
+**Fix A — evict Coder on pause:**
+
+In the code path where the Supervisor returns `outcome="needs_input"` (pause), call:
+
+```python
+from core.session.executor_cache import drop_coder
+if storage.mcp_session_id:
+    drop_coder(storage.mcp_session_id)
+```
+
+This ensures the next delegation after a resume starts with a fresh Coder rather than
+picking up the stale pre-pause one.
+
+**Fix B — pass `mcp_session_id` to `_handle_resume`:**
+
+Update `_handle_resume` signature to accept `mcp_session_id: str | None` and pass it
+through to `engine.run()` instead of the hardcoded `None`:
+
+```python
+def _handle_resume(
+    state: SupervisorState,
+    answer: str,
+    task: str,
+    ctx: Context | None,
+    mcp_session_id: str | None = None,   # ← add this
+) -> str:
+    ...
+    def _executor_fn(_turn_index: int, correction_note: str | None) -> ExecutionResult:
+        ...
+        return engine.run(
+            prompt,
+            target_files,
+            workspace_path=ws,
+            mcp_session_id=mcp_session_id,   # ← was hardcoded None
+        )
+```
+
+Pass `storage.mcp_session_id` when calling `_handle_resume` from `delegate_to_agent`.
+
+This allows the resume turn to benefit from `align_host` Coder warmth (repo map cache)
+when the same host session is still active, consistent with normal delegation behaviour.
+
+**Note:** The full Supervisor-owned session lifecycle (Supervisor decides when to reset via
+`ExecutorFn` `reset_session` hint) is BL-545, deferred to end of Phase 12 / Phase 13.
+
+---
+
 ## What is NOT in scope
 
 - Context pipeline skip (clarity / context_compile / planner) — future optimization; the
   per-delegation pipeline still runs fully for correctness.
 - Registry eviction / size limits — not needed; MCP server is per-workspace, small N.
 - Thread safety / locking — MCP stdio is single-threaded.
+- Full BL-545 `ExecutorFn reset_session` hint — Phase 13.
 - CLI changes — `delegate_to_agent` is the only entry point that matters here.
 
 ---
@@ -252,6 +311,10 @@ No new trace events required. Existing `supervisor_loop_start`, `supervisor_loop
 - [ ] `_handle_resume` stores the resumed agent in `_SUPERVISOR_REGISTRY`.
 - [ ] `project_state_loaded` trace event fires only once per project_key per process
   lifetime (cold start), not on every delegation.
+- [ ] On `needs_input` outcome, `drop_coder(storage.mcp_session_id)` is called so the
+  next delegation after a resume doesn't pick up the stale pre-pause Coder.
+- [ ] `_handle_resume` accepts `mcp_session_id` param and passes it to `engine.run()`
+  instead of the hardcoded `None`.
 - [ ] All existing tests still pass (`pytest -q tests/test_supervisor_state_p12_001.py
   tests/test_supervisor_agent_p12_001.py tests/test_project_state_p12_002.py
   tests/test_delegate_tool.py`).

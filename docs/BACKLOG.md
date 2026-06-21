@@ -2294,6 +2294,51 @@ delegate_to_agent(resume_token="sv_abc123", answer="yes, also add rate limiting"
 
 ---
 
+### BL-545: Supervisor-owned executor session lifecycle
+
+**Status:** `idea` — 2026-06-21. **End of Phase 12 / Phase 13 candidate.**
+**Related:** BL-544 (pause/resume), BL-543 (context lifecycle), P12-ISS-002 (singleton Supervisor).
+
+**Problem:**
+Aider session lifetime is currently controlled by `session_policy` (env var / workspace config) keyed on the **host Cursor session ID** — an external signal that has nothing to do with the project's needs. This leads to two problems:
+
+1. **Wrong owner.** The host (Cursor) decides when to reset Aider's context; the Supervisor — the only component with project knowledge — has no say.
+2. **Stale session after pause/resume.** When a delegation pauses and resumes, the cached Aider Coder (pre-pause) stays in `executor_cache._CODERS[mcp_session_id]`. The resume turn uses a fresh, uncached Coder (`mcp_session_id=None`). The next normal delegation then picks up the stale pre-pause Coder — a conversation history gap that Aider cannot reason about.
+
+**Goal:** The Supervisor decides when to reset the executor session. It is the only layer with the information needed to make that decision:
+- Turn count (Aider's context window growing)
+- Hot-areas drift (files changed diverge from what Aider loaded)
+- Pause/resume happened (session gap → stale)
+- Explicit user signal (`start_fresh`)
+
+**Design (backend-neutral):**
+
+Extend `ExecutorFn` with an optional `reset_session` hint:
+```python
+# Before:
+ExecutorFn = Callable[[int, str | None], ExecutionResult]
+# After:
+ExecutorFn = Callable[[int, str | None, bool], ExecutionResult]
+#                      turn  correction  reset_session
+```
+
+`SupervisorAgent` decides `reset_session=True` when:
+- First turn after a resume (`_resumed_from_pause = True`)
+- Hot-areas overlap with `_completed_turn_artifacts` is below threshold
+- Turn count exceeds a configurable max (e.g. every 5 turns)
+
+`mcp_server.py` handles the Aider-specific eviction inside `_executor_fn` — `drop_coder(mcp_session_id)` — so no Aider API leaks into the Supervisor.
+
+`session_policy` env var becomes a default hint (override for `always_new` disables reuse entirely); the Supervisor's own policy takes precedence otherwise.
+
+**Interim fix (P12-ISS-002 scope):**
+- Drop the stale Coder from `executor_cache` when a delegation pauses (before returning `needs_input`).
+- Pass `mcp_session_id` into `_handle_resume` so the resume turn can at minimum benefit from the warm repo map cache when policy allows.
+
+**Phase placement:** End of Phase 12 (after P12-005) or Phase 13. Depends on P12-ISS-002 (Supervisor singleton). The interim fix ships in P12-ISS-002.
+
+---
+
 ## Done
 
 | ID | Item | Completed |
@@ -2437,6 +2482,7 @@ The MCP-facilitated path is the architectural win: the junior PM host calls `mcp
 
 | Date | Change |
 |------|--------|
+| 2026-06-21 | **BL-545 added** — Supervisor-owned executor session lifecycle: Supervisor decides when to reset Aider session (turn count, hot-area drift, post-resume); `ExecutorFn` gains `reset_session` hint; interim fix (drop stale Coder on pause, pass `mcp_session_id` to resume) ships in P12-ISS-002. End of Phase 12 / Phase 13. |
 | 2026-06-20 | **BL-530 + BL-542 updated** — revised to reflect two-tier context model (D-ARCH-11) and `SupervisorToolRunner` as the Phase 12 implementation. Tier 1 = slow-changing base context; Tier 2 = on-demand tool calls driven by Supervisor LLM reasoning. Phase 13+ tools (RAG search, cross-project) deferred. |
 | 2026-06-20 | **BL-544 added** — Supervisor pause/resume: stateful agent across multiple `delegate_to_agent` calls via `resume_token`; skips already-completed pipeline stages on resume; host answer injected into continuation brief. High priority for real production use. |
 | 2026-06-20 | **BL-543 added** — supervisor-owned context lifecycle: confirm_ask enrichment and continuation brief. |
