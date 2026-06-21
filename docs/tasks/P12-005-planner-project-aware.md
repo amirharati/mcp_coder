@@ -378,8 +378,20 @@ Add at least **7 tests**:
 
 ## § Results
 
-*(Worker fills this in when done.)*
+**Date completed:** 2026-06-21  
+**Tests:** `pytest -q tests/test_planner_project_aware_p12_005.py tests/test_project_state_p12_002.py tests/test_delegate_tool.py tests/test_supervisor_tool_runner_p12_003.py tests/test_reviewer_findings_p12_004.py` → 37 passed
 
-**Date completed:**  
-**Tests:**  
 **Notes / blockers:**
+- Implemented exactly the four requested code changes:
+  - `core/context/planner_prompt.py`: added `project_state_section` param to `build_planner_pass_prompt()`, injected before `## Delegate task` when non-empty, and updated `build_architect_pass_prompt` shim to pass `project_state_section=None`.
+  - `core/context/helper_llm_pipeline.py`: extended `apply_planner_pass()` with `project_state`, `spec_files`, `planner_context_sources`; added `_build_project_state_section()` with file-overlap filtering + 3200-char cap; wired prompt injection and context-source tracking; after successful planner pass, extracted decisions via `extract_decisions_from_plan()` and wrote them to `project_state` with immediate `save()` when any extracted.
+  - `core/engine/planner_decision_extractor.py`: new heuristic extractor with the three regex patterns, dedupe, and `max=5`.
+  - `server/mcp_server.py`: added `_spec_files_from_read()`, updated `_apply_architect_pass()` wrapper to accept/pass-through `project_state`, `spec_files`, `planner_context_sources`, passed `supervisor_agent._project_state` + spec files at call site, and merged `planner_context_sources` into `planner_pass_audit`.
+- Added `tests/test_planner_project_aware_p12_005.py` with 7 tests matching the checklist:
+  1) project-state section injected when non-empty  
+  2) section empty when no entries  
+  3) file filtering keeps only relevant entries  
+  4) `planner_context_sources` populated when state injected  
+  5) `planner_context_sources` stays empty when no state  
+  6) decisions extracted and persisted to project state on successful plan  
+  7) no extraction/save on failed plan

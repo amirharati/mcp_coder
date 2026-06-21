@@ -26,6 +26,7 @@ SPEC_VALIDATION_BLOCK_OUTPUT = (
 )
 
 LogWarnFn = Callable[[str, dict[str, Any]], None]
+_PROJECT_STATE_TOKEN_BUDGET = 800
 
 
 def _helper_provenance(
@@ -44,6 +45,46 @@ def _helper_provenance(
     elif raw_output:
         prov["output_text"] = raw_output
     return prov
+
+
+def _build_project_state_section(
+    project_state: Any,
+    spec_files: list[str] | None,
+) -> str:
+    """Compress project state entries relevant to spec_files into a prompt section."""
+    spec_file_set = {str(f).strip() for f in (spec_files or []) if str(f).strip()}
+
+    def _file_relevant(entry: dict) -> bool:
+        if not spec_file_set:
+            return True
+        entry_files = entry.get("files") or []
+        entry_text = (entry.get("text") or "") + (entry.get("spec_path") or "")
+        return any(f in entry_text or f in entry_files for f in spec_file_set)
+
+    parts: list[str] = []
+
+    relevant_decisions = [
+        d for d in (project_state.decisions or []) if _file_relevant(d)
+    ][-5:]
+    if relevant_decisions:
+        lines = [f"- {str(d.get('text') or '')[:120]}" for d in relevant_decisions]
+        parts.append("### Prior decisions\n" + "\n".join(lines))
+
+    relevant_risks = [r for r in (project_state.open_risks or []) if _file_relevant(r)][-5:]
+    if relevant_risks:
+        lines = [
+            f"- [{str(r.get('severity') or 'advisory').upper()}] {str(r.get('text') or '')[:120]}"
+            for r in relevant_risks
+        ]
+        parts.append("### Open risks\n" + "\n".join(lines))
+
+    if not parts:
+        return ""
+
+    section = "## Project state\n" + "\n\n".join(parts)
+    if len(section) > _PROJECT_STATE_TOKEN_BUDGET * 4:
+        section = section[: _PROJECT_STATE_TOKEN_BUDGET * 4] + "\n…[truncated]"
+    return section
 
 
 def merge_brief(mechanical_brief: str, llm_brief: str) -> str:
@@ -172,12 +213,20 @@ def apply_planner_pass(
     timing: dict[str, int | float] | None = None,
     delegation_id: str | None = None,
     log_warn: LogWarnFn | None = None,
+    project_state: Any | None = None,
+    spec_files: list[str] | None = None,
+    planner_context_sources: list[str] | None = None,
 ) -> tuple[str | None, str | None, dict[str, Any] | None, dict[str, Any]]:
     """Run planner pass and return (planner_plan, error, model_record, provenance)."""
     from core.context.planner_prompt import build_planner_pass_prompt
     from core.engine.planner_pass_llm import run_planner_pass_llm
 
     t_plan = time.perf_counter()
+    project_state_section = ""
+    if project_state is not None:
+        project_state_section = _build_project_state_section(project_state, spec_files)
+        if project_state_section and planner_context_sources is not None:
+            planner_context_sources.append("project_state")
     prompt = build_planner_pass_prompt(
         spec_read=spec_read,
         mechanical_brief=context_package.brief,
@@ -185,6 +234,7 @@ def apply_planner_pass(
         host_transcript=host_transcript,
         task=task,
         context_summary=context_summary,
+        project_state_section=project_state_section or None,
     )
     with role_context("planner_pass"):
         llm_result = run_planner_pass_llm(prompt, workspace_path=workspace)
@@ -202,6 +252,14 @@ def apply_planner_pass(
     )
 
     if llm_result.success:
+        if project_state is not None and delegation_id:
+            from core.engine.planner_decision_extractor import extract_decisions_from_plan
+
+            extracted = extract_decisions_from_plan(llm_result.plan)
+            for decision_text in extracted:
+                project_state.add_decision(decision_text, delegation_id)
+            if extracted:
+                project_state.save()
         provenance = _helper_provenance(
             input_prompt=prompt,
             output_text=llm_result.plan,
@@ -238,6 +296,9 @@ def apply_architect_pass(
     timing: dict[str, int | float] | None = None,
     delegation_id: str | None = None,
     log_warn: LogWarnFn | None = None,
+    project_state: Any | None = None,
+    spec_files: list[str] | None = None,
+    planner_context_sources: list[str] | None = None,
 ) -> tuple[str | None, str | None, dict[str, Any] | None, dict[str, Any]]:
     """Backward-compat shim — delegates to apply_planner_pass (P11-008)."""
     return apply_planner_pass(
@@ -251,6 +312,9 @@ def apply_architect_pass(
         timing=timing,
         delegation_id=delegation_id,
         log_warn=log_warn,
+        project_state=project_state,
+        spec_files=spec_files,
+        planner_context_sources=planner_context_sources,
     )
 
 

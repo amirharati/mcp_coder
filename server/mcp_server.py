@@ -709,6 +709,17 @@ def _truncate_output(text: str, max_chars: int = OUTPUT_MAX_CHARS) -> str:
     return text[: max_chars - 20] + "\n…[truncated]"
 
 
+def _spec_files_from_read(spec_read: Any) -> list[str]:
+    """Extract file paths from spec_read Files section."""
+    if spec_read is None:
+        return []
+    raw = (spec_read.sections.get("Files") or "").strip()
+    if not raw:
+        return []
+    lines = [ln.strip().lstrip("-*").strip() for ln in raw.splitlines()]
+    return [ln for ln in lines if ln and not ln.startswith("#")]
+
+
 def _apply_builder_llm(
     *,
     context_package: "ContextPackage",
@@ -750,6 +761,9 @@ def _apply_architect_pass(
     host_transcript: str | None,
     timing: dict[str, int | float],
     delegation_id: str,
+    project_state: Any | None = None,
+    spec_files: list[str] | None = None,
+    planner_context_sources: list[str] | None = None,
 ) -> tuple[str | None, str | None, dict[str, Any] | None, dict[str, Any]]:
     return _shared_apply_planner_pass(
         context_package=context_package,
@@ -762,6 +776,9 @@ def _apply_architect_pass(
         timing=timing,
         delegation_id=delegation_id,
         log_warn=obs.warn,
+        project_state=project_state,
+        spec_files=spec_files,
+        planner_context_sources=planner_context_sources,
     )
 
 
@@ -2276,6 +2293,7 @@ def delegate_to_agent(
                         target_files=effective_target_files,
                         spec_read=spec_read,
                     )
+                    _planner_context_sources: list[str] = []
                     if architect_enabled:
                         if pipeline_recorder is not None:
                             pipeline_recorder.start("planner_pass")
@@ -2294,6 +2312,13 @@ def delegate_to_agent(
                             host_transcript=host_transcript_text,
                             timing=timing,
                             delegation_id=delegation_id,
+                            project_state=(
+                                supervisor_agent._project_state
+                                if supervisor_agent is not None
+                                else None
+                            ),
+                            spec_files=_spec_files_from_read(spec_read),
+                            planner_context_sources=_planner_context_sources,
                         )
                         _emit_compile_provenance_pair(
                             delegation_id=delegation_id,
@@ -2314,6 +2339,9 @@ def delegate_to_agent(
                             "model_role": (architect_record or {}).get("role"),
                             "model": (architect_record or {}).get("model"),
                         }
+                        planner_pass_audit["planner_context_sources"] = (
+                            _planner_context_sources
+                        )
                         if pipeline_recorder is not None:
                             if architect_pass_error:
                                 pipeline_recorder.end(
@@ -2333,6 +2361,9 @@ def delegate_to_agent(
                             "model_role": "planner_pass",
                             "model": None,
                         }
+                        planner_pass_audit["planner_context_sources"] = (
+                            _planner_context_sources
+                        )
                         if pipeline_recorder is not None:
                             pipeline_recorder.mark(
                                 "planner_pass",

@@ -86,6 +86,7 @@ def build_planner_pass_prompt(
     host_transcript: str | None,
     task: str,
     context_summary: str,
+    project_state_section: str | None = None,
 ) -> str:
     """Assemble planner pass prompt from spec + planner + picker context."""
     parts = [
@@ -94,6 +95,8 @@ def build_planner_pass_prompt(
         "## Mechanical brief paths\n" + _paths_from_brief(mechanical_brief),
         _picker_section(picker_result),
     ]
+    if project_state_section:
+        parts.append(project_state_section)
     task_text = task.strip()
     if task_text:
         parts.append("## Delegate task\n" + task_text)
@@ -124,4 +127,5 @@ def build_architect_pass_prompt(
         host_transcript=host_transcript,
         task=task,
         context_summary=context_summary,
+        project_state_section=None,
     )
