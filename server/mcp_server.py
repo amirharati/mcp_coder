@@ -147,11 +147,7 @@ from core.verify.runner import VerifyResult, run_verify_command
 from core.specs.paths import normalize_spec_path_arg, resolve_spec_path
 from core.specs.read import read_task_spec
 from core.specs.write import apply_post_delegation_report_updates
-from core.state.supervisor_state import (
-    ResumeTokenExpired,
-    ResumeTokenNotFound,
-    SupervisorState,
-)
+from core.state.supervisor_state import SupervisorState
 from core.rag.builder_retrieval import (
     rag_retrieval_should_run,
     run_builder_workspace_file_retrieval,
@@ -1107,7 +1103,6 @@ def _response_payload(
     executor_turns: int | None = None,
     executor_stop_reason: str | None = None,
     needs_input: dict[str, Any] | None = None,
-    resume_token: str | None = None,
     paused_questions: list[str] | None = None,
     auto_retried: bool = False,
     stall_type: str | None = None,
@@ -1236,8 +1231,6 @@ def _response_payload(
     if needs_input is not None:
         payload["needs_input"] = needs_input
         payload["status"] = needs_input.get("status")
-    if resume_token is not None:
-        payload["resume_token"] = resume_token
     if paused_questions is not None:
         payload["paused_questions"] = paused_questions
     if auto_retried:
@@ -1350,8 +1343,63 @@ def _find_delegation_record_for_resume(
     return None
 
 
+def _abandon_paused_state(state: SupervisorState) -> None:
+    """Delete paused state file and emit abandonment trace event."""
+    path = SupervisorState.state_dir(state.project_key) / f"{state.resume_token}.json"
+    try:
+        ws = obs.default_workspace_path()
+        record = _find_delegation_record_for_resume(ws, state.context_ref)
+        session_dir_raw = (record or {}).get("session_dir")
+        if session_dir_raw:
+            append_trace_record(
+                {
+                    "type": "supervisor_state_abandoned",
+                    "resume_token": state.resume_token,
+                    "project_key": state.project_key,
+                    "pause_reason": state.pause_reason,
+                },
+                delegation_id=str(state.context_ref or "abandon"),
+                session_dir=Path(str(session_dir_raw)),
+                workspace=ws,
+            )
+    except Exception:
+        pass
+    try:
+        path.unlink(missing_ok=True)
+    except Exception:
+        pass
+
+
+def _response_payload_paused_reminder(state: SupervisorState) -> str:
+    """Return needs_input reminder when a paused delegation awaits answer."""
+    questions = list(state.questions or [])
+    msg = questions[0] if questions else "Supervisor is paused and awaiting your answer."
+    payload = _response_payload(
+        success=False,
+        output=msg,
+        files_changed=[],
+        session_reused=False,
+        session_reason="paused_reminder",
+        session_policy="resume",
+        outcome=OUTCOME_NEEDS_INPUT,
+        error_class="paused_awaiting_answer",
+        error_message=msg,
+        needs_input=build_needs_input_payload(
+            {
+                "outcome": OUTCOME_NEEDS_INPUT_CLARIFICATION,
+                "supervisor_reason": msg,
+                "message": msg,
+                "files_requested": [],
+                "executor_output_tail": "",
+            }
+        ),
+        paused_questions=questions,
+    )
+    return json.dumps(payload, ensure_ascii=False)
+
+
 def _handle_resume(
-    resume_token: str,
+    state: SupervisorState,
     answer: str,
     task: str,
     ctx: Context | None,
@@ -1361,38 +1409,6 @@ def _handle_resume(
     progress = _DelegationProgressBridge(ctx)
     try:
         ws = obs.default_workspace_path()
-        progress.notify("[resume] Loading paused supervisor state…", force=True)
-        try:
-            state = SupervisorState.find_and_load(resume_token)
-        except ResumeTokenExpired as exc:
-            payload = _response_payload(
-                success=False,
-                output=f"Resume token expired at {exc.expired_at}. Please start a new delegation.",
-                files_changed=[],
-                session_reused=False,
-                session_reason="resume_token_expired",
-                session_policy="resume",
-                outcome="error",
-                error_class="resume_token_expired",
-                error_message=(
-                    f"Resume token expired at {exc.expired_at}. Please start a new delegation."
-                ),
-            )
-            return json.dumps(payload, ensure_ascii=False)
-        except ResumeTokenNotFound:
-            payload = _response_payload(
-                success=False,
-                output=f"Resume token not found: {resume_token}",
-                files_changed=[],
-                session_reused=False,
-                session_reason="resume_token_not_found",
-                session_policy="resume",
-                outcome="error",
-                error_class="resume_token_not_found",
-                error_message=f"Resume token not found: {resume_token}",
-            )
-            return json.dumps(payload, ensure_ascii=False)
-
         record = _find_delegation_record_for_resume(ws, state.context_ref)
         mcp_request = (record or {}).get("mcp_request") or {}
         backend = str((record or {}).get("backend") or "aider")
@@ -1451,13 +1467,11 @@ def _handle_resume(
         payload_success = result.outcome == "success" and exec_result.success
         payload_error_class = exec_result.error_class if not payload_success else None
         payload_error_message = exec_result.error if not payload_success else None
-        resume_token_out: str | None = None
         paused_questions_out: list[str] | None = None
 
         if result.outcome == "escalated":
             payload_outcome = OUTCOME_NEEDS_INPUT
             payload_success = False
-            resume_token_out = result.resume_token
             paused_questions_out = list(result.paused_questions or [])
             needs_input_payload = build_needs_input_payload(
                 {
@@ -1495,7 +1509,6 @@ def _handle_resume(
             error_class=payload_error_class,
             error_message=payload_error_message,
             needs_input=needs_input_payload,
-            resume_token=resume_token_out,
             paused_questions=paused_questions_out,
             model_roles=(
                 {"executor": {"model": model_hint}}
@@ -1519,6 +1532,8 @@ def _handle_resume(
         "Optional spec_path: step task under .mcp-coder/specs/tasks/ (e.g. tasks/my-epic-02-cli.md). "
         "mode: implement (default) edits target_files; review asks questions only (target_files must be []). "
         "Optional model_policy: per-delegation role overrides (executor, reviewer, supervisor, architect). "
+        "Optional answer: continue a paused delegation by answering pending supervisor question(s). "
+        "Optional start_fresh=true: abandon paused state (if any) and run a fresh delegation. "
         "MCP appends audit to specs/reports/<same-name>.md. Returns success, output, files_changed, outcome; "
         "implement mode may include delegation_diff and judgment_checklist for post-delegate verification. "
         "Default backend: aider."
@@ -1533,8 +1548,8 @@ def delegate_to_agent(
     mode: str = "implement",
     cli_artifacts: bool = False,
     model_policy: dict | None = None,
-    resume_token: str | None = None,
     answer: str | None = None,
+    start_fresh: bool = False,
     ctx: Context | None = None,
 ) -> str:
     """Run one delegated implementation via the selected backend; append JSONL log."""
@@ -1585,11 +1600,22 @@ def delegate_to_agent(
                 ensure_ascii=False,
             )
         mcp_request["mode"] = delegate_mode
-        if resume_token is not None:
-            mcp_request["resume_token"] = resume_token
+        from core.state.project_key import ProjectKeyResolver
+
+        _project_key = ProjectKeyResolver.from_spec_path(spec_path)
+        _paused_state = SupervisorState.find_latest(_project_key)
+
+        if start_fresh and _paused_state is not None:
+            _abandon_paused_state(_paused_state)
+            _paused_state = None
+
+        if _paused_state is not None and answer is None:
+            return _response_payload_paused_reminder(_paused_state)
+
+        if _paused_state is not None and answer is not None:
             return _handle_resume(
-                resume_token=resume_token,
-                answer=answer or "",
+                state=_paused_state,
+                answer=answer,
                 task=task,
                 ctx=ctx,
             )
@@ -1849,7 +1875,6 @@ def delegate_to_agent(
         stall_type: str | None = None
         stall_files_requested: list[str] = []
         needs_input_payload: dict[str, Any] | None = None
-        supervisor_resume_token: str | None = None
         supervisor_paused_questions: list[str] | None = None
         # P12-001: unified supervisor agent loop owns all post-planning control flow
         # (replaces the former supervisor_outer_loop_* events). The agent emits the
@@ -2824,7 +2849,6 @@ def delegate_to_agent(
             )
             supervisor_agent.complete_turn(_agent_turn_result, _reviewer_checks)
             supervisor_agent_result = supervisor_agent.finish()
-            supervisor_resume_token = supervisor_agent_result.resume_token
             supervisor_paused_questions = list(supervisor_agent_result.paused_questions or [])
             context_block["supervisor_agent_loop"] = supervisor_agent.context_block(
                 supervisor_agent_result
@@ -3207,7 +3231,6 @@ def delegate_to_agent(
             delegation_pipeline=delegation_pipeline_payload,
             executor_turns=_executor_turns if _executor_turns > 0 else None,
             needs_input=needs_input_payload,
-            resume_token=supervisor_resume_token if outcome == OUTCOME_NEEDS_INPUT else None,
             paused_questions=(
                 supervisor_paused_questions if outcome == OUTCOME_NEEDS_INPUT else None
             ),

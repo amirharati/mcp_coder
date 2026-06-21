@@ -18,10 +18,9 @@ from core.engine.supervisor_agent import (
 from core.state.project_key import ProjectKeyResolver
 from core.state.supervisor_state import (
     ResumeTokenExpired,
-    ResumeTokenNotFound,
     SupervisorState,
 )
-from server.mcp_server import _handle_resume, _response_payload, delegate_to_agent
+from server.mcp_server import _response_payload, delegate_to_agent
 
 
 def _parse_iso(raw: str) -> datetime:
@@ -198,50 +197,140 @@ def test_supervisor_resume_preloads_turn_and_host_clarification(tmp_path):
     assert any(event.get("type") == "supervisor_resumed" for event in events)
 
 
-def test_delegate_resume_token_skips_pipeline_stages(tmp_path, monkeypatch):
+def test_find_latest_returns_most_recent_non_expired(monkeypatch, tmp_path):
+    monkeypatch.setenv("MCP_CODER_HOME", str(tmp_path / "home"))
+    older = _state(spec_path="tasks/auth-01.md")
+    newer = _state(spec_path="tasks/auth-01.md")
+    old_path = older.save()
+    new_path = newer.save()
+
+    old_payload = json.loads(old_path.read_text(encoding="utf-8"))
+    old_payload["paused_at"] = "2026-01-01T00:00:00Z"
+    old_payload["expires_at"] = "2099-01-01T00:00:00Z"
+    old_path.write_text(json.dumps(old_payload), encoding="utf-8")
+
+    new_payload = json.loads(new_path.read_text(encoding="utf-8"))
+    new_payload["paused_at"] = "2026-01-02T00:00:00Z"
+    new_payload["expires_at"] = "2099-01-01T00:00:00Z"
+    new_path.write_text(json.dumps(new_payload), encoding="utf-8")
+
+    latest = SupervisorState.find_latest("tasks/auth")
+    assert latest is not None
+    assert latest.resume_token == newer.resume_token
+
+
+def test_find_latest_returns_none_when_all_expired(monkeypatch, tmp_path):
+    monkeypatch.setenv("MCP_CODER_HOME", str(tmp_path / "home"))
+    state = _state(spec_path="tasks/auth-01.md")
+    path = state.save()
+    payload = json.loads(path.read_text(encoding="utf-8"))
+    payload["expires_at"] = "2000-01-01T00:00:00Z"
+    path.write_text(json.dumps(payload), encoding="utf-8")
+    assert SupervisorState.find_latest("tasks/auth") is None
+
+
+def test_find_latest_returns_none_when_directory_missing(monkeypatch, tmp_path):
+    monkeypatch.setenv("MCP_CODER_HOME", str(tmp_path / "home"))
+    assert SupervisorState.find_latest("missing/project") is None
+
+
+def test_delegate_with_answer_auto_resumes_without_token(tmp_path, monkeypatch):
     monkeypatch.chdir(tmp_path)
     monkeypatch.setenv("MCP_CODER_HOME", str(tmp_path / "home"))
-    with patch("server.mcp_server._handle_resume", return_value='{"ok": true}') as resume_mock, patch(
+    paused = _state(spec_path="tasks/auth-01.md")
+    with patch(
+        "server.mcp_server.SupervisorState.find_latest", return_value=paused
+    ) as latest_mock, patch(
+        "server.mcp_server._handle_resume", return_value='{"ok": true}'
+    ) as resume_mock, patch(
         "server.mcp_server._apply_clarity_check",
-        side_effect=AssertionError("clarity must not run on resume"),
+        side_effect=AssertionError("clarity must not run on implicit resume"),
     ), patch(
         "server.mcp_server._apply_architect_pass",
-        side_effect=AssertionError("planner must not run on resume"),
+        side_effect=AssertionError("planner must not run on implicit resume"),
     ):
         raw = delegate_to_agent(
             task="Continue work",
             target_files=[],
             context_summary="",
-            resume_token="resume-123",
             answer="continue",
         )
     assert json.loads(raw) == {"ok": True}
+    latest_mock.assert_called_once()
     resume_mock.assert_called_once()
 
 
-def test_handle_resume_expired_token_returns_error_payload(monkeypatch):
-    monkeypatch.setattr(
-        "server.mcp_server.SupervisorState.find_and_load",
-        lambda _token: (_ for _ in ()).throw(ResumeTokenExpired("2026-01-01T00:00:00Z")),
+def test_delegate_without_answer_returns_paused_reminder(tmp_path, monkeypatch):
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setenv("MCP_CODER_HOME", str(tmp_path / "home"))
+    paused = _state(spec_path="tasks/auth-01.md")
+    paused.questions = ["Need DB answer?"]
+    with patch(
+        "server.mcp_server.SupervisorState.find_latest", return_value=paused
+    ), patch(
+        "server.mcp_server._apply_clarity_check",
+        side_effect=AssertionError("pipeline must not run for paused reminder"),
+    ), patch(
+        "server.mcp_server._apply_architect_pass",
+        side_effect=AssertionError("pipeline must not run for paused reminder"),
+    ):
+        payload = json.loads(
+            delegate_to_agent(
+                task="Continue work",
+                target_files=[],
+                context_summary="",
+            )
+        )
+    assert payload["outcome"] == "needs_input"
+    assert payload["error_class"] == "paused_awaiting_answer"
+    assert payload["paused_questions"] == ["Need DB answer?"]
+    assert "resume_token" not in payload
+
+
+def test_delegate_start_fresh_abandons_paused_state_and_runs_fresh(tmp_path, monkeypatch):
+    home = tmp_path / "home"
+    workspace = tmp_path / "workspace"
+    workspace.mkdir()
+    monkeypatch.chdir(workspace)
+    monkeypatch.setenv("MCP_CODER_HOME", str(home))
+    monkeypatch.setenv("MCP_CODER_USE_CONTEXT_PACKAGE", "0")
+
+    paused = _state(spec_path="tasks/auth-01.md")
+    paused.save()
+    paused_path = (
+        SupervisorState.state_dir(paused.project_key) / f"{paused.resume_token}.json"
     )
-    payload = json.loads(_handle_resume("expired-token", "answer", "task", None))
-    assert payload["outcome"] == "error"
-    assert payload["error_class"] == "resume_token_expired"
-    assert "Resume token expired at 2026-01-01T00:00:00Z" in payload["error_message"]
+    assert paused_path.is_file()
 
-
-def test_handle_resume_missing_token_returns_error_payload(monkeypatch):
-    monkeypatch.setattr(
-        "server.mcp_server.SupervisorState.find_and_load",
-        lambda _token: (_ for _ in ()).throw(ResumeTokenNotFound("missing-token")),
+    ok_result = ExecutionResult(
+        success=True,
+        output="done",
+        files_changed=["main.py"],
+        model="gpt-4o",
+        tokens={"source": "unavailable"},
     )
-    payload = json.loads(_handle_resume("missing-token", "answer", "task", None))
-    assert payload["outcome"] == "error"
-    assert payload["error_class"] == "resume_token_not_found"
-    assert "Resume token not found: missing-token" in payload["error_message"]
+    mock_engine = type(
+        "MockEngine",
+        (),
+        {"model_name": "gpt-4o", "backend_id": "aider", "run": lambda *a, **k: ok_result},
+    )()
+    with patch("server.mcp_server.SupervisorState.find_latest", return_value=paused), patch(
+        "server.mcp_server.get_engine", return_value=mock_engine
+    ):
+        payload = json.loads(
+            delegate_to_agent(
+                task="Do fresh work",
+                target_files=["main.py"],
+                context_summary="Python project",
+                backend="aider",
+                start_fresh=True,
+            )
+        )
+    assert payload["success"] is True
+    assert not paused_path.exists()
 
 
-def test_response_payload_includes_resume_fields():
+def test_response_payload_does_not_include_resume_token():
     payload = _response_payload(
         success=False,
         output="need input",
@@ -250,8 +339,7 @@ def test_response_payload_includes_resume_fields():
         session_reason="test",
         session_policy="test",
         outcome="needs_input",
-        resume_token="token-1",
         paused_questions=[],
     )
-    assert payload["resume_token"] == "token-1"
+    assert "resume_token" not in payload
     assert payload["paused_questions"] == []

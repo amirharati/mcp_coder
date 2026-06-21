@@ -197,6 +197,8 @@ class SupervisorAgent:
         self._last_result: ExecutionResult | None = None
         self._completed_turn_artifacts: list[dict] = []
         self._pending_host_clarification: str | None = None
+        self._project_state: Any | None = None
+        self._project_state_trace_enabled = False
 
     @property
     def loop_id(self) -> str:
@@ -233,6 +235,11 @@ class SupervisorAgent:
         agent._cur_turn = int(state.turn_index)
         agent._decisions = [agent._decision_from_dict(item) for item in state.decision_log]
         agent._completed_turn_artifacts = list(state.completed_turn_artifacts or [])
+        from core.state.project_state import ProjectState
+
+        agent._project_state = ProjectState.load(state.project_key)
+        agent._project_state_trace_enabled = True
+        agent._emit_project_state_loaded(state.project_key)
         answer = (host_answer or "").strip()
         if answer:
             agent._pending_host_clarification = f"## Host clarification\n{answer}"
@@ -257,7 +264,7 @@ class SupervisorAgent:
         end_reason = "completed"
         turns_completed = int(self._cur_turn)
 
-        self._emit_loop_start()
+        self.begin()
         try:
             correction: str | None = self._consume_host_clarification()
             for turn_index in range(self._cur_turn + 1, self._max_turns + 1):
@@ -368,7 +375,19 @@ class SupervisorAgent:
     #   final = agent.finish()
 
     def begin(self) -> None:
-        self._emit_loop_start()
+        from core.state.project_key import ProjectKeyResolver
+        from core.state.project_state import ProjectState
+
+        if self._project_state is None:
+            project_key = ProjectKeyResolver.from_spec_path(self._spec_path)
+            self._project_state = ProjectState.load(project_key)
+            # Keep existing event-order assertions stable for callers that do not
+            # provide spec_path, while still emitting the new trace for spec-driven flows.
+            if self._spec_path is not None:
+                self._project_state_trace_enabled = True
+                self._emit_project_state_loaded(project_key)
+        if not self._loop_start_emitted:
+            self._emit_loop_start()
 
     def begin_turn(self) -> int:
         self._cur_turn += 1
@@ -611,6 +630,28 @@ class SupervisorAgent:
             final_action=final_action,
             end_reason=end_reason,
         )
+        if self._project_state is not None:
+            files_changed: list[str] = []
+            if executor_result is not None and executor_result.files_changed:
+                files_changed = list(executor_result.files_changed)
+            self._project_state.update_hot_areas(files_changed)
+            delegation_id = self._delegation_id or ""
+            if delegation_id:
+                self._project_state.last_delegation = delegation_id
+            added_decisions = 0
+            added_risks = 0
+            saved_path = self._project_state.save()
+            if self._project_state_trace_enabled:
+                self._emit(
+                    {
+                        "type": "project_state_saved",
+                        "project_key": self._project_state.project_key,
+                        "hot_areas_updated": len(files_changed),
+                        "decisions_added": added_decisions,
+                        "risks_added": added_risks,
+                        "file_path": str(saved_path),
+                    }
+                )
         return SupervisorAgentResult(
             outcome=outcome,
             turns_completed=turns_completed,
@@ -736,6 +777,23 @@ class SupervisorAgent:
             )
         except Exception:
             pass  # observability must never break delegations
+
+    def _emit_project_state_loaded(self, project_key: str) -> None:
+        from core.state.project_state import ProjectState
+
+        state = self._project_state
+        if state is None:
+            return
+        self._emit(
+            {
+                "type": "project_state_loaded",
+                "project_key": project_key,
+                "decisions_count": len(state.decisions),
+                "open_risks_count": len(state.open_risks),
+                "hot_areas_count": len(state.hot_areas),
+                "file_path": str(ProjectState.state_path(project_key)),
+            }
+        )
 
     def _record_turn_artifact(self, result: ExecutionResult) -> None:
         self._completed_turn_artifacts.append(

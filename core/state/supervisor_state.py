@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import logging
 import os
 from dataclasses import asdict, dataclass
 from datetime import datetime, timedelta, timezone
@@ -9,6 +10,8 @@ from uuid import uuid4
 
 from core.state.project_key import ProjectKeyResolver
 from core.storage.paths import mcp_coder_home
+
+logger = logging.getLogger(__name__)
 
 
 class ResumeTokenNotFound(Exception):
@@ -100,6 +103,34 @@ class SupervisorState:
             rel = candidates[0].relative_to(mcp_coder_home() / "projects")
             project_key = "/".join(rel.parts[:-2])
         return cls.load(resume_token, project_key)
+
+    @classmethod
+    def find_latest(cls, project_key: str) -> "SupervisorState | None":
+        """Return the most recent non-expired state for this project key."""
+        state_root = cls.state_dir(project_key)
+        if not state_root.is_dir():
+            return None
+
+        latest: SupervisorState | None = None
+        latest_paused_at: datetime | None = None
+        now = datetime.now(timezone.utc)
+
+        for path in sorted(state_root.glob("*.json")):
+            if path.name.endswith(".tmp"):
+                continue
+            try:
+                data = json.loads(path.read_text(encoding="utf-8"))
+                state = cls(**data)
+                if _parse_iso(state.expires_at) <= now:
+                    continue
+                paused_at = _parse_iso(state.paused_at)
+            except Exception as exc:
+                logger.warning("Skipping invalid supervisor state file %s: %s", path, exc)
+                continue
+            if latest is None or latest_paused_at is None or paused_at > latest_paused_at:
+                latest = state
+                latest_paused_at = paused_at
+        return latest
 
     @staticmethod
     def state_dir(project_key: str) -> Path:
