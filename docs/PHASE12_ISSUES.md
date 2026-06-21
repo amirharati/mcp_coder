@@ -138,6 +138,8 @@ In `delegate_to_agent`, the paused-state detection and early-return to `_handle_
 
 **Note:** Correctness is not affected. The resumed turn reads files from disk correctly. Only the repo-map warmth benefit of `align_host` is missed on that one call.
 
+**Spec:** [P12-ISS-003](./tasks/P12-ISS-003-resume-session-id-after-storage.md)
+
 ---
 
 ### P12-ISS-004 — SupervisorToolRunner token accounting not in decision records
