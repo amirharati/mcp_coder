@@ -147,6 +147,7 @@ def test_delegate_pipeline_in_response_and_jsonl(tmp_path, monkeypatch):
     ws = _setup_workspace(tmp_path)
     monkeypatch.setenv("MCP_CODER_HOME", str(tmp_path / "home"))
     monkeypatch.setenv("MCP_CODER_USE_CONTEXT_PACKAGE", "0")
+    monkeypatch.setenv("MCP_CODER_CLARITY_PASS", "0")
     monkeypatch.chdir(ws)
 
     fake = ExecutionResult(success=True, output="ok", files_changed=["pkg/cli.py"], model="m")
@@ -174,9 +175,11 @@ def test_delegate_pipeline_in_response_and_jsonl(tmp_path, monkeypatch):
     assert _phase_status(phases, "builder_llm") == "skipped"
 
 
-def test_delegate_pipeline_validation_blocked_no_executor(tmp_path, monkeypatch):
+def test_delegate_pipeline_validation_questions_executor_runs(tmp_path, monkeypatch):
+    """When spec_validation has questions, executor still runs — soft gate behavior."""
     ws = _setup_workspace(tmp_path)
     monkeypatch.setenv("MCP_CODER_HOME", str(tmp_path / "home"))
+    monkeypatch.setenv("MCP_CODER_CLARITY_PASS", "0")
     monkeypatch.chdir(ws)
     _write_workspace_config(ws, "host_transcript: dump\nspec_validation: true\n")
 
@@ -199,7 +202,12 @@ def test_delegate_pipeline_validation_blocked_no_executor(tmp_path, monkeypatch)
     ), patch(
         "core.engine.spec_validation_llm.run_spec_validation_llm",
         return_value=blocked,
-    ), patch("server.mcp_server.get_engine") as ge:
+    ), patch(
+        "server.mcp_server.get_engine",
+        return_value=_make_mock_engine(
+            ExecutionResult(success=True, output="done", files_changed=["pkg/cli.py"], model="m")
+        ),
+    ):
         hp.return_value.resolve_active_session.return_value = hint
         raw = delegate_to_agent(
             task="Implement CLI",
@@ -208,13 +216,11 @@ def test_delegate_pipeline_validation_blocked_no_executor(tmp_path, monkeypatch)
             spec_path="tasks/step-b.md",
             mode="implement",
         )
-        ge.assert_not_called()
 
     payload = json.loads(raw)
     phases = payload["delegation_pipeline"]
-    assert payload["outcome"] == "needs_input"
     assert _phase_status(phases, "spec_validation") == "blocked"
-    assert _phase_status(phases, "executor") is None
+    assert _phase_status(phases, "executor") is not None  # executor ran
 
 
 def test_delegate_pipeline_architect_off_skipped(tmp_path, monkeypatch):
@@ -222,6 +228,7 @@ def test_delegate_pipeline_architect_off_skipped(tmp_path, monkeypatch):
     monkeypatch.setenv("MCP_CODER_HOME", str(tmp_path / "home"))
     monkeypatch.setenv("MCP_CODER_CONTEXT_BUILDER_ENABLED", "0")
     monkeypatch.setenv("MCP_CODER_CONTEXT_BUILDER_LLM", "0")
+    monkeypatch.setenv("MCP_CODER_CLARITY_PASS", "0")
     monkeypatch.chdir(ws)
     _write_workspace_config(ws, "auto_merge_spec_read: false\n")
 
@@ -239,6 +246,10 @@ def test_delegate_pipeline_architect_off_skipped(tmp_path, monkeypatch):
 
     payload = json.loads(raw)
     assert _phase_status(payload["delegation_pipeline"], "planner_pass") == "skipped"
+    record = json.loads(Path(payload["log_path"]).read_text(encoding="utf-8").strip())
+    planner = record["context"].get("planner_pass") or {}
+    assert planner.get("ran") is False
+    assert planner.get("model_role") == "planner_pass"
 
 
 def test_delegate_pipeline_spec_validation_disabled_is_skipped(tmp_path, monkeypatch):
@@ -268,6 +279,7 @@ def test_delegate_pipeline_verify_phase_present_when_enabled(tmp_path, monkeypat
     monkeypatch.setenv("MCP_CODER_HOME", str(tmp_path / "home"))
     monkeypatch.setenv("MCP_CODER_USE_CONTEXT_PACKAGE", "0")
     monkeypatch.setenv("MCP_CODER_AUTO_VERIFY", "1")
+    monkeypatch.setenv("MCP_CODER_CLARITY_PASS", "0")
     monkeypatch.chdir(ws)
 
     fake = ExecutionResult(success=True, output="ok", files_changed=["pkg/cli.py"], model="m")

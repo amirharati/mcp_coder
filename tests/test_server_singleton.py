@@ -3,6 +3,7 @@ from __future__ import annotations
 from unittest.mock import patch
 
 from core.server.singleton import (
+    _is_stdio_server_cmdline,
     enforce_single_stdio_server,
     pidfile_path,
     stale_mcp_pids,
@@ -51,3 +52,12 @@ def test_singleton_disabled_by_env(tmp_path, monkeypatch):
     ws = tmp_path / "workspace"
     ws.mkdir()
     assert enforce_single_stdio_server(ws) == []
+
+
+def test_is_stdio_server_cmdline():
+    script = "/repo/mcp_coder/main.py"
+    assert _is_stdio_server_cmdline(f"python {script}", script)
+    assert _is_stdio_server_cmdline(f"python {script} --mcp", script)
+    assert not _is_stdio_server_cmdline(f"python {script} delegate --task t", script)
+    assert not _is_stdio_server_cmdline(f"python {script} setup", script)
+    assert not _is_stdio_server_cmdline(None, script)

@@ -237,10 +237,12 @@ def _extract_response_parts(response_obj: Any) -> tuple[str | None, str | None]:
             return None, None
         if isinstance(message, dict):
             content = message.get("content")
-            reasoning = message.get("reasoning_content")
+            reasoning = message.get("reasoning_content") or message.get("reasoning")
         else:
             content = getattr(message, "content", None)
-            reasoning = getattr(message, "reasoning_content", None)
+            reasoning = getattr(message, "reasoning_content", None) or getattr(
+                message, "reasoning", None
+            )
         text = content if isinstance(content, str) else None
         reasoning_text = reasoning if isinstance(reasoning, str) else None
         return text, reasoning_text
@@ -530,6 +532,8 @@ def record_owned_completion(
         "input": usage.get("input"),
         "output": usage.get("output"),
         "total": usage.get("total"),
+        "reasoning_tokens": usage.get("reasoning_tokens"),
+        "cached_tokens": usage.get("cached_tokens"),
         "source": "owned_completion",
     }
 

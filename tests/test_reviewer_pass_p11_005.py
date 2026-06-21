@@ -19,6 +19,10 @@ from core.engine.reviewer_llm import (
 from core.host.base import HostSessionHint
 from core.host.cursor_transcript import TranscriptLoadResult
 from core.logging.delegation_log import (
+    REVIEWER_ACTION_CONTINUE,
+    REVIEWER_ACTION_NONE,
+    REVIEWER_MODE_ADVISORY,
+    REVIEWER_MODE_DISABLED,
     REVIEWER_PASS_ERROR,
     REVIEWER_PASS_ISSUES,
     REVIEWER_PASS_LGTM,
@@ -175,7 +179,9 @@ def _delegate(
 
     monkeypatch.setenv("MCP_CODER_HOME", str(ws.parent / "home"))
     monkeypatch.chdir(ws)
-    monkeypatch.delenv("MCP_CODER_CLARITY_PASS", raising=False)
+    # This test module targets reviewer behavior; disable clarity gate to avoid
+    # unrelated needs_input blocks from pre-delegate questions.
+    monkeypatch.setenv("MCP_CODER_CLARITY_PASS", "0")
     monkeypatch.delenv("MCP_CODER_SPEC_VALIDATION", raising=False)
     if reviewer_env is None:
         monkeypatch.delenv("MCP_CODER_REVIEWER_PASS", raising=False)
@@ -316,9 +322,15 @@ def test_delegate_reviewer_pass_skipped_without_flag(tmp_path, monkeypatch):
     payload = json.loads(raw)
     assert payload["success"] is True
     assert _phase_status(payload["delegation_pipeline"], "reviewer_pass") == "skipped"
+    assert payload["reviewer_mode"] == REVIEWER_MODE_DISABLED
+    assert payload["reviewer_outcome"] == REVIEWER_PASS_SKIPPED
+    assert payload["reviewer_action"] == REVIEWER_ACTION_NONE
 
     record = json.loads(Path(payload["log_path"]).read_text(encoding="utf-8").strip())
     assert record["context"]["reviewer_pass_result"] == REVIEWER_PASS_SKIPPED
+    assert record["context"]["reviewer_mode"] == REVIEWER_MODE_DISABLED
+    assert record["context"]["reviewer_outcome"] == REVIEWER_PASS_SKIPPED
+    assert record["context"]["reviewer_action"] == REVIEWER_ACTION_NONE
 
 
 def test_delegate_reviewer_pass_lgtm_appends_report_section(tmp_path, monkeypatch):
@@ -334,9 +346,15 @@ def test_delegate_reviewer_pass_lgtm_appends_report_section(tmp_path, monkeypatc
     payload = json.loads(raw)
     assert payload["success"] is True
     assert _phase_status(payload["delegation_pipeline"], "reviewer_pass") == "ok"
+    assert payload["reviewer_mode"] == REVIEWER_MODE_ADVISORY
+    assert payload["reviewer_outcome"] == REVIEWER_PASS_LGTM
+    assert payload["reviewer_action"] == REVIEWER_ACTION_CONTINUE
 
     record = json.loads(Path(payload["log_path"]).read_text(encoding="utf-8").strip())
     assert record["context"]["reviewer_pass_result"] == REVIEWER_PASS_LGTM
+    assert record["context"]["reviewer_mode"] == REVIEWER_MODE_ADVISORY
+    assert record["context"]["reviewer_outcome"] == REVIEWER_PASS_LGTM
+    assert record["context"]["reviewer_action"] == REVIEWER_ACTION_CONTINUE
 
     report_path = ws / ".mcp-coder" / "specs" / "reports" / "step-b.md"
     assert report_path.is_file()
@@ -361,12 +379,41 @@ def test_delegate_reviewer_pass_error_non_fatal(tmp_path, monkeypatch):
     assert payload["success"] is True
     assert payload.get("outcome") in (OUTCOME_SUCCESS, "partial")
     assert _phase_status(payload["delegation_pipeline"], "reviewer_pass") == "error"
+    assert payload["reviewer_mode"] == REVIEWER_MODE_ADVISORY
+    assert payload["reviewer_outcome"] == REVIEWER_PASS_ERROR
+    assert payload["reviewer_action"] == REVIEWER_ACTION_CONTINUE
 
     record = json.loads(Path(payload["log_path"]).read_text(encoding="utf-8").strip())
     assert record["context"]["reviewer_pass_result"] == REVIEWER_PASS_ERROR
+    assert record["context"]["reviewer_mode"] == REVIEWER_MODE_ADVISORY
+    assert record["context"]["reviewer_outcome"] == REVIEWER_PASS_ERROR
+    assert record["context"]["reviewer_action"] == REVIEWER_ACTION_CONTINUE
     assert record["context"]["reviewer_pass"]["error"] == "timeout"
 
     report_path = ws / ".mcp-coder" / "specs" / "reports" / "step-b.md"
     _, body = split_front_matter(report_path.read_text(encoding="utf-8"))
     sections = parse_sections(body)
     assert "Tier-1 Review" not in sections
+
+
+def test_delegate_reviewer_pass_issues_keeps_advisory_continue(tmp_path, monkeypatch):
+    ws = _setup_workspace(tmp_path, with_git=True)
+    issues = ReviewerResult(
+        success=True,
+        outcome="issues",
+        note="- Missing test coverage for CLI flow.",
+        model="cheap-model",
+        duration_ms=25,
+    )
+    raw = _delegate(ws, monkeypatch, reviewer_env="1", reviewer_result=issues)
+    payload = json.loads(raw)
+    assert payload["success"] is True
+    assert _phase_status(payload["delegation_pipeline"], "reviewer_pass") == "ok"
+    assert payload["reviewer_mode"] == REVIEWER_MODE_ADVISORY
+    assert payload["reviewer_outcome"] == REVIEWER_PASS_ISSUES
+    assert payload["reviewer_action"] == REVIEWER_ACTION_CONTINUE
+
+    record = json.loads(Path(payload["log_path"]).read_text(encoding="utf-8").strip())
+    assert record["context"]["reviewer_mode"] == REVIEWER_MODE_ADVISORY
+    assert record["context"]["reviewer_outcome"] == REVIEWER_PASS_ISSUES
+    assert record["context"]["reviewer_action"] == REVIEWER_ACTION_CONTINUE

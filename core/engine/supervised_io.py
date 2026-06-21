@@ -145,6 +145,7 @@ class SupervisedIO:
         on_decision: Callable[[dict[str, Any]], None] | None = None,
         question_registry: "QuestionRegistry | None" = None,
         delegation_id: str | None = None,
+        emit_loop_events: bool = True,
     ) -> None:
         from aider.io import InputOutput
 
@@ -160,6 +161,16 @@ class SupervisedIO:
         self._on_decision = on_decision
         self._question_registry = question_registry
         self._delegation_id = delegation_id
+        # P12-001: the unified SupervisorAgent now owns the supervisor_loop_* lifecycle.
+        # When driven by SupervisorAgent (real flow), aider_engine sets this False so the
+        # loop envelope is emitted exactly once (by the agent). Kept True by default so
+        # SupervisedIO remains self-contained for direct/unit use.
+        self._emit_loop_events = emit_loop_events
+        self._loop_started = False
+        self._loop_id = f"{delegation_id}:supervisor:1" if delegation_id else None
+        self._loop_start_emitted = False
+        self._loop_end_emitted = False
+        self._loop_end_reason: str | None = None
         self.supervisor_decisions: list[dict[str, Any]] = []
         self.supervisor_decisions_count = 0
         self.supervisor_aborts_count = 0
@@ -225,6 +236,77 @@ class SupervisedIO:
         except Exception:
             pass  # observability must never break completions
 
+    def _emit_supervisor_loop_event(
+        self,
+        event_type: str,
+        *,
+        end_reason: str | None = None,
+        final_decision: str | None = None,
+    ) -> None:
+        """Emit explicit supervisor loop lifecycle envelope events."""
+        if not self._emit_loop_events:
+            return  # SupervisorAgent owns the loop lifecycle in the real flow (P12-001).
+        try:
+            from core.observability.context import (
+                delegation_id_var,
+                session_dir_var,
+                workspace_var,
+            )
+            from core.observability.trace import append_trace_record
+            from core.logging.server_log import utc_now_iso
+
+            delegation_id = delegation_id_var.get()
+            session_dir = session_dir_var.get()
+            workspace = workspace_var.get()
+            if not delegation_id or not session_dir:
+                return
+            record: dict[str, Any] = {
+                "type": event_type,
+                "delegation_id": delegation_id,
+                "loop_id": self._loop_id,
+                "turn_count": self.supervisor_decisions_count,
+                "aborts_count": self.supervisor_aborts_count,
+                "timestamp": utc_now_iso(),
+            }
+            if end_reason:
+                record["end_reason"] = end_reason
+            if final_decision:
+                record["final_decision"] = final_decision
+            append_trace_record(
+                record,
+                delegation_id=delegation_id,
+                session_dir=session_dir,
+                workspace=workspace or "",
+            )
+        except Exception:
+            pass
+
+    def _ensure_supervisor_loop_started(self) -> None:
+        if self._loop_started:
+            return
+        self._loop_started = True
+        if self._emit_loop_events:
+            self._loop_start_emitted = True
+        self._emit_supervisor_loop_event("supervisor_loop_start")
+
+    def begin_supervisor_loop(self) -> None:
+        """Public wrapper so caller can emit loop start before first prompt."""
+        self._ensure_supervisor_loop_started()
+
+    def finalize_supervisor_loop(self, *, end_reason: str, final_decision: str | None = None) -> None:
+        """Best-effort loop closure emission (safe to call multiple times)."""
+        if not self._loop_started:
+            return
+        if self._emit_loop_events:
+            self._loop_end_emitted = True
+        self._loop_end_reason = end_reason
+        self._emit_supervisor_loop_event(
+            "supervisor_loop_end",
+            end_reason=end_reason,
+            final_decision=final_decision,
+        )
+        self._loop_started = False
+
     @staticmethod
     def _human_answer_to_bool(answer: str | None) -> bool:
         """Treat 'yes'/'y'/'true'/'1' (case-insensitive) as True, everything else as False."""
@@ -255,6 +337,41 @@ class SupervisedIO:
             self.supervisor_aborts_count += 1
         if self._on_decision is not None:
             self._on_decision(row)
+        # P11-ISS-016: structured turn-level decision event.
+        try:
+            from core.observability.context import (
+                delegation_id_var,
+                session_dir_var,
+                workspace_var,
+            )
+            from core.observability.trace import append_trace_record
+            from core.logging.server_log import utc_now_iso
+
+            delegation_id = delegation_id_var.get()
+            session_dir = session_dir_var.get()
+            workspace = workspace_var.get()
+            if delegation_id and session_dir:
+                turn_rec = {
+                    "type": "supervisor_turn_decision",
+                    "delegation_id": delegation_id,
+                    "loop_id": self._loop_id,
+                    "turn_index": self.supervisor_decisions_count,
+                    "action": decision_name,
+                    "reason": reasoning[:200],
+                    "risk_level": risk_tier,
+                    "question_present": bool(question.strip()),
+                    "llm_used": decision_name not in ("approve",),
+                    "duration_ms": duration_ms,
+                    "timestamp": utc_now_iso(),
+                }
+                append_trace_record(
+                    turn_rec,
+                    delegation_id=delegation_id,
+                    session_dir=session_dir,
+                    workspace=workspace or "",
+                )
+        except Exception:
+            pass
 
     def confirm_ask(
         self,
@@ -266,6 +383,7 @@ class SupervisedIO:
         allow_never: bool = False,
     ) -> bool:
         del default, subject, explicit_yes_required, group, allow_never  # supervised path ignores these
+        self._ensure_supervisor_loop_started()
         risk_tier = classify_confirm_risk(
             question,
             target_files=self._target_files,
@@ -351,6 +469,7 @@ class SupervisedIO:
                 risk_tier=risk_tier,
                 timeout_s=_GATE_TIMEOUT_S,
             )
+            self.finalize_supervisor_loop(end_reason="human_gate_timeout", final_decision="abort")
             raise SupervisorAbort(
                 reasoning="human_gate_timeout",
                 decision="abort",
@@ -360,6 +479,10 @@ class SupervisedIO:
                 decisions=self.supervisor_decisions,
             )
 
+        self.finalize_supervisor_loop(
+            end_reason=result.decision,
+            final_decision=result.decision,
+        )
         raise SupervisorAbort(
             reasoning=result.reasoning,
             decision=result.decision,

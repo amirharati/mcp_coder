@@ -7,7 +7,7 @@ from pathlib import Path
 from unittest.mock import patch
 
 from core.config.spec_validation import clarity_pass_enabled
-from core.context.clarity_prompt import build_clarity_check_prompt
+from core.context.clarity_prompt import CLARITY_ROUND_CAP, build_clarity_check_prompt
 from core.context.helper_llm_pipeline import apply_clarity_check
 from core.engine.base import ExecutionResult
 from core.engine.capabilities import AIDER_CAPABILITIES
@@ -29,7 +29,7 @@ from core.logging.delegation_log import (
 )
 from core.specs.outcome import OUTCOME_NEEDS_INPUT, OUTCOME_SUCCESS
 from core.specs.read import read_task_spec
-from server.mcp_server import delegate_to_agent
+from server.mcp_server import _count_clarity_blocked_rounds, delegate_to_agent
 
 STEP_SPEC = """\
 ---
@@ -128,6 +128,12 @@ def _phase_status(phases: list[dict], phase_name: str) -> str | None:
         if item.get("phase") == phase_name:
             return item.get("status")
     return None
+
+
+def _load_record_from_payload(payload: dict[str, object]) -> dict[str, object]:
+    log_path = Path(str(payload["log_path"]))
+    line = log_path.read_text(encoding="utf-8").strip().splitlines()[-1]
+    return json.loads(line)
 
 
 def _delegate(
@@ -314,6 +320,7 @@ def test_resolve_clarity_check_result_values():
 
 
 def test_delegate_clarity_blocks_vague_task(tmp_path, monkeypatch):
+    """Clarity check hard-gates: execution does not proceed until questions are answered."""
     ws = _setup_workspace(tmp_path)
     captured: dict[str, bool] = {}
     unclear = ClarityCheckResult(
@@ -336,12 +343,19 @@ def test_delegate_clarity_blocks_vague_task(tmp_path, monkeypatch):
     payload = json.loads(raw)
     assert payload["success"] is False
     assert payload["outcome"] == OUTCOME_NEEDS_INPUT
-    assert len(payload["clarification_needed"]) == 2
+    assert len(payload["clarity_questions"]) == 2
+    assert payload["clarity_round_index"] == 1
+    assert payload["clarity_round_cap"] == CLARITY_ROUND_CAP
+    assert payload["clarity_auto_passed"] is False
+    assert "Which auth module" in payload["output"]
     assert captured.get("called") is not True
     assert _phase_status(payload["delegation_pipeline"], "clarity_check") == "blocked"
 
-    record = json.loads(Path(payload["log_path"]).read_text(encoding="utf-8").strip())
+    record = _load_record_from_payload(payload)
     assert record["context"]["clarity_check_result"] == CLARITY_CHECK_CLARIFICATION_NEEDED
+    assert record["context"]["clarity_round_index"] == 1
+    assert record["context"]["clarity_round_cap"] == CLARITY_ROUND_CAP
+    assert record["context"]["clarity_auto_passed"] is False
 
 
 def test_delegate_clarity_clear_proceeds(tmp_path, monkeypatch):
@@ -359,9 +373,12 @@ def test_delegate_clarity_clear_proceeds(tmp_path, monkeypatch):
     assert payload["success"] is True
     assert captured.get("called") is True
     assert "clarification_needed" not in payload
+    assert payload["clarity_round_index"] == 1
+    assert payload["clarity_round_cap"] == CLARITY_ROUND_CAP
+    assert payload["clarity_auto_passed"] is False
     assert _phase_status(payload["delegation_pipeline"], "clarity_check") == "ok"
 
-    record = json.loads(Path(payload["log_path"]).read_text(encoding="utf-8").strip())
+    record = _load_record_from_payload(payload)
     assert record["context"]["clarity_check_result"] == CLARITY_CHECK_CLEAR
 
 
@@ -401,14 +418,18 @@ def test_delegate_clarity_llm_error_proceeds(tmp_path, monkeypatch):
     assert payload.get("outcome") in (OUTCOME_SUCCESS, "partial")
     assert captured.get("called") is True
     assert "clarification_needed" not in payload
+    assert payload["clarity_round_index"] == 1
+    assert payload["clarity_round_cap"] == CLARITY_ROUND_CAP
+    assert payload["clarity_auto_passed"] is False
     assert _phase_status(payload["delegation_pipeline"], "clarity_check") == "error"
 
-    record = json.loads(Path(payload["log_path"]).read_text(encoding="utf-8").strip())
+    record = _load_record_from_payload(payload)
     assert record["context"]["clarity_check_result"] == CLARITY_CHECK_ERROR
     assert record["context"]["clarity_check"]["error"] == "timeout"
 
 
-def test_delegate_skips_clarity_when_spec_validation_blocks(tmp_path, monkeypatch):
+def test_delegate_spec_validation_questions_advisory_execution_proceeds(tmp_path, monkeypatch):
+    """When spec_validation has questions, execution still proceeds — questions are advisory."""
     ws = _setup_workspace(tmp_path)
     blocked_validation = SpecValidationLlmResult(
         success=True,
@@ -417,19 +438,20 @@ def test_delegate_skips_clarity_when_spec_validation_blocks(tmp_path, monkeypatc
         model="cheap-model",
         duration_ms=20,
     )
-    with patch("core.engine.clarity_llm.run_clarity_check_llm") as clarity_llm:
-        raw = _delegate(
-            ws,
-            monkeypatch,
-            task="fix the auth stuff",
-            validation_result=blocked_validation,
-            spec_validation_env="1",
-        )
-        clarity_llm.assert_not_called()
-
+    raw = _delegate(
+        ws,
+        monkeypatch,
+        task="fix the auth stuff",
+        clarity_result=ClarityCheckResult(
+            success=True, passed=True, questions=[], model="m", duration_ms=5
+        ),
+        validation_result=blocked_validation,
+        spec_validation_env="1",
+    )
     payload = json.loads(raw)
-    assert payload["success"] is False
+    # Execution proceeds — clarification_needed is advisory only
     assert len(payload["clarification_needed"]) == 1
+    # Success is determined by the executor, not spec_validation
 
 
 def test_apply_clarity_check_pipeline_blocked(tmp_path):
@@ -455,3 +477,136 @@ def test_apply_clarity_check_pipeline_blocked(tmp_path):
     assert passed is False
     assert err is None
     assert audit["questions_count"] == 1
+    assert audit["round_index"] == 1
+    assert audit["round_cap"] == CLARITY_ROUND_CAP
+    assert audit["auto_passed"] is False
+
+
+def test_delegate_clarity_round_cap_autopass_emits_trace_fields(tmp_path, monkeypatch):
+    ws = _setup_workspace(tmp_path)
+    unclear = ClarityCheckResult(
+        success=True,
+        passed=False,
+        questions=["Which file should be edited?"],
+        model="cheap-model",
+        duration_ms=12,
+    )
+
+    with patch(
+        "server.mcp_server._count_clarity_blocked_rounds",
+        side_effect=[0, CLARITY_ROUND_CAP - 1, CLARITY_ROUND_CAP],
+    ):
+        # Round 1: blocked.
+        payload_1 = json.loads(_delegate(ws, monkeypatch, task="fix auth", clarity_result=unclear))
+        assert payload_1["success"] is False
+        assert payload_1["clarity_round_index"] == 1
+        assert payload_1["clarity_auto_passed"] is False
+
+        # Round 2: blocked again.
+        payload_2 = json.loads(_delegate(ws, monkeypatch, task="fix auth", clarity_result=unclear))
+        assert payload_2["success"] is False
+        assert payload_2["clarity_round_index"] == CLARITY_ROUND_CAP
+        assert payload_2["clarity_auto_passed"] is False
+
+        # Round 3: cap reached -> auto-pass; executor runs despite unclear mock.
+        payload_3 = json.loads(_delegate(ws, monkeypatch, task="fix auth", clarity_result=unclear))
+    assert payload_3["success"] is True
+    assert payload_3["clarity_round_index"] == CLARITY_ROUND_CAP + 1
+    assert payload_3["clarity_round_cap"] == CLARITY_ROUND_CAP
+    assert payload_3["clarity_auto_passed"] is True
+    assert _phase_status(payload_3["delegation_pipeline"], "clarity_check") == "ok"
+
+    record = _load_record_from_payload(payload_3)
+    assert record["context"]["clarity_round_index"] == CLARITY_ROUND_CAP + 1
+    assert record["context"]["clarity_round_cap"] == CLARITY_ROUND_CAP
+    assert record["context"]["clarity_auto_passed"] is True
+
+    trace_path = Path(record["session_dir"]) / str(record["trace_ref"])
+    trace_lines = [
+        json.loads(line)
+        for line in trace_path.read_text(encoding="utf-8").splitlines()
+        if line.strip()
+    ]
+    clarity_events = [evt for evt in trace_lines if evt.get("type") == "clarity_result"]
+    assert clarity_events
+    latest = clarity_events[-1]
+    assert latest["clarity_round_index"] == CLARITY_ROUND_CAP + 1
+    assert latest["clarity_round_cap"] == CLARITY_ROUND_CAP
+    assert latest["clarity_auto_passed"] is True
+
+
+def test_count_clarity_blocked_rounds_uses_structured_field_only(tmp_path):
+    session_dir = tmp_path / "session"
+    session_dir.mkdir(parents=True, exist_ok=True)
+    log_path = session_dir / "delegations.jsonl"
+
+    rows = [
+        {
+            "outcome": "needs_input",
+            "context": {"clarity_check_result": "clarification_needed", "task_spec": "tasks/step-a.md"},
+            "mcp_request": {"spec_path": "tasks/step-a.md"},
+        },
+        {
+            # Legacy text that used to match fallback; should not count without structured flag.
+            "outcome": "needs_input",
+            "context": {"task_spec": "tasks/step-a.md"},
+            "response_to_cursor": {"output_preview": "Clarity questions: please answer"},
+            "mcp_request": {"spec_path": "tasks/step-a.md"},
+        },
+        {
+            # Different needs_input reason; must not count.
+            "outcome": "needs_input",
+            "context": {"clarity_check_result": "skipped", "task_spec": "tasks/step-a.md"},
+            "mcp_request": {"spec_path": "tasks/step-a.md"},
+        },
+        {
+            # Not needs_input; must not count.
+            "outcome": "success",
+            "context": {"clarity_check_result": "clarification_needed", "task_spec": "tasks/step-a.md"},
+            "mcp_request": {"spec_path": "tasks/step-a.md"},
+        },
+    ]
+    log_path.write_text(
+        "\n".join(json.dumps(row, sort_keys=True) for row in rows) + "\n",
+        encoding="utf-8",
+    )
+
+    assert _count_clarity_blocked_rounds(session_dir, "tasks/step-a.md") == 1
+
+
+def test_count_clarity_blocked_rounds_requires_matching_spec_when_target_set(tmp_path):
+    session_dir = tmp_path / "session"
+    session_dir.mkdir(parents=True, exist_ok=True)
+    log_path = session_dir / "delegations.jsonl"
+
+    rows = [
+        {
+            "outcome": "needs_input",
+            "context": {"clarity_check_result": "clarification_needed", "task_spec": "tasks/step-a.md"},
+            "mcp_request": {"spec_path": "tasks/step-a.md"},
+        },
+        {
+            # Missing spec info should not be counted for scoped queries.
+            "outcome": "needs_input",
+            "context": {"clarity_check_result": "clarification_needed"},
+        },
+        {
+            # Different spec should not count.
+            "outcome": "needs_input",
+            "context": {"clarity_check_result": "clarification_needed", "task_spec": "tasks/step-b.md"},
+        },
+        {
+            # Path normalization + suffix matching should count.
+            "outcome": "needs_input",
+            "context": {
+                "clarity_check_result": "clarification_needed",
+                "task_spec": "./workspace/.mcp-coder/specs/tasks/step-a.md",
+            },
+        },
+    ]
+    log_path.write_text(
+        "\n".join(json.dumps(row, sort_keys=True) for row in rows) + "\n",
+        encoding="utf-8",
+    )
+
+    assert _count_clarity_blocked_rounds(session_dir, "./tasks/step-a.md") == 2

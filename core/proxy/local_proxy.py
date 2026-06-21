@@ -28,7 +28,7 @@ _PROXY_ENV_KEYS = (
 
 def _parse_attribution(
     headers: dict[str, str],
-) -> tuple[str | None, int | None, int | None, str | None, str | None, str]:
+) -> tuple[str | None, int | None, int | None, str | None, str | None, str | None, str]:
     lowered = {k.lower(): v for k, v in headers.items()}
 
     def _int_header(name: str) -> int | None:
@@ -40,6 +40,7 @@ def _parse_attribution(
     delegation_id = lowered.get("x-mcp-delegation-id")
     step_index = _int_header("x-mcp-step-index")
     call_index = _int_header("x-mcp-call-index")
+    role = lowered.get("x-mcp-role")
     session_dir = lowered.get("x-mcp-session-dir")
     workspace = lowered.get("x-mcp-workspace")
     has_attribution_headers = any(
@@ -51,7 +52,7 @@ def _parse_attribution(
         )
     )
     attribution_source = "headers" if has_attribution_headers else "none"
-    return delegation_id, step_index, call_index, session_dir, workspace, attribution_source
+    return delegation_id, step_index, call_index, role, session_dir, workspace, attribution_source
 
 
 def _forward_headers(
@@ -90,6 +91,7 @@ def _emit_proxy_call(
     delegation_id: str | None,
     step_index: int | None,
     call_index: int | None,
+    role: str | None,
     session_dir: str | None,
     workspace: str | None,
     model: str | None,
@@ -106,6 +108,7 @@ def _emit_proxy_call(
 
         get_observability().record_proxy_llm_call(
             delegation_id=delegation_id,
+            role=role,
             step_index=step_index,
             call_index=call_index,
             session_dir=session_dir,
@@ -139,6 +142,7 @@ class _ProxyHandler(BaseHTTPRequestHandler):
         delegation_id: str | None = None
         step_index: int | None = None
         call_index: int | None = None
+        role: str | None = None
         session_dir: str | None = None
         workspace: str | None = None
         attribution_source = "none"
@@ -153,6 +157,7 @@ class _ProxyHandler(BaseHTTPRequestHandler):
                 delegation_id,
                 step_index,
                 call_index,
+                role,
                 session_dir,
                 workspace,
                 attribution_source,
@@ -234,6 +239,7 @@ class _ProxyHandler(BaseHTTPRequestHandler):
                     delegation_id=delegation_id,
                     step_index=step_index,
                     call_index=call_index,
+                    role=role,
                     session_dir=session_dir,
                     workspace=workspace,
                     model=model,

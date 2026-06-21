@@ -12,20 +12,33 @@
 - Quote **`prior_failed_attempts`** when present before describing the latest success.
 - After a retry: **failed attempts first**, then latest outcome. Use `list_delegations(spec_path=…)` when unsure.
 
+## Server freshness check (automatic startup step)
+
+- At the **start of every new chat/session**, call `get_server_status()` automatically before any planning or delegation work (do this even if the user did not ask).
+- Post a one-line startup status to the user that includes at least: `source_revision`, `started_at`, and whether `stale_vs_local_changes` is `true/false`.
+- If `stale_vs_local_changes` is `true`: stop and ask the user to restart MCP connection in Cursor; re-check with `get_server_status()` before continuing.
+- Treat this as a required safety gate, not optional guidance.
+- `delegate_to_agent` responses also include `server_status` so freshness remains visible during normal workflow.
+
 ## Spec validation (`clarification_needed`)
 
 When `clarification_needed` is non-empty: answer each item in Cursor chat, update the spec (`revision++`) if needed, then retry `delegate_to_agent`. Do **not** implement on disk yourself.
 
 ## Clarity check (automatic — never disable)
 
-A pre-delegation clarity check runs automatically before every `delegate_to_agent` call. It ensures the task is specific enough for the executor to proceed.
+A pre-delegation clarity check runs before every `delegate_to_agent` call. **When it has questions, execution pauses** — the host must answer them in the spec file and re-delegate.
 
 **You must not** disable or bypass it (no `clarity_pass: false` in config, no `MCP_CODER_CLARITY_PASS=0` in env).
 
-When it returns `clarification_needed`:
-- Answer the listed questions directly in your `context_summary` or by updating the spec.
-- Re-call `delegate_to_agent` immediately — do **not** implement yourself.
-- The bar is **"clear enough to start"**, not "fully specified". If the task can be reasonably attempted with room to discover details, it passes. Only genuinely ambiguous tasks are blocked (unknown target file, contradictory scope, no acceptance signal).
+**Hard cap:** after 2 blocked rounds on the same spec, the check auto-passes and execution proceeds regardless.
+
+When `delegate_to_agent` returns `success: false` and `outcome: needs_input` with clarity questions in the `output`:
+- The questions have already been written to the `## Q&A` section of the spec file (open items with `[answer here]`).
+- **Fill in the answers** in the spec's `## Q&A` section directly — replace each `[answer here]` with the real answer.
+- Re-call `delegate_to_agent` — do **not** implement yourself.
+- You may also include a brief `context_summary` restating key decisions, but the spec Q&A is the canonical record.
+
+`clarification_needed` (from spec validation) is **advisory** — execution ran, just note the questions for your next delegation.
 
 ## Supervisor escalation (`needs_input` + human gate)
 

@@ -40,10 +40,12 @@ def extract_thinking_from_response(result: Any) -> tuple[str | None, int]:
                 message = first.get("message")
             if message is not None:
                 if isinstance(message, dict):
-                    reasoning = message.get("reasoning_content")
+                    reasoning = message.get("reasoning_content") or message.get("reasoning")
                     thinking_blocks = message.get("thinking_blocks")
                 else:
-                    reasoning = getattr(message, "reasoning_content", None)
+                    reasoning = getattr(message, "reasoning_content", None) or getattr(
+                        message, "reasoning", None
+                    )
                     thinking_blocks = getattr(message, "thinking_blocks", None)
                 if isinstance(reasoning, str) and reasoning.strip():
                     thinking_text = reasoning.strip()
@@ -323,6 +325,9 @@ class ObservableModel(Model):
             headers["X-Mcp-Session-Dir"] = session_dir
         if workspace:
             headers["X-Mcp-Workspace"] = workspace
+        role = role_var.get()
+        if role:
+            headers["X-Mcp-Role"] = role
         headers["X-Mcp-Call-Index"] = str(self._call_index)
         self.extra_params["extra_headers"] = headers
 

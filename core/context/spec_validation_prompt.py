@@ -6,18 +6,21 @@ from core.specs.read import SpecReadResult
 
 _TRANSCRIPT_TAIL_CHARS = 8000
 
-VALIDATION_PREAMBLE = """## Role: spec validator
+VALIDATION_PREAMBLE = """## Role: spec advisor
 
-Compare the task spec (Goal, Constraints, Files) to recent host conversation decisions.
+Review the task spec (Goal, Constraints, Files) against the task description and any available context.
 You do NOT edit files and you do NOT implement anything.
+
+**Execution will proceed regardless.** Your output is advisory feedback — questions the host should address in the spec or context_summary before the next delegation.
 
 Rules:
 - Begin your response IMMEDIATELY with exactly one of these headings (no preamble):
-  - `## Validation OK` when the spec aligns with the conversation
-  - `## Clarifications needed` when the spec is ambiguous or contradicts the conversation
-- After `## Clarifications needed`, list up to 5 questions as markdown bullets (`- `).
+  - `## Validation OK` when the spec aligns with the task and context
+  - `## Clarifications needed` when you have questions that would meaningfully improve the outcome
+- After `## Clarifications needed`, list up to 3 questions as markdown bullets (`- `).
 - No code fences, no file contents, no reasoning narration before the heading.
-- Questions must be specific and actionable for the planner in Cursor."""
+- Questions must be genuinely useful for improving the next delegation, not just "nice to know".
+- When in doubt: return `## Validation OK`."""
 
 
 def _truncate_transcript_tail(text: str, max_chars: int = _TRANSCRIPT_TAIL_CHARS) -> str:
@@ -60,6 +63,7 @@ def build_spec_validation_prompt(
     summary = (context_summary or "").strip()
     if summary:
         sections.append(f"## Planner context summary\n{summary}")
-    transcript = _truncate_transcript_tail(host_transcript.strip())
-    sections.append("## Recent host conversation\n" + transcript)
+    transcript = _truncate_transcript_tail((host_transcript or "").strip())
+    if transcript:
+        sections.append("## Recent host conversation\n" + transcript)
     return "\n\n".join(sections)

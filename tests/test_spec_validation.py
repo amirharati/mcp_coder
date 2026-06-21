@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import json
 from pathlib import Path
-from unittest.mock import patch
+from unittest.mock import MagicMock, patch
 
 from core.config.spec_validation import spec_validation_enabled
 from core.context.spec_validation_prompt import build_spec_validation_prompt
@@ -149,6 +149,7 @@ def _delegate_with_transcript(
     spec_path: str = "tasks/step-b.md",
 ):
     monkeypatch.setenv("MCP_CODER_HOME", str(ws.parent / "home"))
+    monkeypatch.setenv("MCP_CODER_CLARITY_PASS", "0")
     monkeypatch.chdir(ws)
     _write_workspace_config(ws, "host_transcript: dump\nspec_validation: true\n")
 
@@ -282,10 +283,12 @@ def test_llm_runner_clarifications_response(tmp_path):
 # --- integration ---
 
 
-def test_delegate_skips_validation_when_transcript_empty(tmp_path, monkeypatch):
+def test_delegate_runs_validation_without_transcript(tmp_path, monkeypatch):
+    """spec_validation runs even when no host transcript is available (transcript is optional)."""
     ws = _setup_workspace(tmp_path)
     monkeypatch.setenv("MCP_CODER_HOME", str(tmp_path / "home"))
     monkeypatch.setenv("MCP_CODER_SPEC_VALIDATION", "1")
+    monkeypatch.setenv("MCP_CODER_CLARITY_PASS", "0")
     monkeypatch.chdir(ws)
 
     captured: dict[str, bool] = {}
@@ -293,6 +296,18 @@ def test_delegate_skips_validation_when_transcript_empty(tmp_path, monkeypatch):
     engine = _make_mock_engine(fake, captured)
 
     with patch("core.engine.spec_validation_llm.run_spec_validation_llm") as validate:
+        validate.return_value = MagicMock(
+            passed=True,
+            blocked=False,
+            clarification_needed=False,
+            questions=[],
+            audit="Validation OK",
+            error=None,
+            model="m",
+            duration_ms=10,
+            tokens={"input": 10, "output": 5, "total": 15, "source": "spec_validation"},
+            provenance=MagicMock(spec_path=None, host_transcript_path=None, context_source=None),
+        )
         with patch("server.mcp_server.get_engine", return_value=engine):
             raw = delegate_to_agent(
                 task="Implement CLI",
@@ -301,7 +316,7 @@ def test_delegate_skips_validation_when_transcript_empty(tmp_path, monkeypatch):
                 spec_path="tasks/step-b.md",
                 mode="implement",
             )
-        validate.assert_not_called()
+        validate.assert_called_once()
 
     payload = json.loads(raw)
     assert payload["success"] is True
@@ -355,7 +370,8 @@ def test_delegate_validation_ok_proceeds(tmp_path, monkeypatch):
     assert "clarification_needed" not in payload
 
 
-def test_delegate_validation_blocks_executor(tmp_path, monkeypatch):
+def test_delegate_validation_questions_advisory_executor_runs(tmp_path, monkeypatch):
+    """When spec_validation has questions, execution proceeds and questions appear as advisory."""
     ws = _setup_workspace(tmp_path)
     captured: dict[str, bool] = {}
     blocked = SpecValidationLlmResult(
@@ -372,13 +388,11 @@ def test_delegate_validation_blocks_executor(tmp_path, monkeypatch):
         ws, monkeypatch, validation_result=blocked, engine_captured=captured
     )
     payload = json.loads(raw)
-    assert payload["success"] is False
-    assert payload["outcome"] == OUTCOME_NEEDS_INPUT
-    assert len(payload["clarification_needed"]) == 2
     assert payload["spec_validation_ran"] is True
     assert payload["spec_validation_passed"] is False
-    assert captured.get("called") is not True
-    assert payload["files_changed"] == []
+    assert len(payload["clarification_needed"]) == 2
+    # Execution proceeds — success from executor
+    assert captured.get("called") is True
 
 
 def test_delegate_validation_llm_error_proceeds(tmp_path, monkeypatch):

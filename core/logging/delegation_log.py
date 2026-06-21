@@ -62,6 +62,10 @@ REVIEWER_PASS_LGTM = "lgtm"
 REVIEWER_PASS_ISSUES = "issues"
 REVIEWER_PASS_SKIPPED = "skipped"
 REVIEWER_PASS_ERROR = "error"
+REVIEWER_MODE_ADVISORY = "advisory"
+REVIEWER_MODE_DISABLED = "disabled"
+REVIEWER_ACTION_CONTINUE = "continue"
+REVIEWER_ACTION_NONE = "none"
 
 
 def resolve_reviewer_pass_result(
@@ -81,6 +85,35 @@ def resolve_reviewer_pass_result(
     if not ran:
         return REVIEWER_PASS_SKIPPED
     return REVIEWER_PASS_ERROR
+
+
+def resolve_reviewer_policy_fields(
+    *,
+    enabled: bool,
+    ran: bool,
+    outcome: str | None,
+    error: str | None = None,
+) -> dict[str, str]:
+    """Stable reviewer visibility fields for API payload + delegation context.
+
+    reviewer_mode: policy mode (today: advisory or disabled)
+    reviewer_outcome: lgtm/issues/skipped/error
+    reviewer_action: concrete policy action (continue/none)
+    """
+    reviewer_outcome = resolve_reviewer_pass_result(
+        enabled=enabled, ran=ran, outcome=outcome, error=error
+    )
+    if not enabled:
+        return {
+            "reviewer_mode": REVIEWER_MODE_DISABLED,
+            "reviewer_outcome": reviewer_outcome,
+            "reviewer_action": REVIEWER_ACTION_NONE,
+        }
+    return {
+        "reviewer_mode": REVIEWER_MODE_ADVISORY,
+        "reviewer_outcome": reviewer_outcome,
+        "reviewer_action": REVIEWER_ACTION_CONTINUE,
+    }
 
 
 def supervisor_audit_fields(tokens: dict[str, Any] | None) -> dict[str, Any]:

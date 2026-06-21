@@ -468,6 +468,47 @@ def test_view_events_shell_exec_emitted():
     assert "pytest" in sh["summary"]
 
 
+def test_view_events_clarity_result_emitted():
+    """clarity_result trace line is surfaced as mcp.clarity_result."""
+    trace = [
+        {
+            "type": "clarity_result",
+            "delegation_id": "d1",
+            "ran": True,
+            "passed": False,
+            "has_questions": True,
+            "questions": ["Which file should be edited?"],
+            "questions_count": 1,
+            "clarity_round_index": 1,
+            "clarity_round_cap": 2,
+            "clarity_auto_passed": False,
+            "timestamp": "2026-01-01T00:00:01Z",
+        }
+    ]
+    events = _build_view_events(_simple_record(), trace)
+    clarity = next((e for e in events if e["name"] == "mcp.clarity_result"), None)
+    assert clarity is not None
+    assert clarity["detail"]["status"] == "blocked"
+    assert clarity["detail"]["questions_count"] == 1
+
+
+def test_view_events_unknown_tool_call_has_fallback_row():
+    """tool_call with unknown tool kind still appears via executor.tool row."""
+    trace = [
+        {
+            "type": "tool_call",
+            "delegation_id": "d1",
+            "step_index": 0,
+            "tool": "open_file",
+            "path": "x.py",
+        }
+    ]
+    events = _build_view_events(_simple_record(), trace)
+    tool = next((e for e in events if e["name"] == "executor.tool"), None)
+    assert tool is not None
+    assert tool["detail"]["tool"] == "open_file"
+
+
 def test_view_events_folded_llm_roles_not_emitted():
     """llm_call roles spec_validation, architect_pass, context_builder, executor → not emitted."""
     trace = [
@@ -498,6 +539,54 @@ def test_view_events_workspace_summarizer_emitted():
     post = next((e for e in events if e["name"] == "mcp→post"), None)
     assert post is not None
     assert post["detail"]["index_count"] == 1
+
+
+def test_view_events_compile_stage_keeps_helper_thinking_body():
+    """Folded planner llm_call keeps reasoning text in mcp.planner detail.llm."""
+    trace = [
+        {
+            "type": "llm_call",
+            "delegation_id": "d1",
+            "role": "planner_pass",
+            "model": "planner-model",
+            "call_index": 0,
+            "tokens": {"input": 10, "output": 5, "reasoning_tokens": 3},
+            "reasoning_body": "planner chain of thought",
+            "response_body": "## Planner plan\n- step 1",
+        },
+        {
+            "type": "compile_event",
+            "delegation_id": "d1",
+            "stage": "architect_output",
+            "status": "ok",
+            "body": "planner output body",
+            "timestamp": "2026-01-01T00:00:01Z",
+        },
+    ]
+    events = _build_view_events(_simple_record(), trace)
+    planner = next(e for e in events if e["name"] == "mcp.planner")
+    assert planner["detail"]["thinking_tokens"] == 3
+    assert planner["detail"]["llm"]["thinking_body"] == "planner chain of thought"
+
+
+def test_view_events_standalone_helper_keeps_thinking_body():
+    """Unfolded helper llm_call keeps reasoning text in event detail."""
+    trace = [
+        {
+            "type": "llm_call",
+            "delegation_id": "d1",
+            "role": "review",
+            "model": "review-model",
+            "call_index": 1,
+            "tokens": {"input": 20, "output": 7, "reasoning_tokens": 4},
+            "reasoning_body": "reviewer thinking",
+            "response_body": "## ISSUES\n- missing test",
+        }
+    ]
+    events = _build_view_events(_simple_record(), trace)
+    review = next(e for e in events if e["name"] == "mcp.review")
+    assert review["detail"]["thinking_tokens"] == 4
+    assert review["detail"]["thinking_body"] == "reviewer thinking"
 
 
 def test_view_events_executor_to_mcp_virtual():

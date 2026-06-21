@@ -1,7 +1,7 @@
 # Phase 11 issues
 
 **Status:** **Active** — Phase 11 opened 2026-06-18.
-**Open:** P11-ISS-002 through P11-ISS-013 (8 new from timetracker dogfood 2026-06-19)
+**Open:** P11-ISS-002, P11-ISS-014, P11-ISS-017, P11-ISS-018, P11-ISS-019
 **Promoted from backlog:** BL-351 (full), BL-521 (new), BL-354 (v0), BL-358 (v0), BL-512 (Stage 2), BL-522 (new) — see [PHASE11_MVP.md](./PHASE11_MVP.md)
 **Related PM board:** [PHASE11_MVP.md](./PHASE11_MVP.md)
 
@@ -56,6 +56,12 @@
 | P11-ISS-011 | **fixed** | low | `context_mode: fallback` even when `spec_path` is explicitly provided — final timetracker delegation supplied `spec_path` yet context mode is `fallback`; spec wasn't compiled despite being passed | context compiler | Fixed as part of P11-ISS-006/008: `pipeline_recorder` now always created for IMPLEMENT; `reviewer_applicable` no longer requires `spec_read` |
 | P11-ISS-012 | **fixed** | low | Trace viewer still labels planner phase as "architect" — `compile_event` stage constants `STAGE_ARCHITECT_INPUT`/`STAGE_ARCHITECT_OUTPUT` in `trace.py` and display mapping in `delegation_view_enrich.py` were not renamed in P11-008; viewer shows "mcp.architect" instead of "mcp.planner" | P11-008 rename gap | Fixed: added `STAGE_PLANNER_INPUT`/`STAGE_PLANNER_OUTPUT` constants in `trace.py`; old constants aliased for backward compat; `_COMPILE_STAGE_MAP` in `delegation_view_enrich.py` maps both `planner_input` and `architect_input` to `"mcp.planner"` |
 | P11-ISS-013 | **fixed** | **high** | `_looks_like_clarification()` too broad — fires on any `?` in output not matching a files-request; executor output (thinking text, README content, log strings) routinely contains `?`, triggering false `clarification_requested` failures even when all files were written; root cause of P11-ISS-007 | `aider_runtime.py` | Fixed: `_looks_like_clarification()` now only checks the **last 20 lines** of output for bare `?`; marker-based detection still checks full output |
+| P11-ISS-014 | open | **high** | `llm_call` trace events missing role attribution (`role=None`) — model calls are visible but cannot be reliably mapped to planner/reviewer/clarity/spec-validation/executor in event stream | Observability / phase-exit | Add required fields on every `proxy_llm_call` / `backend_llm_call`: `role`, `model`, `provider`, `ok`, `duration_ms`, token summary; verify with one full delegation |
+| P11-ISS-015 | **fixed** | medium | Supervisor outer-loop lifecycle is implicit — no explicit start/end envelope to group inner events and explain control flow | P11-009 | Fixed: `SupervisorAgent` emits canonical `supervisor_loop_start` / `supervisor_loop_end`; unified lifecycle removes the dual `supervisor_outer_loop_*` + inner split; 17 tests pass |
+| P11-ISS-016 | **fixed** | medium | Supervisor turn-level decisions are not fully normalized — hard to reconstruct why loop continued, gated, retried, or aborted | P11-009 | Fixed: `SupervisorAgent` emits `supervisor_turn_start`, `supervisor_turn_end`, `supervisor_decision` per turn with `turn_index`, `action`, `reason`, `worker_outcome`, `checks_result`, `duration_ms` |
+| P11-ISS-017 | open | medium | Reviewer pass outcome is visible but policy semantics are unclear (advisory vs blocking / continue vs retry) in delegation record and response payload | P11-005 UX/logging | Add explicit reviewer policy fields: `reviewer_mode`, `reviewer_outcome`, `reviewer_action`; include in `response_to_cursor` and `delegations.jsonl` context block |
+| P11-ISS-018 | open | low | Planner pass visibility is uneven — pipeline phase exists, but planner audit block is not normalized alongside clarity/spec-validation/reviewer | P11-008 telemetry | Add `planner_pass` audit block (`ran`, `applied`, `error`, `duration_ms`, model role ref) to context block and viewer enrichment |
+| P11-ISS-019 | open | low | Clarity loop guardrails now work (Q&A + cap) but telemetry is incomplete for explainability of block vs auto-pass transitions | P11-001 stabilization | Add clarity telemetry fields: `clarity_round_index`, `clarity_round_cap`, `clarity_auto_passed`, and surface them in trace + delegation record |
 
 ---
 
@@ -72,5 +78,6 @@
 | — | **BL-526** | Architect role | True epic-boundary CTO role (high-level context only, no inner task details); distinct from planner which is task-scoped |
 | — | **BL-513** | AI-suggested model policy | Pre-delegation analysis step suggests `model_policy` overrides based on task complexity |
 | — | **BL-514** | Dynamic escalation | Outer-loop controller modifies active model policy mid-delegation in response to runtime signals |
+| — | **BL-533** | Supervisor as real agent loop | ~~Dual-loop namespace (supervisor_loop / supervisor_outer_loop) was a layering artifact.~~ **Resolved in Phase 11 (P11-009):** `SupervisorAgent` owns unified post-planning loop; single `supervisor_loop_*` lifecycle; `max_turns` config enables autonomous reruns. Live multi-turn rerun wiring in `mcp_server` deferred as follow-up (P11-009 § Results). |
 
-**Phase 12 theme:** *Context intelligence for all roles* — move from waterfall pipeline (each model gets a single compiled snapshot) to an agentic loop where every role can query, communicate, and iterate.
+**Phase 12 theme:** *Context intelligence for all roles + supervisor as agent* — move from waterfall pipeline (each model gets a single compiled snapshot) to an agentic loop where the supervisor owns post-planning control flow and every role can query, communicate, and iterate.

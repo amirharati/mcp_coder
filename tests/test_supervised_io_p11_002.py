@@ -27,6 +27,7 @@ from core.engine.supervisor import (
     SupervisorDecision,
     parse_supervisor_output,
 )
+from core.observability.context import delegation_id_var, session_dir_var, workspace_var
 from core.logging.delegation_log import supervisor_audit_fields
 from server.mcp_server import delegate_to_agent
 
@@ -108,6 +109,42 @@ def test_supervised_io_high_risk_calls_supervisor():
     )
     assert sio.confirm_ask("Run shell command: pytest tests/") is True
     supervisor.evaluate.assert_called_once()
+
+
+def test_supervised_loop_events_emitted():
+    supervisor = MagicMock(spec=DelegationSupervisor)
+    supervisor.evaluate.return_value = SupervisorDecision(
+        decision="approve",
+        reasoning="safe",
+        duration_ms=5,
+        risk_tier="high",
+    )
+    sio = SupervisedIO(
+        output=io.StringIO(),
+        supervisor=supervisor,
+        target_files={"pkg/cli.py"},
+        contract_paths={"pkg/cli.py"},
+        delegation_id="d-loop",
+    )
+
+    emitted: list[dict] = []
+    tok_d = delegation_id_var.set("d-loop")
+    tok_s = session_dir_var.set("/tmp/session")
+    tok_w = workspace_var.set("/tmp/ws")
+    try:
+        with patch("core.observability.trace.append_trace_record") as append:
+            append.side_effect = lambda rec, **_: emitted.append(rec)
+            assert sio.confirm_ask("Run shell command: pytest tests/") is True
+            sio.finalize_supervisor_loop(end_reason="completed", final_decision="approve")
+    finally:
+        delegation_id_var.reset(tok_d)
+        session_dir_var.reset(tok_s)
+        workspace_var.reset(tok_w)
+
+    types = [e.get("type") for e in emitted]
+    assert "supervisor_loop_start" in types
+    assert "supervisor_turn_decision" in types
+    assert "supervisor_loop_end" in types
 
 
 def test_supervised_io_deny_returns_false():

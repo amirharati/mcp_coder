@@ -1,9 +1,11 @@
 from __future__ import annotations
 
 import asyncio
+from datetime import datetime
 import json
 import os
 import queue
+import signal
 import subprocess
 import threading
 import time
@@ -120,6 +122,7 @@ from core.engine import get_engine, list_backends
 from core.engine.factory import UnknownBackendError
 from core.session.policy import resolve_session_policy
 from core.session.store import SessionStore
+from core.server.singleton import stale_mcp_pids
 from core.specs.bootstrap import ensure_task_report, ensure_workspace_spec_layout
 from core.engine.spec_review import run_spec_review
 from core.specs.delegation_policies import (
@@ -792,6 +795,8 @@ def _apply_clarity_check(
     spec_read: "Any",
     workspace: str,
     task: str,
+    context_summary: str,
+    prior_blocked_count: int,
     recent_delegation_titles: list[str],
     timing: dict[str, int | float],
     delegation_id: str,
@@ -809,6 +814,8 @@ def _apply_clarity_check(
         spec_read=spec_read,
         workspace=workspace,
         task=task,
+        context_summary=context_summary,
+        prior_blocked_count=prior_blocked_count,
         recent_delegation_titles=recent_delegation_titles,
         timing=timing,
         delegation_id=delegation_id,
@@ -845,14 +852,70 @@ def _apply_reviewer_pass(
     )
 
 
+def _count_clarity_blocked_rounds(
+    session_dir: "Path | str",
+    spec_rel_path: str | None,
+) -> int:
+    """Count how many prior delegations in this session were blocked by clarity for this spec."""
+    import json as _json
+    from core.logging.delegation_log import CLARITY_CHECK_CLARIFICATION_NEEDED
+
+    def _norm_spec(path: str | None) -> str:
+        text = str(path or "").strip().replace("\\", "/")
+        if text.startswith("./"):
+            text = text[2:]
+        return text
+
+    def _same_spec(a: str, b: str) -> bool:
+        if not a or not b:
+            return False
+        return a == b or a.endswith("/" + b) or b.endswith("/" + a)
+
+    log_path = Path(session_dir) / "delegations.jsonl"
+    if not log_path.is_file():
+        return 0
+    target_spec = _norm_spec(spec_rel_path)
+    count = 0
+    try:
+        for line in log_path.read_text(encoding="utf-8", errors="replace").splitlines():
+            line = line.strip()
+            if not line:
+                continue
+            try:
+                rec = _json.loads(line)
+            except Exception:
+                continue
+            if rec.get("outcome") != "needs_input":
+                continue
+            # Count only structured clarity outcomes; avoid text-matching heuristics.
+            ctx = rec.get("context") or {}
+            clarity_result = str(ctx.get("clarity_check_result") or "").strip().lower()
+            if clarity_result != CLARITY_CHECK_CLARIFICATION_NEEDED:
+                continue
+            # Optionally scope to same spec.
+            if target_spec:
+                req = rec.get("mcp_request") or {}
+                rec_spec = _norm_spec(
+                    req.get("spec_path")
+                    or rec.get("spec_path")
+                    or ctx.get("task_spec")
+                    or ""
+                )
+                if not rec_spec or not _same_spec(rec_spec, target_spec):
+                    continue
+            count += 1
+    except Exception:
+        return 0
+    return count
+
+
 def _collect_reviewer_unified_diff(workspace: str, files_changed: list[str]) -> str:
-    """Git unified diff for reviewer prompt; raises on collection failure."""
+    """Unified diff for reviewer prompt. Falls back to file content when not a git repo."""
     from core.engine.git_diff import normalize_repo_path
 
     if not files_changed:
         return ""
     paths = [normalize_repo_path(p) for p in files_changed]
-    last_err = "git diff failed"
     try:
         for args in (
             ["git", "diff", "HEAD", "--", *paths],
@@ -868,8 +931,19 @@ def _collect_reviewer_unified_diff(workspace: str, files_changed: list[str]) -> 
             )
             if proc.returncode == 0:
                 return proc.stdout or ""
-            last_err = (proc.stderr or proc.stdout or last_err).strip()[:500]
-        raise RuntimeError(last_err)
+            stderr = (proc.stderr or "").lower()
+            if "not a git repository" in stderr:
+                break  # no point retrying; fall through to file-content fallback
+        # Not a git repo or git unavailable — include file contents as a best-effort diff
+        parts: list[str] = []
+        for rel in files_changed[:10]:  # cap to avoid huge prompts
+            abs_p = Path(workspace) / rel
+            try:
+                content = abs_p.read_text(encoding="utf-8", errors="replace")
+                parts.append(f"--- /dev/null\n+++ {rel}\n" + "\n".join(f"+{l}" for l in content.splitlines()))
+            except OSError:
+                pass
+        return "\n\n".join(parts)
     except (OSError, subprocess.TimeoutExpired) as exc:
         raise RuntimeError(str(exc)) from exc
 
@@ -1013,6 +1087,13 @@ def _response_payload(
     auto_verify_enabled_flag: bool | None = None,
     verify_result: dict[str, Any] | None = None,
     clarification_needed: list[str] | None = None,
+    clarity_questions: list[str] | None = None,
+    clarity_round_index: int | None = None,
+    clarity_round_cap: int | None = None,
+    clarity_auto_passed: bool | None = None,
+    reviewer_mode: str | None = None,
+    reviewer_outcome: str | None = None,
+    reviewer_action: str | None = None,
     spec_validation_ran: bool | None = None,
     spec_validation_passed: bool | None = None,
     delegation_pipeline: list[dict[str, Any]] | None = None,
@@ -1021,7 +1102,21 @@ def _response_payload(
     needs_input: dict[str, Any] | None = None,
     auto_retried: bool = False,
     stall_type: str | None = None,
+    server_status: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
+    # When spec advisor has questions (advisory, execution ran), prepend them
+    # to the output so the host always sees them in the text it reads.
+    # Note: clarity questions are NOT prepended here — when clarity blocks,
+    # output is set to just the questions before this function is called.
+    advisory_parts: list[str] = []
+    if clarification_needed:
+        advisory_parts.append(
+            "📋 **Spec advisor questions** (consider updating spec or context_summary before next delegation):\n"
+            + "\n".join(f"- {q}" for q in clarification_needed)
+        )
+    if advisory_parts:
+        output = "\n\n".join(advisory_parts) + "\n\n---\n\n" + output
+
     payload: dict[str, Any] = {
         "success": success,
         "output": _truncate_output(output),
@@ -1105,6 +1200,20 @@ def _response_payload(
             payload["verify_result"] = verify_result
     if clarification_needed:
         payload["clarification_needed"] = clarification_needed
+    if clarity_questions:
+        payload["clarity_questions"] = clarity_questions
+    if clarity_round_index is not None:
+        payload["clarity_round_index"] = clarity_round_index
+    if clarity_round_cap is not None:
+        payload["clarity_round_cap"] = clarity_round_cap
+    if clarity_auto_passed is not None:
+        payload["clarity_auto_passed"] = clarity_auto_passed
+    if reviewer_mode is not None:
+        payload["reviewer_mode"] = reviewer_mode
+    if reviewer_outcome is not None:
+        payload["reviewer_outcome"] = reviewer_outcome
+    if reviewer_action is not None:
+        payload["reviewer_action"] = reviewer_action
     if spec_validation_ran is not None:
         payload["spec_validation_ran"] = spec_validation_ran
     if spec_validation_passed is not None:
@@ -1122,7 +1231,95 @@ def _response_payload(
         payload["auto_retried"] = True
     if stall_type:
         payload["stall_type"] = stall_type
+    if server_status is not None:
+        payload["server_status"] = server_status
     return payload
+
+
+def _safe_parse_lstart(raw: str) -> datetime | None:
+    text = (raw or "").strip()
+    if not text:
+        return None
+    try:
+        return datetime.strptime(text, "%a %b %d %H:%M:%S %Y")
+    except ValueError:
+        return None
+
+
+def _build_server_status(workspace: str | Path) -> dict[str, Any]:
+    """Best-effort runtime freshness snapshot for host visibility."""
+    from core.version import repo_root, source_revision
+
+    ws = str(workspace)
+    root = repo_root()
+    pid = os.getpid()
+    started_at: str | None = None
+    latest_dirty_change_at: str | None = None
+    dirty_count = 0
+    stale_vs_local_changes: bool | None = None
+    started: datetime | None = None
+
+    try:
+        proc = subprocess.run(
+            ["ps", "-p", str(pid), "-o", "lstart="],
+            capture_output=True,
+            text=True,
+            timeout=2,
+            check=False,
+        )
+        started = _safe_parse_lstart(proc.stdout)
+        if started is not None:
+            started_at = started.isoformat(timespec="seconds")
+    except (OSError, subprocess.TimeoutExpired):
+        pass
+
+    try:
+        gs = subprocess.run(
+            ["git", "-C", str(root), "status", "--porcelain"],
+            capture_output=True,
+            text=True,
+            timeout=3,
+            check=False,
+        )
+        if gs.returncode == 0:
+            paths: list[Path] = []
+            for line in gs.stdout.splitlines():
+                if len(line) < 4:
+                    continue
+                rel = line[3:].strip()
+                if not rel:
+                    continue
+                path = root / rel
+                if path.is_file():
+                    paths.append(path)
+            dirty_count = len(paths)
+            if paths:
+                latest_ts = max(p.stat().st_mtime for p in paths)
+                latest_dt = datetime.fromtimestamp(latest_ts)
+                latest_dirty_change_at = latest_dt.isoformat(timespec="seconds")
+                if started is not None:
+                    stale_vs_local_changes = started < latest_dt
+            elif started is not None:
+                stale_vs_local_changes = False
+    except (OSError, ValueError, subprocess.TimeoutExpired):
+        pass
+
+    try:
+        stale_pids = stale_mcp_pids(ws, main_script=str(root / "main.py"))
+    except Exception:
+        stale_pids = []
+
+    return {
+        "pid": pid,
+        "workspace_path": ws,
+        "source_root": str(root),
+        "source_revision": source_revision(),
+        "started_at": started_at,
+        "dirty_files_count": dirty_count,
+        "latest_dirty_change_at": latest_dirty_change_at,
+        "stale_vs_local_changes": stale_vs_local_changes,
+        "stale_sibling_pids": stale_pids,
+    }
 
 
 @mcp.tool(
@@ -1319,6 +1516,7 @@ def delegate_to_agent(
             task_preview=task,
         )
         model: str | None = None
+        result: ExecutionResult | None = None
         success = False
         error: str | None = None
         error_class: str | None = None
@@ -1408,9 +1606,11 @@ def delegate_to_agent(
         cap_warnings: list[str] = []
         picker_result: CandidateFilesResult | None = None
         architect_enabled = False
+        architect_reason: str | None = None
         architect_plan_applied = False
         architect_pass_error: str | None = None
         architect_record: dict[str, Any] | None = None
+        planner_pass_audit: dict[str, Any] | None = None
         architect_plan: str | None = None
         builder_llm_enabled = False
         builder_brief_applied = False
@@ -1430,12 +1630,16 @@ def delegate_to_agent(
         clarity_check_audit: dict[str, Any] | None = None
         clarity_check_record: dict[str, Any] | None = None
         clarity_check_error: str | None = None
+        clarity_round_index: int | None = None
+        clarity_round_cap: int | None = None
+        clarity_auto_passed: bool | None = None
         reviewer_pass_ran = False
         reviewer_pass_outcome: str | None = None
         reviewer_pass_note: str | None = None
         reviewer_pass_error: str | None = None
         reviewer_pass_audit: dict[str, Any] | None = None
         reviewer_pass_record: dict[str, Any] | None = None
+        reviewer_policy_fields: dict[str, str] = {}
         builder_provenance: dict[str, Any] = {}
         architect_provenance: dict[str, Any] = {}
         builder_history_rag_on = False
@@ -1448,6 +1652,25 @@ def delegate_to_agent(
         stall_type: str | None = None
         stall_files_requested: list[str] = []
         needs_input_payload: dict[str, Any] | None = None
+        # P12-001: unified supervisor agent loop owns all post-planning control flow
+        # (replaces the former supervisor_outer_loop_* events). The agent emits the
+        # canonical supervisor_loop_* / supervisor_turn_* / supervisor_decision events.
+        from core.engine.supervisor_agent import (
+            SupervisorAgent,
+            resolve_supervisor_max_turns,
+        )
+
+        supervisor_agent: SupervisorAgent | None = None
+        supervisor_agent_result = None
+        _supervisor_max_turns = resolve_supervisor_max_turns(ws)
+
+        def _supervisor_event_sink(rec: dict[str, Any]) -> None:
+            append_trace_record(
+                rec,
+                delegation_id=delegation_id,
+                session_dir=storage.session_dir,
+                workspace=ws,
+            )
 
         if (
             pipeline_recorder is not None
@@ -1455,65 +1678,50 @@ def delegate_to_agent(
             and spec_validation_enabled(ws)
             and spec_read is not None  # spec_validation requires a loaded spec
         ):
-            if host_transcript_text and host_transcript_text.strip():
-                pipeline_recorder.start("spec_validation")
-                (
-                    spec_validation_blocked,
-                    clarification_needed,
-                    spec_validation_ran,
-                    spec_validation_passed,
-                    _spec_val_err,
-                    spec_validation_audit,
-                    spec_validation_record,
-                    spec_validation_provenance,
-                ) = _apply_spec_validation(
-                    spec_read=spec_read,
-                    workspace=ws,
-                    task=task,
-                    context_summary=context_summary,
-                    host_transcript=host_transcript_text,
-                    timing=timing,
-                    delegation_id=delegation_id,
+            pipeline_recorder.start("spec_validation")
+            (
+                spec_validation_blocked,
+                clarification_needed,
+                spec_validation_ran,
+                spec_validation_passed,
+                _spec_val_err,
+                spec_validation_audit,
+                spec_validation_record,
+                spec_validation_provenance,
+            ) = _apply_spec_validation(
+                spec_read=spec_read,
+                workspace=ws,
+                task=task,
+                context_summary=context_summary,
+                host_transcript=host_transcript_text or "",
+                timing=timing,
+                delegation_id=delegation_id,
+            )
+            _emit_compile_provenance_pair(
+                delegation_id=delegation_id,
+                workspace=ws,
+                session_dir=storage.session_dir,
+                obs_verbosity=_compile_verbosity,
+                input_stage=STAGE_VALIDATION_INPUT,
+                output_stage=STAGE_VALIDATION_OUTPUT,
+                provenance=spec_validation_provenance,
+                source_path=host_hint.host_transcript_path,
+                last_source_line=(
+                    transcript_result.lines_parsed
+                    if transcript_result.lines_parsed > 0
+                    else None
+                ),
+                byte_start=transcript_result.source_byte_start,
+                byte_end=transcript_result.source_byte_end,
+            )
+            if spec_validation_blocked:
+                pipeline_recorder.end("spec_validation", status="blocked")
+            elif _spec_val_err:
+                pipeline_recorder.end(
+                    "spec_validation", status="error", detail=_spec_val_err[:200]
                 )
-                _emit_compile_provenance_pair(
-                    delegation_id=delegation_id,
-                    workspace=ws,
-                    session_dir=storage.session_dir,
-                    obs_verbosity=_compile_verbosity,
-                    input_stage=STAGE_VALIDATION_INPUT,
-                    output_stage=STAGE_VALIDATION_OUTPUT,
-                    provenance=spec_validation_provenance,
-                    source_path=host_hint.host_transcript_path,
-                    last_source_line=(
-                        transcript_result.lines_parsed
-                        if transcript_result.lines_parsed > 0
-                        else None
-                    ),
-                    byte_start=transcript_result.source_byte_start,
-                    byte_end=transcript_result.source_byte_end,
-                )
-                if spec_validation_blocked:
-                    pipeline_recorder.end("spec_validation", status="blocked")
-                elif _spec_val_err:
-                    pipeline_recorder.end(
-                        "spec_validation", status="error", detail=_spec_val_err[:200]
-                    )
-                else:
-                    pipeline_recorder.end("spec_validation", status="ok")
             else:
-                pipeline_recorder.mark(
-                    "spec_validation",
-                    status="skipped",
-                    detail="empty_host_transcript",
-                )
-                _emit_compile_skip(
-                    delegation_id=delegation_id,
-                    stage=STAGE_VALIDATION_INPUT,
-                    workspace=ws,
-                    session_dir=storage.session_dir,
-                    obs_verbosity=_compile_verbosity,
-                    reason="empty_host_transcript",
-                )
+                pipeline_recorder.end("spec_validation", status="ok")
         elif pipeline_recorder is not None and not review_target_files_error:
             pipeline_recorder.mark(
                 "spec_validation",
@@ -1534,7 +1742,6 @@ def delegate_to_agent(
         if (
             pipeline_recorder is not None
             and not review_target_files_error
-            and not spec_validation_blocked
             and clarity_pass_on
         ):
             from core.context.builder_history import gather_builder_history
@@ -1543,6 +1750,10 @@ def delegate_to_agent(
             _titles = [r.get("task", "")[:80] for r in _history.same_spec[:3]]
             if not _titles:
                 _titles = [r.get("task", "")[:80] for r in _history.project_recent[:3]]
+
+            _prior_blocked = _count_clarity_blocked_rounds(
+                storage.session_dir, spec_rel_path
+            )
 
             pipeline_recorder.start("clarity_check")
             (
@@ -1558,10 +1769,18 @@ def delegate_to_agent(
                 spec_read=spec_read,
                 workspace=ws,
                 task=task,
+                context_summary=context_summary,
+                prior_blocked_count=_prior_blocked,
                 recent_delegation_titles=_titles,
                 timing=timing,
                 delegation_id=delegation_id,
             )
+            if clarity_check_audit is not None:
+                # Stable telemetry keys used by trace + delegation visibility.
+                clarity_round_index = int(clarity_check_audit.get("round_index") or 0) or None
+                clarity_round_cap = int(clarity_check_audit.get("round_cap") or 0) or None
+                _auto_passed = clarity_check_audit.get("auto_passed")
+                clarity_auto_passed = bool(_auto_passed) if _auto_passed is not None else None
             if clarity_check_blocked:
                 pipeline_recorder.end("clarity_check", status="blocked")
             elif clarity_check_error:
@@ -1575,11 +1794,14 @@ def delegate_to_agent(
                 {
                     "type": "clarity_result",
                     "delegation_id": delegation_id,
-                    "needs_clarification": clarity_check_blocked,
+                    "has_questions": bool(clarity_check_questions),
                     "ran": clarity_check_ran,
                     "passed": clarity_check_passed,
                     "questions": clarity_check_questions or [],
                     "questions_count": len(clarity_check_questions or []),
+                    "clarity_round_index": clarity_round_index,
+                    "clarity_round_cap": clarity_round_cap,
+                    "clarity_auto_passed": clarity_auto_passed,
                     "error": clarity_check_error,
                     "timestamp": obs.utc_now_iso(),
                 },
@@ -1605,14 +1827,26 @@ def delegate_to_agent(
             success = False
             error = review_target_files_error
             output = review_target_files_error
-        elif spec_validation_blocked:
-            success = False
-            error = None
-            output = _SPEC_VALIDATION_BLOCK_OUTPUT
         elif clarity_check_blocked:
+            # Hard gate: execution is paused; host must add answers to spec Q&A and re-delegate.
             success = False
             error = None
-            output = _CLARITY_CHECK_BLOCK_OUTPUT
+            _spec_hint = (
+                f" in `{spec_rel_path}`" if spec_rel_path else " in the spec"
+            )
+            output = (
+                "🔍 **Clarity questions** — add answers to the `## Q&A` section"
+                f"{_spec_hint} then re-call `delegate_to_agent`:\n"
+                + "\n".join(f"- {q}" for q in (clarity_check_questions or []))
+            )
+            # Auto-append unanswered questions to the spec so the host can fill them in-place.
+            if spec_rel_path and clarity_check_questions:
+                try:
+                    from core.specs.write import append_clarity_qa
+                    _spec_abs = Path(ws) / spec_rel_path
+                    append_clarity_qa(_spec_abs, clarity_check_questions)
+                except Exception:
+                    pass  # best-effort; never block
         else:
             progress.notify(
                 (
@@ -1622,6 +1856,17 @@ def delegate_to_agent(
                 force=True,
             )
             progress.notify("[executor] Starting delegated run…", force=True)
+            supervisor_agent = SupervisorAgent(
+                delegation_id=delegation_id,
+                workspace_path=ws,
+                # executor_fn/reviewer_fn unused in host-driven mode (mcp_server owns
+                # the executor + reviewer plumbing and drives the loop turn-by-turn).
+                executor_fn=lambda _turn, _correction: result,
+                max_turns=_supervisor_max_turns,
+                event_sink=_supervisor_event_sink,
+            )
+            supervisor_agent.begin()
+            supervisor_agent.begin_turn()
             executor_phase_started = False
             _executor_turns = 0
             try:
@@ -1801,6 +2046,14 @@ def delegate_to_agent(
                         )
                         if architect_plan:
                             architect_plan_applied = True
+                        planner_pass_audit = {
+                            "ran": True,
+                            "applied": architect_plan_applied,
+                            "error": architect_pass_error,
+                            "duration_ms": timing.get("planner_pass_ms"),
+                            "model_role": (architect_record or {}).get("role"),
+                            "model": (architect_record or {}).get("model"),
+                        }
                         if pipeline_recorder is not None:
                             if architect_pass_error:
                                 pipeline_recorder.end(
@@ -1811,6 +2064,15 @@ def delegate_to_agent(
                             else:
                                 pipeline_recorder.end("planner_pass", status="ok")
                     else:
+                        planner_pass_audit = {
+                            "ran": False,
+                            "applied": False,
+                            "error": None,
+                            "reason": architect_reason,
+                            "duration_ms": 0,
+                            "model_role": "planner_pass",
+                            "model": None,
+                        }
                         if pipeline_recorder is not None:
                             pipeline_recorder.mark(
                                 "planner_pass",
@@ -2191,10 +2453,6 @@ def delegate_to_agent(
                 )
                 context_block["repo_map_count"] = pkg_meta.get("repo_map_count", 0)
                 context_block["context_builder_llm_enabled"] = builder_llm_enabled
-                context_block["planner_pass_enabled"] = architect_enabled
-                context_block["planner_plan_applied"] = architect_plan_applied
-                if architect_pass_error:
-                    context_block["planner_pass_error"] = architect_pass_error
                 if builder_llm_enabled:
                     context_block["builder_brief_applied"] = builder_brief_applied
                     if builder_llm_error:
@@ -2207,6 +2465,13 @@ def delegate_to_agent(
                     context_block["rag_retrieval_hit_count"] = len(rag_retrieval_refs)
                     context_block["rag_retrieval_delegation_hits"] = len(delegation_rag_refs)
                     context_block["rag_retrieval_file_hits"] = len(workspace_file_rag_refs)
+            # Planner pass telemetry should be stable regardless of builder/rag toggles.
+            if planner_pass_audit is not None:
+                context_block["planner_pass"] = planner_pass_audit
+            context_block["planner_pass_enabled"] = architect_enabled
+            context_block["planner_plan_applied"] = architect_plan_applied
+            if architect_pass_error:
+                context_block["planner_pass_error"] = architect_pass_error
             context_block["adapter_in"] = {
                 "fnames": sorted(
                     e.path for e in context_package.entries if e.tier == TIER_EDIT_FULL
@@ -2305,7 +2570,10 @@ def delegate_to_agent(
                     detail="disabled_or_not_applicable",
                 )
 
-        from core.logging.delegation_log import resolve_reviewer_pass_result
+        from core.logging.delegation_log import (
+            resolve_reviewer_pass_result,
+            resolve_reviewer_policy_fields,
+        )
 
         reviewer_pass_result = resolve_reviewer_pass_result(
             enabled=reviewer_pass_on,
@@ -2313,9 +2581,57 @@ def delegate_to_agent(
             outcome=reviewer_pass_outcome,
             error=reviewer_pass_error,
         )
+        reviewer_policy_fields = resolve_reviewer_policy_fields(
+            enabled=reviewer_pass_on,
+            ran=reviewer_pass_ran,
+            outcome=reviewer_pass_outcome,
+            error=reviewer_pass_error,
+        )
         context_block["reviewer_pass_result"] = reviewer_pass_result
+        # Explicit reviewer policy visibility fields (P11-ISS-017).
+        context_block.update(reviewer_policy_fields)
         if reviewer_pass_audit is not None:
             context_block["reviewer_pass"] = reviewer_pass_audit
+
+        if supervisor_agent is not None:
+            # Translate the reviewer signal into the agent's per-turn check summary, then
+            # let the agent emit supervisor_turn_end + supervisor_decision and close the
+            # loop. With max_turns=1 (default) this is a single turn ending in `done`.
+            _reviewer_checks = {
+                "outcome": (
+                    "issues"
+                    if reviewer_pass_outcome == "issues"
+                    else ("lgtm" if reviewer_pass_outcome == "lgtm" else None)
+                ),
+                "note": str(
+                    reviewer_pass_note or reviewer_pass_error or ""
+                )[:300],
+            }
+            _agent_turn_result = (
+                result
+                if result is not None
+                else ExecutionResult(
+                    success=success,
+                    output=output or "",
+                    files_changed=files_changed,
+                    model=model,
+                    error=error,
+                    error_class=error_class,
+                )
+            )
+            supervisor_agent.complete_turn(_agent_turn_result, _reviewer_checks)
+            supervisor_agent_result = supervisor_agent.finish()
+            context_block["supervisor_agent_loop"] = supervisor_agent.context_block(
+                supervisor_agent_result
+            )
+
+        # Explicit clarity loop telemetry (P11-ISS-019).
+        if clarity_round_index is not None:
+            context_block["clarity_round_index"] = clarity_round_index
+        if clarity_round_cap is not None:
+            context_block["clarity_round_cap"] = clarity_round_cap
+        if clarity_auto_passed is not None:
+            context_block["clarity_auto_passed"] = clarity_auto_passed
 
         if (
             spec_path
@@ -2323,7 +2639,7 @@ def delegate_to_agent(
             and delegate_mode == DELEGATE_MODE_IMPLEMENT
             and delegation_policies is not None
         ):
-            if pipeline_recorder is not None and not spec_validation_blocked:
+            if pipeline_recorder is not None:
                 pipeline_recorder.start("post_gateway")
             gateway_result = apply_post_delegation_gateway(
                 workspace=ws,
@@ -2344,10 +2660,10 @@ def delegate_to_agent(
                     "skipped": revert_skipped,
                     "gateway_applied": gateway_result.gateway_applied,
                 }
-            if pipeline_recorder is not None and not spec_validation_blocked:
+            if pipeline_recorder is not None:
                 pipeline_recorder.end("post_gateway", status="ok")
 
-        if spec_validation_blocked or clarity_check_blocked:
+        if clarity_check_blocked:
             outcome = OUTCOME_NEEDS_INPUT
         elif spec_path:
             if spec_invalid_reason:
@@ -2422,8 +2738,6 @@ def delegate_to_agent(
             and not spec_invalid_reason
             and success
             and files_changed
-            and not spec_validation_blocked
-            and not clarity_check_blocked
         ):
             if pipeline_recorder is not None:
                 pipeline_recorder.start("auto_verify")
@@ -2462,7 +2776,7 @@ def delegate_to_agent(
                     )
                 else:
                     pipeline_recorder.end("auto_verify", status="ok")
-        elif pipeline_recorder is not None and not spec_validation_blocked:
+        elif pipeline_recorder is not None:
             pipeline_recorder.mark(
                 "auto_verify",
                 status="skipped",
@@ -2599,6 +2913,7 @@ def delegate_to_agent(
         suggested_edit_paths_payload: list[str] | None = (
             picker_result.suggested_edit_paths or None if picker_result is not None else None
         )
+        server_status_payload = _build_server_status(ws)
 
         response = _response_payload(
             success=success,
@@ -2645,7 +2960,14 @@ def delegate_to_agent(
             builder_brief_applied=builder_brief_applied if builder_llm_enabled else None,
             auto_verify_enabled_flag=verify_enabled if verify_result is not None else None,
             verify_result=verify_result.to_response_dict() if verify_result is not None else None,
-            clarification_needed=clarification_needed or clarity_check_questions,
+            clarification_needed=clarification_needed,
+            clarity_questions=clarity_check_questions or None,
+            clarity_round_index=clarity_round_index,
+            clarity_round_cap=clarity_round_cap,
+            clarity_auto_passed=clarity_auto_passed,
+            reviewer_mode=reviewer_policy_fields.get("reviewer_mode"),
+            reviewer_outcome=reviewer_policy_fields.get("reviewer_outcome"),
+            reviewer_action=reviewer_policy_fields.get("reviewer_action"),
             spec_validation_ran=spec_validation_ran,
             spec_validation_passed=spec_validation_passed,
             delegation_pipeline=delegation_pipeline_payload,
@@ -2653,6 +2975,7 @@ def delegate_to_agent(
             needs_input=needs_input_payload,
             auto_retried=stall_auto_retried,
             stall_type=stall_type,
+            server_status=server_status_payload,
         )
         if host_policy_overrides:
             response["model_policy_applied"] = summarize_model_policy_applied(
@@ -2807,7 +3130,7 @@ def delegate_to_agent(
                     e.path for e in context_package.entries if e.tier == TIER_EDIT_FULL
                 )
             envelope = delegation_envelope(
-                ok=bool(success) and not spec_validation_blocked and not clarity_check_blocked,
+                ok=bool(success) and not clarity_check_blocked,
                 stop_after="full",
                 artifacts=full_run_artifacts(
                     caller_response=response,
@@ -2817,7 +3140,7 @@ def delegate_to_agent(
                     capability_warnings=cap_warnings or None,
                 ),
                 caller_response=response,
-                error=error if (not success or spec_validation_blocked or clarity_check_blocked) else None,
+                error=error if (not success or clarity_check_blocked) else None,
             )
             return json.dumps(envelope, ensure_ascii=False)
 
@@ -2864,6 +3187,19 @@ def inspect_context(
         host_transcript=None,
     )
     return json.dumps(result, ensure_ascii=False)
+
+
+@mcp.tool(
+    name="get_server_status",
+    description=(
+        "Return MCP server runtime identity + freshness signals (pid, source revision, "
+        "process start time, dirty-worktree comparison, stale sibling pids). "
+        "Use this to quickly confirm Cursor is connected to the latest local server code."
+    ),
+)
+def get_server_status(workspace_path: str | None = None) -> str:
+    ws = workspace_path or obs.default_workspace_path()
+    return json.dumps(_build_server_status(ws), ensure_ascii=False)
 
 
 @mcp.tool(

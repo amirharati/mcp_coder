@@ -15,6 +15,24 @@ from core.storage.paths import ensure_mcp_coder_home, mcp_coder_home, normalize_
 _STARTUP_GRACE_SEC = 0.5
 _TERMINATE_WAIT_SEC = 2.0
 
+# main.py subcommands — not long-running stdio MCP servers
+_CLI_SUBCOMMANDS = frozenset({
+    "compare",
+    "delegate",
+    "history",
+    "index-workspace",
+    "inspect-context",
+    "logs",
+    "maintenance",
+    "rag",
+    "replay",
+    "search",
+    "setup",
+    "test-model",
+    "trace",
+    "view",
+})
+
 
 def _singleton_enabled() -> bool:
     raw = os.environ.get("MCP_CODER_SINGLETON", "1").strip().lower()
@@ -38,6 +56,13 @@ def _read_pid(path: Path) -> int | None:
 def _write_pid(path: Path, pid: int) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(f"{pid}\n", encoding="utf-8")
+
+
+def register_stdio_server(workspace: str | Path) -> None:
+    """Write PID file for this workspace. Does NOT kill anything."""
+    ensure_mcp_coder_home()
+    ws = normalize_workspace(workspace)
+    _write_pid(pidfile_path(ws), os.getpid())
 
 
 def _pid_alive(pid: int) -> bool:
@@ -69,10 +94,48 @@ def _process_cwd(pid: int) -> str | None:
     return None
 
 
+def _process_cmdline(pid: int) -> str | None:
+    try:
+        result = subprocess.run(
+            ["ps", "-p", str(pid), "-o", "args="],
+            capture_output=True,
+            text=True,
+            timeout=2,
+            check=False,
+        )
+    except (OSError, subprocess.TimeoutExpired):
+        return None
+    line = (result.stdout or "").strip()
+    return line or None
+
+
+def _is_stdio_server_cmdline(cmdline: str | None, main_script: str) -> bool:
+    """True when cmdline is main.py running the MCP stdio server (not a CLI subcommand)."""
+    if not cmdline or main_script not in cmdline:
+        return False
+    tokens = cmdline.split()
+    try:
+        script_idx = next(
+            i
+            for i, tok in enumerate(tokens)
+            if tok == main_script or tok.endswith("/main.py")
+        )
+    except StopIteration:
+        return False
+    tail = tokens[script_idx + 1 :]
+    if not tail:
+        return True
+    if tail[0] == "--mcp":
+        if len(tail) == 1:
+            return True
+        return tail[1] not in _CLI_SUBCOMMANDS
+    return tail[0] not in _CLI_SUBCOMMANDS
+
+
 def _pgrep_mcp_pids(main_script: str) -> list[int]:
     try:
         result = subprocess.run(
-            ["pgrep", "-f", f"{main_script} --mcp"],
+            ["pgrep", "-f", main_script],
             capture_output=True,
             text=True,
             timeout=2,
@@ -85,8 +148,11 @@ def _pgrep_mcp_pids(main_script: str) -> list[int]:
     pids: list[int] = []
     for line in result.stdout.splitlines():
         line = line.strip()
-        if line.isdigit():
-            pids.append(int(line))
+        if not line.isdigit():
+            continue
+        pid = int(line)
+        if _is_stdio_server_cmdline(_process_cmdline(pid), main_script):
+            pids.append(pid)
     return pids
 
 

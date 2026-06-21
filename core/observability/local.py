@@ -407,6 +407,7 @@ class LocalObservability(ObservabilityBackend):
         *,
         call_type: str,
         model: str | None,
+        role: str | None = None,
         step_index: int | None = None,
         call_index: int | None = None,
         thinking_text: str | None = None,
@@ -420,6 +421,7 @@ class LocalObservability(ObservabilityBackend):
         from core.observability.context import (
             delegation_id_var,
             model_policy_var,
+            role_var,
             session_dir_var,
             step_index_var,
             workspace_var,
@@ -439,6 +441,7 @@ class LocalObservability(ObservabilityBackend):
             step_index=resolved_step,
             call_index=call_index,
             call_type=call_type,
+            role=role if role is not None else role_var.get(),
             model=model,
             verbosity=verbosity,
             duration_ms=duration_ms,
@@ -460,6 +463,7 @@ class LocalObservability(ObservabilityBackend):
         self,
         *,
         delegation_id: str | None,
+        role: str | None = None,
         step_index: int | None = None,
         call_index: int | None = None,
         session_dir: str | Path | None = None,
@@ -476,6 +480,7 @@ class LocalObservability(ObservabilityBackend):
         from core.config.observability import VERBOSITY_STANDARD, resolve_observability_verbosity
         from core.observability.context import (
             delegation_id_var,
+            role_var,
             session_dir_var,
             workspace_var,
         )
@@ -498,6 +503,7 @@ class LocalObservability(ObservabilityBackend):
             delegation_id=resolved_delegation_id,
             step_index=step_index,
             call_index=call_index,
+            role=role if role is not None else role_var.get(),
             model=model,
             verbosity=verbosity,
             request_received_at=request_received_at,

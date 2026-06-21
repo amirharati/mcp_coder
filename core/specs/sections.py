@@ -28,6 +28,7 @@ MCP_OWNED_SECTION_TITLES = (
     "Scope expansion",
     "Worker feedback",
     "Blockers / questions",
+    "Q&A",
     "Suggested next (hints only)",
 )
 

@@ -5,6 +5,7 @@ from __future__ import annotations
 import argparse
 import os
 import sys
+import traceback
 from pathlib import Path
 
 
@@ -246,6 +247,35 @@ def main() -> None:
         help="maintenance subcommand: stats",
     )
 
+    sub.add_parser(
+        "ps",
+        help="List running mcp-coder stdio server processes",
+    )
+    sub.add_parser(
+        "status",
+        help="Check mcp-coder stdio freshness and multi-instance state",
+    )
+    kill_p = sub.add_parser(
+        "kill",
+        help="Kill mcp-coder stdio server(s); default scope is current workspace",
+    )
+    kill_p.add_argument(
+        "--all",
+        action="store_true",
+        help="Kill all mcp-coder stdio server processes across workspaces",
+    )
+    kill_p.add_argument(
+        "--workspace",
+        default=None,
+        help="Workspace path scope for kill (default: current workspace)",
+    )
+    kill_p.add_argument(
+        "--min-age-seconds",
+        type=float,
+        default=0.0,
+        help="Only kill processes older than this many seconds",
+    )
+
     parser.add_argument(
         "--mcp",
         action="store_true",
@@ -356,6 +386,27 @@ def main() -> None:
             maintenance_argv = maintenance_argv[1:]
         raise SystemExit(main_maintenance(maintenance_argv))
 
+    if args.command == "ps":
+        from core.cli.mcp_process import cmd_ps
+
+        raise SystemExit(cmd_ps())
+
+    if args.command == "status":
+        from core.cli.mcp_process import cmd_status
+
+        raise SystemExit(cmd_status())
+
+    if args.command == "kill":
+        from core.cli.mcp_process import cmd_kill
+
+        raise SystemExit(
+            cmd_kill(
+                all_processes=args.all,
+                workspace=args.workspace,
+                min_age_seconds=args.min_age_seconds,
+            )
+        )
+
     if args.command == "replay":
         from core.cli.replay import main_replay
 
@@ -403,7 +454,7 @@ def main() -> None:
         raise SystemExit(2)
 
     from core.config import apply_provider_env, load_env_files
-    from core.server.singleton import enforce_single_stdio_server
+    from core.server.singleton import register_stdio_server
     from server.mcp_server import run_stdio
 
     from core.logging.delegation_log import log_brief, log_stderr, workspace_path
@@ -412,43 +463,63 @@ def main() -> None:
     from core.specs.bootstrap import ensure_workspace_spec_layout
     from core.storage.paths import ensure_mcp_coder_home, mcp_coder_home, project_key
 
-    _bootstrap_cli_env()
-    ensure_mcp_coder_home()
-    ws = workspace_path()
-    spec_layout = ensure_workspace_spec_layout(ws)
-    rule_sync = sync_workspace_cursor_rules(ws)
-    enforce_single_stdio_server(ws, main_script=str(Path(__file__).resolve()))
-    log_cfg = resolve_config(ws)
-    host_raw = os.environ.get("MCP_CODER_HOST", "auto").strip() or "auto"
-    from core.session.policy import resolve_session_policy
+    ws: str | None = None
+    try:
+        _bootstrap_cli_env()
+        ensure_mcp_coder_home()
+        ws = workspace_path()
+        spec_layout = ensure_workspace_spec_layout(ws)
+        rule_sync = sync_workspace_cursor_rules(ws)
+        register_stdio_server(ws)
+        log_cfg = resolve_config(ws)
+        host_raw = os.environ.get("MCP_CODER_HOST", "auto").strip() or "auto"
+        from core.session.policy import resolve_session_policy
 
-    server_log_emit(
-        "stdio_server_ready",
-        level="info",
-        workspace_path=ws,
-        mcp_coder_home=str(mcp_coder_home()),
-        host_provider=host_raw,
-        session_policy=resolve_session_policy(ws),
-        singleton_enabled=os.environ.get("MCP_CODER_SINGLETON", "1").strip().lower()
-        not in ("0", "false", "no", "off"),
-        server_log_scope=log_cfg.scope,
-        server_log_level=log_cfg.level,
-        spec_template_path=spec_layout.get("spec_template_path"),
-        spec_template_created=spec_layout.get("spec_template_created"),
-        cursor_rules_skipped=rule_sync.get("skipped"),
-        cursor_rules_skip_reason=rule_sync.get("reason"),
-        cursor_rules_policy=rule_sync.get("policy"),
-        cursor_rules_created=rule_sync.get("created_count"),
-        cursor_rules_updated=rule_sync.get("updated_count"),
-        cursor_rules_removed=rule_sync.get("removed"),
-        cursor_rules=rule_sync.get("rules"),
-    )
-    if log_brief():
-        log_stderr(
-            f"[mcp-coder] stdio server ready pid={os.getpid()}; home={mcp_coder_home()} "
-            f"project_key={project_key(ws)} ws={ws}"
+        from core.version import repo_root, source_revision
+
+        server_log_emit(
+            "stdio_server_ready",
+            level="info",
+            workspace_path=ws,
+            mcp_coder_home=str(mcp_coder_home()),
+            source_root=str(repo_root()),
+            source_revision=source_revision(),
+            host_provider=host_raw,
+            session_policy=resolve_session_policy(ws),
+            server_log_scope=log_cfg.scope,
+            server_log_level=log_cfg.level,
+            spec_template_path=spec_layout.get("spec_template_path"),
+            spec_template_created=spec_layout.get("spec_template_created"),
+            cursor_rules_skipped=rule_sync.get("skipped"),
+            cursor_rules_skip_reason=rule_sync.get("reason"),
+            cursor_rules_policy=rule_sync.get("policy"),
+            cursor_rules_created=rule_sync.get("created_count"),
+            cursor_rules_updated=rule_sync.get("updated_count"),
+            cursor_rules_removed=rule_sync.get("removed"),
+            cursor_rules=rule_sync.get("rules"),
         )
-    run_stdio()
+        if log_brief():
+            log_stderr(
+                f"[mcp-coder] stdio server ready pid={os.getpid()}; "
+                f"source={repo_root()}@{source_revision()}; "
+                f"home={mcp_coder_home()} project_key={project_key(ws)} ws={ws}"
+            )
+        run_stdio()
+    except Exception as exc:
+        tb = traceback.format_exc(limit=8)
+        try:
+            server_log_emit(
+                "stdio_server_start_failed",
+                level="error",
+                workspace_path=ws,
+                error=str(exc),
+                traceback=tb,
+            )
+        except Exception:
+            pass
+        if log_brief():
+            log_stderr(f"[mcp-coder] stdio startup failed: {exc}\n{tb}")
+        raise
 
 
 if __name__ == "__main__":

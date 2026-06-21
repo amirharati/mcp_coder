@@ -69,16 +69,22 @@ def _apply_executor_pull_hint(model: Any, *, workspace_path: str) -> bool:
 
 def _supervisor_metadata_from_io(io: Any) -> dict[str, Any]:
     """Attach supervisor audit fields from SupervisedIO when present."""
-    decisions = getattr(io, "supervisor_decisions", None)
-    if not decisions:
+    if not hasattr(io, "supervisor_decisions_count"):
         return {}
+
+    # P12-001: supervisor_loop_* lifecycle is now owned by SupervisorAgent. SupervisedIO
+    # only exports the per-confirm decision audit the agent surfaces in the delegation record.
     payload: dict[str, Any] = {
-        "supervisor_decisions": list(decisions),
+        "supervisor_loop_id": getattr(io, "_loop_id", None),
         "supervisor_decisions_count": int(getattr(io, "supervisor_decisions_count", 0) or 0),
         "supervisor_aborts_count": int(getattr(io, "supervisor_aborts_count", 0) or 0),
     }
-    last = decisions[-1]
-    payload["supervisor_last_decision"] = str(last.get("decision") or "")
+
+    decisions = getattr(io, "supervisor_decisions", None)
+    if decisions:
+        payload["supervisor_decisions"] = list(decisions)
+        last = decisions[-1]
+        payload["supervisor_last_decision"] = str(last.get("decision") or "")
     supervisor = getattr(io, "_supervisor", None)
     if supervisor is not None and hasattr(supervisor, "usage_record"):
         payload["supervisor_usage"] = supervisor.usage_record
@@ -386,6 +392,8 @@ class AiderEngine(ExecutionEngine):
                             on_decision=None,
                             question_registry=_question_registry,
                             delegation_id=delegation_id,
+                            # P12-001: SupervisorAgent owns the supervisor_loop_* envelope.
+                            emit_loop_events=False,
                         )
 
                     io, out_buffer = create_delegation_io(io_factory=_io_factory)

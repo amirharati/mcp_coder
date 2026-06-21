@@ -2,7 +2,16 @@
 # Run mcp-coder CLI from any workspace without activating the repo venv.
 set -euo pipefail
 
-REPO_ROOT="${MCP_CODER_REPO_ROOT:-$(cd "$(dirname "$0")/.." && pwd)}"
+# Resolve symlinks (e.g. /usr/local/bin/mcp-coder → repo/scripts/mcp-coder).
+_script="${BASH_SOURCE[0]}"
+while [[ -L "$_script" ]]; do
+  _dir="$(cd -P "$(dirname "$_script")" && pwd)"
+  _script="$(readlink "$_script")"
+  [[ "$_script" != /* ]] && _script="$_dir/$_script"
+done
+_script_dir="$(cd -P "$(dirname "$_script")" && pwd)"
+
+REPO_ROOT="${MCP_CODER_REPO_ROOT:-$(cd "$_script_dir/.." && pwd)}"
 PYTHON="$REPO_ROOT/.venv/bin/python"
 
 if [[ ! -x "$PYTHON" ]]; then
@@ -23,4 +32,8 @@ elif [[ -f "$REPO_ROOT/.env" ]]; then
   set +a
 fi
 
+# MCP stdio server (no args): pass --mcp so singleton can find/kill stale processes.
+if [[ $# -eq 0 ]]; then
+  exec "$PYTHON" "$REPO_ROOT/main.py" --mcp
+fi
 exec "$PYTHON" "$REPO_ROOT/main.py" "$@"

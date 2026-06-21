@@ -13,7 +13,7 @@ from typing import Any
 
 from core.config.models import provider_hint_for_model
 from core.config.providers import apply_provider_env
-from core.config.role_models import ROLE_CONTEXT_BUILDER, resolve_role_model_name
+from core.config.role_models import ROLE_PLANNER, resolve_role_model_name
 from core.engine.owned_helper_llm import run_owned_helper_completion
 
 _ERROR_MARKERS = (
@@ -82,7 +82,7 @@ def run_planner_pass_llm(
 ) -> PlannerPassLlmResult:
     """One-shot planner model call. On failures, returns success=False."""
     apply_provider_env()
-    resolved = resolve_role_model_name(ROLE_CONTEXT_BUILDER, workspace_path)
+    resolved = resolve_role_model_name(ROLE_PLANNER, workspace_path)
 
     config_error = provider_hint_for_model(resolved)
     if config_error:

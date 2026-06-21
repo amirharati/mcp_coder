@@ -364,6 +364,8 @@ def apply_clarity_check(
     spec_read: Any,
     workspace: str,
     task: str,
+    context_summary: str = "",
+    prior_blocked_count: int = 0,
     recent_delegation_titles: list[str],
     timing: dict[str, int | float] | None = None,
     delegation_id: str | None = None,
@@ -382,14 +384,35 @@ def apply_clarity_check(
 
     Returns (blocked, questions, ran, passed, error, audit_dict, model_record, provenance).
     On failure: not blocked (non-fatal), ran=False, provenance includes error.
+
+    Auto-passes (blocked=False) when prior_blocked_count >= CLARITY_ROUND_CAP — the host
+    has already answered questions; trust them and proceed.
     """
-    from core.context.clarity_prompt import build_clarity_check_prompt
+    from core.context.clarity_prompt import CLARITY_ROUND_CAP, build_clarity_check_prompt
     from core.engine.clarity_llm import run_clarity_check_llm
+
+    round_index = prior_blocked_count + 1
+
+    # Hard cap: stop asking after N rounds — execute regardless.
+    if prior_blocked_count >= CLARITY_ROUND_CAP:
+        audit: dict[str, Any] = {
+            "ran": False,
+            "passed": True,
+            "questions_count": 0,
+            "round_index": round_index,
+            "round_cap": CLARITY_ROUND_CAP,
+            "auto_passed": True,
+            "reason": f"clarity_round_cap ({CLARITY_ROUND_CAP})",
+        }
+        provenance = _helper_provenance(input_prompt="(capped — auto-pass)")
+        return False, None, False, True, None, audit, None, provenance
 
     t_val = time.perf_counter()
     prompt = build_clarity_check_prompt(
         task=task,
         spec_read=spec_read,
+        context_summary=context_summary,
+        prior_blocked_count=prior_blocked_count,
         recent_delegation_titles=recent_delegation_titles,
     )
     with role_context("clarity_check"):
@@ -421,6 +444,9 @@ def apply_clarity_check(
             "ran": False,
             "passed": None,
             "questions_count": 0,
+            "round_index": round_index,
+            "round_cap": CLARITY_ROUND_CAP,
+            "auto_passed": False,
             "duration_ms": llm_result.duration_ms,
         }
         if llm_result.error:
@@ -437,6 +463,9 @@ def apply_clarity_check(
             "ran": True,
             "passed": True,
             "questions_count": 0,
+            "round_index": round_index,
+            "round_cap": CLARITY_ROUND_CAP,
+            "auto_passed": False,
             "duration_ms": llm_result.duration_ms,
         }
         provenance = _helper_provenance(
@@ -451,6 +480,9 @@ def apply_clarity_check(
         "ran": True,
         "passed": False,
         "questions_count": len(questions),
+        "round_index": round_index,
+        "round_cap": CLARITY_ROUND_CAP,
+        "auto_passed": False,
         "duration_ms": llm_result.duration_ms,
     }
     output_text = llm_result.raw_output or "\n".join(f"- {q}" for q in questions)
@@ -490,7 +522,11 @@ def apply_reviewer_pass(
     from core.logging.delegation_log import REVIEWER_PASS_ERROR, REVIEWER_PASS_LGTM
 
     acceptance = (
-        (spec_read.sections.get("Done when") or spec_read.sections.get("Goal") or "")
+        (
+            (spec_read.sections.get("Done when") or spec_read.sections.get("Goal") or "")
+            if spec_read is not None
+            else ""
+        )
         .strip()
     )
     t_val = time.perf_counter()

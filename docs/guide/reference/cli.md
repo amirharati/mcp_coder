@@ -20,6 +20,9 @@
 | [`search`](#search) | Unified search: `delegations` \| `files` (Phase 5 toolset) |
 | [`index-workspace`](#index-workspace) | Build / refresh `workspace_rag.db` file summaries |
 | [`maintenance`](#maintenance) | Storage stats — JSONL records, trace files, DB row counts |
+| [`ps`](#ps) | List running `mcp-coder` stdio server processes |
+| [`status`](#status) | Freshness + duplicate-instance health check |
+| [`kill`](#kill) | Kill `mcp-coder` stdio server process(es) |
 
 > **Bare invocation at a terminal** prints help; it does **not** start the MCP server. The stdio server starts only when Cursor launches the process (stdin is not a TTY), or when you explicitly pass `--mcp`.
 
@@ -407,6 +410,56 @@ capture_for_training:   false
 Use after a delegation to confirm trace files are being written and DB row counts are incrementing. Useful for validating observability config (`observability_verbosity`, `capture_for_training`).
 
 > **Note:** Trace files are written under `sessions/<id>/traces/` for delegations across verbosity tiers. `lean` writes minimal hash/size style records; `standard` adds previews; `full` adds bodies.
+
+---
+
+## `ps`
+
+Lists active `mcp-coder` stdio server processes (PID, start time, workspace cwd, full command).
+
+```bash
+mcp-coder ps
+```
+
+Use this to quickly confirm whether one or multiple MCP servers are running.
+
+---
+
+## `status`
+
+Checks stdio server health/freshness for current local code:
+
+```bash
+mcp-coder status
+```
+
+Reports:
+- `NO_STDIO_SERVER` / `ONE_STDIO_SERVER` / `MULTIPLE_STDIO_SERVERS`
+- per-process start time, workspace cwd, command
+- freshness relative to latest local dirty-file change
+
+Exit codes:
+- `0`: healthy
+- `1`: no server
+- `2`: stale or multiple servers
+
+---
+
+## `kill`
+
+Kill running stdio server process(es):
+
+```bash
+mcp-coder kill
+mcp-coder kill --workspace /path/to/workspace
+mcp-coder kill --workspace /path/to/workspace --min-age-seconds 5
+mcp-coder kill --all
+```
+
+- default: kills only the process whose cwd matches current workspace
+- `--workspace`: explicit workspace-scoped kill
+- `--min-age-seconds`: skip killing very new processes (useful to avoid reconnect race)
+- `--all`: kill every `mcp-coder` stdio process across workspaces
 
 ---
 

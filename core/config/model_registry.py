@@ -34,6 +34,8 @@ from core.config.role_models import (
 # underlying role (see _ROLE_MODEL_ALIAS).
 ROLE_PLANNER_PASS = "planner_pass"
 ROLE_ARCHITECT = "architect"  # legacy label kept for backward compat
+ROLE_CLARITY_CHECK = "clarity_check"
+ROLE_SUPERVISOR = "supervisor"
 ROLE_SPEC_VALIDATION = "spec_validation"
 ROLE_SPEC_REVIEW = "spec_review"
 ROLE_WORKSPACE_SUMMARIZER = "workspace_summarizer"
@@ -45,6 +47,8 @@ ROLES: tuple[str, ...] = (
     ROLE_CRITIC,
     ROLE_PLANNER_PASS,
     ROLE_ARCHITECT,
+    ROLE_CLARITY_CHECK,
+    ROLE_SUPERVISOR,
     ROLE_SPEC_VALIDATION,
     ROLE_SPEC_REVIEW,
     ROLE_WORKSPACE_SUMMARIZER,
@@ -55,6 +59,7 @@ ROLES: tuple[str, ...] = (
 # the review model.
 _ROLE_MODEL_ALIAS: dict[str, str] = {
     ROLE_ARCHITECT: ROLE_CONTEXT_BUILDER,  # legacy alias kept for backward compat
+    ROLE_CLARITY_CHECK: ROLE_CONTEXT_BUILDER,
     ROLE_SPEC_VALIDATION: ROLE_CONTEXT_BUILDER,
     ROLE_WORKSPACE_SUMMARIZER: ROLE_CONTEXT_BUILDER,
     ROLE_SPEC_REVIEW: ROLE_REVIEW,
@@ -65,8 +70,12 @@ VALID_REASONING_EFFORT = frozenset({"none", "low", "medium", "high"})
 # Per-role generation-param defaults (P9-012). Applied on top of Aider metadata,
 # below env overrides.
 _ROLE_GEN_DEFAULTS: dict[str, dict] = {
-    ROLE_CONTEXT_BUILDER: {"temperature": 0.2},
-    ROLE_SPEC_VALIDATION: {"temperature": 0.1},
+    ROLE_CONTEXT_BUILDER: {"temperature": 0.2, "reasoning_effort": "low"},
+    ROLE_CLARITY_CHECK: {"reasoning_effort": "low"},
+    ROLE_SUPERVISOR: {"reasoning_effort": "low"},
+    ROLE_PLANNER_PASS: {"reasoning_effort": "low"},
+    ROLE_WORKSPACE_SUMMARIZER: {"reasoning_effort": "low"},
+    ROLE_SPEC_VALIDATION: {"temperature": 0.1, "reasoning_effort": "low"},
     ROLE_REVIEW: {"temperature": 0.0},
     ROLE_SPEC_REVIEW: {"temperature": 0.0},
 }

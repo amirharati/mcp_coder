@@ -33,6 +33,90 @@ ACTION_EXECUTOR_STALL = "executor_stall"
 PREVIEW_MAX_CHARS = 500
 BRIEF_MAX_CHARS = 200
 
+
+def _provider_from_model(model: str | None) -> str | None:
+    """Best-effort provider slug from model id."""
+    if not model:
+        return None
+    model_s = str(model).strip()
+    if not model_s:
+        return None
+    if "/" in model_s:
+        return model_s.split("/", 1)[0]
+    return None
+
+
+def _coerce_int(value: Any) -> int | None:
+    if value is None:
+        return None
+    try:
+        return int(value)
+    except (TypeError, ValueError):
+        return None
+
+
+def _extract_proxy_usage_from_raw_response(raw_response: str | None) -> dict[str, int | None] | None:
+    """Best-effort usage extraction from proxy raw JSON response body."""
+    if not raw_response:
+        return None
+    try:
+        payload = json.loads(raw_response)
+    except Exception:
+        return None
+    if not isinstance(payload, dict):
+        return None
+
+    usage = payload.get("usage")
+    if not isinstance(usage, dict):
+        return None
+
+    input_tokens = _coerce_int(
+        usage.get("input_tokens")
+        or usage.get("prompt_tokens")
+        or usage.get("inputTokens")
+        or usage.get("promptTokens")
+    )
+    output_tokens = _coerce_int(
+        usage.get("output_tokens")
+        or usage.get("completion_tokens")
+        or usage.get("outputTokens")
+        or usage.get("completionTokens")
+    )
+    total_tokens = _coerce_int(
+        usage.get("total_tokens")
+        or usage.get("totalTokenCount")
+        or usage.get("totalTokens")
+    )
+
+    completion_details = usage.get("completion_tokens_details") or {}
+    prompt_details = usage.get("prompt_tokens_details") or {}
+    reasoning_tokens = _coerce_int(
+        usage.get("reasoning_tokens")
+        or (completion_details.get("reasoning_tokens") if isinstance(completion_details, dict) else None)
+    )
+    cached_tokens = _coerce_int(
+        prompt_details.get("cached_tokens") if isinstance(prompt_details, dict) else None
+    )
+
+    if (
+        input_tokens is None
+        and output_tokens is None
+        and total_tokens is None
+        and reasoning_tokens is None
+        and cached_tokens is None
+    ):
+        return None
+    if total_tokens is None and (input_tokens is not None or output_tokens is not None):
+        total_tokens = (input_tokens or 0) + (output_tokens or 0)
+    return {
+        "input": input_tokens,
+        "output": output_tokens,
+        "total": total_tokens,
+        "reasoning_tokens": reasoning_tokens,
+        "cached_tokens": cached_tokens,
+    }
+
+
 # compile_event stage constants (P7-003)
 TRACE_TYPE_COMPILE_EVENT = "compile_event"
 STAGE_MECHANICAL_BRIEF = "mechanical_brief"
@@ -155,11 +239,20 @@ def build_trace_record(
         record["duration_ms"] = duration_ms
 
     if tokens:
-        record["tokens"] = {
+        token_payload = {
             "input": tokens.get("input"),
             "output": tokens.get("output"),
             "total": tokens.get("total"),
         }
+        reasoning_tokens = tokens.get("reasoning_tokens")
+        cached_tokens = tokens.get("cached_tokens")
+        if reasoning_tokens is not None:
+            token_payload["reasoning_tokens"] = reasoning_tokens
+            # Keep a top-level alias for quick log scans.
+            record["thinking_tokens"] = reasoning_tokens
+        if cached_tokens is not None:
+            token_payload["cached_tokens"] = cached_tokens
+        record["tokens"] = token_payload
 
     if prompt_text:
         record["prompt_hash"] = sha256_hex(prompt_text)
@@ -192,9 +285,12 @@ def build_backend_llm_call_record(
     step_index: int | None,
     call_index: int | None = None,
     call_type: str,
+    role: str | None = None,
     model: str | None,
+    provider: str | None = None,
     verbosity: str,
     timestamp: str | None = None,
+    ok: bool | None = True,
     duration_ms: int | None = None,
     thinking_text: str | None = None,
     thinking_tokens: int | None = None,
@@ -208,7 +304,10 @@ def build_backend_llm_call_record(
         "type": TRACE_TYPE_BACKEND_LLM_CALL,
         "delegation_id": delegation_id,
         "call_type": call_type,
+        "role": role,
         "model": model,
+        "provider": provider or _provider_from_model(model),
+        "ok": ok,
         "timestamp": timestamp or utc_now_iso(),
         "verbosity": verbosity,
     }
@@ -275,7 +374,9 @@ def build_proxy_llm_call_record(
     delegation_id: str | None,
     step_index: int | None,
     call_index: int | None,
+    role: str | None = None,
     model: str | None,
+    provider: str | None = None,
     verbosity: str,
     request_received_at: str,
     response_received_at: str,
@@ -284,6 +385,8 @@ def build_proxy_llm_call_record(
     raw_request: str | None = None,
     raw_response: str | None = None,
     attribution_source: str = "none",
+    ok: bool | None = None,
+    tokens: dict[str, Any] | None = None,
     timestamp: str | None = None,
 ) -> dict[str, Any]:
     """Build one JSONL trace line for a proxy-captured LLM HTTP call."""
@@ -292,15 +395,33 @@ def build_proxy_llm_call_record(
         "delegation_id": delegation_id,
         "step_index": step_index,
         "call_index": call_index,
+        "role": role,
         "model": model,
+        "provider": provider or _provider_from_model(model),
         "request_received_at": request_received_at,
         "response_received_at": response_received_at,
         "wire_latency_ms": wire_latency_ms,
         "status_code": status_code,
+        "ok": bool(status_code < 400) if ok is None else bool(ok),
         "attribution_source": attribution_source,
         "timestamp": timestamp or utc_now_iso(),
         "verbosity": verbosity,
     }
+    token_source = tokens or _extract_proxy_usage_from_raw_response(raw_response)
+    if token_source:
+        token_payload = {
+            "input": token_source.get("input"),
+            "output": token_source.get("output"),
+            "total": token_source.get("total"),
+        }
+        reasoning_tokens = token_source.get("reasoning_tokens")
+        cached_tokens = token_source.get("cached_tokens")
+        if reasoning_tokens is not None:
+            token_payload["reasoning_tokens"] = reasoning_tokens
+            record["thinking_tokens"] = reasoning_tokens
+        if cached_tokens is not None:
+            token_payload["cached_tokens"] = cached_tokens
+        record["tokens"] = token_payload
 
     redacted_request = redact_secrets(raw_request) if raw_request else None
     redacted_response = redact_secrets(raw_response) if raw_response else None

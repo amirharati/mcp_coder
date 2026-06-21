@@ -316,3 +316,35 @@ def apply_post_delegation_spec_updates(
         output=output,
         error=error,
     )
+
+
+def append_clarity_qa(path: Path, questions: list[str], answers: list[str] | None = None) -> None:
+    """Append clarity questions (and optional answers) to the spec's ## Q&A section.
+
+    If answers is None/empty, writes the questions as open items so the host can fill them in.
+    Idempotent — does not duplicate identical questions already present.
+    """
+    if not path.is_file():
+        return
+    raw = path.read_text(encoding="utf-8")
+    front_matter, body = split_front_matter(raw)
+
+    existing_qa = parse_sections(body).get("Q&A", "").strip()
+
+    new_entries: list[str] = []
+    for i, q in enumerate(questions):
+        q = q.strip()
+        if not q:
+            continue
+        if q in existing_qa:
+            continue  # already present
+        ans = (answers[i].strip() if answers and i < len(answers) else "") or "_[answer here]_"
+        new_entries.append(f"**Q:** {q}\n**A:** {ans}")
+
+    if not new_entries:
+        return  # nothing new to add
+
+    new_block = "\n\n".join(new_entries)
+    updated_qa = f"{existing_qa}\n\n{new_block}".strip() if existing_qa else new_block
+    body = replace_section_body(body, "Q&A", updated_qa)
+    path.write_text(join_front_matter(front_matter, body), encoding="utf-8")

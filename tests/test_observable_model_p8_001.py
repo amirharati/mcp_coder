@@ -80,6 +80,7 @@ def test_build_backend_llm_call_record_lean():
         delegation_id="d-1",
         step_index=2,
         call_type="executor_turn",
+        role="executor",
         model="m",
         verbosity=VERBOSITY_LEAN,
         prompt_text="secret sk-abcdefghijklmnopqrstuvwxyz",
@@ -88,6 +89,8 @@ def test_build_backend_llm_call_record_lean():
     )
     assert rec["type"] == TRACE_TYPE_BACKEND_LLM_CALL
     assert rec["call_type"] == "executor_turn"
+    assert rec["role"] == "executor"
+    assert rec["ok"] is True
     assert rec["step_index"] == 2
     assert "prompt_hash" in rec
     assert "response_hash" in rec

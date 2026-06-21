@@ -104,6 +104,7 @@ Phase 11:  MCP → Aider (supervised, decisions routed) ↔ Supervisor LLM → r
 | 6 | P11-006 | [P11-006](../tasks/P11-006-smart-architect-trigger.md) | **done** 2026-06-19 | Smart trigger + skip-reason audit |
 | 7 | P11-007 | [P11-007](../tasks/P11-007-model-policy-host.md) | **done** 2026-06-19 | Host model_policy arg wired, additive precedence |
 | 8 | P11-008 | [P11-008](../tasks/P11-008-planner-rename-refactor.md) | **done** 2026-06-19 | Naming refactor: architect_pass → planner_pass; role hierarchy constants; 1126 passed |
+| 9 | P11-009 | [P11-009](../tasks/P11-009-supervisor-agent-loop-v1.md) | **done** 2026-06-20 | Supervisor as agent loop (BL-533, P11-ISS-015/016): unified `supervisor_loop_*` lifecycle; 17 tests + 1158 full suite |
 
 ---
 
@@ -420,6 +421,7 @@ Run a focused observability validation pass on 3-5 delegations and confirm:
 
 | Date | Change |
 |------|--------|
+| 2026-06-20 | **P11-009 shipped** — Supervisor as agent loop (BL-533, closes P11-ISS-015/016): `SupervisorAgent` owns unified `supervisor_loop_*` lifecycle; dual `supervisor_outer_loop_*` + inner split removed; `max_turns` config; 17 tests + 1158 full suite passed. |
 | 2026-06-19 | **P11-008 shipped** — `architect_pass` → `planner_pass` rename refactor complete; legacy aliases kept with warnings; 1126 passed. Phase 11 all milestones done; pre-dogfood log review gate now open. |
 | 2026-06-19 | **P11-007 shipped** — host `model_policy` arg (BL-512 Stage 2) wired with per-role normalization, additive precedence, delegation-lifetime context binding, and non-fatal warning behavior. |
 | 2026-06-19 | **P11-006 shipped** — smart architect trigger v0 with spec/env/heuristic precedence and skip-reason audit wiring; 24 tests passed. |

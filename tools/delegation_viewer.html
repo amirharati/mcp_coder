@@ -856,6 +856,47 @@
         return html || renderValue(d);
       }
 
+      if (n === "mcp.supervisor_loop" || n === "mcp.supervisor_turn" || n === "mcp.supervisor_outer_loop") {
+        let html = "";
+        if (d.loop_id) html += tl_field("loop_id", `<code>${esc(d.loop_id)}</code>`);
+        if (d.event_type) html += tl_field("event", `<code>${esc(d.event_type)}</code>`);
+        // P12-001 unified supervisor agent loop fields
+        if (d.max_turns != null) html += tl_field("max_turns", String(d.max_turns));
+        if (d.turn_index != null) html += tl_field("turn", String(d.turn_index));
+        if (d.worker_outcome) html += tl_field("worker_outcome", `<code>${esc(d.worker_outcome)}</code>`);
+        if (d.checks_result && d.checks_result.outcome)
+          html += tl_field("checks", `<code>${esc(d.checks_result.outcome)}</code>`);
+        if (d.action) html += tl_field("action", `<code>${esc(d.action)}</code>`);
+        if (d.model) html += tl_field("model", esc(d.model));
+        if (d.final_action) html += tl_field("final_action", `<code>${esc(d.final_action)}</code>`);
+        if (d.turns_completed != null) html += tl_field("turns_completed", String(d.turns_completed));
+        if (d.reason) html += tl_field("reason", esc(d.reason));
+        if (d.end_reason) html += tl_field("end_reason", `<code>${esc(d.end_reason)}</code>`);
+        // legacy supervisor_outer_loop_* / old supervisor_loop_* fields (backward compat)
+        if (d.cycle_index != null) html += tl_field("cycle", String(d.cycle_index));
+        if (d.reviewer_outcome) html += tl_field("reviewer_outcome", `<code>${esc(d.reviewer_outcome)}</code>`);
+        if (d.risk_level) html += tl_field("risk", `<code>${esc(d.risk_level)}</code>`);
+        if (d.final_decision) html += tl_field("final_decision", `<code>${esc(d.final_decision)}</code>`);
+        if (d.turn_count != null) html += tl_field("turn_count", String(d.turn_count));
+        if (d.aborts_count != null) html += tl_field("aborts_count", String(d.aborts_count));
+        if (d.duration_ms != null) html += tl_field("duration", `${d.duration_ms}ms`);
+        return html || renderValue(d);
+      }
+
+      if (n === "mcp.clarity_result") {
+        let html = "";
+        if (d.status) html += tl_field("status", `<code>${esc(d.status)}</code>`);
+        if (d.clarity_round_index != null || d.clarity_round_cap != null) {
+          html += tl_field("round", `${d.clarity_round_index ?? "?"}/${d.clarity_round_cap ?? "?"}`);
+        }
+        if (d.questions_count != null) html += tl_field("questions", String(d.questions_count));
+        if (Array.isArray(d.questions) && d.questions.length) {
+          html += tl_msgRow("received", "← Questions", d.questions.join("\n"));
+        }
+        if (d.error) html += tl_field("error", esc(String(d.error)));
+        return html || renderValue(d);
+      }
+
       if (n === "mcp→index") {
         let html = "";
         html += `<div class="meta" style="margin-bottom:0.45rem">Post-delegate housekeeping — not part of the executor result.</div>`;
@@ -872,6 +913,8 @@
         html += tl_policyFold(d.policy_applied);
         html += tl_msgRow("sent", "→ Prompt", d.prompt_body || d.prompt_preview);
         html += tl_msgRow("received", "← Summary", d.response_body || d.response_preview);
+        if (d.thinking_body || d.thinking_preview)
+          html += tl_msgRow("thinking", "◈ Thinking", d.thinking_body || d.thinking_preview);
         return html || renderValue(d);
       }
 
@@ -892,12 +935,17 @@
             html += tl_field("tokens", [
               tk.input  != null ? `${fmtK(tk.input)} in`  : null,
               tk.output != null ? `${fmtK(tk.output)} out` : null,
+              (d.thinking_tokens != null || tk.reasoning_tokens != null)
+                ? `think=${fmtK(d.thinking_tokens != null ? d.thinking_tokens : tk.reasoning_tokens)}`
+                : null,
             ].filter(Boolean).join(" / "));
           }
           if (d.duration_ms) html += tl_field("duration", `${d.duration_ms}ms`);
           html += tl_policyFold(d.policy_applied);
           html += tl_msgRow("sent", "→ Prompt", d.prompt_body || d.prompt_preview);
           html += tl_msgRow("received", "← Response", d.response_body || d.response_preview);
+          if (d.thinking_body || d.thinking_preview)
+            html += tl_msgRow("thinking", "◈ Thinking", d.thinking_body || d.thinking_preview);
           return html || renderValue(d);
         }
 
@@ -916,6 +964,9 @@
             html += tl_field("tokens", [
               tk.input  != null ? `${fmtK(tk.input)} in`  : null,
               tk.output != null ? `${fmtK(tk.output)} out` : null,
+              (d.thinking_tokens != null || tk.reasoning_tokens != null)
+                ? `think=${fmtK(d.thinking_tokens != null ? d.thinking_tokens : tk.reasoning_tokens)}`
+                : null,
             ].filter(Boolean).join(" / "));
           }
           if (lc.duration_ms) html += tl_field("duration", `${lc.duration_ms}ms`);
@@ -923,6 +974,8 @@
           html += tl_policyFold(lc.policy_applied);
           html += tl_msgRow("sent",     "→ Prompt",   lc.prompt_body    || lc.prompt_preview);
           html += tl_msgRow("received", "← Response", lc.response_body  || lc.response_preview);
+          if (lc.thinking_body || lc.thinking_preview)
+            html += tl_msgRow("thinking", "◈ Thinking", lc.thinking_body || lc.thinking_preview);
         }
         if (d.mechanical_brief) {
           html += `<div class="tl-section-label">Mechanical brief (before LLM)</div>`;
@@ -1008,7 +1061,7 @@
         const tokStr = [
           d.tokens_in  != null ? `${fmtK(d.tokens_in)} in`  : null,
           d.tokens_out != null ? `${fmtK(d.tokens_out)} out` : null,
-          d.thinking_tokens ? `${fmtK(d.thinking_tokens)} ◈ think` : null,
+          d.thinking_tokens ? `think=${fmtK(d.thinking_tokens)}` : null,
         ].filter(Boolean).join("  ·  ");
         if (tokStr) html += tl_field("tokens", tokStr);
         if (d.duration_ms != null) html += tl_field("duration", `${d.duration_ms.toLocaleString()}ms`);
@@ -1044,6 +1097,14 @@
         return html || renderValue(d);
       }
 
+      if (n === "executor.tool") {
+        let html = "";
+        if (d.tool) html += tl_field("tool", `<code>${esc(d.tool)}</code>`);
+        if (d.step_index != null) html += tl_field("step", String(d.step_index));
+        html += tl_rawBlock("Raw tool event", d.raw_event);
+        return html || renderValue(d);
+      }
+
       if (n === "executor→mcp") {
         let html = "";
         // ── Aggregate LLM stats ────────────────────────────────────────────
@@ -1051,7 +1112,7 @@
         const totTok = [
           d.total_tokens_in  != null ? `${fmtK(d.total_tokens_in)} in`   : null,
           d.total_tokens_out != null ? `${fmtK(d.total_tokens_out)} out`  : null,
-          d.total_thinking   != null ? `${fmtK(d.total_thinking)} ◈ think` : null,
+          d.total_thinking   != null ? `think=${fmtK(d.total_thinking)}` : null,
         ].filter(Boolean).join("  ·  ");
         if (totTok) html += tl_field("total tokens", totTok);
         // ── Output ────────────────────────────────────────────────────────

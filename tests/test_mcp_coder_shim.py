@@ -27,3 +27,9 @@ def test_shim_help_lists_subcommands():
     assert "inspect-context" in proc.stdout
     assert "history" in proc.stdout
     assert "test-model" in proc.stdout
+
+
+def test_shim_no_args_passes_mcp_flag():
+    """MCP launch (no args) must include --mcp for singleton process matching."""
+    text = SHIM.read_text(encoding="utf-8")
+    assert 'exec "$PYTHON" "$REPO_ROOT/main.py" --mcp' in text

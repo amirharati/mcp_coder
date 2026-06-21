@@ -48,10 +48,12 @@ def _extract_text_and_reasoning(response_obj: Any) -> tuple[str, str | None]:
             return "", None
         if isinstance(message, dict):
             content = message.get("content")
-            reasoning = message.get("reasoning_content")
+            reasoning = message.get("reasoning_content") or message.get("reasoning")
         else:
             content = getattr(message, "content", None)
-            reasoning = getattr(message, "reasoning_content", None)
+            reasoning = getattr(message, "reasoning_content", None) or getattr(
+                message, "reasoning", None
+            )
         text = (content or "").strip() if isinstance(content, str) else ""
         reasoning_text = reasoning if isinstance(reasoning, str) else None
         return text, reasoning_text
@@ -66,7 +68,7 @@ class LlmGateway:
         self._backend = backend
         self._call_index = 0
 
-    def _build_extra_headers(self) -> dict[str, str]:
+    def _build_extra_headers(self, *, role: str) -> dict[str, str]:
         from core.observability.context import (
             delegation_id_var,
             session_dir_var,
@@ -76,6 +78,7 @@ class LlmGateway:
 
         self._call_index += 1
         headers: dict[str, str] = {"X-Mcp-Call-Index": str(self._call_index)}
+        headers["X-Mcp-Role"] = role
         delegation_id = delegation_id_var.get()
         if delegation_id:
             headers["X-Mcp-Delegation-Id"] = delegation_id
@@ -137,7 +140,7 @@ class LlmGateway:
                         "messages": messages,
                         "max_tokens": params.max_tokens or max_tokens,
                         "drop_params": True,
-                        "extra_headers": self._build_extra_headers(),
+                        "extra_headers": self._build_extra_headers(role=role),
                     }
                     if params.reasoning_effort:
                         completion_kwargs["reasoning_effort"] = params.reasoning_effort

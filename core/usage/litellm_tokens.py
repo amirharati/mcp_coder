@@ -28,6 +28,15 @@ def _tokens_from_usage_mapping(usage: Any) -> dict[str, int | None] | None:
         inp = _coerce_int(usage.get("input_tokens") or usage.get("prompt_tokens"))
         out = _coerce_int(usage.get("output_tokens") or usage.get("completion_tokens"))
         total = _coerce_int(usage.get("total_tokens"))
+        details = usage.get("completion_tokens_details") or {}
+        prompt_details = usage.get("prompt_tokens_details") or {}
+        reasoning = _coerce_int(
+            usage.get("reasoning_tokens")
+            or (details.get("reasoning_tokens") if isinstance(details, dict) else None)
+        )
+        cached = _coerce_int(
+            (prompt_details.get("cached_tokens") if isinstance(prompt_details, dict) else None)
+        )
     else:
         inp = _coerce_int(
             getattr(usage, "input_tokens", None) or getattr(usage, "prompt_tokens", None)
@@ -37,11 +46,26 @@ def _tokens_from_usage_mapping(usage: Any) -> dict[str, int | None] | None:
             or getattr(usage, "completion_tokens", None)
         )
         total = _coerce_int(getattr(usage, "total_tokens", None))
-    if inp is None and out is None and total is None:
+        details = getattr(usage, "completion_tokens_details", None)
+        prompt_details = getattr(usage, "prompt_tokens_details", None)
+        reasoning = _coerce_int(
+            getattr(usage, "reasoning_tokens", None)
+            or (getattr(details, "reasoning_tokens", None) if details is not None else None)
+        )
+        cached = _coerce_int(
+            getattr(prompt_details, "cached_tokens", None) if prompt_details is not None else None
+        )
+    if inp is None and out is None and total is None and reasoning is None and cached is None:
         return None
     if total is None and (inp is not None or out is not None):
         total = (inp or 0) + (out or 0)
-    return {"input": inp, "output": out, "total": total}
+    return {
+        "input": inp,
+        "output": out,
+        "total": total,
+        "reasoning_tokens": reasoning,
+        "cached_tokens": cached,
+    }
 
 
 def _tokens_from_response(response: Any) -> dict[str, int | None] | None:

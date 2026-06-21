@@ -189,7 +189,7 @@ def _aggregate_tokens(events: list[dict[str, Any]]) -> dict[str, Any]:
             tokens = ev.get("tokens") or {}
             inp = tokens.get("input")
             out = tokens.get("output")
-            think = None
+            think = tokens.get("reasoning_tokens")
         else:
             continue
 
@@ -429,8 +429,11 @@ def _fmt_tokens(tok: dict[str, Any] | None) -> str:
         parts.append(f"{tok['input']:,}↑")
     if tok.get("output") is not None:
         parts.append(f"{tok['output']:,}↓")
-    if tok.get("thinking") is not None:
-        parts.append(f"{tok['thinking']:,}◈")
+    thinking = tok.get("thinking")
+    if thinking is None:
+        thinking = tok.get("reasoning_tokens")
+    if thinking is not None:
+        parts.append(f"think={thinking:,}")
     return " ".join(parts)
 
 
@@ -640,6 +643,9 @@ def _build_view_events(
                             "response_preview": lc.get("response_preview"),
                             "prompt_body": lc.get("prompt_body"),
                             "response_body": lc.get("response_body"),
+                            # llm_call uses reasoning_* keys for helper thoughts.
+                            "thinking_body": lc.get("reasoning_body"),
+                            "thinking_preview": lc.get("reasoning_preview"),
                             "policy_applied": lc.get("policy_applied"),
                         }
 
@@ -669,6 +675,7 @@ def _build_view_events(
                 detail["skip_reason"] = stage_detail_txt
             if llm_detail:
                 detail["llm"] = llm_detail
+                detail["thinking_tokens"] = (llm_detail.get("tokens") or {}).get("reasoning_tokens")
             if mech:
                 detail["mechanical_brief"] = {
                     "body":       mech.get("body"),
@@ -720,6 +727,9 @@ def _build_view_events(
                         "housekeeping": True,
                         "model": model,
                         "tokens": tok,
+                        "thinking_tokens": (tok or {}).get("reasoning_tokens"),
+                        "thinking_body": line.get("reasoning_body"),
+                        "thinking_preview": line.get("reasoning_preview"),
                         "duration_ms": duration,
                         "prompt_body": line.get("prompt_body"),
                         "response_body": line.get("response_body"),
@@ -744,6 +754,9 @@ def _build_view_events(
                     "role": role,
                     "model": model,
                     "tokens": tok,
+                    "thinking_tokens": (tok or {}).get("reasoning_tokens"),
+                    "thinking_body": line.get("reasoning_body"),
+                    "thinking_preview": line.get("reasoning_preview"),
                     "duration_ms": duration,
                     "prompt_body": line.get("prompt_body"),
                     "response_body": line.get("response_body"),
@@ -890,6 +903,283 @@ def _build_view_events(
                 },
             ))
 
+        elif t == "supervisor_loop_start":
+            # P12-001 unified agent loop. Legacy traces also use this type but carry
+            # turn_count/aborts_count (no max_turns) — both shapes render here.
+            _summary = (
+                f"start · loop={line.get('loop_id') or '?'}"
+                + (f" · max_turns={line.get('max_turns')}" if line.get("max_turns") is not None else "")
+            )
+            _emit(_view_event(
+                ev_id=f"mcp.supervisor.loop.start.{line.get('loop_id') or line.get('timestamp')}",
+                name="mcp.supervisor_loop",
+                direction="→",
+                scope="mcp",
+                timestamp=line.get("timestamp"),
+                summary=_summary,
+                detail={
+                    "event_type": "supervisor_loop_start",
+                    "loop_id": line.get("loop_id"),
+                    "max_turns": line.get("max_turns"),
+                    # legacy fields (backward compat)
+                    "turn_count": line.get("turn_count"),
+                    "aborts_count": line.get("aborts_count"),
+                },
+                is_boundary=False,
+            ))
+
+        elif t == "supervisor_turn_start":
+            _emit(_view_event(
+                ev_id=f"mcp.supervisor.turn.start.{line.get('turn_index')}.{line.get('timestamp')}",
+                name="mcp.supervisor_turn",
+                direction="→",
+                scope="mcp",
+                timestamp=line.get("timestamp"),
+                summary=f"turn {line.get('turn_index')} start",
+                detail={
+                    "event_type": "supervisor_turn_start",
+                    "loop_id": line.get("loop_id"),
+                    "turn_index": line.get("turn_index"),
+                },
+                is_boundary=False,
+            ))
+
+        elif t == "supervisor_turn_end":
+            _checks = line.get("checks_result") or {}
+            _checks_outcome = _checks.get("outcome") if isinstance(_checks, dict) else None
+            _emit(_view_event(
+                ev_id=f"mcp.supervisor.turn.end.{line.get('turn_index')}.{line.get('timestamp')}",
+                name="mcp.supervisor_turn",
+                direction="←",
+                scope="mcp",
+                timestamp=line.get("timestamp"),
+                summary=" · ".join(
+                    p for p in [
+                        f"turn {line.get('turn_index')} end" if line.get("turn_index") is not None else "turn end",
+                        str(line.get("worker_outcome") or ""),
+                        f"checks={_checks_outcome}" if _checks_outcome else None,
+                        f"{line.get('duration_ms')}ms" if line.get("duration_ms") is not None else None,
+                    ]
+                    if p
+                ),
+                detail={
+                    "event_type": "supervisor_turn_end",
+                    "loop_id": line.get("loop_id"),
+                    "turn_index": line.get("turn_index"),
+                    "worker_outcome": line.get("worker_outcome"),
+                    "checks_result": line.get("checks_result"),
+                    "duration_ms": line.get("duration_ms"),
+                },
+                is_boundary=False,
+            ))
+
+        elif t == "supervisor_decision":
+            _tok = line.get("tokens") or {}
+            _emit(_view_event(
+                ev_id=f"mcp.supervisor.decision.{line.get('turn_index')}.{line.get('timestamp')}",
+                name="mcp.supervisor_turn",
+                direction="⇄",
+                scope="mcp",
+                timestamp=line.get("timestamp"),
+                summary=" · ".join(
+                    p for p in [
+                        f"turn {line.get('turn_index')}" if line.get("turn_index") is not None else None,
+                        str(line.get("action") or ""),
+                        str(line.get("model") or ""),
+                        f"{line.get('duration_ms')}ms" if line.get("duration_ms") else None,
+                    ]
+                    if p
+                ),
+                detail={
+                    "event_type": "supervisor_decision",
+                    "loop_id": line.get("loop_id"),
+                    "turn_index": line.get("turn_index"),
+                    "action": line.get("action"),
+                    "reason": line.get("reason"),
+                    "model": line.get("model"),
+                    "tokens": line.get("tokens"),
+                    "duration_ms": line.get("duration_ms"),
+                },
+                is_boundary=False,
+            ))
+
+        elif t == "supervisor_outer_loop_start":
+            _emit(_view_event(
+                ev_id=f"mcp.supervisor.outer.start.{line.get('loop_id') or line.get('timestamp')}",
+                name="mcp.supervisor_outer_loop",
+                direction="→",
+                scope="mcp",
+                timestamp=line.get("timestamp"),
+                summary=f"start · loop={line.get('loop_id') or '?'}",
+                detail={
+                    "event_type": "supervisor_outer_loop_start",
+                    "loop_id": line.get("loop_id"),
+                    "cycle_index": line.get("cycle_index"),
+                    "reason": line.get("reason"),
+                },
+                is_boundary=False,
+            ))
+
+        elif t == "supervisor_outer_loop_decision":
+            _emit(_view_event(
+                ev_id=f"mcp.supervisor.outer.decision.{line.get('cycle_index') or line.get('timestamp')}",
+                name="mcp.supervisor_outer_loop",
+                direction="⇄",
+                scope="mcp",
+                timestamp=line.get("timestamp"),
+                summary=" · ".join(
+                    p for p in [
+                        f"cycle={line.get('cycle_index')}" if line.get("cycle_index") is not None else None,
+                        str(line.get("action") or ""),
+                        str(line.get("reviewer_outcome") or ""),
+                    ]
+                    if p
+                ),
+                detail={
+                    "event_type": "supervisor_outer_loop_decision",
+                    "loop_id": line.get("loop_id"),
+                    "cycle_index": line.get("cycle_index"),
+                    "action": line.get("action"),
+                    "reason": line.get("reason"),
+                    "reviewer_outcome": line.get("reviewer_outcome"),
+                },
+                is_boundary=False,
+            ))
+
+        elif t == "supervisor_outer_loop_end":
+            _emit(_view_event(
+                ev_id=f"mcp.supervisor.outer.end.{line.get('loop_id') or line.get('timestamp')}",
+                name="mcp.supervisor_outer_loop",
+                direction="←",
+                scope="mcp",
+                timestamp=line.get("timestamp"),
+                summary=" · ".join(
+                    p for p in [
+                        f"end={line.get('reason')}" if line.get("reason") else "end",
+                        f"action={line.get('action')}" if line.get("action") else None,
+                        str(line.get("reviewer_outcome") or ""),
+                    ]
+                    if p
+                ),
+                detail={
+                    "event_type": "supervisor_outer_loop_end",
+                    "loop_id": line.get("loop_id"),
+                    "cycle_index": line.get("cycle_index"),
+                    "action": line.get("action"),
+                    "reason": line.get("reason"),
+                    "reviewer_outcome": line.get("reviewer_outcome"),
+                },
+                is_boundary=False,
+            ))
+
+        elif t == "supervisor_turn_decision":
+            _emit(_view_event(
+                ev_id=f"mcp.supervisor.turn.{line.get('turn_index') or line.get('timestamp')}",
+                name="mcp.supervisor_turn",
+                direction="⇄",
+                scope="mcp",
+                timestamp=line.get("timestamp"),
+                summary=" · ".join(
+                    p for p in [
+                        f"turn {line.get('turn_index')}" if line.get("turn_index") is not None else None,
+                        str(line.get("action") or ""),
+                        str(line.get("risk_level") or ""),
+                        f"{line.get('duration_ms')}ms" if line.get("duration_ms") is not None else None,
+                    ]
+                    if p
+                ),
+                detail={
+                    "event_type": "supervisor_turn_decision",
+                    "loop_id": line.get("loop_id"),
+                    "turn_index": line.get("turn_index"),
+                    "action": line.get("action"),
+                    "reason": line.get("reason"),
+                    "risk_level": line.get("risk_level"),
+                    "question_present": line.get("question_present"),
+                    "llm_used": line.get("llm_used"),
+                    "duration_ms": line.get("duration_ms"),
+                },
+                is_boundary=False,
+            ))
+
+        elif t == "supervisor_loop_end":
+            # P12-001 unified agent loop carries turns_completed/final_action; legacy
+            # traces carry turn_count/aborts_count/final_decision. Render both shapes.
+            _turns = (
+                line.get("turns_completed")
+                if line.get("turns_completed") is not None
+                else line.get("turn_count")
+            )
+            _emit(_view_event(
+                ev_id=f"mcp.supervisor.loop.end.{line.get('loop_id') or line.get('timestamp')}",
+                name="mcp.supervisor_loop",
+                direction="←",
+                scope="mcp",
+                timestamp=line.get("timestamp"),
+                summary=" · ".join(
+                    p for p in [
+                        f"end={line.get('end_reason')}" if line.get("end_reason") else "end",
+                        f"action={line.get('final_action')}" if line.get("final_action") else None,
+                        f"turns={_turns}" if _turns is not None else None,
+                        f"aborts={line.get('aborts_count')}" if line.get("aborts_count") is not None else None,
+                    ]
+                    if p
+                ),
+                detail={
+                    "event_type": "supervisor_loop_end",
+                    "loop_id": line.get("loop_id"),
+                    "end_reason": line.get("end_reason"),
+                    "final_action": line.get("final_action"),
+                    "turns_completed": line.get("turns_completed"),
+                    # legacy fields (backward compat)
+                    "final_decision": line.get("final_decision"),
+                    "turn_count": line.get("turn_count"),
+                    "aborts_count": line.get("aborts_count"),
+                },
+                is_boundary=False,
+            ))
+
+        elif t == "clarity_result":
+            passed = line.get("passed")
+            auto_passed = line.get("clarity_auto_passed")
+            round_index = line.get("clarity_round_index")
+            round_cap = line.get("clarity_round_cap")
+            questions_count = line.get("questions_count")
+            if auto_passed:
+                status = "auto_passed"
+            elif passed is True:
+                status = "clear"
+            elif passed is False:
+                status = "blocked"
+            else:
+                status = "unknown"
+            summary_parts = [
+                status,
+                f"round={round_index}/{round_cap}" if round_index is not None and round_cap is not None else None,
+                f"questions={questions_count}" if questions_count is not None else None,
+            ]
+            _emit(_view_event(
+                ev_id=f"mcp.clarity_result.{line.get('timestamp')}",
+                name="mcp.clarity_result",
+                direction="·",
+                scope="mcp",
+                timestamp=line.get("timestamp"),
+                summary=" · ".join(p for p in summary_parts if p),
+                detail={
+                    "status": status,
+                    "ran": line.get("ran"),
+                    "passed": passed,
+                    "has_questions": line.get("has_questions"),
+                    "questions_count": questions_count,
+                    "questions": line.get("questions") or [],
+                    "clarity_round_index": round_index,
+                    "clarity_round_cap": round_cap,
+                    "clarity_auto_passed": auto_passed,
+                    "error": line.get("error"),
+                },
+                is_boundary=False,
+            ))
+
         elif t == "tool_call":
             tool = line.get("tool") or ""
             step = line.get("step_index")
@@ -924,6 +1214,23 @@ def _build_view_events(
                     timestamp=line.get("timestamp"),
                     summary=summary,
                     detail={"step_index": step, "tool": tool, "command": cmd, "args": line.get("args"), "exit_code": ec},
+                    is_boundary=False,
+                ))
+            else:
+                # Future-proof fallback so new tool_call kinds are visible by default.
+                summary = tool or "tool_call"
+                _emit(_view_event(
+                    ev_id=f"executor.tool.{n}.{ts_key}",
+                    name="executor.tool",
+                    direction="·",
+                    scope="executor",
+                    timestamp=line.get("timestamp"),
+                    summary=summary,
+                    detail={
+                        "step_index": step,
+                        "tool": tool,
+                        "raw_event": line,
+                    },
                     is_boundary=False,
                 ))
 

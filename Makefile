@@ -1,4 +1,4 @@
-.PHONY: venv install install-locked install-dev lock test mcp mcp-ps mcp-kill mcp-smoke logs-last server-logs-last test-ws
+.PHONY: venv install install-cli install-locked install-dev lock test mcp mcp-ps mcp-status mcp-kill mcp-kill-ws mcp-smoke logs-last server-logs-last test-ws
 
 PYTHON ?= python3.12
 # Workspace to test against (override: make mcp-smoke TEST_WS=/path/to/repo)
@@ -9,6 +9,10 @@ venv:
 
 install:
 	./scripts/bootstrap.sh
+
+# One-time: editable venv + /usr/local/bin/mcp-coder symlink (live dev — no reinstall after)
+install-cli:
+	./install.sh
 
 install-locked:
 	./scripts/bootstrap.sh --locked
@@ -28,12 +32,43 @@ mcp:
 
 # List Cursor/manual mcp-coder processes
 mcp-ps:
-	@ps aux | grep "main.py --mcp" | grep -v grep || echo "(no mcp-coder processes)"
+	@pids_raw=$$(pgrep -f "mcp_coder/main.py --mcp" || true); \
+	if [ -z "$$pids_raw" ]; then \
+		echo "(no mcp-coder processes)"; \
+	else \
+		pids=$$(echo "$$pids_raw" | tr '\n' ',' | sed 's/,$$//'); \
+		ps -p "$$pids" -o pid= -o lstart= -o command=; \
+	fi
 
-# Kill all main.py --mcp (then Reload Window in Cursor)
+# Health check: verifies active stdio server freshness vs local edits
+mcp-status:
+	.venv/bin/python scripts/mcp_status.py
+
+# Kill all mcp-coder stdio servers (then Reload Window in Cursor)
 mcp-kill:
-	-pkill -f "main.py --mcp" 2>/dev/null || true
-	@echo "Done. In Cursor: Cmd+Shift+P → Developer: Reload Window"
+	@pids=$$(pgrep -f "main.py --mcp" || true); \
+	if [ -n "$$pids" ]; then \
+		echo "killing pids: $$pids"; \
+		kill $$pids 2>/dev/null || true; \
+	fi; \
+	sleep 1; \
+	remaining=$$(pgrep -f "main.py --mcp" || true); \
+	if [ -n "$$remaining" ]; then \
+		echo "force-killing remaining pids: $$remaining"; \
+		kill -9 $$remaining 2>/dev/null || true; \
+	fi; \
+	sleep 0.2; \
+	final=$$(pgrep -f "main.py --mcp" || true); \
+	if [ -n "$$final" ]; then \
+		echo "warning: still running pids: $$final"; \
+	else \
+		echo "Done. No mcp-coder stdio server processes remain."; \
+	fi; \
+	echo "In Cursor: Cmd+Shift+P → Developer: Reload Window"
+
+# Kill only the mcp-coder stdio server for TEST_WS (default: current dir)
+mcp-kill-ws:
+	.venv/bin/python scripts/mcp_kill_ws.py --workspace "$(TEST_WS)"
 
 # Verify on-disk code: policy, host, no old SESSION_POLICY constant
 mcp-smoke:
