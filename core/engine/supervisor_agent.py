@@ -24,10 +24,11 @@ from __future__ import annotations
 
 import time
 from collections.abc import Callable
-from dataclasses import dataclass, field
+from dataclasses import asdict, dataclass, field
 from typing import Any, Literal
 
 from core.engine.base import ExecutionResult
+from core.state.supervisor_state import SupervisorState
 
 SupervisorAction = Literal["rerun_aider", "done", "escalate_host"]
 SupervisorOutcome = Literal["success", "escalated", "error"]
@@ -74,6 +75,9 @@ class SupervisorAgentResult:
     executor_result: ExecutionResult | None
     decisions: list[SupervisorTurnDecision]
     loop_id: str
+    resume_token: str | None = None
+    paused_questions: list[str] = field(default_factory=list)
+    completed_turn_artifacts: list[dict] = field(default_factory=list)
 
 
 # Decision function override (e.g. injected by tests, or an LLM-backed callable).
@@ -170,15 +174,19 @@ class SupervisorAgent:
         max_turns: int = 1,
         event_sink: EventSink | None = None,
         supervisor_model: str | None = None,
+        spec_path: str | None = None,
+        plan: str | None = None,
     ) -> None:
         self._delegation_id = delegation_id
         self._workspace_path = workspace_path
+        self._spec_path = spec_path
         self._executor_fn = executor_fn
         self._reviewer_fn = reviewer_fn
         self._decision_fn = decision_fn
         self._max_turns = max(1, int(max_turns))
         self._event_sink = event_sink
         self._supervisor_model = supervisor_model
+        self._plan = plan
         self._loop_id = f"{delegation_id}:supervisor:1" if delegation_id else "supervisor:1"
         self._loop_start_emitted = False
         self._loop_end_emitted = False
@@ -187,6 +195,8 @@ class SupervisorAgent:
         self._turn_t0: float | None = None
         self._decisions: list[SupervisorTurnDecision] = []
         self._last_result: ExecutionResult | None = None
+        self._completed_turn_artifacts: list[dict] = []
+        self._pending_host_clarification: str | None = None
 
     @property
     def loop_id(self) -> str:
@@ -196,20 +206,61 @@ class SupervisorAgent:
     def max_turns(self) -> int:
         return self._max_turns
 
+    def set_plan(self, plan: str | None) -> None:
+        self._plan = plan
+
+    @classmethod
+    def resume(
+        cls,
+        state: SupervisorState,
+        host_answer: str,
+        *,
+        workspace_path: str,
+        executor_fn: ExecutorFn,
+        reviewer_fn: ReviewerFn | None = None,
+        event_sink: EventSink | None = None,
+    ) -> "SupervisorAgent":
+        agent = cls(
+            delegation_id=state.context_ref,
+            workspace_path=workspace_path,
+            executor_fn=executor_fn,
+            reviewer_fn=reviewer_fn,
+            max_turns=max(1, int(state.turn_index) + 1),
+            event_sink=event_sink,
+            spec_path=state.spec_path,
+            plan=state.plan,
+        )
+        agent._cur_turn = int(state.turn_index)
+        agent._decisions = [agent._decision_from_dict(item) for item in state.decision_log]
+        agent._completed_turn_artifacts = list(state.completed_turn_artifacts or [])
+        answer = (host_answer or "").strip()
+        if answer:
+            agent._pending_host_clarification = f"## Host clarification\n{answer}"
+        agent._emit(
+            {
+                "type": "supervisor_resumed",
+                "resume_token": state.resume_token,
+                "resumed_at_turn": state.turn_index,
+                "project_key": state.project_key,
+                "host_answer_chars": len(host_answer or ""),
+            }
+        )
+        return agent
+
     # ── public API ─────────────────────────────────────────────────────────
 
     def run(self) -> SupervisorAgentResult:
         """Drive the supervisor loop to completion and return the final outcome."""
-        decisions: list[SupervisorTurnDecision] = []
+        decisions: list[SupervisorTurnDecision] = list(self._decisions)
         last_result: ExecutionResult | None = None
         final_action = "done"
         end_reason = "completed"
-        turns_completed = 0
+        turns_completed = int(self._cur_turn)
 
         self._emit_loop_start()
         try:
-            correction: str | None = None
-            for turn_index in range(1, self._max_turns + 1):
+            correction: str | None = self._consume_host_clarification()
+            for turn_index in range(self._cur_turn + 1, self._max_turns + 1):
                 turns_completed = turn_index
                 t0 = time.perf_counter()
                 self._emit_turn_start(turn_index)
@@ -249,6 +300,7 @@ class SupervisorAgent:
                     checks_result=checks,
                     duration_ms=int((time.perf_counter() - t0) * 1000),
                 )
+                self._record_turn_artifact(result)
 
                 turns_remaining = self._max_turns - turn_index
                 decision = self._decide(
@@ -277,7 +329,9 @@ class SupervisorAgent:
                     final_action = "escalate_host"
                     end_reason = "max_turns_reached"
                     break
-                correction = self._correction_note(checks, result)
+                correction = self._merge_correction_with_clarification(
+                    self._correction_note(checks, result)
+                )
 
             outcome = self._resolve_outcome(final_action, last_result)
             return self._finish(
@@ -341,6 +395,7 @@ class SupervisorAgent:
             duration_ms=duration_ms,
         )
         self._last_result = result
+        self._record_turn_artifact(result)
         decision = self._decide(
             SupervisorTurnContext(
                 turn_index=self._cur_turn,
@@ -356,7 +411,8 @@ class SupervisorAgent:
         return decision
 
     def correction_note(self, checks: dict[str, Any] | None) -> str:
-        return self._correction_note(checks, self._last_result or ExecutionResult(False, ""))
+        note = self._correction_note(checks, self._last_result or ExecutionResult(False, ""))
+        return self._merge_correction_with_clarification(note)
 
     def finish(self) -> SupervisorAgentResult:
         """Close a host-driven loop, deriving the final outcome from recorded turns."""
@@ -469,6 +525,7 @@ class SupervisorAgent:
             f"## Files changed\n{files}",
             f"## Checks\noutcome={checks.get('outcome') or 'none'}; note={str(checks.get('note') or '')[:300]}",
             f"## Prior decisions\n{prior_lines}",
+            f"## Planner plan\n{(self._plan or '(none)')[:1200]}",
             f"## Worker output tail\n{tail}",
         ]
         return "\n\n".join(sections)
@@ -522,6 +579,33 @@ class SupervisorAgent:
         executor_result: ExecutionResult | None,
         decisions: list[SupervisorTurnDecision],
     ) -> SupervisorAgentResult:
+        resume_token: str | None = None
+        paused_questions: list[str] = []
+        if outcome == "escalated":
+            pause_reason = "max_turns_reached" if end_reason == "max_turns_reached" else "needs_input"
+            paused_questions = self._paused_questions(executor_result, decisions)
+            state = SupervisorState.create(
+                spec_path=self._spec_path,
+                context_ref=self._delegation_id or self._loop_id,
+                plan=self._plan,
+                decision_log=[asdict(item) for item in decisions],
+                completed_turn_artifacts=list(self._completed_turn_artifacts),
+                turn_index=turns_completed,
+                questions=list(paused_questions),
+                pause_reason=pause_reason,
+            )
+            state.save()
+            resume_token = state.resume_token
+            self._emit(
+                {
+                    "type": "supervisor_paused",
+                    "resume_token": state.resume_token,
+                    "turn_index": state.turn_index,
+                    "pause_reason": state.pause_reason,
+                    "questions": state.questions,
+                    "expires_at": state.expires_at,
+                }
+            )
         self._emit_loop_end(
             turns_completed=turns_completed,
             final_action=final_action,
@@ -535,6 +619,9 @@ class SupervisorAgent:
             executor_result=executor_result,
             decisions=decisions,
             loop_id=self._loop_id,
+            resume_token=resume_token,
+            paused_questions=paused_questions,
+            completed_turn_artifacts=list(self._completed_turn_artifacts),
         )
 
     def context_block(self, result: SupervisorAgentResult) -> dict[str, Any]:
@@ -649,3 +736,59 @@ class SupervisorAgent:
             )
         except Exception:
             pass  # observability must never break delegations
+
+    def _record_turn_artifact(self, result: ExecutionResult) -> None:
+        self._completed_turn_artifacts.append(
+            {
+                "files_changed": list(result.files_changed or []),
+                "output_tail": (result.output or "")[-500:],
+            }
+        )
+
+    def _merge_correction_with_clarification(self, note: str) -> str:
+        clarification = self._consume_host_clarification()
+        if not clarification:
+            return note
+        if not note:
+            return clarification
+        return f"{clarification}\n\n{note}"
+
+    def _consume_host_clarification(self) -> str | None:
+        text = self._pending_host_clarification
+        self._pending_host_clarification = None
+        return text
+
+    @staticmethod
+    def _decision_from_dict(raw: dict[str, Any]) -> SupervisorTurnDecision:
+        action_raw = str(raw.get("action") or "done")
+        action: SupervisorAction
+        if action_raw == "rerun_aider":
+            action = "rerun_aider"
+        elif action_raw == "escalate_host":
+            action = "escalate_host"
+        else:
+            action = "done"
+        return SupervisorTurnDecision(
+            action=action,
+            reason=str(raw.get("reason") or ""),
+            model=str(raw.get("model") or ""),
+            tokens=dict(raw.get("tokens") or {}),
+            duration_ms=int(raw.get("duration_ms") or 0),
+        )
+
+    @staticmethod
+    def _paused_questions(
+        result: ExecutionResult | None, decisions: list[SupervisorTurnDecision]
+    ) -> list[str]:
+        if result is None:
+            return [decisions[-1].reason] if decisions and decisions[-1].reason else []
+        questions: list[str] = []
+        lines = [line.strip() for line in (result.output or "").splitlines() if line.strip()]
+        for line in lines:
+            if line.endswith("?"):
+                questions.append(line)
+        if not questions and result.error and result.error.strip():
+            questions.append(result.error.strip())
+        if not questions and decisions and decisions[-1].reason.strip():
+            questions.append(decisions[-1].reason.strip())
+        return questions[:5]

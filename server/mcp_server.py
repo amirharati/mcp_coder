@@ -26,6 +26,7 @@ from core.config.auto_verify import (
 )
 from core.engine.architect_trigger import should_run_architect_pass
 from core.config.aider_runtime import (
+    OUTCOME_NEEDS_INPUT_CLARIFICATION,
     OUTCOME_NEEDS_INPUT_FILES,
     build_needs_input_payload,
     resolve_executor_max_steps,
@@ -108,6 +109,7 @@ from core.host.cursor_transcript import (
     load_cursor_transcript,
     transcript_log_context,
 )
+from core.logging.read_delegations import load_delegations_for_workspace
 from core.observability.context import host_model_policy_var
 from core.observability import (
     CONTEXT_MODE_FALLBACK,
@@ -145,6 +147,11 @@ from core.verify.runner import VerifyResult, run_verify_command
 from core.specs.paths import normalize_spec_path_arg, resolve_spec_path
 from core.specs.read import read_task_spec
 from core.specs.write import apply_post_delegation_report_updates
+from core.state.supervisor_state import (
+    ResumeTokenExpired,
+    ResumeTokenNotFound,
+    SupervisorState,
+)
 from core.rag.builder_retrieval import (
     rag_retrieval_should_run,
     run_builder_workspace_file_retrieval,
@@ -1100,6 +1107,8 @@ def _response_payload(
     executor_turns: int | None = None,
     executor_stop_reason: str | None = None,
     needs_input: dict[str, Any] | None = None,
+    resume_token: str | None = None,
+    paused_questions: list[str] | None = None,
     auto_retried: bool = False,
     stall_type: str | None = None,
     server_status: dict[str, Any] | None = None,
@@ -1227,6 +1236,10 @@ def _response_payload(
     if needs_input is not None:
         payload["needs_input"] = needs_input
         payload["status"] = needs_input.get("status")
+    if resume_token is not None:
+        payload["resume_token"] = resume_token
+    if paused_questions is not None:
+        payload["paused_questions"] = paused_questions
     if auto_retried:
         payload["auto_retried"] = True
     if stall_type:
@@ -1322,6 +1335,180 @@ def _build_server_status(workspace: str | Path) -> dict[str, Any]:
     }
 
 
+def _find_delegation_record_for_resume(
+    workspace: str, delegation_id: str | None
+) -> dict[str, Any] | None:
+    if not delegation_id:
+        return None
+    try:
+        records = load_delegations_for_workspace(workspace)
+    except Exception:
+        return None
+    for record in records:
+        if str(record.get("delegation_id") or "") == delegation_id:
+            return record
+    return None
+
+
+def _handle_resume(
+    resume_token: str,
+    answer: str,
+    task: str,
+    ctx: Context | None,
+) -> str:
+    from core.engine.supervisor_agent import SupervisorAgent
+
+    progress = _DelegationProgressBridge(ctx)
+    try:
+        ws = obs.default_workspace_path()
+        progress.notify("[resume] Loading paused supervisor state…", force=True)
+        try:
+            state = SupervisorState.find_and_load(resume_token)
+        except ResumeTokenExpired as exc:
+            payload = _response_payload(
+                success=False,
+                output=f"Resume token expired at {exc.expired_at}. Please start a new delegation.",
+                files_changed=[],
+                session_reused=False,
+                session_reason="resume_token_expired",
+                session_policy="resume",
+                outcome="error",
+                error_class="resume_token_expired",
+                error_message=(
+                    f"Resume token expired at {exc.expired_at}. Please start a new delegation."
+                ),
+            )
+            return json.dumps(payload, ensure_ascii=False)
+        except ResumeTokenNotFound:
+            payload = _response_payload(
+                success=False,
+                output=f"Resume token not found: {resume_token}",
+                files_changed=[],
+                session_reused=False,
+                session_reason="resume_token_not_found",
+                session_policy="resume",
+                outcome="error",
+                error_class="resume_token_not_found",
+                error_message=f"Resume token not found: {resume_token}",
+            )
+            return json.dumps(payload, ensure_ascii=False)
+
+        record = _find_delegation_record_for_resume(ws, state.context_ref)
+        mcp_request = (record or {}).get("mcp_request") or {}
+        backend = str((record or {}).get("backend") or "aider")
+        target_files = (
+            list(mcp_request.get("effective_target_files") or [])
+            or list(mcp_request.get("target_files") or [])
+        )
+        context_block = (record or {}).get("context") or {}
+        base_prompt = str(context_block.get("prompt_full") or task or "").strip()
+        if not base_prompt:
+            base_prompt = task
+        model_hint = str((record or {}).get("model") or "")
+
+        engine = get_engine(backend)
+        event_sink = None
+        session_dir_raw = (record or {}).get("session_dir")
+        if session_dir_raw:
+            session_dir = Path(str(session_dir_raw))
+
+            def _resume_event_sink(rec: dict[str, Any]) -> None:
+                append_trace_record(
+                    rec,
+                    delegation_id=str(state.context_ref or rec.get("delegation_id") or "resume"),
+                    session_dir=session_dir,
+                    workspace=ws,
+                )
+
+            event_sink = _resume_event_sink
+
+        def _executor_fn(_turn_index: int, correction_note: str | None) -> ExecutionResult:
+            prompt = base_prompt
+            if correction_note:
+                prompt = f"{prompt}\n\n{correction_note}"
+            with role_context(ROLE_EXECUTOR):
+                return engine.run(
+                    prompt,
+                    target_files,
+                    workspace_path=ws,
+                    mcp_session_id=None,
+                )
+
+        progress.notify("[resume] Continuing delegation from paused turn…", force=True)
+        agent = SupervisorAgent.resume(
+            state,
+            answer,
+            workspace_path=ws,
+            executor_fn=_executor_fn,
+            reviewer_fn=None,
+            event_sink=event_sink,
+        )
+        result = agent.run()
+        exec_result = result.executor_result or ExecutionResult(success=False, output="")
+
+        needs_input_payload = None
+        payload_outcome = OUTCOME_SUCCESS if result.outcome == "success" else "error"
+        payload_success = result.outcome == "success" and exec_result.success
+        payload_error_class = exec_result.error_class if not payload_success else None
+        payload_error_message = exec_result.error if not payload_success else None
+        resume_token_out: str | None = None
+        paused_questions_out: list[str] | None = None
+
+        if result.outcome == "escalated":
+            payload_outcome = OUTCOME_NEEDS_INPUT
+            payload_success = False
+            resume_token_out = result.resume_token
+            paused_questions_out = list(result.paused_questions or [])
+            needs_input_payload = build_needs_input_payload(
+                {
+                    "outcome": OUTCOME_NEEDS_INPUT_CLARIFICATION,
+                    "supervisor_reason": (
+                        paused_questions_out[0]
+                        if paused_questions_out
+                        else "Supervisor requires host clarification."
+                    ),
+                    "message": (
+                        paused_questions_out[0]
+                        if paused_questions_out
+                        else "Supervisor requires host clarification."
+                    ),
+                    "files_requested": [],
+                    "executor_output_tail": (exec_result.output or "")[-500:],
+                }
+            )
+            payload_error_class = "needs_input"
+            payload_error_message = (
+                paused_questions_out[0]
+                if paused_questions_out
+                else "Supervisor requires host clarification."
+            )
+
+        payload = _response_payload(
+            success=payload_success,
+            output=exec_result.output or "",
+            files_changed=list(exec_result.files_changed or []),
+            files_unexpected=list(exec_result.files_unexpected or []),
+            session_reused=False,
+            session_reason="resumed",
+            session_policy="resume",
+            outcome=payload_outcome,
+            error_class=payload_error_class,
+            error_message=payload_error_message,
+            needs_input=needs_input_payload,
+            resume_token=resume_token_out,
+            paused_questions=paused_questions_out,
+            model_roles=(
+                {"executor": {"model": model_hint}}
+                if model_hint and payload_outcome != "error"
+                else None
+            ),
+        )
+        progress.notify("[done] Resume delegation complete.", force=True)
+        return json.dumps(payload, ensure_ascii=False)
+    finally:
+        progress.close()
+
+
 @mcp.tool(
     name="delegate_to_agent",
     description=(
@@ -1346,6 +1533,8 @@ def delegate_to_agent(
     mode: str = "implement",
     cli_artifacts: bool = False,
     model_policy: dict | None = None,
+    resume_token: str | None = None,
+    answer: str | None = None,
     ctx: Context | None = None,
 ) -> str:
     """Run one delegated implementation via the selected backend; append JSONL log."""
@@ -1396,6 +1585,14 @@ def delegate_to_agent(
                 ensure_ascii=False,
             )
         mcp_request["mode"] = delegate_mode
+        if resume_token is not None:
+            mcp_request["resume_token"] = resume_token
+            return _handle_resume(
+                resume_token=resume_token,
+                answer=answer or "",
+                task=task,
+                ctx=ctx,
+            )
         ws = obs.default_workspace_path()
         usage_report_enabled = obs.resolve_usage_report_enabled(ws)
         ensure_workspace_spec_layout(ws)
@@ -1652,6 +1849,8 @@ def delegate_to_agent(
         stall_type: str | None = None
         stall_files_requested: list[str] = []
         needs_input_payload: dict[str, Any] | None = None
+        supervisor_resume_token: str | None = None
+        supervisor_paused_questions: list[str] | None = None
         # P12-001: unified supervisor agent loop owns all post-planning control flow
         # (replaces the former supervisor_outer_loop_* events). The agent emits the
         # canonical supervisor_loop_* / supervisor_turn_* / supervisor_decision events.
@@ -1864,6 +2063,8 @@ def delegate_to_agent(
                 executor_fn=lambda _turn, _correction: result,
                 max_turns=_supervisor_max_turns,
                 event_sink=_supervisor_event_sink,
+                spec_path=spec_rel_path,
+                plan=architect_plan,
             )
             supervisor_agent.begin()
             supervisor_agent.begin_turn()
@@ -2597,6 +2798,8 @@ def delegate_to_agent(
             # Translate the reviewer signal into the agent's per-turn check summary, then
             # let the agent emit supervisor_turn_end + supervisor_decision and close the
             # loop. With max_turns=1 (default) this is a single turn ending in `done`.
+            if architect_plan:
+                supervisor_agent.set_plan(architect_plan)
             _reviewer_checks = {
                 "outcome": (
                     "issues"
@@ -2621,9 +2824,37 @@ def delegate_to_agent(
             )
             supervisor_agent.complete_turn(_agent_turn_result, _reviewer_checks)
             supervisor_agent_result = supervisor_agent.finish()
+            supervisor_resume_token = supervisor_agent_result.resume_token
+            supervisor_paused_questions = list(supervisor_agent_result.paused_questions or [])
             context_block["supervisor_agent_loop"] = supervisor_agent.context_block(
                 supervisor_agent_result
             )
+            if supervisor_agent_result.outcome == "escalated":
+                success = False
+                needs_input_payload = build_needs_input_payload(
+                    {
+                        "outcome": OUTCOME_NEEDS_INPUT_CLARIFICATION,
+                        "supervisor_reason": (
+                            supervisor_paused_questions[0]
+                            if supervisor_paused_questions
+                            else "Supervisor requires host clarification."
+                        ),
+                        "message": (
+                            supervisor_paused_questions[0]
+                            if supervisor_paused_questions
+                            else "Supervisor requires host clarification."
+                        ),
+                        "files_requested": [],
+                        "executor_output_tail": (output or "")[-500:],
+                    }
+                )
+                error_class = "needs_input"
+                error = (
+                    supervisor_paused_questions[0]
+                    if supervisor_paused_questions
+                    else "Supervisor requires host clarification."
+                )
+                error_message = error
 
         # Explicit clarity loop telemetry (P11-ISS-019).
         if clarity_round_index is not None:
@@ -2727,6 +2958,9 @@ def delegate_to_agent(
                 if pipeline_recorder is not None:
                     pipeline_recorder.end("spec_report", status="ok")
         elif stall_type:
+            outcome = OUTCOME_NEEDS_INPUT
+
+        if supervisor_agent_result is not None and supervisor_agent_result.outcome == "escalated":
             outcome = OUTCOME_NEEDS_INPUT
 
         verify_result: VerifyResult | None = None
@@ -2973,6 +3207,10 @@ def delegate_to_agent(
             delegation_pipeline=delegation_pipeline_payload,
             executor_turns=_executor_turns if _executor_turns > 0 else None,
             needs_input=needs_input_payload,
+            resume_token=supervisor_resume_token if outcome == OUTCOME_NEEDS_INPUT else None,
+            paused_questions=(
+                supervisor_paused_questions if outcome == OUTCOME_NEEDS_INPUT else None
+            ),
             auto_retried=stall_auto_retried,
             stall_type=stall_type,
             server_status=server_status_payload,

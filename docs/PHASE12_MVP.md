@@ -120,7 +120,7 @@ Phase 12:  SupervisorAgent maintains project memory + context + continuity acros
 | 2 | P12-002 | [P12-002](../tasks/P12-002-project-state-store.md) | **pending** | Persistent project state store: cross-delegation `project_state.json` (decisions, risks, hot areas), Supervisor reads/writes per delegation (BL-540) |
 | 3 | P12-003 | [P12-003](../tasks/P12-003-supervisor-tool-runner.md) | **pending** | `SupervisorToolRunner`: two-tier context model (tier-1 base + tier-2 on-demand tool calls), tool-calling loop for inter-turn and confirm_ask decisions (BL-530/542) |
 | 4 | P12-004 | [P12-004](../tasks/P12-004-reviewer-feedback-loop.md) | **pending** | Reviewer findings → project state: severity classification, `open_risks` promotion; unlocks `get_reviewer_findings` tool (BL-541) |
-| 5 | P12-005 | [P12-005](../tasks/P12-005-planner-project-aware.md) | **pending** | Planner reads project state via same tool pattern; decisions written back after planning (BL-525 v1) |
+| 5 | P12-005 | [P12-005](../tasks/P12-005-planner-project-aware.md) | **pending** | Planner reads project state via pre-injection (D-P12-6): `## Project state` section prepended to prompt; decisions extracted and written back after planning (BL-525 v1) |
 
 ---
 
