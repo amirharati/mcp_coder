@@ -9,7 +9,7 @@
 # Phase 12 issues
 
 **Status:** **Active** — Phase 12 opened 2026-06-20.
-**Open:** P12-ISS-001
+**Open:** P12-ISS-001 (closed), P12-ISS-002
 **Promoted from backlog:** BL-540 (project state), BL-529 (supervisor context), BL-543 (context lifecycle), BL-544 (pause/resume), BL-541 (reviewer feedback loop), BL-525 v1 / BL-542 (planner project-aware)
 **Related PM board:** [PHASE12_MVP.md](./PHASE12_MVP.md)
 
@@ -33,7 +33,8 @@
 
 | ID | Status | Severity | Summary | Milestone | Notes |
 |----|--------|----------|---------|-----------|-------|
-| **P12-ISS-001** | **open** | medium | `resume_token` should be internal; host should not need to pass it | P12-001 | See detail below |
+| **P12-ISS-001** | **closed** | medium | `resume_token` should be internal; host should not need to pass it | P12-001 | Fixed in commit 16dfe7b |
+| **P12-ISS-002** | **open** | high | `SupervisorAgent` recreated per delegation — should be a long-lived singleton per `project_key` | pre-P12-003 | See detail below |
 
 ---
 
@@ -67,9 +68,64 @@ P12-001 shipped `resume_token` as a host-facing param on `delegate_to_agent`. Th
 
 ---
 
+---
+
+### P12-ISS-002 — SupervisorAgent singleton per project_key
+
+**Filed:** 2026-06-21  
+**Milestone:** pre-P12-003 (must fix before P12-003 is handed to a worker)  
+**Severity:** high — architectural correctness; current design defeats the "stateful agent" vision
+
+**Problem:**
+`SupervisorAgent` is constructed fresh on every `delegate_to_agent` call and destroyed
+when the delegation completes. Between delegations the agent doesn't exist. `project_state`
+is reloaded from disk on every call. This contradicts the core vision:
+
+> *"mcp-coder provides tactical execution AND institutional memory — the Supervisor is the
+> mind that coordinates workers across the full lifecycle of a real project."*
+
+An agent that dies and is recreated per call is not a persistent mind; it's a stateless
+function with disk I/O.
+
+**Desired behaviour:**
+- One `SupervisorAgent` per `project_key` lives in a module-level registry for the entire
+  MCP server process lifetime.
+- First call: created + loads `project_state` from disk (cold start / after restart).
+- Subsequent calls: same agent object, `project_state` already warm in memory.
+- `project_state` is written to disk at the end of each delegation (crash recovery, already
+  implemented by P12-002).
+- Per-delegation state (`delegation_id`, `executor_fn`, `plan`, `decisions`, turn state)
+  is reset by a new `begin_delegation()` call at the start of each delegation.
+- `_handle_resume` stores the resumed agent in the registry.
+
+**Why this matters beyond performance:**
+- `project_state_loaded` fires once (cold start) not once per delegation.
+- In-memory decisions and hot_areas accumulate without disk round-trips.
+- Natural foundation for P12-003 (`SupervisorToolRunner`): the tool-calling loop queries
+  the agent's own in-memory state, not disk on every call.
+- Conceptually correct: the agent is the identity; delegations are tasks handed to it.
+
+**Scope of fix:**
+- `core/engine/supervisor_agent.py`: add `begin_delegation()` instance method that resets
+  all per-delegation fields (`delegation_id`, `executor_fn`, `plan`, `decisions`,
+  `_cur_turn`, `_completed_turn_artifacts`, `_pending_host_clarification`, `_loop_id`,
+  `_loop_start_emitted`, `_loop_end_emitted`) while preserving `_project_state` and
+  `_workspace_path`.
+- `server/mcp_server.py`: add `_SUPERVISOR_REGISTRY: dict[str, SupervisorAgent]` and
+  `_get_or_create_supervisor(project_key, workspace_path, spec_path)` factory; wire into
+  `delegate_to_agent` normal path and `_handle_resume`.
+- Tests: 5 new tests covering singleton identity, `begin_delegation` reset, project_state
+  preservation, and no disk reload on warm agent.
+
+**Spec:** [P12-ISS-002](./tasks/P12-ISS-002-supervisor-singleton.md)
+
+---
+
 ## Changelog
 
 | Date | Event |
 |------|-------|
+| 2026-06-21 | P12-ISS-002 filed — SupervisorAgent singleton: agent must live across delegations, not be recreated per call. Fix targeted before P12-003. |
+| 2026-06-21 | P12-ISS-001 closed — implicit resume implemented and dogfooded (commit 16dfe7b). |
 | 2026-06-21 | P12-ISS-001 filed — implicit resume: token should be internal, not host-facing. Fix targeted before P12-003. |
 | 2026-06-20 | Phase 12 issues log opened. |
