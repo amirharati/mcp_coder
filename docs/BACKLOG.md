@@ -2073,21 +2073,25 @@ Operators tuning dogfood/debug runs must know this matrix by heart; `.env.exampl
 
 ---
 
-### BL-530: On-demand context retrieval for all helper models
+### BL-530: On-demand context retrieval — `SupervisorToolRunner` (Phase 12 implementation)
 
-**Status:** `idea` — 2026-06-19. **Phase 12 candidate.**
-**Related:** BL-529 (supervisor context), BL-354 (executor-pull sidecar), BL-531 (multi-turn loops).
+**Status:** `idea` — 2026-06-19. **Phase 12 — P12-003 (SupervisorToolRunner).**
+**Related:** BL-542 (context routing), BL-354 (executor-pull sidecar), BL-531 (multi-turn loops), BL-540 (project state).
 
-**Problem:** All helper models (clarity, planner, supervisor, reviewer) receive a single compiled context snapshot at call time and cannot request additional information. If the planner needs to see a dependency file that wasn't in the initial package, or the reviewer wants to check a test file that wasn't in `files_changed`, they simply don't — the result is lower quality with no recourse.
+**Problem:** All helper models receive a single compiled context snapshot at call time and cannot request additional information. If the supervisor needs to check what changed in the last delegation before approving a risky action, or the planner needs to see a past decision before planning, they simply don't — the result is lower quality decisions with no recourse.
 
-**Goal:** Give each helper model a minimal tool interface for on-demand context retrieval: `read_file(path)`, `rag_search(query)`, `get_spec(spec_path)`. The helper LLM can call these tools once or twice before producing its output, turning a single-shot prompt into a lightweight agentic step.
+**Goal:** Give the Supervisor and Planner a tool-calling loop (`SupervisorToolRunner`) where the LLM reasons about what context it needs and calls tools on demand. Uses a **two-tier context model**: Tier 1 (slow-changing base: spec, plan, decision log) assembled once per turn; Tier 2 (action-specific) pulled via tool calls based on the LLM's own reasoning.
 
-**Design sketch:**
-- Add a `HelperToolRunner` thin layer that proxies a small fixed tool set (no code edits, no shell)
-- Each helper role opts in via `tool_enabled: true` in its config; disabled by default
-- Tool calls logged as `tool_call(role=planner_pass, ...)` trace events
-- Start with planner and supervisor (highest value); clarity and reviewer can follow
-- Execution budget: max 3 tool calls per helper invocation to bound latency + cost
+**Phase 12 tool set (P12-003):**
+- `get_project_state()` — decisions, risks, hot areas from `project_state.json`
+- `get_delegation_history(spec_path, n)` — last N delegation summaries + files changed
+- `read_file(path)` — file content (truncated to budget)
+- `get_diff(delegation_id)` — unified diff from a past delegation
+- `get_reviewer_findings(files)` — classified findings for specific files (available after P12-004)
+
+**Phase 13+ tool set (deferred):** `search_past_decisions(query)` (RAG over decision history), cross-project queries, full `HelperToolRunner` for clarity/reviewer roles, sidecar HTTP tool server for executor (BL-354 full).
+
+**Phase placement:** Phase 12, P12-003. Depends on BL-540 (project state) for `get_project_state` tool data.
 
 ---
 
@@ -2123,6 +2127,170 @@ Operators tuning dogfood/debug runs must know this matrix by heart; `.env.exampl
 - **Supervisor → context builder**: escalation can trigger a context-enrichment step before handing back to human
 
 **Why this matters:** Without inter-model communication, each model operates on a stale snapshot. With it, the delegation becomes a true multi-agent loop rather than a waterfall pipeline.
+
+---
+
+### BL-540: Persistent project state — cross-delegation planner notebook
+
+**Status:** `idea` — 2026-06-20. **Phase 12 candidate.**
+**Related:** BL-525 (Planner role), BL-529 (supervisor context), BL-541 (reviewer → project state).
+
+**Problem:** BL-525 scopes the Planner as session-bounded — its state lives only within one MCP session and is lost on Cursor restart. Real projects span many sessions over days or weeks. The Planner has no memory of what was built two sessions ago, what decisions were made, or what risks were surfaced. Every delegation starts from scratch regardless of project history.
+
+**Goal:** A `project_state` object stored in `~/.mcp-coder/projects/<key>/project_state.json` that persists across sessions and is maintained by the Planner. Contains:
+- What the project is (inferred and confirmed over time; editable by host)
+- Decisions made and why (pulled from spec reports + past `context_summary` fields + planner summaries)
+- Current "hot areas" — files/subsystems recently touched and what happened
+- Open risks / known gaps surfaced across delegations (fed by reviewer, supervisor, planner)
+- A compact rolling summary (≤ 2k tokens) that fits into every helper's context without blowing budget
+
+**Lifecycle:**
+- **Before delegation:** Planner reads project state, incorporates it into planning context
+- **After delegation:** Planner updates project state with what was decided/built/discovered (spec report + reviewer findings as input)
+- **Reviewer → state:** Serious reviewer findings can be promoted to project state risks (BL-541)
+- **Supervisor → state:** Repeated escalation patterns noted in project state for future reference
+- **Host write:** Host can add/edit entries via a future `update_project_state` MCP tool
+
+**Invariant:** Project state must be compact enough (~2k tokens) that all helpers can receive it without dominating their budget. Not a log — a living summary. Old detail is summarised or pruned.
+
+**Phase placement:** Phase 12. Prerequisite for BL-525 full Planner role.
+
+---
+
+### BL-541: Reviewer findings feedback loop — close the loop across delegations
+
+**Status:** `idea` — 2026-06-20. **Phase 12 candidate.**
+**Related:** BL-358 (reviewer v0 shipped), BL-540 (project state), BL-532 (inter-model communication).
+
+**Problem:** The tier-1 reviewer (`reviewer_pass`, shipped P11-005) runs after each executor turn and appends its findings to the spec report. But that's where the chain ends — findings are written to a file that no subsequent delegation reads. The next delegation's planner, supervisor, and context builder have no idea what the reviewer found. The reviewer might as well not exist from the perspective of future delegations.
+
+**Goal:** Close the feedback loop so reviewer findings actually influence future work:
+
+1. **`prior_review_notes` in planner context** — after a delegation completes, reviewer findings (if any) are summarised and stored alongside the spec in a `<spec>-review-summary.md`. The next delegation on the same spec has this summary injected into the planner's context prefix.
+
+2. **Serious findings → project state** — findings above a severity threshold (missing error handling, broken interface contract, obvious test gap) are promoted to `project_state.open_risks` (BL-540) so they persist across specs/sessions.
+
+3. **Supervisor can consult reviewer history** — when a supervisor decision involves a file or area that has recent reviewer findings, a `reviewer_history_summary` field is included in the supervisor's context (BL-529 extension).
+
+**What this is NOT:** Not a re-delegation trigger. Not automated re-work. The reviewer is still advisory — findings surface to the Planner and state, not auto-fix.
+
+**Phase placement:** Phase 12. Depends on BL-540 (project state) for item 2; item 1 can land independently.
+
+---
+
+### BL-542: Dynamic context routing — two-tier Supervisor/Planner context model
+
+**Status:** `idea` — 2026-06-20. **Phase 12 — part of P12-003 (SupervisorToolRunner).**
+**Related:** BL-530 (SupervisorToolRunner mechanism), BL-540 (project state), BL-541 (reviewer findings).
+
+**Problem:** The Supervisor and Planner often need context that spans multiple sources (project state, past delegation outcomes, reviewer findings, specific files) and the right selection depends on what they're doing at that moment. A pre-assembled fixed context slice misses the adaptive nature of the need.
+
+**Goal:** The two-tier context model (D-ARCH-11): Tier 1 (slow-changing, assembled at turn start) + Tier 2 (on-demand via the Supervisor's own tool calls based on its reasoning). This is the product-level scoping of BL-530 for the Supervisor and Planner roles specifically. BL-530 is the mechanism; BL-542 is the design decision about which sources matter and how they compose.
+
+Key constraint: all tool calls logged as `supervisor_tool_call` trace events. Budget enforcement: total retrieved context stays within the role's D-ARCH-1/11 budget. Max 3 tool rounds per decision call (configurable).
+
+**Phase placement:** Phase 12, P12-003. Implemented as part of `SupervisorToolRunner` with the Phase 12 tool set. Full RAG/search tools deferred to Phase 13.
+
+---
+
+### BL-543: Supervisor-owned context lifecycle — refresh at checkpoints and confirm_ask enrichment
+
+**Status:** `idea` — 2026-06-20. **Phase 12 candidate.**
+**Related:** BL-529 (supervisor context), BL-530 (on-demand retrieval), BL-540 (project state), BL-542 (context routing), BL-351 (SupervisedIO).
+
+**Problem:** Context is compiled once before the executor runs and handed as a static package. This is correct for `max_turns=1`. For multi-turn supervisor loops it breaks down: after turn 1 the workspace has changed (files edited, files created), the executor produced output the Supervisor has seen but the next executor turn has not, and reviewer findings exist that the executor knows nothing about. The second turn runs with stale context — it may redo work, contradict what turn 1 did, or miss the reviewer's concern entirely.
+
+A second gap: during execution, every `confirm_ask` is a natural mid-execution pause where Aider is waiting. The Supervisor currently returns only approve/deny. This is a missed opportunity — the Supervisor knows what the question is about, can pull relevant context, and can inject that context into its response so Aider continues with enriched understanding rather than just a boolean.
+
+**Goal:** Make the Supervisor the owner of context lifecycle inside the execution loop. Three checkpoints:
+
+**Checkpoint A — Pre-delegation (infrastructure, unchanged)**
+The existing pipeline (clarity → context_compile → builder_llm) produces the initial `ContextPackage`. The Supervisor receives this and uses it for turn 1. No change to the compiler.
+
+**Checkpoint B — `confirm_ask` mid-turn (new)**
+When Aider fires `confirm_ask` and the Supervisor evaluates:
+- Supervisor may pull context via BL-542 router (`rag_search`, `read_file`, `get_project_state`) targeted at the specific question
+- Supervisor's decision response can include a `context_injection: str` field — additional context appended to Aider's next message before it resumes
+- The `confirm_ask` gate becomes a context enrichment point, not just a yes/no gate
+- Example: Aider asks "add `auth_utils.py`?" → Supervisor: "yes, and keep the existing `validate_token()` signature intact — it is used by 3 callers"
+
+**Checkpoint C — Post-turn / pre-next-turn (new)**
+After an executor turn completes and the Supervisor decides to rerun:
+- Supervisor reads fresh content of `files_changed` from this turn
+- Assembles a "continuation brief": what was done + what reviewer found + what remains from the plan
+- The executor's prompt for turn 2 is NOT the original brief — it is the continuation brief prepended above the original spec/map sections
+- Cost: a short LLM summary call (~500 tokens) + file reads of `files_changed` only
+
+**Invariant:** The infrastructure compiler (checkpoint A) is never re-invoked mid-loop. Checkpoints B and C are Supervisor responsibility only — lightweight delta updates, not full recompiles.
+
+**Trace events:**
+- `supervisor_context_inject` — when Supervisor enriches a `confirm_ask` response with context
+- `supervisor_context_refresh` — when Supervisor assembles a continuation brief for next turn
+
+**Phase placement:** Phase 12. Checkpoint B (confirm_ask enrichment) can ship independently of checkpoint C. Both depend on BL-529 (supervisor context window) and BL-542 (context routing) for the pull mechanism.
+
+---
+
+### BL-544: Supervisor pause/resume — stateful agent across multiple delegate_to_agent calls
+
+**Status:** `idea` — 2026-06-20. **Phase 12 candidate. High priority.**
+**Related:** BL-528 (late-answer resume, specific case), BL-351 (SupervisedIO), BL-543 (context lifecycle), BL-350 (outer-loop continuation).
+
+**Problem:** When the Supervisor escalates to the host mid-loop (needs human input, needs a decision from the planner, needs clarification), the current model aborts the delegation and returns `needs_input`. The next `delegate_to_agent` call is a completely fresh start: clarity, spec_validation, context_compile, planner_pass all re-run from scratch. The Supervisor has no memory of what turn 1 did. Files on disk reflect turn 1's edits but the Supervisor's context does not. The second call is expensive and potentially wrong.
+
+This breaks real multi-step work. If a task requires two or three turns with a host question in between, the system cannot maintain coherence across them.
+
+**Goal:** A general pause/resume mechanism for the Supervisor agent. On escalation, the Supervisor serializes its full state. The host gets a `resume_token` with the response. When the host calls `delegate_to_agent` again with that token, the Supervisor resumes from exactly where it paused — no re-running of pipeline stages already completed.
+
+**Supervisor state (serialized on pause):**
+```
+SupervisorState {
+    resume_token:      UUID
+    spec_path:         str
+    turn_index:        int          # turns completed so far
+    plan:              str          # from Planner — still valid unless host changes scope
+    decision_log:      list         # all confirm_ask decisions from completed turns
+    completed_turns:   list[{       # artifacts from each completed turn
+        files_changed, output_tail, reviewer_findings
+    }]
+    pause_reason:      str          # needs_input | needs_clarification | ...
+    questions:         list[str]    # what the Supervisor is asking
+    context_ref:       str          # delegation_id → original context package on disk
+    paused_at:         ISO8601
+    expires_at:        ISO8601      # TTL (e.g. 24h)
+}
+```
+
+Stored in `~/.mcp-coder/projects/<key>/supervisor_states/<resume_token>.json`.
+
+**Resume call:**
+```
+delegate_to_agent(resume_token="sv_abc123", answer="yes, also add rate limiting")
+  → skip: clarity_check, spec_validation, context_compile, planner_pass, turn 1
+  → load: SupervisorState from resume_token
+  → inject: host's answer into continuation brief (BL-543 checkpoint C)
+  → Supervisor may ask Planner to revise plan incorporating the answer (optional)
+  → run: turn N (next turn from saved turn_index)
+```
+
+**What does NOT re-run on resume:**
+
+| Stage | Fresh call | Resume call |
+|---|---|---|
+| clarity_check | runs | skipped |
+| spec_validation | runs | skipped |
+| context_compile | runs (~16k tokens) | skipped — loaded from context_ref |
+| planner_pass | runs | skipped — plan in state (may be revised if host answer changes scope) |
+| completed executor turns | n/a | skipped — already on disk |
+| next executor turn | runs | runs |
+
+**Host's answer as context:** The `answer` param on resume is injected into the continuation brief (BL-543) as a `## Host clarification` section before the executor sees it. The Planner can optionally revise the remaining plan to incorporate the answer before turn N runs.
+
+**Relationship to BL-528:** BL-528 covers the specific case where the human gate timed out but a late answer arrived. BL-544 is the general pause/resume mechanism that BL-528 would be implemented on top of.
+
+**Why this matters for real production use:** Without pause/resume, every escalation is a cold restart. Complex tasks that require host input mid-way (common in real projects: "I found an ambiguity", "should I also update the tests?", "I need to know the auth strategy before continuing") cannot be handled with continuity. The Supervisor can't be trusted as a real agent without it.
+
+**Phase placement:** Phase 12. Depends on BL-543 (continuation brief) and BL-540 (project state). New `resume_token` param on `delegate_to_agent` MCP tool — backward compatible (optional).
 
 ---
 
@@ -2269,6 +2437,10 @@ The MCP-facilitated path is the architectural win: the junior PM host calls `mcp
 
 | Date | Change |
 |------|--------|
+| 2026-06-20 | **BL-530 + BL-542 updated** — revised to reflect two-tier context model (D-ARCH-11) and `SupervisorToolRunner` as the Phase 12 implementation. Tier 1 = slow-changing base context; Tier 2 = on-demand tool calls driven by Supervisor LLM reasoning. Phase 13+ tools (RAG search, cross-project) deferred. |
+| 2026-06-20 | **BL-544 added** — Supervisor pause/resume: stateful agent across multiple `delegate_to_agent` calls via `resume_token`; skips already-completed pipeline stages on resume; host answer injected into continuation brief. High priority for real production use. |
+| 2026-06-20 | **BL-543 added** — supervisor-owned context lifecycle: confirm_ask enrichment and continuation brief. |
+| 2026-06-20 | **BL-540, BL-541, BL-542 added** — persistent project state, reviewer findings feedback loop, dynamic context routing for planner/supervisor. |
 | 2026-06-20 | **Phase 11 closed** — § Phase 11 table marked shipped/closed; carry-over issues moved from PHASE11_ISSUES to backlog items BL-535..BL-539; BL-533 marked done in P11-009 and BL-534 added for reasoning-capture fidelity. |
 | 2026-06-19 | **P11-007 shipped** — BL-512 Stage 2 done: host `model_policy` arg with per-role overrides, additive precedence (host > env > defaults), and warning audit fields. |
 | 2026-06-19 | **P11-006 shipped** — smart architect trigger v0 shipped (spec/env/heuristic precedence + skip-reason audit detail). |
