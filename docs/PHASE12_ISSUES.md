@@ -8,8 +8,8 @@
 
 # Phase 12 issues
 
-**Status:** **Active** — Phase 12 opened 2026-06-20.
-**Open:** (none — all P12 issues closed; BL-545 tracked in backlog)
+**Status:** **Closed** — Phase 12 closed 2026-06-21.
+**Open:** (none)
 **Promoted from backlog:** BL-540 (project state), BL-529 (supervisor context), BL-543 (context lifecycle), BL-544 (pause/resume), BL-541 (reviewer feedback loop), BL-525 v1 / BL-542 (planner project-aware)
 **Related PM board:** [PHASE12_MVP.md](./PHASE12_MVP.md)
 
@@ -178,6 +178,7 @@ therefore under-count supervisor LLM cost when tools are used.
 
 | Date | Event |
 |------|-------|
+| 2026-06-21 | **Phase 12 issues log closed** — all P12-ISS resolved; partial north-star / BL vision items carried to backlog (see PHASE12_MVP § Phase 12 exit). |
 | 2026-06-21 | P12-ISS-004 closed — SupervisorToolRunner.run_with_metrics aggregates tokens into decision records + usage totals (commit 2a762e0). |
 | 2026-06-21 | P12-ISS-003 closed — resume branch moved after session acquisition; `_handle_resume` now receives acquired `mcp_session_id` (commit 74d6f09). |
 | 2026-06-21 | P12-ISS-004 filed — SupervisorToolRunner multi-round token totals not in supervisor decision records; Phase 13 observability cleanup. |

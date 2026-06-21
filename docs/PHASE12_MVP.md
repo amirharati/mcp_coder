@@ -9,7 +9,7 @@
 
 # Phase 12 — Supervisor as intelligent orchestration layer
 
-**Status:** **Active** — planning session 2026-06-20.
+**Status:** **Closed** — Phase 12 closed 2026-06-21.
 **Purpose:** Transform the SupervisorAgent from a loop-runner into the main intelligence layer of mcp-coder: persistent project memory across delegations, context lifecycle management (continuation briefs, mid-turn enrichment), and pause/resume across host round-trips. All helpers remain stateless; the Supervisor owns all state and routing.
 **PM board:** this file · **Issues:** [PHASE12_ISSUES.md](./PHASE12_ISSUES.md)
 **Phase 11 (closed):** [PHASE11_MVP.md](./PHASE11_MVP.md) · [PHASE11_ISSUES.md](./PHASE11_ISSUES.md)
@@ -116,11 +116,15 @@ Phase 12:  SupervisorAgent maintains project memory + context + continuity acros
 
 | Order | Milestone | Spec | Status | Notes |
 |-------|-----------|------|--------|-------|
-| 1 | P12-001 | [P12-001](../tasks/P12-001-supervisor-stateful-pause-resume.md) | **pending** | Stateful SupervisorAgent + pause/resume: `SupervisorState`, session serialization, `resume_token` on `delegate_to_agent`, skip-completed-stages on resume (BL-544) |
-| 2 | P12-002 | [P12-002](../tasks/P12-002-project-state-store.md) | **pending** | Persistent project state store: cross-delegation `project_state.json` (decisions, risks, hot areas), Supervisor reads/writes per delegation (BL-540) |
-| 3 | P12-003 | [P12-003](../tasks/P12-003-supervisor-tool-runner.md) | **pending** | `SupervisorToolRunner`: two-tier context model (tier-1 base + tier-2 on-demand tool calls), tool-calling loop for inter-turn and confirm_ask decisions (BL-530/542) |
-| 4 | P12-004 | [P12-004](../tasks/P12-004-reviewer-feedback-loop.md) | **pending** | Reviewer findings → project state: severity classification, `open_risks` promotion; unlocks `get_reviewer_findings` tool (BL-541) |
-| 5 | P12-005 | [P12-005](../tasks/P12-005-planner-project-aware.md) | **pending** | Planner reads project state via pre-injection (D-P12-6): `## Project state` section prepended to prompt; decisions extracted and written back after planning (BL-525 v1) |
+| 1 | P12-001 | [P12-001](../tasks/P12-001-supervisor-stateful-pause-resume.md) | **shipped** | Stateful SupervisorAgent + pause/resume + implicit resume (P12-ISS-001); commit 16dfe7b |
+| 2 | P12-002 | [P12-002](../tasks/P12-002-project-state-store.md) | **shipped** | `project_state.json` store; commit 16dfe7b |
+| 3 | P12-003 | [P12-003](../tasks/P12-003-supervisor-tool-runner.md) | **shipped** | `SupervisorToolRunner` + gateway `tools=`; commit 367ba27 |
+| 4 | P12-004 | [P12-004](../tasks/P12-004-reviewer-feedback-loop.md) | **shipped** | Reviewer findings → project state; commit 604f317 |
+| 5 | P12-005 | [P12-005](../tasks/P12-005-planner-project-aware.md) | **shipped** | Planner pre-injection (D-P12-6); commit 69d93d8 |
+| — | P12-ISS-002 | [P12-ISS-002](../tasks/P12-ISS-002-supervisor-singleton.md) | **shipped** | Singleton per `project_key`; commit d8ff46c |
+| — | P12-ISS-003 | [P12-ISS-003](../tasks/P12-ISS-003-resume-session-id-after-storage.md) | **shipped** | Resume session-id ordering; commit 74d6f09 |
+| — | P12-ISS-004 | [P12-ISS-004](../tasks/P12-ISS-004-supervisor-tool-runner-token-aggregation.md) | **shipped** | Tool-runner token aggregation; commit 2a762e0 |
+| — | BL-545 v1 | [BL-545](../tasks/BL-545-supervisor-owned-executor-session.md) | **shipped** | Executor reset control plane; commit 2d7307b |
 
 ---
 
@@ -128,10 +132,10 @@ Phase 12:  SupervisorAgent maintains project memory + context + continuity acros
 
 ### P12-001 — Stateful SupervisorAgent + pause/resume *(BL-544 + session state from BL-540)*
 
-**Status:** `pending`
-**Goal:** Refactor `SupervisorAgent` to maintain serializable session state. On escalation (`needs_input`), the Supervisor saves its full session state and returns a `resume_token`. On a subsequent `delegate_to_agent` call with that token, the Supervisor loads state and resumes from exactly where it paused — clarity, spec validation, context compilation, planner pass, and completed executor turns are all skipped. The host's answer is injected into the executor's context for the next turn.
+**Status:** `shipped` (2026-06-21, commit 16dfe7b + follow-ups)
+**Goal:** Refactor `SupervisorAgent` to maintain serializable session state. On escalation (`needs_input`), save state and support resume without re-running completed pipeline stages. Host answer injected on resume (implicit resume via `answer=`; P12-ISS-001).
 
-This is the structural foundation. All other Phase 12 items (project state, context enrichment, continuation briefs) plug into the state infrastructure built here.
+This is the structural foundation.
 
 **Scope:**
 - `core/engine/supervisor_agent.py` — refactor `SupervisorAgent` to carry a `SupervisorState`:
@@ -211,8 +215,7 @@ This is the structural foundation. All other Phase 12 items (project state, cont
 
 ### P12-002 — Persistent project state store *(BL-540)*
 
-**Status:** `pending`
-**Goal:** Create the durable cross-delegation memory store. After this milestone, every delegation reads the project's prior decisions and risks before running, and writes its key decisions back when done. Builds on the `ProjectKeyResolver` from P12-001.
+**Status:** `shipped` (2026-06-21, commit 16dfe7b)
 
 **Scope:**
 - `core/state/project_state.py` — `ProjectState` class:
@@ -232,9 +235,7 @@ This is the structural foundation. All other Phase 12 items (project state, cont
 
 ### P12-003 — `SupervisorToolRunner`: two-tier context + tool-calling loop *(BL-530, BL-542)*
 
-**Status:** `pending`
-**Design note:** [notes/supervisor-orchestration-layer.md](../notes/supervisor-orchestration-layer.md) § D-ARCH-11 + SupervisorToolRunner
-**Goal:** Replace the Supervisor's single-call LLM model with a tool-calling loop using a two-tier context design. The Supervisor gets a compact base context (tier-1: slow-changing) and can call tools on demand (tier-2: action-specific, pulled based on its own reasoning). This applies to both inter-turn decisions and `confirm_ask` interceptions.
+**Status:** `shipped` (2026-06-21, commit 367ba27)
 
 **Two-tier model:**
 - **Tier 1 (base, always present):** spec text (compressed), current plan, decision log tail, task description. Assembled once per turn start or delegation resume.
@@ -266,8 +267,7 @@ This is the structural foundation. All other Phase 12 items (project state, cont
 
 ### P12-004 — Reviewer findings feedback loop *(BL-541)*
 
-**Status:** `pending`
-**Goal:** Close the loop from Reviewer to future Planners. Notable/critical findings are classified and promoted to `project_state.open_risks`. A subsequent delegation on the same project has those risks available via the `get_reviewer_findings` tool (P12-003 tool registered here).
+**Status:** `shipped` (2026-06-21, commit 604f317)
 
 **Scope:**
 - After `reviewer_pass`: classify findings as `advisory | notable | critical` (cheap LLM call, spec contract as calibration reference); promote `notable+` to `project_state.add_risk()`
@@ -284,8 +284,7 @@ This is the structural foundation. All other Phase 12 items (project state, cont
 
 ### P12-005 — Planner reads project state *(BL-525 v1)*
 
-**Status:** `pending`
-**Goal:** Make the Planner context-aware of project history before it plans, using simple pre-injection (D-P12-6). A `## Project state` section is added to the existing planner prompt: compressed decisions and open risks from `project_state.json` that touch the current spec's files. After planning, the Supervisor extracts explicit decisions from the plan text and writes them back to project state. No `SupervisorToolRunner` wrapping — that's BL-525 complete / Phase 13.
+**Status:** `shipped` (2026-06-21, commit 69d93d8)
 
 **Scope:**
 - Before the planner LLM call in `core/engine/planner_pass_llm.py` (or `architect_pass_llm.py`): load `ProjectState`, extract entries touching current spec's `Files` section (file-path matching), compress to `## Project state` section (max ~800 tokens), prepend to prompt
@@ -299,9 +298,58 @@ This is the structural foundation. All other Phase 12 items (project state, cont
 
 ---
 
+## Phase 12 exit (2026-06-21)
+
+**Closeout stance:** Phase 12 delivered the **infrastructure-first** orchestration layer. Milestones P12-001..P12-005 + issues + BL-545 v1 are shipped. North-star items that required richer behaviour (interception, full continuation briefs) are **explicitly deferred** to backlog — expected; details come in later phases.
+
+### Automated test gate
+
+**87 passed** (2026-06-21) across:
+
+- `tests/test_supervisor_state_p12_001.py`
+- `tests/test_supervisor_agent_p12_001.py`
+- `tests/test_project_state_p12_002.py`
+- `tests/test_supervisor_tool_runner_p12_003.py`
+- `tests/test_reviewer_findings_p12_004.py`
+- `tests/test_planner_project_aware_p12_005.py`
+- `tests/test_supervisor_token_accounting_p12_iss_004.py`
+- `tests/test_supervisor_session_reset_bl545.py`
+
+Live multi-delegation dogfood (CLI + Cursor) is **deferred to Phase 13 P13-001** — the first milestone there.
+
+### North-star acceptance (honest)
+
+| # | Criterion | Status | Notes |
+|---|-----------|--------|-------|
+| 1 | Project memory across delegations | **shipped (unit-tested)** | `project_state.json`, planner pre-injection, reviewer promotion |
+| 2 | Continuation brief for turn 2+ | **partial** | `completed_turn_artifacts` persisted; full brief assembly → **BL-543** checkpoint C |
+| 3 | Autonomous interception (`supervisor_intercept`) | **deferred** | D-ARCH-8 not implemented → **BL-547** |
+| 4 | Pause/resume end-to-end | **shipped (unit-tested)** | Implicit resume, singleton, session-id on resume, BL-545 reset |
+| 5 | Reviewer → project state | **shipped** | P12-004 |
+| 6 | Planner reads history | **shipped** | P12-005 pre-injection |
+
+### Carried to backlog (partial / deferred)
+
+| Backlog | What shipped in Phase 12 | Deferred |
+|---------|--------------------------|----------|
+| **BL-540** | v1 project state store | Full multi-session corpus, RAG index |
+| **BL-541** | v1 reviewer → state loop | Tier-2 epic-boundary review |
+| **BL-542** | `SupervisorToolRunner` + Phase 12 tool set | RAG search, `get_diff`, full HelperToolRunner |
+| **BL-543** | Host clarification on resume (`## Host clarification`) | Checkpoint B (confirm_ask enrichment), checkpoint C (full continuation brief) |
+| **BL-544** | Pause/resume + implicit resume | Late-answer resume → **BL-528** |
+| **BL-525** | v1 planner pre-injection | Full tool-calling Planner |
+| **BL-529** | Tool-runner tier-2 pull | Full supervisor context window management |
+| **BL-545** | v1 reset control plane | Smart adaptation → **BL-546** |
+| **BL-547** (new) | — | D-ARCH-8 autonomous interception before escalation |
+
+**Next phase:** [PHASE13_MVP.md](./PHASE13_MVP.md) — stabilize, dogfood, document, fix small gaps.
+
+---
+
 ## Changelog
 
 | Date | Event |
 |------|-------|
+| 2026-06-21 | **Phase 12 closed** — P12-001..P12-005 + P12-ISS-001..004 + BL-545 v1 shipped; 87 unit tests pass; partial north-star items carried to backlog (BL-543 B/C, BL-547, BL-546, BL-528, etc.). Live dogfood → Phase 13. |
 | 2026-06-20 | Phase 12 opened. Planning session: architecture note written (`supervisor-orchestration-layer.md`), BL-540..544 captured in backlog, PM board created. 6 milestones scoped: P12-001..P12-006. |
 | 2026-06-20 | **Milestone reorder + P12-003 rewrite** — P12-001 promoted to pause/resume first (BL-544). P12-003 rewritten: was "supervisor context upgrade" (pre-assembly), now `SupervisorToolRunner` (two-tier model: tier-1 base context + tier-2 on-demand tool calls). P12-004/005/006 collapsed to 4/5 (continuation brief folded into tool model). Architecture note updated with D-ARCH-11 two-tier model + `SupervisorToolRunner` section. |

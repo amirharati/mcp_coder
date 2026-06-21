@@ -36,8 +36,10 @@ Use this page so **main vision** ([IDEA.md](./IDEA.md)) is not lost when editing
 | **2 — P10 gaps** | [PHASE10_ISSUES.md](./PHASE10_ISSUES.md) | Promoted backlog items + implementation issues | **Frozen**; BL-334/106/520/351/516/517/518/519 shipped as P10-001..P10-004 (with BL-516/518 partial residuals in backlog) |
 | **2 — Phase 11 PM** | [PHASE11_MVP.md](./PHASE11_MVP.md) | Supervised execution + smarter context — SupervisedIO, clarity pass, reviewer, model policy | **Closed** — 2026-06-20 |
 | **2 — P11 gaps** | [PHASE11_ISSUES.md](./PHASE11_ISSUES.md) | Phase 11 promoted backlog + implementation issues | **Closed** — remaining issues moved to BL-535..BL-539 |
-| **2 — Phase 12 PM** | [PHASE12_MVP.md](./PHASE12_MVP.md) | Supervisor as intelligent orchestration layer — project state, context lifecycle, pause/resume, reviewer feedback loop | **Active** — opened 2026-06-20 |
-| **2 — P12 gaps** | [PHASE12_ISSUES.md](./PHASE12_ISSUES.md) | Phase 12 promoted backlog + implementation issues | **Active** |
+| **2 — Phase 12 PM** | [PHASE12_MVP.md](./PHASE12_MVP.md) | Supervisor orchestration infrastructure — project state, tool runner, pause/resume, reviewer loop | **Frozen** — closed 2026-06-21 |
+| **2 — P12 gaps** | [PHASE12_ISSUES.md](./PHASE12_ISSUES.md) | Phase 12 implementation issues | **Frozen** — all closed; partials → backlog |
+| **2 — Phase 13 PM** | [PHASE13_MVP.md](./PHASE13_MVP.md) | Stabilize + dogfood + document + test hardening + backlog review | **Active** — opened 2026-06-21 |
+| **2 — P13 gaps** | [PHASE13_ISSUES.md](./PHASE13_ISSUES.md) | Phase 13 dogfood + cleanup issues | **Active** |
 | **2 — Deferred** | [BACKLOG.md](./BACKLOG.md) | BL-* items, priorities, post–P1/P2 focus | Add/defer with user; do not delete rows silently |
 | **2 — P1 gaps** | [PHASE1_ISSUES.md](./PHASE1_ISSUES.md) | Issues from P1 — **frozen / historical at P1-199** | Read-only; new gaps → BACKLOG |
 | **2 — P2 gaps** | [PHASE2_ISSUES.md](./PHASE2_ISSUES.md) | Issues from Phase 2 — **frozen at P2-499** | Read-only; carried → PHASE3_ISSUES |
@@ -100,15 +102,17 @@ Use this page so **main vision** ([IDEA.md](./IDEA.md)) is not lost when editing
 - **Phase 9 (closed 2026-06-17):** Write-always + `LocalLlmProxy` + context blobs + replay/compare/inspect + model registry Stage 1. See [PHASE9_MVP.md](./PHASE9_MVP.md) (frozen).
 - **Phase 10 (closed 2026-06-18):** Trustable real-project dogfood shipped — executor option wiring (BL-334), MCP visibility + `logs tail` (BL-106/520 POF), stall → `needs_input` (BL-351 v0), backlog clearance (BL-517/519 full; BL-516/518 partial). See [PHASE10_MVP.md](./PHASE10_MVP.md) · [PHASE10_ISSUES.md](./PHASE10_ISSUES.md).
 - **Phase 11 (closed 2026-06-20):** Supervised execution — SupervisedIO, clarity pass, reviewer, model policy, planner rename, SupervisorAgent loop. See [PHASE11_MVP.md](./PHASE11_MVP.md) (frozen).
-- **Phase 12 (active):** Supervisor as intelligent orchestration layer — persistent project state (BL-540), supervisor context upgrade (BL-529), continuation briefs + confirm_ask enrichment (BL-543), pause/resume (BL-544), reviewer feedback loop (BL-541), Planner reads project state (BL-525 v1). See [PHASE12_MVP.md](./PHASE12_MVP.md).
-- **Phase 12+:** Full Planner-as-real-agent (BL-525 complete), CTO/Architect role (BL-526), full executor-pull sidecar (BL-354 full), AI-suggested params (BL-513), dynamic escalation (BL-514), out-of-process backend proxy, multi-host, ensemble (BL-007).
+- **Phase 12 (closed 2026-06-21):** Supervisor orchestration infrastructure — project state, tool runner, pause/resume, reviewer loop, planner pre-injection, executor reset control plane. See [PHASE12_MVP.md](./PHASE12_MVP.md) (frozen).
+- **Phase 13 (active):** Stabilize + dogfood + document + test hardening + backlog review. See [PHASE13_MVP.md](./PHASE13_MVP.md).
+- **Phase 13+:** Full Planner-as-real-agent (BL-525 complete), interception (BL-547), context lifecycle B/C (BL-543), CTO/Architect (BL-526), executor adaptation (BL-546), full executor-pull sidecar (BL-354 full), AI-suggested params (BL-513), dynamic escalation (BL-514), out-of-process backend proxy, multi-host, ensemble (BL-007).
 - **Executor:** Aider-first; OpenCode/other hosts very low priority.
 
 ## Changelog
 
 | Date | Change |
 |------|--------|
-| 2026-06-20 | **Phase 12 opened** — PHASE12_MVP.md + PHASE12_ISSUES.md created; `supervisor-orchestration-layer.md` architecture note written; BL-540..BL-544 captured; 6 milestones P12-001..P12-006 scoped (project state, supervisor context upgrade, continuation briefs, pause/resume, reviewer feedback loop, Planner project-aware); D-ARCH-7..11 locked. |
+| 2026-06-21 | **Phase 13 opened** — PHASE13_MVP + PHASE13_ISSUES; dogfood-first stabilize phase after Phase 12 close. |
+| 2026-06-21 | **Phase 12 closed** — orchestration infra shipped; partials → backlog (BL-543, BL-547, etc.). |
 | 2026-06-20 | **Phase 11 closed** — P11-001..P11-009 shipped; remaining Phase 11 open issues moved to backlog carry-over items (BL-535..BL-539). |
 | 2026-06-19 | **P11-003 shipped** — executor-pull hint v0 (`/read` prompt guidance); Phase 11 remains active. |
 | 2026-06-19 | **P11-002 shipped** — supervised execution v1 (`SupervisedIO` + `DelegationSupervisor`); Phase 11 remains active. |

@@ -14,6 +14,37 @@ Status: `idea` | `deferred` | `blocked` | `in_phase` | `done`
 
 ---
 
+## Phase 13 active (opened 2026-06-21)
+
+**PM board:** [PHASE13_MVP.md](./PHASE13_MVP.md) · **Issues:** [PHASE13_ISSUES.md](./PHASE13_ISSUES.md)
+
+| Backlog / theme | Milestone | Status | Deferred |
+|-----------------|-----------|--------|----------|
+| Dogfood + trace analysis | P13-001 | pending | — |
+| Doc consolidation | P13-002 | pending | After P13-001 |
+| Test hardening | P13-003 | pending | After P13-001 |
+| Low-hanging fixes + backlog review | P13-004 | pending | Items TBD after dogfood |
+
+---
+
+## Phase 12 shipped (closed 2026-06-21)
+
+**PM board:** [PHASE12_MVP.md](./PHASE12_MVP.md) · **Issues:** [PHASE12_ISSUES.md](./PHASE12_ISSUES.md)
+
+| Backlog | Milestone | Status |
+|---------|-----------|--------|
+| BL-544 | P12-001 | ✅ Shipped |
+| BL-540 | P12-002 | ✅ Shipped (v1) |
+| BL-530/542 | P12-003 | ✅ Shipped |
+| BL-541 | P12-004 | ✅ Shipped |
+| BL-525 v1 | P12-005 | ✅ Shipped |
+| BL-545 | BL-545 v1 | ✅ Shipped |
+| P12-ISS-001..004 | — | ✅ Closed |
+
+**Partials → backlog:** BL-543 (B/C), BL-529, BL-525 full, BL-547 (intercept), BL-546 (executor adaptation).
+
+---
+
 ## Phase 11 shipped (closed 2026-06-20)
 
 **PM board:** [PHASE11_MVP.md](./PHASE11_MVP.md) · **Issues:** [PHASE11_ISSUES.md](./PHASE11_ISSUES.md) · **Bootstrap:** [notes/phase11-master-session-bootstrap.md](./notes/phase11-master-session-bootstrap.md)
@@ -2058,7 +2089,7 @@ Operators tuning dogfood/debug runs must know this matrix by heart; `.env.exampl
 
 ### BL-529: Supervisor context window — task + spec + Aider output tail
 
-**Status:** `idea` — 2026-06-19. **Phase 12 candidate.**
+**Status:** `partial` — 2026-06-21. **Phase 12:** tier-2 pull via `SupervisorToolRunner` (P12-003). **Deferred:** full context window assembly / pre-assembly upgrade.
 **Related:** BL-351 (supervised IO), BL-530 (on-demand context retrieval), BL-532 (inter-model communication).
 
 **Problem:** `DelegationSupervisor.evaluate()` currently receives only `question` + `risk_tier` + `target_files`. It cannot see the task description, spec contract, or what Aider has done so far in the run. This makes every risk judgment context-free — the supervisor cannot distinguish "add `config.py` which is in the spec Files contract" from "add `config.py` which is out of scope".
@@ -2075,7 +2106,7 @@ Operators tuning dogfood/debug runs must know this matrix by heart; `.env.exampl
 
 ### BL-530: On-demand context retrieval — `SupervisorToolRunner` (Phase 12 implementation)
 
-**Status:** `idea` — 2026-06-19. **Phase 12 — P12-003 (SupervisorToolRunner).**
+**Status:** `done` — 2026-06-21. **Phase 12 P12-003 shipped** (commit 367ba27). Phase 13+ tools deferred below.
 **Related:** BL-542 (context routing), BL-354 (executor-pull sidecar), BL-531 (multi-turn loops), BL-540 (project state).
 
 **Problem:** All helper models receive a single compiled context snapshot at call time and cannot request additional information. If the supervisor needs to check what changed in the last delegation before approving a risky action, or the planner needs to see a past decision before planning, they simply don't — the result is lower quality decisions with no recourse.
@@ -2132,8 +2163,7 @@ Operators tuning dogfood/debug runs must know this matrix by heart; `.env.exampl
 
 ### BL-540: Persistent project state — cross-delegation planner notebook
 
-**Status:** `idea` — 2026-06-20. **Phase 12 candidate.**
-**Related:** BL-525 (Planner role), BL-529 (supervisor context), BL-541 (reviewer → project state).
+**Status:** `done` — 2026-06-21. **Phase 12 P12-002 shipped** (v1 store; commit 16dfe7b). Full corpus/RAG → Phase 13+.
 
 **Problem:** BL-525 scopes the Planner as session-bounded — its state lives only within one MCP session and is lost on Cursor restart. Real projects span many sessions over days or weeks. The Planner has no memory of what was built two sessions ago, what decisions were made, or what risks were surfaced. Every delegation starts from scratch regardless of project history.
 
@@ -2159,8 +2189,7 @@ Operators tuning dogfood/debug runs must know this matrix by heart; `.env.exampl
 
 ### BL-541: Reviewer findings feedback loop — close the loop across delegations
 
-**Status:** `idea` — 2026-06-20. **Phase 12 candidate.**
-**Related:** BL-358 (reviewer v0 shipped), BL-540 (project state), BL-532 (inter-model communication).
+**Status:** `done` — 2026-06-21. **Phase 12 P12-004 shipped** (commit 604f317). Tier-2 epic review → Phase 13+.
 
 **Problem:** The tier-1 reviewer (`reviewer_pass`, shipped P11-005) runs after each executor turn and appends its findings to the spec report. But that's where the chain ends — findings are written to a file that no subsequent delegation reads. The next delegation's planner, supervisor, and context builder have no idea what the reviewer found. The reviewer might as well not exist from the perspective of future delegations.
 
@@ -2180,7 +2209,7 @@ Operators tuning dogfood/debug runs must know this matrix by heart; `.env.exampl
 
 ### BL-542: Dynamic context routing — two-tier Supervisor/Planner context model
 
-**Status:** `idea` — 2026-06-20. **Phase 12 — part of P12-003 (SupervisorToolRunner).**
+**Status:** `done` — 2026-06-21. **Phase 12 P12-003 shipped** (SupervisorToolRunner; commit 367ba27).
 **Related:** BL-530 (SupervisorToolRunner mechanism), BL-540 (project state), BL-541 (reviewer findings).
 
 **Problem:** The Supervisor and Planner often need context that spans multiple sources (project state, past delegation outcomes, reviewer findings, specific files) and the right selection depends on what they're doing at that moment. A pre-assembled fixed context slice misses the adaptive nature of the need.
@@ -2195,7 +2224,7 @@ Key constraint: all tool calls logged as `supervisor_tool_call` trace events. Bu
 
 ### BL-543: Supervisor-owned context lifecycle — refresh at checkpoints and confirm_ask enrichment
 
-**Status:** `idea` — 2026-06-20. **Phase 12 candidate.**
+**Status:** `partial` — 2026-06-21. **Phase 12:** host clarification on resume only (`## Host clarification`). **Deferred:** checkpoint B (confirm_ask enrichment), checkpoint C (full continuation brief for turn 2+).
 **Related:** BL-529 (supervisor context), BL-530 (on-demand retrieval), BL-540 (project state), BL-542 (context routing), BL-351 (SupervisedIO).
 
 **Problem:** Context is compiled once before the executor runs and handed as a static package. This is correct for `max_turns=1`. For multi-turn supervisor loops it breaks down: after turn 1 the workspace has changed (files edited, files created), the executor produced output the Supervisor has seen but the next executor turn has not, and reviewer findings exist that the executor knows nothing about. The second turn runs with stale context — it may redo work, contradict what turn 1 did, or miss the reviewer's concern entirely.
@@ -2233,7 +2262,7 @@ After an executor turn completes and the Supervisor decides to rerun:
 
 ### BL-544: Supervisor pause/resume — stateful agent across multiple delegate_to_agent calls
 
-**Status:** `idea` — 2026-06-20. **Phase 12 candidate. High priority.**
+**Status:** `done` — 2026-06-21. **Phase 12 P12-001 shipped** (implicit resume P12-ISS-001; singleton P12-ISS-002; commit 16dfe7b+).
 **Related:** BL-528 (late-answer resume, specific case), BL-351 (SupervisedIO), BL-543 (context lifecycle), BL-350 (outer-loop continuation).
 
 **Problem:** When the Supervisor escalates to the host mid-loop (needs human input, needs a decision from the planner, needs clarification), the current model aborts the delegation and returns `needs_input`. The next `delegate_to_agent` call is a completely fresh start: clarity, spec_validation, context_compile, planner_pass all re-run from scratch. The Supervisor has no memory of what turn 1 did. Files on disk reflect turn 1's edits but the Supervisor's context does not. The second call is expensive and potentially wrong.
@@ -2296,7 +2325,7 @@ delegate_to_agent(resume_token="sv_abc123", answer="yes, also add rate limiting"
 
 ### BL-545: Supervisor-owned executor session lifecycle (v1 — control plane)
 
-**Status:** `in_phase` — 2026-06-21. **Worker spec:** `docs/tasks/BL-545-supervisor-owned-executor-session.md`.
+**Status:** `done` — 2026-06-21. **BL-545 v1 shipped** (commit 2d7307b). Smart adaptation → BL-546.
 **Related:** BL-544 (pause/resume), BL-543 (context lifecycle), BL-546 (deferred adaptation), P12-ISS-002/003 (shipped interim fixes).
 
 **Problem:**
@@ -2356,6 +2385,21 @@ BL-545 v1 only lays plumbing: Supervisor can signal `reset_session`, but the pol
 
 ---
 
+### BL-547: Supervisor autonomous interception (D-ARCH-8)
+
+**Status:** `deferred` — 2026-06-21. **Phase 13+ candidate** (not Phase 13 cleanup scope).
+**Related:** BL-543 (confirm_ask enrichment), BL-529 (supervisor context), D-ARCH-8 (PHASE12_MVP).
+
+**Problem:**
+Phase 12 north-star #3 and D-ARCH-8 call for the Supervisor to resolve blocking sub-helper questions (Clarity, `confirm_ask`, spec validation) from `project_state` / `decision_log` / plan **before** escalating to the host. No `supervisor_intercept` logic shipped in Phase 12 — infrastructure (state store, tool runner, singleton) is in place; interception behaviour is not.
+
+**Goal:**
+When a sub-helper would block on a question answerable from known project context, the Supervisor resolves it autonomously and logs `supervisor_intercept` in trace (`question`, `resolution_source`, `answer`, `reasoning`). Escalate only when context is insufficient.
+
+**Phase placement:** After Phase 13 dogfood validates the Phase 12 stack. Pairs naturally with BL-543 checkpoint B once confirm_ask enrichment is scoped.
+
+---
+
 ## Done
 
 | ID | Item | Completed |
@@ -2375,8 +2419,8 @@ BL-545 v1 only lays plumbing: Supervisor can signal `reset_session`, but the pol
 
 ### BL-525: Planner role — session-bounded, mutable plan, RAG-aware
 
-**Status:** `idea` — 2026-06-19.  
-**Related:** BL-350 (outer loop), BL-161 (internal pipeline), BL-526 (Architect), BL-351 (Supervisor — possible merge in Phase 12).  
+**Status:** `partial` — 2026-06-21. **Phase 12 P12-005 shipped** (pre-injection v1; commit 69d93d8). Full tool-calling Planner → Phase 13+.
+**Related:** BL-350 (outer loop), BL-161 (internal pipeline), BL-526 (Architect), BL-351 (Supervisor — possible merge in Phase 12).
 **Design note:** [docs/notes/multi-model-roles.md § Role hierarchy](./notes/multi-model-roles.md)
 
 **Problem:** The current `architect_pass` is a one-shot task-level planner — it fires once before the executor and produces a static prompt prefix. There is no role that owns a mutable plan for the full task lifecycle (before / during / after executor) or that carries session context across delegations.
@@ -2499,7 +2543,8 @@ The MCP-facilitated path is the architectural win: the junior PM host calls `mcp
 
 | Date | Change |
 |------|--------|
-| 2026-06-21 | **BL-545 updated + BL-546 added** — BL-545 reframed as v1 control-plane slice (resume-first-turn reset + optional every-N, default off; worker spec `BL-545-supervisor-owned-executor-session.md`). Smarter context adaptation deferred to **BL-546** (later phase). |
+| 2026-06-21 | **Phase 12 closed** — P12-001..P12-005 + issues + BL-545 v1 shipped; partial items (BL-543, BL-529, BL-525) and D-ARCH-8 → **BL-547** deferred; Phase 13 opened (stabilize + dogfood). |
+| 2026-06-21 | **BL-547 added** — D-ARCH-8 supervisor autonomous interception (`supervisor_intercept`); deferred post–Phase 12 infra. |
 | 2026-06-21 | **BL-545 added** — Supervisor-owned executor session lifecycle: Supervisor decides when to reset Aider session (turn count, hot-area drift, post-resume); `ExecutorFn` gains `reset_session` hint; interim fix (drop stale Coder on pause, pass `mcp_session_id` to resume) ships in P12-ISS-002. End of Phase 12 / Phase 13. |
 | 2026-06-20 | **BL-530 + BL-542 updated** — revised to reflect two-tier context model (D-ARCH-11) and `SupervisorToolRunner` as the Phase 12 implementation. Tier 1 = slow-changing base context; Tier 2 = on-demand tool calls driven by Supervisor LLM reasoning. Phase 13+ tools (RAG search, cross-project) deferred. |
 | 2026-06-20 | **BL-544 added** — Supervisor pause/resume: stateful agent across multiple `delegate_to_agent` calls via `resume_token`; skips already-completed pipeline stages on resume; host answer injected into continuation brief. High priority for real production use. |

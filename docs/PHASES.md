@@ -1007,4 +1007,5 @@ See full table in [PHASE11_MVP.md](./PHASE11_MVP.md) § Cross-phase architectura
 - [x] **P11-006 shipped** — smart architect trigger v0 (`should_run_architect_pass` + skip-reason audit), 2026-06-19.
 - [x] **P11-007 shipped** — host `model_policy` arg v0 (per-role host overrides + additive precedence + non-fatal warnings), 2026-06-19.
 - [x] **Phase 11 complete** — P11-001..P11-009 shipped (clarity, supervised execution, executor-pull hint, human gate, reviewer, smart trigger, host model policy, planner rename, supervisor agent loop); closed 2026-06-20. See [PHASE11_MVP.md](./PHASE11_MVP.md).
-- [ ] **Phase 12 active** — Supervisor as intelligent orchestration layer: persistent project state (BL-540), supervisor context upgrade (BL-529), continuation briefs + confirm_ask enrichment (BL-543), pause/resume (BL-544), reviewer feedback loop (BL-541), Planner reads project state (BL-525 v1). See [PHASE12_MVP.md](./PHASE12_MVP.md).
+- [x] **Phase 12 complete** — P12-001..P12-005 + P12-ISS-001..004 + BL-545 v1 shipped; 87 unit tests; partial north-star → backlog. See [PHASE12_MVP.md](./PHASE12_MVP.md).
+- [ ] **Phase 13 active** — Stabilize + dogfood + docs + test hardening + backlog review. See [PHASE13_MVP.md](./PHASE13_MVP.md).
