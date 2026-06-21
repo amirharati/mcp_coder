@@ -11,6 +11,8 @@
 | Tool | Category | Edits disk? | Returns |
 |------|----------|-------------|---------|
 | [`delegate_to_agent`](#delegate_to_agent) | **Primary** | Yes (implement mode) | Delegation response |
+| [`answer_delegation_question`](#answer_delegation_question) | **In-flight** | No | Gate status |
+| [`get_server_status`](#get_server_status) | Health | No | PID + freshness info |
 | [`inspect_context`](#inspect_context) | Dry-run | No | ContextPackage JSON |
 | [`list_delegations`](#list_delegations) | History | No | Delegation list |
 | [`get_checkpoint_detail`](#get_checkpoint_detail) | History | No | Checkpoint metadata |
@@ -23,7 +25,7 @@
 
 ## `delegate_to_agent`
 
-**The primary tool.** Runs the full delegation pipeline: compiles context, calls the executor (Aider today), audits the result, writes JSONL + spec report.
+**The primary tool.** Runs the full delegation pipeline: spec validation + clarity check → compiles context → supervisor loop (executor + reviewer) → audits the result → writes JSONL + spec report.
 
 ### Parameters
 
@@ -35,12 +37,25 @@
 | `spec_path` | `str` | No | Step task spec path under `.mcp-coder/specs/tasks/` (e.g. `tasks/auth-01-model.md`). Strongly recommended for all implement calls |
 | `mode` | `str` | No | `implement` (default) or `review` (questions only, no edits) |
 | `backend` | `str` | No | `aider` (only backend today) |
+| `model_policy` | `dict` | No | Per-delegation role overrides. Keys: `executor`, `planner`, `supervisor`, `reviewer`, `context_builder`. Each value: `{model, reasoning_effort, thinking_budget}` |
 
 ### Modes
 
-**`implement`** — executor edits `target_files` on disk. Full pipeline runs: spec read → validation? → picker → assemble → builder? → executor → gateway → report → verify?
+**`implement`** — executor edits `target_files` on disk. Full pipeline runs:
+`spec_validation?` → `clarity_check?` → `file_picker` → `assemble` → `planner_pass?` → `builder_llm?` → supervisor loop (`executor` + `reviewer_pass?`) → `post_gateway` → `spec_report` → `verify?`
 
 **`review`** — LLM answers questions about the spec / code. `target_files` must be `[]`. Most pipeline stages skipped. Returns answer text in `output`.
+
+### Pre-execution gates
+
+Two stages can block execution before the executor runs, returning `outcome: needs_input`:
+
+| Stage | Env var | When it blocks |
+|-------|---------|----------------|
+| `spec_validation` | `MCP_CODER_SPEC_VALIDATION` | Spec text has genuine ambiguity or missing decisions |
+| `clarity_check` | `MCP_CODER_CLARITY_PASS` | Task description is underspecified or contradicts the spec |
+
+When blocked: `success: false`, `outcome: needs_input`, `clarification_needed: [...]` — no files changed, no executor tokens spent.
 
 ### Response fields (JSON string)
 
@@ -72,11 +87,11 @@
 
 | Field | Type | Meaning |
 |-------|------|---------|
-| `clarification_needed` | `list[str]` | Set when `spec_validation` blocks — questions for the planner |
+| `clarification_needed` | `list[str]` | Set when `spec_validation` or `clarity_check` blocks — questions for the planner |
 | `prior_failed_attempts` | `list` | Past failures on the same spec (surface for planner adjustment) |
 | `auto_merged_read_paths` | `list[str]` | Read paths auto-added from spec `files_read` |
 | `suggested_edit_paths` | `list[str]` | Symbol-scan hits in edit dirs (audit hint, not in contract) |
-| `model_roles` | `dict` | Per-role model + token counts — live counts for all 4 roles since Phase 6; `source` field indicates measurement method (`owned_completion` for helpers, `aider_output_parse` for executor) |
+| `model_roles` | `dict` | Per-role model + token counts. Roles: `executor`, `planner`, `context_builder`, `supervisor`, `reviewer`. `source` field indicates measurement method |
 | `context_refs` | `list` | RAG retrieval hits (delegation + workspace-file) when `rag_retrieval` ran |
 | `usage` | `dict` | Token estimate + preflight info |
 | `verify_result` | `dict` | `auto_verify` outcome (command, exit_code, passed) |
@@ -85,22 +100,68 @@
 
 ### What gets written to disk
 
-- One **lean** record (~12 KB) appended to `~/.mcp-coder/projects/<key>/sessions/<id>/delegations.jsonl` — pointers and hashes, bodies stored separately
-- Per-delegation trace events written to `sessions/<id>/traces/<delegation_id>.jsonl` (`llm_call`, `tool_call`, `action`, `compile_event`)
+- One **lean** record (~12 KB) appended to `~/.mcp-coder/projects/<key>/sessions/<id>/delegations.jsonl`
+- Per-delegation trace events written to `sessions/<id>/traces/<delegation_id>.jsonl` — includes `llm_call`, `compile_event`, `clarity_result`, `supervisor_loop_start/end`, `supervisor_turn_start/end`, `supervisor_decision`, and `backend_llm_call` events for every role
 - Spec report appended to `.mcp-coder/specs/reports/<spec-name>-report.md`
 - Workspace history row + checkpoint + file diffs in `workspace_history.db`
 - Delegation indexed in `delegation_rag.db` (FTS5)
 - Changed files incrementally re-indexed in `workspace_rag.db` when `workspace_file_rag` is on
 
-### When spec_validation blocks
+### When a gate blocks
 
-If `spec_validation: true` in config and the LLM finds real ambiguity: `success: false`, `outcome: needs_input`, `clarification_needed: [...]` — executor never runs, no files changed. **Pipeline stops before `rag_retrieval`** — `context_refs` stays empty (by design; see BL-364).
+If `spec_validation` or `clarity_check` finds a problem: `success: false`, `outcome: needs_input`, `clarification_needed: [...]` — executor never runs, no files changed. **Pipeline stops before `file_picker`** — `context_refs` stays empty.
+
+---
+
+## `answer_delegation_question`
+
+Unblock a paused delegation by providing a human answer to an escalated supervisor question. Call while `delegate_to_agent` is still running after it emits a `[gate]` notification in the host.
+
+### Parameters
+
+| Param | Type | Notes |
+|-------|------|-------|
+| `delegation_id` | `str` | The active delegation ID shown in the gate notification |
+| `answer` | `str` | `yes` / `no` (or any text — `yes`/`y`/`true`/`1` = approve) |
+
+### Response
+
+```json
+{"status": "ok", "delegation_id": "...", "answer": "yes"}
+```
+
+`status: not_found` if no gate is waiting for that delegation ID (already timed out or completed).
+
+> **Note:** This requires the MCP client to support concurrent tool calls. If Cursor's implementation does not, the gate will time out and the delegation will abort with `needs_input` — no data is lost.
+
+---
+
+## `get_server_status`
+
+Return MCP server runtime identity and freshness signals. Use to confirm Cursor is talking to the most recent local server code.
+
+### Parameters
+
+| Param | Type | Notes |
+|-------|------|-------|
+| `workspace_path` | `str` | Optional override |
+
+### Response fields
+
+| Field | Meaning |
+|-------|---------|
+| `pid` | Server process PID |
+| `source_revision` | Git commit hash of running code |
+| `started_at` | Process start timestamp |
+| `is_stale` | True if local files are newer than the running process |
+| `stale_files` | List of files changed since process start |
+| `sibling_pids` | Other `mcp-coder` stdio processes (duplicate instances) |
 
 ---
 
 ## `inspect_context`
 
-Dry-run context compiler. Builds the `ContextPackage` that *would* be sent to the executor — without calling any backend or editing any files.
+Dry-run context compiler. Builds the `ContextPackage` that *would* be sent to the executor — without calling any backend or editing any files. Helper LLM phases are not available via MCP (use `mcp-coder inspect-context --run-all-helpers` from CLI).
 
 ### Parameters
 
@@ -126,10 +187,8 @@ Dry-run context compiler. Builds the `ContextPackage` that *would* be sent to th
 | `adapter_preview.prompt_chars` / `prompt_tokens_est` | Prompt size estimate |
 | `adapter_preview.prompt` | Full executor prompt (only if `include_prompt: true`) |
 | `auto_merged_read_paths` | Read paths auto-added from spec |
-| `context_refs` | RAG hits when `rag_retrieval` ran (inspect dry-run mirrors delegate) |
+| `context_refs` | RAG hits when `rag_retrieval` ran |
 | `contract_warnings` | Spec contract issues |
-
-**Note:** `inspect_context` (MCP) does not run helper LLMs. Use `mcp-coder inspect-context --run-builder-llm` from CLI to opt into helper phases.
 
 ---
 
@@ -239,11 +298,13 @@ Ranked list with `path`, `score`, `snippet` (summary excerpt). Requires `mcp-cod
 
 ## How Cursor calls these tools
 
-Cursor's agent reads `use-mcp-coder.mdc` (synced by `mcp-coder setup`) which instructs it when to call each tool. The key rules today:
+Cursor's agent reads `use-mcp-coder.mdc` (synced by `mcp-coder setup`) which instructs it when to call each tool. Key rules:
 
-- `delegate_to_agent` when user asks to build / create / change files — with `spec_path` when a step spec exists.
+- `delegate_to_agent` when the user asks to build / create / change files — with `spec_path` when a step spec exists.
+- `answer_delegation_question` when a `[gate]` notification arrives mid-delegation (concurrent tool call).
+- `get_server_status` to confirm it is talking to the latest local server code before starting work.
 - `inspect_context` before delegating when scope or read-deps are uncertain.
-- History tools (`list_delegations`, `get_file_history`, etc.) when user asks "what changed?", "what did the last step do?", or to inform the next `context_summary`.
+- History tools (`list_delegations`, `get_file_history`, etc.) when the user asks "what changed?", "what did the last step do?", or to inform the next `context_summary`.
 - `rag_search` / `workspace_search` when the user asks about prior work, a topic, or "where is X implemented?" — or to sanity-check what the builder will retrieve.
 
 ---
@@ -252,6 +313,7 @@ Cursor's agent reads `use-mcp-coder.mdc` (synced by `mcp-coder setup`) which ins
 
 | Date | Change |
 |------|--------|
-| 2026-06-13 | Phase 6 — `model_roles` tokens now live (not null); lean JSONL note; trace file in disk-writes list |
-| 2026-06-13 | Phase 5 — `workspace_search`, `context_refs`; builder RAG wired; validation-block note |
+| 2026-06-20 | Added `answer_delegation_question` and `get_server_status` tools; added `model_policy` param to `delegate_to_agent`; updated pipeline description with all 7 phases; added pre-execution gates section; updated `model_roles` response to include all 5 roles; updated disk-writes list with supervisor trace events |
+| 2026-06-13 | `model_roles` tokens now live (not null); lean JSONL note; trace file in disk-writes list |
+| 2026-06-13 | `workspace_search`, `context_refs`; builder RAG wired; validation-block note |
 | 2026-06-12 | Initial version — all 7 tools, parameter tables, response fields, Cursor call rules |

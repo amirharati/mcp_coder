@@ -224,7 +224,7 @@ This is **best-effort** — if snapshots are disabled or the DB is empty, delega
 | `spec_path` | Task spec used (nullable) |
 | `checkpoint_summary` | One-line label of what happened |
 | `outcome` | `success` / `failure` / `partial` |
-| `model`, `duration_ms`, `tokens_total` | Trajectory metadata (token counts live since Phase 9) |
+| `model`, `duration_ms`, `tokens_total` | Trajectory metadata |
 | `delta_created` / `modified` / `deleted` | File counts |
 
 ### `file_deltas`
@@ -251,7 +251,7 @@ This is **best-effort** — if snapshots are disabled or the DB is empty, delega
 
 ---
 
-## 9. Retrieval search (Phase 5)
+## 9. Retrieval search
 
 Two FTS corpora live under `~/.mcp-coder/projects/<key>/`:
 

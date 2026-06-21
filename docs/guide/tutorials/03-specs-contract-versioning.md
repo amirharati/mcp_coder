@@ -261,7 +261,7 @@ After the executor runs, mcp-coder compares `files_changed` to `files_edit`:
 - **`edit_scope: discover`** (default): edits outside `files_edit` are allowed but recorded. Non-strict violations appear in JSONL as `files_unexpected`; the report may get a **Scope expansion** section suggesting you update the spec.
 - **`edit_scope: strict`**: paths outside `files_edit` trigger **scope_violation**; strict mode may revert those paths (when snapshot data exists). Report gets **Blockers** and **Suggested next** pointing back to the spec.
 
-This phase appears in JSONL as `context.delegation_pipeline.post_gateway` (implement + valid spec + Phase 4+).
+This phase appears in JSONL as `context.delegation_pipeline.post_gateway` (implement + valid spec only).
 
 ---
 
@@ -345,7 +345,7 @@ Or `MCP_CODER_SPEC_VALIDATION=1`.
 
 When on, an LLM pass may block implement with `clarification_needed` before the executor runs. JSONL fields: `spec_validation_ran`, `spec_validation_passed`, and `model_roles.spec_validation` when it ran.
 
-Try this in a later experiment (T-06 / Phase 4.5 Track 3); not required for the basic review → implement loop.
+Try this in T-06 (delegation pipeline) when you want to understand all validation gates; not required for the basic review → implement loop.
 
 ---
 
@@ -364,7 +364,7 @@ Open the record (T-02) or `mcp-coder view delegations`:
 | `scope_violations` / `files_unexpected` | Gateway findings |
 | `outcome` | See table in §6 |
 | `context.delegation_pipeline` | Phase timings (implement + valid spec only) |
-| `model_roles` | Per-role models with live token counts and `policy_applied` provenance (Phase 9) |
+| `model_roles` | Per-role models with live token counts and `policy_applied` provenance |
 
 MCP tool responses expose some fields at the top level (e.g. `delegation_pipeline`); JSONL nests pipeline under `context` — see T-02.
 
@@ -406,4 +406,4 @@ Bundled templates: `resources/spec-template.md`, `spec-epic-template.md`, `spec-
 
 - **T-04 (Context compiler):** `inspect-context` dry-run — tiers, builder LLM, what Aider actually sees for a spec-backed delegate
 - **T-06 (Delegation pipeline):** full `delegate_to_agent` phase list and config flag matrix
-- **BL-343:** structured delegation viewer is now shipped in Phase 9 (`view_events[]` middleware + boundary-table UI in `mcp-coder view delegations`)
+- **`mcp-coder view delegations`:** structured viewer with boundary-table UI and supervisor loop event rendering

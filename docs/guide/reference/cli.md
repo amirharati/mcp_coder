@@ -17,7 +17,7 @@
 | [`view delegations`](#view-delegations) | Browser UI for `delegations.jsonl` |
 | [`history`](#history) | Browse / diff / revert from `workspace_history.db` |
 | [`rag`](#rag) | Search / index delegation FTS5 (`delegation_rag.db`) |
-| [`search`](#search) | Unified search: `delegations` \| `files` (Phase 5 toolset) |
+| [`search`](#search) | Unified search: `delegations` \| `files` |
 | [`index-workspace`](#index-workspace) | Build / refresh `workspace_rag.db` file summaries |
 | [`maintenance`](#maintenance) | Storage stats — JSONL records, trace files, DB row counts |
 | [`ps`](#ps) | List running `mcp-coder` stdio server processes |
@@ -130,7 +130,7 @@ mcp-coder delegate \
 
 ## `inspect-context`
 
-Dry-run context compiler with optional helper LLM phases. No executor call, no file edits. CLI-only flags (`--run-builder-llm`, `--run-architect`, `--run-spec-validation`) allow opting into helper phases — these are **not available in the MCP version** which always skips helpers.
+Dry-run context compiler with optional helper LLM phases. No executor call, no file edits. CLI-only flags allow opting into helper phases — these are **not available in the MCP version**.
 
 ```
 mcp-coder inspect-context --task TEXT --target-files PATH [PATH …]
@@ -152,10 +152,10 @@ mcp-coder inspect-context --task TEXT --target-files PATH [PATH …]
 | `--no-adapter-preview` | Omit `adapter_preview` (fnames, prompt stats) |
 | `--include-prompt` | Add full executor prompt text in `adapter_preview.prompt` |
 | `--run-builder-llm` | Run the context-builder LLM brief pass (API cost) |
-| `--run-architect` | Run the architect pass LLM (API cost) |
+| `--run-architect` | Run the planner pass LLM (API cost). Flag name kept for compatibility; runs `planner_pass` internally. |
 | `--run-spec-validation` | Run pre-delegate spec validation LLM (API cost) |
 | `--run-all-helpers` | Shorthand for all three above |
-| `--host-transcript-file PATH` | Inject host transcript for validation / architect |
+| `--host-transcript-file PATH` | Inject host transcript for validation / planner |
 | `--force-helpers` | Run helpers even when disabled in `config.yaml` |
 | `--fail-on-validation-block` | Exit 2 if spec validation would block a real delegate |
 | `--pretty` | Pretty-print JSON |
@@ -192,10 +192,12 @@ mcp-coder view delegations [LOG_FILE] [--workspace PATH] [--port PORT] [--no-ope
 
 `LOG_FILE` and `--workspace` are mutually exclusive.
 
-Viewer behavior (Phase 9):
+Viewer behavior:
 - Chronological, multi-delegation browser with collapsible delegation blocks
 - Boundary-oriented event timeline (`host→mcp`, `mcp.*`, `executor→llm`, `llm→executor`, `executor→mcp`, `mcp→host`)
 - Detail panel per row (context, request params, policy, prompt/response fields, tool activity)
+- Supervisor loop lifecycle rendered inline (`supervisor_loop_start/end`, `supervisor_turn_*`, `supervisor_decision`)
+- Thinking tokens / reasoning text displayed where captured
 - Enrichment loaded lazily from trace + RAG/context sources on card expand
 
 ---
@@ -366,23 +368,66 @@ mcp-coder index-workspace [--workspace PATH] [--changed-only] [--limit N] [--jso
 
 ## Environment variables
 
+### Core / runtime
+
 | Var | Used by | Meaning |
 |-----|---------|---------|
 | `MCP_CODER_WORKSPACE` | all commands | Override workspace root (default: cwd) |
 | `AIDER_MODEL` | `test-model`, server | Executor model |
-| `MCP_CODER_LOG_FULL_PROMPT` | server | `1` = include full prompt in `delegations.jsonl` (off by default) |
 | `MCP_CODER_HOST` | server | Host provider override (`auto`, `cursor`, `none`) |
 | `MCP_CODER_SINGLETON` | server | `0` = allow multiple stdio servers (default `1`) |
-| `MCP_CODER_RAG_ENABLED` | server | Master RAG index toggle (default on) |
-| `MCP_CODER_BUILDER_HISTORY_RAG` | server | Builder delegation RAG (default on) |
-| `MCP_CODER_WORKSPACE_FILE_RAG` | server | Workspace-file corpus (default on) |
-| `MCP_CODER_WORKSPACE_FILE_HINTS` | server | File hints in picker/builder (default on) |
-| `MCP_CODER_BUILDER_RAG_K` | server | Max delegation hits in builder (default 5) |
-| `MCP_CODER_WORKSPACE_FILE_RAG_K` | server | Max file hits in builder (default 5) |
 | `MCP_CODER_SESSION_POLICY` | server | `always_new` or `align_host` |
+| `MCP_CODER_LOG_FULL_PROMPT` | server | `1` = include full prompt in `delegations.jsonl` (off by default) |
 
-| `MCP_CODER_OBSERVABILITY_VERBOSITY` | server | `lean` \| `standard` \| `full` — trace file content depth (default `standard`) |
-| `MCP_CODER_CAPTURE_FOR_TRAINING` | server | `1` = write `traces/<id>-training.json` opt-in tuples (off by default) |
+### Pipeline helper stages
+
+All default **on**. Set `0` / `false` / `no` to disable; `config.yaml` keys override env when set.
+
+| Var | yaml key | Meaning |
+|-----|----------|---------|
+| `MCP_CODER_SPEC_VALIDATION` | `spec_validation` | Pre-delegation spec coherence check; blocks on ambiguity |
+| `MCP_CODER_CLARITY_PASS` | `clarity_pass` | Pre-delegation task clarity check; asks questions if underspecified |
+| `MCP_CODER_PLANNER_PASS` | `planner_pass` | Planner LLM pass producing `## Planner plan` in the brief |
+| `MCP_CODER_REVIEWER_PASS` | `reviewer_pass` | Post-execution advisory reviewer scan |
+
+Deprecated alias: `MCP_CODER_ARCHITECT_PASS` → `MCP_CODER_PLANNER_PASS` (emits a warning).
+
+### Per-role models
+
+| Var | Role | Meaning |
+|-----|------|---------|
+| `AIDER_MODEL` | executor | Executor model (passed to Aider) |
+| `MCP_CODER_PLANNER_PASS_MODEL` | planner | Model for planner pass (default: context_builder tier) |
+| `MCP_CODER_SUPERVISOR_MODEL` | supervisor | Model for supervisor `confirm_ask` decisions (default: Sonnet-class) |
+| `MCP_CODER_REVIEWER_PASS_MODEL` | reviewer | Model for reviewer pass (default: Flash-class) |
+
+Resolved at server start via `model_registry`. Server log prints each resolved model at startup.
+
+### Supervisor loop
+
+| Var | Meaning |
+|-----|---------|
+| `MCP_CODER_SUPERVISOR_MAX_TURNS` | Max Aider invocations per delegation (default `1`); set `2`–`3` for autonomous retry |
+| `MCP_CODER_SUPERVISOR_REASONING_EFFORT` | Reasoning effort for supervisor LLM (`low` / `medium` / `high`) |
+| `MCP_CODER_SUPERVISOR_THINKING_BUDGET` | Thinking token budget for supervisor LLM |
+
+### RAG
+
+| Var | Meaning |
+|-----|---------|
+| `MCP_CODER_RAG_ENABLED` | Master RAG index toggle (default on) |
+| `MCP_CODER_BUILDER_HISTORY_RAG` | Builder delegation RAG (default on) |
+| `MCP_CODER_WORKSPACE_FILE_RAG` | Workspace-file corpus (default on) |
+| `MCP_CODER_WORKSPACE_FILE_HINTS` | File hints in picker/builder (default on) |
+| `MCP_CODER_BUILDER_RAG_K` | Max delegation hits in builder (default 5) |
+| `MCP_CODER_WORKSPACE_FILE_RAG_K` | Max file hits in builder (default 5) |
+
+### Observability
+
+| Var | Meaning |
+|-----|---------|
+| `MCP_CODER_OBSERVABILITY_VERBOSITY` | `lean` \| `standard` \| `full` — trace file content depth (default `standard`) |
+| `MCP_CODER_CAPTURE_FOR_TRAINING` | `1` = write `traces/<id>-training.json` opt-in tuples (off by default) |
 
 `.env` files at workspace root and mcp-coder repo root are loaded automatically on server start.
 
@@ -468,7 +513,7 @@ mcp-coder kill --all
 | Path | Contents |
 |------|----------|
 | `~/.mcp-coder/projects/<key>/sessions/<id>/delegations.jsonl` | Audit log — one lean record per delegation |
-| `~/.mcp-coder/projects/<key>/sessions/<id>/traces/<id>.jsonl` | Per-delegation trace events (`llm_call`, `tool_call`, `action`, `compile_event`) |
+| `~/.mcp-coder/projects/<key>/sessions/<id>/traces/<id>.jsonl` | Per-delegation trace events (`llm_call`, `compile_event`, `supervisor_loop_*`, `supervisor_turn_*`, `supervisor_decision`, `clarity_result`, …) |
 | `~/.mcp-coder/projects/<key>/workspace_history.db` | SQLite — snapshots + checkpoints + file deltas |
 | `~/.mcp-coder/projects/<key>/delegation_rag.db` | SQLite FTS5 — delegation summaries |
 | `~/.mcp-coder/projects/<key>/workspace_rag.db` | SQLite FTS5 — workspace-file summaries |
@@ -483,6 +528,7 @@ mcp-coder kill --all
 
 | Date | Change |
 |------|--------|
+| 2026-06-20 | Added Phase 11 env vars (clarity, spec_validation, planner_pass, reviewer_pass, supervisor); per-role model vars; supervisor loop vars; restructured env table; updated inspect-context `--run-architect` note; updated viewer features; updated trace path description |
 | 2026-06-13 | Phase 7 sync — trace path note updated (all tiers), event-type description updated, maintenance stats sample now includes executor turns |
 | 2026-06-13 | Phase 6 — `maintenance stats` added; observability env vars; trace file storage path; lean JSONL note |
 | 2026-06-13 | Phase 5 — `search`, `index-workspace`; RAG defaults on; env vars for corpus toggles |

@@ -234,10 +234,10 @@ repo map               ←  def/class outlines for files not otherwise included
 ---
 ## Builder brief                                            ←  helper LLM narrative (default on; disable with context_builder_llm: false)
 ---
-## Architect plan                                           ←  helper LLM plan (opt-in; default off; architect_pass: true)
+## Planner plan                                          ←  helper LLM plan (default on; disable with planner_pass: false)
 ```
 
-**Important:** `architect_pass` runs as a pipeline phase *before* `builder_llm`, but the architect plan is **merged last** — prepended above the builder + mechanical stack (`server/mcp_server.py`).
+**Important:** `planner_pass` runs as a pipeline phase *before* `builder_llm`, but the planner plan is **merged last** — prepended above the builder + mechanical stack (`server/mcp_server.py`).
 
 **Host transcript** (separate from the brief stack):
 
@@ -267,7 +267,7 @@ For `mode=implement` with a valid spec and `context_builder` enabled (default on
 ```
 file_picker       rules-based: spec contract + planner hints + symbol scan → ranked candidates
 context_assemble  materialize candidates → PathEntry list with tiered payloads + mechanical brief
-architect_pass*   helper LLM produces ## Architect plan (stored; merged after builder)
+planner_pass*   helper LLM produces ## Planner plan (stored; merged after builder)
 builder_llm*      helper LLM prepends ## Builder brief above mechanical brief
 [merge architect plan on top of package.brief if architect succeeded]
 budget            trim read-tier payloads until estimated tokens ≤ model budget
@@ -300,7 +300,7 @@ Green = mechanical/deterministic (no LLM). Orange = optional helper-LLM stages, 
 |-------|---------|--------|
 | Picker + assemble | **on** | `context_builder: false` |
 | Builder LLM | **on** | `context_builder_llm: false` |
-| Architect pass | **off** | `architect_pass: true` |
+| Planner pass | **on** | `planner_pass: false` |
 | Host transcript to executor | **off** | `host_transcript: dump` |
 | Budget | **on** | `MCP_CODER_CONTEXT_BUDGET_ENABLED=0` |
 
@@ -714,31 +714,31 @@ The final brief is a stack — each optional layer sits **above** the one below,
 ```mermaid
 %%{init: {'flowchart': {'nodeSpacing': 6, 'rankSpacing': 12}}}%%
 flowchart TB
-    AP[Architect plan] --> BB[Builder brief] --> MB[Mechanical brief]
+    PP[Planner plan] --> BB[Builder brief] --> MB[Mechanical brief]
 
-    style AP fill:#fdf0e0
+    style PP fill:#fdf0e0
     style BB fill:#fdf0e0
     style MB fill:#e8f4e8
 ```
 
-### 8a. Architect pass (opt-in, default off)
+### 8a. Planner pass (default on)
 
-`core/context/architect_prompt.py` + `core/engine/architect_pass_llm.py`
+`core/context/clarity_prompt.py` + `core/engine/planner_pass_llm.py`
 
-When `architect_pass: true` (or `MCP_CODER_ARCHITECT_PASS=1`):
+When `planner_pass: true` (default; disable with `planner_pass: false` or `MCP_CODER_PLANNER_PASS=0`):
 
 1. Runs **after** `context_assemble`, **before** `builder_llm`.
 2. Prompt includes spec summary, mechanical brief paths, picker audit, `task`, `context_summary`, and host transcript (if `host_transcript: dump`).
-3. On success, returns a `## Architect plan` block.
+3. On success, returns a `## Planner plan` block.
 4. Plan is **not** merged immediately — it is prepended **after** builder_llm finishes:
 
 ```python
 # server/mcp_server.py — final merge order
-context_package.brief = _merge_architect_plan(architect_plan, context_package.brief)
-# architect_plan sits above builder + mechanical brief
+context_package.brief = _merge_architect_plan(planner_plan, context_package.brief)
+# planner_plan sits above builder + mechanical brief
 ```
 
-Use this for harder tasks where you want a structured plan layer before the executor runs. It is separate from `mode=review` (which skips the compile path entirely).
+Use this for hard tasks where you want a structured plan layer before the executor runs. It is separate from `mode=review` (which skips the compile path entirely).
 
 ### 8b. Builder LLM (on by default)
 
@@ -818,7 +818,7 @@ mcp-coder inspect-context --workspace "$DEMO" \
   | jq -r '.context_package.brief' | head -15
 ```
 
-First line should be `## Architect plan`, then `## Builder brief`, then mechanical `## Task` (architect merges above builder — same order as MCP).
+First line should be `## Planner plan`, then `## Builder brief`, then mechanical `## Task` (planner plan merges above builder — same order as MCP).
 
 **D. Delegate-faithful prepare** — builder runs from **config** (default on), no `--run-*` flags; always returns full Aider prompt:
 
@@ -837,13 +837,13 @@ mcp-coder delegate --workspace "$DEMO" \
 
 This is what §9 assembles into `executor_in` — use `jq -r '.artifacts.executor_in.prompt'` to dump the full string.
 
-To enable architect on prepare without inspect flags, add to `$DEMO/.mcp-coder/config.yaml`:
+To disable the planner pass on this prepare run, set in `$DEMO/.mcp-coder/config.yaml`:
 
 ```yaml
-architect_pass: true
+planner_pass: false
 ```
 
-Then re-run **D** — `helper_phases.architect_pass.applied` should be `true` and the prompt starts with `## Architect plan`.
+Then re-run **D** — `helper_phases.planner_pass.applied` should be `false` and `## Planner plan` won't appear in the prompt.
 
 ---
 
@@ -1066,7 +1066,7 @@ Pre + Aider + post (`post_gateway`, spec report, optional `auto_verify`). Same J
   },
   "helper_phases": {
     "spec_validation": {"ran": false, "would_block_delegate": false},
-    "architect_pass": {"ran": false, "applied": false},
+    "architect_pass": {"ran": false, "applied": false},  // deprecated alias; same as planner_pass
     "builder_llm": {"ran": false, "applied": false}
   }
 }
@@ -1141,7 +1141,7 @@ Precedence everywhere: **default → env → `.mcp-coder/config.yaml`** (yaml wi
 | `MCP_CODER_CONTEXT_BUILDER_LLM` | `1` | Env toggle for builder LLM |
 | `MCP_CODER_INSPECT_RUN_BUILDER_LLM` | `0` | Enable builder LLM in inspect CLI |
 | `host_transcript` | **none** | `dump` → load Cursor chat JSONL into helper LLMs + executor prompt |
-| `architect_pass` | **off** | `true` → `## Architect plan` above builder + mechanical brief |
+| `planner_pass` | **on** | `false` → `## Planner plan` not prepended above builder + mechanical brief |
 
 Turn the context builder off to fall back to the Phase 1/2 path (only `target_files`, no picker, no map):
 
@@ -1207,7 +1207,7 @@ On inspect, spec validation never blocks exit; on a real delegate it can block (
 | Phase | inspect flag | Workspace config | Needs host transcript? |
 |-------|--------------|------------------|------------------------|
 | Spec validation | `--run-spec-validation` | `spec_validation: true` | Yes (`--host-transcript-file` on inspect; auto on delegate when `host_transcript: dump`) |
-| Architect pass | `--run-architect` | `architect_pass: true` | Optional |
+| Planner pass | `--run-architect` | `planner_pass: false` to disable | On by default |
 | Builder LLM | `--run-builder-llm` | `context_builder_llm: true` (default on) | Optional |
 
 Hands-on helper + Aider prompt demos: **§8** (helper layers) and **§9** (wire format + round trip). Quick reference:
@@ -1250,4 +1250,4 @@ Hands-on helper + Aider prompt demos: **§8** (helper layers) and **§9** (wire 
 
 - **T-05 (Workspace history):** why checkpoints vs git, `mcp-coder history` CLI, revert, policy/revert building blocks; builder history is one consumer
 - **T-06 (Delegation pipeline):** `mcp-coder delegate` artifact fields, `delegation_pipeline` JSONL, post_gateway / auto_verify — builds on §0 Bonus here
-- **BL-335 resolved (Phase 9):** token counts in `model_roles` are now live for all paths (helper + executor), with `policy_applied` provenance blocks on every `backend_llm_call` and `llm_call` trace event
+- **BL-335 resolved:** token counts in `model_roles` are now live for all paths (helper + executor), with `policy_applied` provenance blocks on every `backend_llm_call` and `llm_call` trace event

@@ -12,31 +12,33 @@
 
 ---
 
-## 1. Ten phases, one delegate call
+## 1. The delegation pipeline
 
 ```mermaid
 %%{init: {'flowchart': {'nodeSpacing': 6, 'rankSpacing': 12}}}%%
 flowchart TB
   P1[1 spec_read] --> P2[2 spec_validation*]
-  P2 --> P3[3 file_picker]
-  P3 --> P4[4 context_assemble]
-  P4 --> P5[5 architect_pass*]
-  P5 --> P6[6 builder_llm]
-  P6 --> P7[7 executor]
-  P7 --> P8[8 post_gateway]
-  P8 --> P9[9 spec_report]
-  P9 --> P10[10 auto_verify*]
+  P2 --> P3[3 clarity_check*]
+  P3 --> P4[4 file_picker]
+  P4 --> P5[5 context_assemble]
+  P5 --> P6[6 planner_pass*]
+  P6 --> P7[7 builder_llm]
+  P7 --> P8[8 executor]
+  P8 --> P9[9 reviewer_pass*]
+  P9 --> P10[10 post_gateway]
+  P10 --> P11[11 spec_report]
+  P11 --> P12[12 auto_verify*]
 ```
 
-One straight chain — no nested boxes. Three logical groups (same order as the numbered list below):
+One straight chain — no nested boxes. Three logical groups:
 
 | Group | Phases | What happens |
 |-------|--------|--------------|
-| **Prepare** | 1–6 | Read spec, validate, compile context, build brief — **no file edits on disk** |
-| **Execute** | 7 | Aider runs SEARCH/REPLACE |
-| **Wrap up** | 8–10 | Diff workspace, write spec report, optional pytest |
+| **Prepare** | 1–7 | Read spec, validate intent, compile context, build brief — **no file edits on disk** |
+| **Execute** | 8–9 | Aider runs SEARCH/REPLACE; reviewer scans result |
+| **Wrap up** | 10–12 | Diff workspace, write spec report, optional pytest |
 
-`*` = opt-in (defaults: `builder_llm` on; `spec_validation`, `architect_pass`, `auto_verify` off).
+`*` = opt-in. Defaults: `spec_validation` on, `clarity_check` on, `builder_llm` on, `reviewer_pass` on. `planner_pass` on. `auto_verify` off.
 
 ASCII equivalent:
 
@@ -44,23 +46,29 @@ ASCII equivalent:
 delegate_to_agent(mode=implement, spec_path=..., task=..., ...)
   │
   ├─ 1  spec_read          parse spec contract — Files, policies, outcome rules
-  ├─ 2  spec_validation*   cheap LLM — spec vs host transcript → clarification_needed?
-  ├─ 3  file_picker        rg + spec paths + hints → candidate_files   [T-04 §4]
-  ├─ 3b rag_retrieval      FTS: past delegations + file summaries → context_refs  [default on]
-  ├─ 4  context_assemble   tiers → ContextPackage → mechanical brief   [T-04 §5]
-  ├─ 5  architect_pass*    cheap LLM → ## Architect plan above brief   [T-04 §8a]
-  ├─ 6  builder_llm        cheap LLM → ## Builder brief merged on top  [T-04 §8b]
-  ├─ 7  executor           Aider: SEARCH/REPLACE on fnames
-  ├─ 8  post_gateway       manifest diff → files_changed; scope audit  [T-05 §3]
-  ├─ 9  spec_report        write .mcp-coder/specs/reports/*.md
-  └─ 10 auto_verify*       pytest → outcome: success / partial
+  ├─ 2  spec_validation*   cheap LLM — spec coherence → clarification_needed?  [BLOCKS]
+  ├─ 3  clarity_check*     cheap LLM — task clarity → questions?                [BLOCKS]
+  ├─ 4  file_picker        rg + spec paths + hints → candidate_files   [T-04 §4]
+  ├─ 4b rag_retrieval      FTS: past delegations + file summaries → context_refs  [default on]
+  ├─ 5  context_assemble   tiers → ContextPackage → mechanical brief   [T-04 §5]
+  ├─ 6  planner_pass*      Sonnet LLM → ## Planner plan above brief    [T-04 §8a]
+  ├─ 7  builder_llm        Flash LLM → ## Builder brief merged on top  [T-04 §8b]
+  │
+  ├─ SupervisorAgent loop  (one turn by default; max_turns configurable)
+  │     ├─ 8  executor           Aider: SEARCH/REPLACE on fnames (supervised)
+  │     └─ 9  reviewer_pass*     Flash LLM → advisory review of diff
+  │
+  ├─ 10 post_gateway       manifest diff → files_changed; scope audit  [T-05 §3]
+  ├─ 11 spec_report        write .mcp-coder/specs/reports/*.md
+  └─ 12 auto_verify*       pytest → outcome: success / partial
 
-* = opt-in (default off except builder_llm which is on by default)
+[BLOCKS] = pipeline stops here if the LLM returns questions; no executor runs, no files changed.
+* = opt-in (default off: auto_verify; all others default on)
 ```
 
-Phases 3–6 are covered in T-04. **Phase 5:** `rag_retrieval` (3b) runs between picker and assemble when `context_builder` + RAG flags are on (defaults). Phases 8–9 touch T-05 history. This tutorial fills in 2, 7, 9, 10 and shows how to read timing for all of them.
+Phases 4–7 are covered in T-04. `rag_retrieval` (4b) runs between picker and assemble when `context_builder` + RAG flags are on (defaults). Phases 10–11 touch T-05 history. This tutorial fills in 2–3, 8–9, 11, 12 and shows how to read timing for all of them.
 
-**When is `delegation_pipeline` present?** Only for **`mode=implement` with a valid spec** (Phase 4+). Pass-through delegations, `mode=review`, invalid specs, or older runs may omit it entirely (T-02 §4).
+**When is `delegation_pipeline` present?** Only for **`mode=implement` with a valid spec**. Pass-through delegations, `mode=review`, invalid specs, or delegations without a `spec_path` may omit it entirely (T-02 §4).
 
 ---
 
@@ -75,7 +83,7 @@ Every phase emits a record under **`context.delegation_pipeline`** in JSONL (top
     {"phase": "spec_validation",  "status": "ok",      "duration_ms": 679},
     {"phase": "file_picker",      "status": "ok",      "duration_ms": 5},
     {"phase": "context_assemble", "status": "ok",      "duration_ms": 73},
-    {"phase": "architect_pass",   "status": "ok",      "duration_ms": 1277},
+    {"phase": "planner_pass",    "status": "ok",      "duration_ms": 1277},
     {"phase": "builder_llm",      "status": "ok",      "duration_ms": 2446},
     {"phase": "executor",         "status": "error",   "duration_ms": 13066,
      "detail": "To implement the changes…"},
@@ -96,7 +104,7 @@ Every phase emits a record under **`context.delegation_pipeline`** in JSONL (top
 | `ok` | Phase ran and completed normally |
 | `skipped` | Disabled by config or not applicable (no spec → `spec_validation` skips) |
 | `error` | Phase failed non-fatally; pipeline often continues (executor error still runs post_gateway) |
-| `blocked` | `spec_validation` returned `clarification_needed` — **no executor, no file edits** |
+| `blocked` | `spec_validation` or `clarity_check` returned questions — **no executor, no file edits** |
 
 ```mermaid
 %%{init: {'flowchart': {'nodeSpacing': 6, 'rankSpacing': 12}}}%%
@@ -123,24 +131,38 @@ Parses the spec file (T-03): front matter, `## Files`, policies, outcome rules.
 - On failure (bad YAML, missing file): `status: error`; pipeline continues without spec contract.
 - Outputs: `files_edit`, `files_read`, `edit_scope`, outcome rule list.
 
-### 2 — `spec_validation` (opt-in, off by default)
+### 2 — `spec_validation` (default on)
 
-A cheap LLM checks the spec against context (task, host transcript if available) and can return `clarification_needed` — which **blocks** the pipeline and returns the question to the planner before any file edits happen. Useful for catching under-specified tasks early.
+A cheap LLM checks the spec against context (task, host transcript if available) and can return `clarification_needed` — which **blocks** the pipeline and returns the question to the planner before any file edits happen. Catches internally incoherent specs and contradictions.
 
-Enable:
+Disable:
 
 ```yaml
 # .mcp-coder/config.yaml
-spec_validation: true
+spec_validation: false
 ```
 
-or `MCP_CODER_SPEC_VALIDATION=1`.
+or `MCP_CODER_SPEC_VALIDATION=0`.
 
-When blocked: JSONL `status: blocked`; response contains `clarification_needed: "..."`.
+When blocked: JSONL `status: blocked`; response contains `clarification_needed: [...]`.
 
-### 3b — `rag_retrieval` (default on since Phase 5)
+### 3 — `clarity_check` (default on)
 
-Runs after `file_picker`, before `context_assemble`. FTS over `delegation_rag.db` + `workspace_rag.db`; merges into `## Relevant prior work` and JSONL `context_refs[]`. Fast when indexes exist; skipped when `context_builder` off or all RAG flags off. **Not run** when `spec_validation` blocks — later phases absent too.
+A cheap LLM checks whether the task description itself is clear and actionable. Different from spec_validation (which checks the spec document) — clarity_check asks "does this task make sense for the executor to attempt right now?"
+
+If the task is underspecified, it surfaces questions to the planner **before** the context compiler runs. Disable:
+
+```yaml
+clarity_pass: false
+```
+
+or `MCP_CODER_CLARITY_PASS=0`.
+
+When blocked: same as spec_validation — `status: blocked`, `clarification_needed: [...]`.
+
+### 4b — `rag_retrieval` (default on)
+
+Runs after `file_picker`, before `context_assemble`. FTS over `delegation_rag.db` + `workspace_rag.db`; merges into `## Relevant prior work` and JSONL `context_refs[]`. Fast when indexes exist; skipped when `context_builder` off or all RAG flags off. **Not run** when spec_validation or clarity_check blocks.
 
 Check hits without a full delegate:
 
@@ -149,7 +171,7 @@ mcp-coder search delegations "retry logic" --limit 3
 mcp-coder search files "ledger" --limit 3   # needs index-workspace first
 ```
 
-### 3 — `file_picker` → 4 — `context_assemble` → 5 — `architect_pass` → 6 — `builder_llm`
+### 4 — `file_picker` → 5 — `context_assemble` → 6 — `planner_pass` → 7 — `builder_llm`
 
 See **T-04** §4–§8 for full detail. Quick summary here:
 
@@ -157,10 +179,10 @@ See **T-04** §4–§8 for full detail. Quick summary here:
 |-------|-------------|---------|
 | `file_picker` | rg symbol scan + spec contract → ranked candidates | On when `context_builder: true` (default) |
 | `context_assemble` | Tiers, payloads, mechanical brief, budget | Same |
-| `architect_pass` | `## Architect plan` layer above brief | Off by default; `architect_pass: true` |
+| `planner_pass` | `## Planner plan` layer above brief | On by default; `planner_pass: false` disables |
 | `builder_llm` | `## Builder brief` narrative on top | On by default; `context_builder_llm: false` disables |
 
-**Dry-run phases 3–6 without a delegate** (no API call, no disk edits):
+**Dry-run phases 4–7 without a delegate** (no API call, no disk edits):
 
 ```bash
 mcp-coder inspect-context \
@@ -169,17 +191,33 @@ mcp-coder inspect-context \
   --task "Add CLI entrypoint"
 ```
 
-Shows tiers, picker candidates, and the mechanical brief — the same inputs phases 3–4 use before helper LLMs run (T-04 §0 playground for a full walkthrough).
+Shows tiers, picker candidates, and the mechanical brief — the same inputs phases 4–5 use before helper LLMs run (T-04 §0 playground for a full walkthrough).
 
-### 7 — `executor`
+### 8 — `executor` (inside supervisor loop)
 
 Aider runs `coder.run(prompt)` with `fnames` (edit paths). This is where file edits happen on disk.
 
+The executor runs inside the **SupervisorAgent loop**. By default (`supervisor_max_turns: 1`) there is one turn. Set `MCP_CODER_SUPERVISOR_MAX_TURNS=2` to allow autonomous retry if the reviewer finds issues.
+
+While Aider runs, every `confirm_ask` decision (e.g. "run this shell command?", "add this file?") is routed to a supervisor LLM which approves, denies, or aborts — not auto-approved.
+
 Key facts:
 - Duration typically dominates the pipeline (LLM call inside Aider).
-- Aider may touch files **not** in `fnames` mid-loop (§3.5 in T-04).
+- Aider may touch files **not** in `fnames` mid-loop.
 - Error here → `status: error`; `files_changed` still computed from manifest diff.
 - Same-session caching: Aider `Coder` instance is reused across delegates in the same MCP session when workspace/model match → `executor_reused: true` in JSONL (faster; skips Aider init).
+
+### 9 — `reviewer_pass` (default on)
+
+After the executor finishes each turn, a lightweight reviewer LLM scans `files_changed` against the spec's acceptance criteria. Result is advisory — appended to the spec report, not a blocker. Disable:
+
+```yaml
+reviewer_pass: false
+```
+
+or `MCP_CODER_REVIEWER_PASS=0`.
+
+The reviewer result appears in `delegation_pipeline` as `reviewer_pass` and in `model_roles` with its own token count.
 
 ### 8 — `post_gateway`
 
@@ -220,18 +258,21 @@ When off or executor failed: `auto_verify` → `skipped`, `detail: disabled_or_n
 
 | Flag | Default | Phases affected |
 |------|---------|-----------------|
-| `context_builder` | **on** | Phases 3–7 (picker, assemble, architect, builder) |
-| `context_builder_llm` | **on** | Phases 6–7 (builder brief) |
-| `builder_history_rag` | **on** | Phase 3b — delegation hits in builder |
+| `spec_validation` | **on** | Phase 2 (spec coherence gate) |
+| `clarity_pass` | **on** | Phase 3 (task clarity gate) |
+| `context_builder` | **on** | Phases 4–7 (picker, assemble, planner, builder) |
+| `context_builder_llm` | **on** | Phase 7 (builder brief) |
+| `planner_pass` | **on** | Phase 6 (planner plan LLM) |
+| `builder_history_rag` | **on** | Phase 4b — delegation hits in builder |
 | `workspace_file_rag` | **on** | `workspace_rag.db` + search |
 | `workspace_file_hints` | **on** | File hits in picker + brief |
-| `architect_pass` | **off** | Phase 5 (architect plan LLM) |
-| `spec_validation` | **off** | Phase 2 |
-| `host_transcript` | `none` | Phases 2, 5–7 (helper LLMs see transcript when `dump`) |
-| `auto_verify` | **off** | Phase 10 |
-| `edit_scope` | `discover` | Phase 8 (`strict` → auto-revert violations) |
-| `MCP_CODER_CONTEXT_BUDGET_ENABLED` | `1` | Phase 4 budget degradation |
-| `MCP_CODER_DISABLE_WORKSPACE_SNAPSHOT` | `0` | Phase 8 (off → no manifest diff, no blobs) |
+| `reviewer_pass` | **on** | Phase 9 (advisory reviewer scan) |
+| `auto_verify` | **off** | Phase 12 |
+| `host_transcript` | `none` | Phases 2, 3, 6–7 (helper LLMs see transcript when `dump`) |
+| `edit_scope` | `discover` | Phase 10 (`strict` → auto-revert violations) |
+| `MCP_CODER_SUPERVISOR_MAX_TURNS` | `1` | Supervisor loop turns (set `2`–`3` for retry) |
+| `MCP_CODER_CONTEXT_BUDGET_ENABLED` | `1` | Phase 5 budget degradation |
+| `MCP_CODER_DISABLE_WORKSPACE_SNAPSHOT` | `0` | Phase 10 (off → no manifest diff, no blobs) |
 
 ---
 
@@ -311,7 +352,7 @@ jq '.context.delegation_pipeline' "$REC"
 # or, for a single LOG file:  tail -1 "$LOG" | jq '.context.delegation_pipeline'
 ```
 
-If the result is `null`, that record has no pipeline (review mode, no spec, or pre–Phase 4). Pick another line or run a new spec-backed `implement` delegate (T-01).
+If the result is `null`, that record has no pipeline (review mode, no spec, or delegation without a `spec_path`). Pick another line or run a new spec-backed `implement` delegate (T-01).
 
 ### Sort phases by time (find the bottleneck)
 
@@ -328,7 +369,7 @@ jq -r '
 ```
 executor        error   13066ms
 builder_llm     ok      2446ms
-architect_pass  ok      1277ms
+planner_pass    ok      1277ms
 spec_validation ok      679ms
 context_assemble ok     73ms
 spec_report     ok      8ms
@@ -338,7 +379,7 @@ post_gateway    ok      0ms
 auto_verify     skipped 0ms
 ```
 
-`executor` usually wins; helper LLMs (`builder_llm`, `architect_pass`) are next when enabled.
+`executor` usually wins; helper LLMs (`builder_llm`, `planner_pass`) are next when enabled.
 
 ### Phases that did not finish cleanly
 
@@ -385,17 +426,18 @@ mcp-coder history diff "$ID" --path src/api.py   # optional single file
 mcp-coder view delegations --workspace /path/to/project
 ```
 
-List view is structured and expanded detail now uses the Phase 9 v2 boundary viewer (`view_events[]`): chronological boundary rows plus a detail panel for each crossing. Keep the `jq` snippets handy when you want to script/filter raw fields directly from JSONL.
+List view is structured and expanded detail uses the boundary viewer: chronological boundary rows plus a detail panel for each crossing. Keep the `jq` snippets handy when you want to script/filter raw fields directly from JSONL.
 
 ### What to look for
 
 | Signal | Likely cause |
 |--------|----------------|
 | `executor.duration_ms` ≫ everything else | Normal — dominates wall time |
-| `builder_llm` / `architect_pass` high with `ok` | Slow cheap model or large brief; check `context.prompt_chars` in same JSONL line |
+| `builder_llm` / `planner_pass` high with `ok` | Slow model or large brief; check `context.prompt_chars` in same JSONL line |
 | `context_assemble` high | Large workspace or many spec read paths; budget may have degraded (T-04 §7) |
 | `post_gateway` high | Large manifest walk; many files in workspace |
-| `spec_validation` → `blocked` | Under-specified task; fix spec or answer clarification |
+| `spec_validation` → `blocked` | Spec is ambiguous; fix spec or answer clarification |
+| `clarity_check` → `blocked` | Task description is underspecified; clarify before retrying |
 | No `delegation_pipeline` key | Not implement+spec; see T-02 §4 |
 
 ---
@@ -420,8 +462,13 @@ The pipeline does **not** run the same way for every mode:
 | Pipeline recorder | `core/pipeline/phases.py` — `PipelineRecorder` |
 | Spec read | `core/specs/read.py` |
 | Spec validation LLM | `core/engine/spec_validation_llm.py` |
+| Clarity check LLM | `core/context/clarity_llm.py` |
 | Context phases | `core/context/` — T-04 code map |
+| Planner pass LLM | `core/engine/planner_pass_llm.py` |
+| Supervisor agent loop | `core/engine/supervisor_agent.py` |
 | Executor adapter | `core/engine/aider_engine.py` |
+| Supervised IO (confirm_ask routing) | `core/engine/supervised_io.py` |
+| Reviewer LLM | `core/engine/reviewer_llm.py` |
 | Post-gateway scope audit | `core/workspace/gateway.py` |
 | Spec report write | `core/specs/write.py` |
 | Auto-verify | `core/config/auto_verify.py`, `core/engine/auto_verify.py` |

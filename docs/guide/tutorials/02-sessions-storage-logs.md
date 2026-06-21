@@ -27,7 +27,7 @@ mcp-coder keeps state in two places:
     project.json                    workspace path + timestamps
     workspace_history.db            SQLite: file snapshots, diffs, checkpoints
     delegation_rag.db               SQLite FTS5: full-text search over delegations
-    workspace_rag.db                SQLite FTS5: per-file summaries (Phase 5)
+    workspace_rag.db                SQLite FTS5: per-file summaries
     sessions/<mcp_session_id>/
       delegations.jsonl             one lean JSONL record per delegation ← audit trail
       traces/
@@ -172,7 +172,7 @@ What it typically contains:
 | Prompt slice | `prompt_preview` | First ~500 chars of the **final** executor prompt (truncated) |
 | Host transcript | `host_transcript_path`, `host_transcript_hash`, `host_transcript_bytes` | Which Cursor chat was injected and how much |
 | Context package summary | `context_package.entries` | Path + tier per file (`edit-full`, `read-excerpt`, …) — **no file payloads** |
-| Builder / architect flags | `context_builder_enabled`, `builder_brief_applied`, `architect_pass_enabled` | Which pipeline stages ran — config/audit, not the brief text |
+| Builder / planner flags | `context_builder_enabled`, `builder_brief_applied`, `planner_pass_enabled` | Which pipeline stages ran — config/audit, not the brief text |
 | Phase audit | `delegation_pipeline` | Per-phase status + `duration_ms` (implement+spec only; see below) |
 | Executor session | `executor_reused`, `executor_recreated` | Whether the Aider instance was reused |
 
@@ -222,8 +222,8 @@ Example (abbreviated):
     "tokens": {"input": 1843, "output": 231, "total": 2074, "source": "owned_completion"},
     "duration_ms": 1565
   },
-  "architect_pass": {
-    "role": "architect_pass",
+  "planner_pass": {
+    "role": "planner_pass",
     "tokens": {"input": 1358, "output": 169, "total": 1527, "source": "owned_completion"},
     "duration_ms": 1139
   },
@@ -235,13 +235,13 @@ Example (abbreviated):
 }
 ```
 
-`source` tells you how tokens were counted: `owned_completion` = helpers measured directly via `litellm.completion` (Phase 6, always accurate); `aider_output_parse` = parsed from Aider's output summary (best-effort).
+`source` tells you how tokens were counted: `owned_completion` = helpers measured directly via `litellm.completion` (always accurate); `aider_output_parse` = parsed from Aider's output summary (best-effort).
 
 ### `context.delegation_pipeline` — phase audit (JSONL)
 
 In **JSONL**, the phase list lives under **`context.delegation_pipeline`**, not at the top level. The **MCP response** to Cursor also exposes it as top-level `delegation_pipeline` for convenience.
 
-Present only when the delegation ran the implement+spec pipeline (`mode=implement`, valid spec, Phase 4+). Older or pass-through records may not have this key at all.
+Present only when the delegation ran the implement+spec pipeline (`mode=implement`, valid spec). Pass-through or `mode=review` records may not have this key at all.
 
 ```json
 "context": {
@@ -357,7 +357,7 @@ Example `llm_call` line (at default `standard` verbosity — previews only):
 | `standard` *(default)* | Full bodies written + standard previews in CLI/viewer | Normal debugging |
 | `full` | Full bodies written + maximal display detail | Deep inspection |
 
-> **Phase 9 update:** write behavior is now **always full-capture** (P9-001/P9-008). Verbosity controls presentation/export and downstream promotion behavior, not whether prompts/responses are stored.
+> Write behavior is **always full-capture**. Verbosity controls presentation/export and downstream promotion behavior, not whether prompts/responses are stored.
 
 The JSONL row points to its trace via `trace_ref`. The delegation viewer resolves it lazily on card expand.
 
@@ -406,7 +406,7 @@ These call `list_delegations`, `get_delegation_diff`, `get_file_history`, `get_c
 After T-01's delegation, open your record and check:
 
 1. **`outcome`** — is it `success`? If `partial`, check `context.delegation_pipeline` for the failing phase (if present).
-2. **`context.delegation_pipeline`** — which phase took the most time? `executor` almost always dominates. Skip this if the key is missing (non-implement or pre–Phase 4 run).
+2. **`context.delegation_pipeline`** — which phase took the most time? `executor` almost always dominates. Skip this if the key is missing (non-implement or no `spec_path` delegation).
 3. **`context.context_package.entries`** — which files and tiers made it into the package? (paths only — not content)
 4. **`context.builder_brief_applied`** — did the builder LLM stage run? If `true`, check `model_roles.context_builder` for the model; use `prompt_preview` or T-04's `inspect-context` to see the actual brief text
 5. **`files_changed` vs `files_requested`** — do they match? If `files_changed` contains entries not in `files_requested`, the executor edited something outside the spec scope — the gateway should have flagged this.
