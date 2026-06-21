@@ -342,8 +342,20 @@ Add at least **5 new tests**:
 
 ## § Results
 
-*(Worker fills this in when done.)*
+**Date completed:** 2026-06-21
 
-**Date completed:**  
-**Tests:**  
+**Tests:** `pytest -q tests/test_supervisor_state_p12_001.py tests/test_supervisor_agent_p12_001.py tests/test_project_state_p12_002.py tests/test_delegate_tool.py` — **56 passed, 0 failures** (3.10 s).
+
+**Files changed:**
+- `core/engine/supervisor_agent.py` — added `begin_delegation()` instance method (resets all per-delegation fields, preserves `_project_state` and `_workspace_path`).
+- `server/mcp_server.py`:
+  - Added module-level `_SUPERVISOR_REGISTRY: dict[str, SupervisorAgent]`.
+  - Added `_get_or_create_supervisor(project_key, workspace_path, spec_path)` factory (before `_handle_resume`).
+  - `delegate_to_agent`: replaced `SupervisorAgent(…)` constructor with `_get_or_create_supervisor(…) + agent.begin_delegation(…)`.
+  - `_handle_resume`: added `mcp_session_id: str | None = None` parameter; passes it to `engine.run()` instead of hardcoded `None`; stores resumed agent in `_SUPERVISOR_REGISTRY[_pk]`.
+  - On `supervisor_agent_result.outcome == "escalated"`: calls `drop_coder(storage.mcp_session_id)` (BL-545 interim fix).
+- `tests/test_supervisor_state_p12_001.py` — added 5 new tests: `test_get_or_create_supervisor_returns_same_object`, `test_get_or_create_supervisor_different_keys_different_objects`, `test_begin_delegation_resets_per_delegation_fields`, `test_begin_delegation_preserves_project_state`, `test_project_state_not_reloaded_on_warm_agent`.
+
 **Notes / blockers:**
+- `mcp_session_id` in the `_handle_resume` call site from `delegate_to_agent` is `None` (the default) because `storage` is not yet created at that early-return point in the function. The parameter is in place and fully wired inside `_handle_resume`; a future refactor moving the resume early-return to after `storage` creation would enable passing the real `mcp_session_id`.
+- `_project_state_trace_enabled` is reset to `False` in `begin_delegation()` so `begin()` re-enables it when `spec_path is not None`, preserving the existing guard and event-order stability for callers without a spec path.

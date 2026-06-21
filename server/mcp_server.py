@@ -162,6 +162,9 @@ from core.observability.bootstrap import ensure_observability_bootstrap
 
 ensure_observability_bootstrap(obs)
 
+# Keyed by project_key. Long-lived per MCP server process lifetime.
+_SUPERVISOR_REGISTRY: dict[str, "SupervisorAgent"] = {}
+
 
 def _sanitize_notification_text(text: str, *, max_chars: int = 180) -> str:
     compact = " ".join((text or "").split())
@@ -1398,11 +1401,36 @@ def _response_payload_paused_reminder(state: SupervisorState) -> str:
     return json.dumps(payload, ensure_ascii=False)
 
 
+def _get_or_create_supervisor(
+    project_key: str,
+    workspace_path: str,
+    spec_path: str | None,
+) -> "SupervisorAgent":
+    """Return the existing SupervisorAgent for this project_key, or create a fresh one.
+
+    Creation loads project_state from disk (first call or after server restart).
+    The returned agent has NOT had begin_delegation() called yet — caller must do that.
+    """
+    from core.engine.supervisor_agent import SupervisorAgent
+
+    agent = _SUPERVISOR_REGISTRY.get(project_key)
+    if agent is None:
+        agent = SupervisorAgent(
+            delegation_id=None,  # will be set by begin_delegation()
+            workspace_path=workspace_path,
+            executor_fn=lambda _t, _c: None,  # placeholder; overwritten by begin_delegation
+            spec_path=spec_path,
+        )
+        _SUPERVISOR_REGISTRY[project_key] = agent
+    return agent
+
+
 def _handle_resume(
     state: SupervisorState,
     answer: str,
     task: str,
     ctx: Context | None,
+    mcp_session_id: str | None = None,
 ) -> str:
     from core.engine.supervisor_agent import SupervisorAgent
 
@@ -1447,7 +1475,7 @@ def _handle_resume(
                     prompt,
                     target_files,
                     workspace_path=ws,
-                    mcp_session_id=None,
+                    mcp_session_id=mcp_session_id,
                 )
 
         progress.notify("[resume] Continuing delegation from paused turn…", force=True)
@@ -1459,6 +1487,10 @@ def _handle_resume(
             reviewer_fn=None,
             event_sink=event_sink,
         )
+        from core.state.project_key import ProjectKeyResolver
+
+        _pk = ProjectKeyResolver.from_spec_path(state.spec_path)
+        _SUPERVISOR_REGISTRY[_pk] = agent
         result = agent.run()
         exec_result = result.executor_result or ExecutionResult(success=False, output="")
 
@@ -2080,9 +2112,11 @@ def delegate_to_agent(
                 force=True,
             )
             progress.notify("[executor] Starting delegated run…", force=True)
-            supervisor_agent = SupervisorAgent(
+            supervisor_agent = _get_or_create_supervisor(
+                _project_key, ws, spec_rel_path
+            )
+            supervisor_agent.begin_delegation(
                 delegation_id=delegation_id,
-                workspace_path=ws,
                 # executor_fn/reviewer_fn unused in host-driven mode (mcp_server owns
                 # the executor + reviewer plumbing and drives the loop turn-by-turn).
                 executor_fn=lambda _turn, _correction: result,
@@ -2986,6 +3020,10 @@ def delegate_to_agent(
 
         if supervisor_agent_result is not None and supervisor_agent_result.outcome == "escalated":
             outcome = OUTCOME_NEEDS_INPUT
+            from core.session.executor_cache import drop_coder
+
+            if storage.mcp_session_id:
+                drop_coder(storage.mcp_session_id)
 
         verify_result: VerifyResult | None = None
         verify_enabled = auto_verify_enabled(ws)

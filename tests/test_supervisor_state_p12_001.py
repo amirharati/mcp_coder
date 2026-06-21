@@ -20,7 +20,12 @@ from core.state.supervisor_state import (
     ResumeTokenExpired,
     SupervisorState,
 )
-from server.mcp_server import _response_payload, delegate_to_agent
+from server.mcp_server import (
+    _SUPERVISOR_REGISTRY,
+    _get_or_create_supervisor,
+    _response_payload,
+    delegate_to_agent,
+)
 
 
 def _parse_iso(raw: str) -> datetime:
@@ -343,3 +348,115 @@ def test_response_payload_does_not_include_resume_token():
     )
     assert "resume_token" not in payload
     assert payload["paused_questions"] == []
+
+
+# ── P12-ISS-002: singleton registry + begin_delegation tests ────────────────
+
+
+def test_get_or_create_supervisor_returns_same_object(tmp_path, monkeypatch):
+    monkeypatch.setenv("MCP_CODER_HOME", str(tmp_path / "home"))
+    _SUPERVISOR_REGISTRY.clear()
+    try:
+        agent1 = _get_or_create_supervisor("test-proj", str(tmp_path), None)
+        agent2 = _get_or_create_supervisor("test-proj", str(tmp_path), None)
+        assert agent1 is agent2
+    finally:
+        _SUPERVISOR_REGISTRY.clear()
+
+
+def test_get_or_create_supervisor_different_keys_different_objects(tmp_path, monkeypatch):
+    monkeypatch.setenv("MCP_CODER_HOME", str(tmp_path / "home"))
+    _SUPERVISOR_REGISTRY.clear()
+    try:
+        agent_a = _get_or_create_supervisor("proj-a", str(tmp_path), None)
+        agent_b = _get_or_create_supervisor("proj-b", str(tmp_path), None)
+        assert agent_a is not agent_b
+    finally:
+        _SUPERVISOR_REGISTRY.clear()
+
+
+def test_begin_delegation_resets_per_delegation_fields(tmp_path, monkeypatch):
+    monkeypatch.setenv("MCP_CODER_HOME", str(tmp_path / "home"))
+    ok = ExecutionResult(success=True, output="done")
+    agent = SupervisorAgent(
+        delegation_id="deleg-1",
+        workspace_path=str(tmp_path),
+        executor_fn=lambda _t, _c: ok,
+        spec_path=None,
+    )
+    # Simulate state from a completed turn.
+    agent._cur_turn = 3
+    agent._decisions = [object()]  # type: ignore[list-item]
+    agent._completed_turn_artifacts = [{"files_changed": ["f.py"]}]
+    agent._pending_host_clarification = "some answer"
+    agent._plan = "old plan"
+
+    agent.begin_delegation(
+        delegation_id="deleg-2",
+        executor_fn=lambda _t, _c: ok,
+        plan="new plan",
+    )
+
+    assert agent._delegation_id == "deleg-2"
+    assert agent._cur_turn == 0
+    assert agent._decisions == []
+    assert agent._completed_turn_artifacts == []
+    assert agent._pending_host_clarification is None
+    assert agent._plan == "new plan"
+    assert agent._loop_start_emitted is False
+
+
+def test_begin_delegation_preserves_project_state(tmp_path, monkeypatch):
+    monkeypatch.setenv("MCP_CODER_HOME", str(tmp_path / "home"))
+    from core.state.project_state import ProjectState
+
+    ok = ExecutionResult(success=True, output="done")
+    agent = SupervisorAgent(
+        delegation_id="deleg-1",
+        workspace_path=str(tmp_path),
+        executor_fn=lambda _t, _c: ok,
+        spec_path=None,
+    )
+
+    # Warm the agent: manually set _project_state.
+    ps = ProjectState(project_key="tasks/auth")
+    ps.decisions.append({"text": "use postgres", "delegation_id": "d1"})
+    agent._project_state = ps
+
+    # begin_delegation should NOT clear _project_state.
+    agent.begin_delegation(
+        delegation_id="deleg-2",
+        executor_fn=lambda _t, _c: ok,
+    )
+    agent.begin()  # should skip disk load since _project_state is already set
+
+    assert agent._project_state is ps
+    assert len(agent._project_state.decisions) == 1
+    assert agent._project_state.decisions[0]["text"] == "use postgres"
+
+
+def test_project_state_not_reloaded_on_warm_agent(tmp_path, monkeypatch):
+    monkeypatch.setenv("MCP_CODER_HOME", str(tmp_path / "home"))
+    from core.state.project_state import ProjectState
+
+    ok = ExecutionResult(success=True, output="done")
+    agent = SupervisorAgent(
+        delegation_id="deleg-1",
+        workspace_path=str(tmp_path),
+        executor_fn=lambda _t, _c: ok,
+        spec_path=None,
+    )
+
+    with patch.object(ProjectState, "load", wraps=ProjectState.load) as mock_load:
+        # First delegation — cold start, load is called.
+        agent.begin_delegation(delegation_id="deleg-1", executor_fn=lambda _t, _c: ok)
+        agent.begin()
+        first_call_count = mock_load.call_count
+
+        # Second delegation — warm agent, load must NOT be called again.
+        agent.begin_delegation(delegation_id="deleg-2", executor_fn=lambda _t, _c: ok)
+        agent.begin()
+        second_call_count = mock_load.call_count
+
+    assert first_call_count == 1, "Expected exactly one load on cold start"
+    assert second_call_count == 1, "Expected no extra load on warm agent"

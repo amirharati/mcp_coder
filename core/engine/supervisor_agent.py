@@ -211,6 +211,45 @@ class SupervisorAgent:
     def set_plan(self, plan: str | None) -> None:
         self._plan = plan
 
+    def begin_delegation(
+        self,
+        *,
+        delegation_id: str | None,
+        executor_fn: ExecutorFn,
+        reviewer_fn: ReviewerFn | None = None,
+        decision_fn: DecisionFn | None = None,
+        max_turns: int = 1,
+        event_sink: EventSink | None = None,
+        supervisor_model: str | None = None,
+        spec_path: str | None = None,
+        plan: str | None = None,
+    ) -> None:
+        """Reset per-delegation state. Call before begin() for each new delegation.
+
+        Keeps cross-delegation state intact: _project_state, _workspace_path.
+        """
+        self._delegation_id = delegation_id
+        self._executor_fn = executor_fn
+        self._reviewer_fn = reviewer_fn
+        self._decision_fn = decision_fn
+        self._max_turns = max(1, int(max_turns))
+        self._event_sink = event_sink
+        self._supervisor_model = supervisor_model
+        self._plan = plan
+        self._spec_path = spec_path
+        self._loop_id = f"{delegation_id}:supervisor:1" if delegation_id else "supervisor:1"
+        self._loop_start_emitted = False
+        self._loop_end_emitted = False
+        self._cur_turn = 0
+        self._turn_t0 = None
+        self._decisions = []
+        self._last_result = None
+        self._completed_turn_artifacts = []
+        self._pending_host_clarification = None
+        # Reset so begin() re-enables it when spec_path is not None.
+        self._project_state_trace_enabled = False
+        # _project_state and _workspace_path are intentionally preserved.
+
     @classmethod
     def resume(
         cls,
