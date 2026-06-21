@@ -9,7 +9,7 @@
 # Phase 12 issues
 
 **Status:** **Active** — Phase 12 opened 2026-06-20.
-**Open:** P12-ISS-001 (closed), P12-ISS-002
+**Open:** P12-ISS-003, P12-ISS-004
 **Promoted from backlog:** BL-540 (project state), BL-529 (supervisor context), BL-543 (context lifecycle), BL-544 (pause/resume), BL-541 (reviewer feedback loop), BL-525 v1 / BL-542 (planner project-aware)
 **Related PM board:** [PHASE12_MVP.md](./PHASE12_MVP.md)
 
@@ -36,6 +36,7 @@
 | **P12-ISS-001** | **closed** | medium | `resume_token` should be internal; host should not need to pass it | P12-001 | Fixed in commit 16dfe7b |
 | **P12-ISS-002** | **closed** | high | `SupervisorAgent` recreated per delegation — should be a long-lived singleton per `project_key` | pre-P12-003 | Fixed in commit d8ff46c |
 | **P12-ISS-003** | **open** | low | Resume early-return path passes `mcp_session_id=None` to `_handle_resume`; storage not yet created at that code point | post-P12-003 | See note below |
+| **P12-ISS-004** | **open** | low | `SupervisorToolRunner` multi-round LLM calls not rolled into supervisor decision token totals | Phase 13 | See note below |
 
 ---
 
@@ -139,10 +140,41 @@ In `delegate_to_agent`, the paused-state detection and early-return to `_handle_
 
 ---
 
+### P12-ISS-004 — SupervisorToolRunner token accounting not in decision records
+
+**Filed:** 2026-06-21  
+**Milestone:** Phase 13 (observability cleanup; does not block P12-004/P12-005)  
+**Severity:** low — reporting gap only; gateway still records each `gw.complete()` call independently
+
+**Problem:**
+P12-003 wired `SupervisorAgent._llm_decide()` and `DelegationSupervisor.evaluate()` through
+`SupervisorToolRunner.run()`, which may invoke `gw.complete()` up to `max_tool_rounds + 1`
+times per decision. The runner returns **text only**; callers now pass `tokens={}` into
+`SupervisorTurnDecision` / `SupervisorDecision`. Per-delegation supervisor usage reports
+therefore under-count supervisor LLM cost when tools are used.
+
+**What still works:**
+- Each `gw.complete()` call is recorded by `LlmGateway` / observability backend as a
+  separate LLM call (trace + token events).
+- Decision logic and tool-calling behaviour are unaffected.
+
+**Desired fix (Phase 13):**
+- `SupervisorToolRunner.run()` returns a small result object: `{text, tokens, duration_ms}`
+  aggregating all rounds in the loop.
+- `_llm_decide()` and `DelegationSupervisor.evaluate()` populate decision records from
+  that aggregate.
+- Optional: single `supervisor_tool_loop` trace summary with total tokens across rounds.
+
+**Timing:** defer until after Phase 12 milestones ship; natural fit with D-ARCH-10
+(multi-model Supervisor observability).
+
+---
+
 ## Changelog
 
 | Date | Event |
 |------|-------|
+| 2026-06-21 | P12-ISS-004 filed — SupervisorToolRunner multi-round token totals not in supervisor decision records; Phase 13 observability cleanup. |
 | 2026-06-21 | P12-ISS-003 filed — resume early-return passes mcp_session_id=None; low-priority follow-up after P12-003. |
 | 2026-06-21 | P12-ISS-002 closed — singleton agent + Aider session fix (commit d8ff46c). |
 | 2026-06-21 | P12-ISS-002 filed — SupervisorAgent singleton: agent must live across delegations, not be recreated per call. Fix targeted before P12-003. |
