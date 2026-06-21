@@ -34,7 +34,8 @@
 | ID | Status | Severity | Summary | Milestone | Notes |
 |----|--------|----------|---------|-----------|-------|
 | **P12-ISS-001** | **closed** | medium | `resume_token` should be internal; host should not need to pass it | P12-001 | Fixed in commit 16dfe7b |
-| **P12-ISS-002** | **open** | high | `SupervisorAgent` recreated per delegation — should be a long-lived singleton per `project_key` | pre-P12-003 | See detail below |
+| **P12-ISS-002** | **closed** | high | `SupervisorAgent` recreated per delegation — should be a long-lived singleton per `project_key` | pre-P12-003 | Fixed in commit d8ff46c |
+| **P12-ISS-003** | **open** | low | Resume early-return path passes `mcp_session_id=None` to `_handle_resume`; storage not yet created at that code point | post-P12-003 | See note below |
 
 ---
 
@@ -121,10 +122,29 @@ function with disk I/O.
 
 ---
 
+---
+
+### P12-ISS-003 — Resume early-return passes `mcp_session_id=None` to `_handle_resume`
+
+**Filed:** 2026-06-21  
+**Milestone:** post-P12-003 (low priority; does not block correctness)  
+**Severity:** low — resume is correct; only the `align_host` cache-warmth benefit is lost on the first resume call
+
+**Problem:**
+In `delegate_to_agent`, the paused-state detection and early-return to `_handle_resume` happens *before* `SessionStore.acquire()` is called. So `storage.mcp_session_id` is unavailable at that point, and `_handle_resume` is called with `mcp_session_id=None` (the default). This means the resume turn always starts with a cold Aider Coder even when `align_host` is active and the Cursor session is still live.
+
+**Fix:** Move the paused-state detection block to *after* `storage = SessionStore().acquire(ws, policy, host_hint)`, then pass `storage.mcp_session_id` to `_handle_resume`.
+
+**Note:** Correctness is not affected. The resumed turn reads files from disk correctly. Only the repo-map warmth benefit of `align_host` is missed on that one call.
+
+---
+
 ## Changelog
 
 | Date | Event |
 |------|-------|
+| 2026-06-21 | P12-ISS-003 filed — resume early-return passes mcp_session_id=None; low-priority follow-up after P12-003. |
+| 2026-06-21 | P12-ISS-002 closed — singleton agent + Aider session fix (commit d8ff46c). |
 | 2026-06-21 | P12-ISS-002 filed — SupervisorAgent singleton: agent must live across delegations, not be recreated per call. Fix targeted before P12-003. |
 | 2026-06-21 | P12-ISS-001 closed — implicit resume implemented and dogfooded (commit 16dfe7b). |
 | 2026-06-21 | P12-ISS-001 filed — implicit resume: token should be internal, not host-facing. Fix targeted before P12-003. |
