@@ -50,7 +50,7 @@ Those stay in backlog until Phase 13 exit review prioritizes them for a later ph
 
 | Order | Milestone | Spec | Status | Notes |
 |-------|-----------|------|--------|-------|
-| 1 | P13-001 | [P13-001](../tasks/P13-001-dogfood-persistent-agent.md) | **pending** | Dogfood capstone: CLI harness + Cursor habit-cli epic; trace analysis |
+| 1 | P13-001 | [P13-001](../tasks/P13-001-dogfood-persistent-agent.md) | **pending** | Dogfood: existing CLI + Cursor; trace analysis (master session; no new scripts) |
 | 2 | P13-002 | *(pending)* | **pending** | Doc consolidation: architecture note, BACKLOG sync, archive stale notes |
 | 3 | P13-003 | *(pending)* | **pending** | Test hardening from P13-001 findings |
 | 4 | P13-004 | *(pending)* | **pending** | Low-hanging fixes + **end-of-phase backlog review** (items TBD after P13-001) |
@@ -64,14 +64,16 @@ Those stay in backlog until Phase 13 exit review prioritizes them for a later ph
 ### P13-001 — Dogfood capstone + trace analysis
 
 **Status:** `pending`
-**Goal:** Run real delegations exercising Phase 12 paths; capture delegation IDs; analyze traces and server logs; file `P13-ISS-*` for bugs; produce a signed checklist.
+**Goal:** Run real delegations exercising Phase 12 paths using **existing CLI** (`mcp-coder delegate`, `trace inspect`, `pytest`); capture delegation IDs; analyze traces; file `P13-ISS-*` for bugs.
+
+**No new dogfood scripts in repo.**
 
 **Scenarios (minimum):**
 1. **Multi-delegation same project** — 2–3 `delegate_to_agent` calls with same `spec_path` prefix; verify `project_state.json` grows; planner `planner_context_sources` includes `project_state` on later runs.
 2. **Pause/resume** — delegation that escalates to `needs_input`; resume with `answer=`; verify pipeline stages skipped; `supervisor_resumed` in trace.
 3. **Optional:** `start_fresh=True` abandons paused state; singleton identity across delegations (`project_state_loaded` once per process after warm start).
 
-**CLI path:** `mcp-coder delegate` (full run) on a toy spec in a test workspace.
+**CLI path:** `mcp-coder delegate` (+ optional `scripts/smoke_delegation.py`). Specs in host workspace `.mcp-coder/specs/tasks/`.
 **Cursor path:** `delegate_to_agent` MCP tool on same or parallel scenario.
 
 **Analysis tools:** `mcp-coder trace inspect`, `mcp-coder logs tail`, `project_state.json` on disk.
