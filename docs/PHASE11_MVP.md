@@ -9,7 +9,7 @@
 
 # Phase 11 — Supervised execution + smarter context
 
-**Status:** **Active** — Phase 11 opened 2026-06-18.
+**Status:** **Closed** — Phase 11 closed 2026-06-20.
 **Purpose:** Make the Aider/MCP relationship qualitatively more powerful: supervised execution (Aider is no longer a blind `yes=True` process), smarter context before delegation, and output quality gates — all while keeping per-delegation cost bounded through context frugality.
 **PM board:** this file · **Issues:** [PHASE11_ISSUES.md](./PHASE11_ISSUES.md)
 **Phase 10 (frozen):** [PHASE10_MVP.md](./PHASE10_MVP.md) · [PHASE10_ISSUES.md](./PHASE10_ISSUES.md)
@@ -421,6 +421,7 @@ Run a focused observability validation pass on 3-5 delegations and confirm:
 
 | Date | Change |
 |------|--------|
+| 2026-06-20 | **Phase 11 closed** — remaining open Phase 11 issues moved to backlog (BL-535..BL-539) so phase docs can freeze with no open issue debt. |
 | 2026-06-20 | **P11-009 shipped** — Supervisor as agent loop (BL-533, closes P11-ISS-015/016): `SupervisorAgent` owns unified `supervisor_loop_*` lifecycle; dual `supervisor_outer_loop_*` + inner split removed; `max_turns` config; 17 tests + 1158 full suite passed. |
 | 2026-06-19 | **P11-008 shipped** — `architect_pass` → `planner_pass` rename refactor complete; legacy aliases kept with warnings; 1126 passed. Phase 11 all milestones done; pre-dogfood log review gate now open. |
 | 2026-06-19 | **P11-007 shipped** — host `model_policy` arg (BL-512 Stage 2) wired with per-role normalization, additive precedence, delegation-lifetime context binding, and non-fatal warning behavior. |

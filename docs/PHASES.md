@@ -1006,4 +1006,4 @@ See full table in [PHASE11_MVP.md](./PHASE11_MVP.md) § Cross-phase architectura
 - [x] **P11-005 shipped** — tier-1 reviewer v0 (`reviewer_pass` + report section append), 2026-06-19.
 - [x] **P11-006 shipped** — smart architect trigger v0 (`should_run_architect_pass` + skip-reason audit), 2026-06-19.
 - [x] **P11-007 shipped** — host `model_policy` arg v0 (per-role host overrides + additive precedence + non-fatal warnings), 2026-06-19.
-- [ ] **Phase 11 active** — P11-008 naming refactor; then pre-dogfood log review gate (`P11-ISS-001`). See [PHASE11_MVP.md](./PHASE11_MVP.md).
+- [x] **Phase 11 complete** — P11-001..P11-009 shipped (clarity, supervised execution, executor-pull hint, human gate, reviewer, smart trigger, host model policy, planner rename, supervisor agent loop); closed 2026-06-20. See [PHASE11_MVP.md](./PHASE11_MVP.md).

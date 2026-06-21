@@ -14,7 +14,7 @@ Status: `idea` | `deferred` | `blocked` | `in_phase` | `done`
 
 ---
 
-## Phase 11 active (opened 2026-06-18)
+## Phase 11 shipped (closed 2026-06-20)
 
 **PM board:** [PHASE11_MVP.md](./PHASE11_MVP.md) · **Issues:** [PHASE11_ISSUES.md](./PHASE11_ISSUES.md) · **Bootstrap:** [notes/phase11-master-session-bootstrap.md](./notes/phase11-master-session-bootstrap.md)
 
@@ -27,6 +27,18 @@ Status: `idea` | `deferred` | `blocked` | `in_phase` | `done`
 | BL-358 | P11-005 | ✅ Done — tier-1 reviewer v0 shipped (`reviewer_pass` + report append, non-fatal on reviewer error) | Tier-2 epic-boundary review → Phase 12 |
 | — | P11-006 | ✅ Done — smart architect trigger shipped (spec/env/heuristic precedence + skip-reason detail) | — |
 | BL-512 | P11-007 | ✅ Done — host `model_policy` arg shipped (per-role overrides + additive precedence + warning audit) | BL-513 AI-suggested, BL-514 dynamic escalation → Phase 12 |
+| — | P11-008 | ✅ Done — naming refactor `architect_pass` → `planner_pass` | Legacy aliases retained with warnings |
+| BL-533 | P11-009 | ✅ Done — supervisor agent loop unified (`supervisor_loop_*`) | Live multi-turn rerun wiring in `mcp_server` follow-up |
+
+### Phase 11 carried issues (moved on close)
+
+| Backlog | Source issue | Theme | Status | One-line summary |
+|---------|--------------|-------|--------|------------------|
+| **BL-535** | P11-ISS-002 | Trace inspect UX | deferred | `trace inspect <id>` should work for specless CLI runs via trace-file fallback when DB index is missing. |
+| **BL-536** | P11-ISS-014 | Role attribution completeness | deferred | Ensure every `proxy_llm_call`/`backend_llm_call` has reliable `role`, `model`, `provider`, `ok`, `duration_ms`, token summary. |
+| **BL-537** | P11-ISS-017 | Reviewer semantics | deferred | Make reviewer policy explicit in outputs/records (`reviewer_mode`, `reviewer_outcome`, `reviewer_action`) and behavior docs. |
+| **BL-538** | P11-ISS-018 | Planner audit normalization | deferred | Normalize planner-pass audit block with same shape/style as clarity/spec-validation/reviewer in records + viewer. |
+| **BL-539** | P11-ISS-019 | Clarity telemetry polish | deferred | Expose complete clarity round telemetry (`clarity_round_index`, `clarity_round_cap`, `clarity_auto_passed`) consistently in trace + records. |
 
 ---
 
@@ -2257,6 +2269,7 @@ The MCP-facilitated path is the architectural win: the junior PM host calls `mcp
 
 | Date | Change |
 |------|--------|
+| 2026-06-20 | **Phase 11 closed** — § Phase 11 table marked shipped/closed; carry-over issues moved from PHASE11_ISSUES to backlog items BL-535..BL-539; BL-533 marked done in P11-009 and BL-534 added for reasoning-capture fidelity. |
 | 2026-06-19 | **P11-007 shipped** — BL-512 Stage 2 done: host `model_policy` arg with per-role overrides, additive precedence (host > env > defaults), and warning audit fields. |
 | 2026-06-19 | **P11-006 shipped** — smart architect trigger v0 shipped (spec/env/heuristic precedence + skip-reason audit detail). |
 | 2026-06-19 | **P11-005 shipped** — BL-358 Phase 11 slice done (`reviewer_pass` + report append + non-fatal error path). |
