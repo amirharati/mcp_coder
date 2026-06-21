@@ -4,6 +4,7 @@ import json
 import os
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
+from types import SimpleNamespace
 from unittest.mock import patch
 from uuid import UUID
 
@@ -243,11 +244,14 @@ def test_delegate_with_answer_auto_resumes_without_token(tmp_path, monkeypatch):
     monkeypatch.chdir(tmp_path)
     monkeypatch.setenv("MCP_CODER_HOME", str(tmp_path / "home"))
     paused = _state(spec_path="tasks/auth-01.md")
+    storage = SimpleNamespace(mcp_session_id="abc123")
     with patch(
         "server.mcp_server.SupervisorState.find_latest", return_value=paused
     ) as latest_mock, patch(
         "server.mcp_server._handle_resume", return_value='{"ok": true}'
     ) as resume_mock, patch(
+        "server.mcp_server.SessionStore.acquire", return_value=storage
+    ) as acquire_mock, patch(
         "server.mcp_server._apply_clarity_check",
         side_effect=AssertionError("clarity must not run on implicit resume"),
     ), patch(
@@ -262,7 +266,9 @@ def test_delegate_with_answer_auto_resumes_without_token(tmp_path, monkeypatch):
         )
     assert json.loads(raw) == {"ok": True}
     latest_mock.assert_called_once()
+    acquire_mock.assert_called_once()
     resume_mock.assert_called_once()
+    assert resume_mock.call_args.kwargs.get("mcp_session_id") == "abc123"
 
 
 def test_delegate_without_answer_returns_paused_reminder(tmp_path, monkeypatch):

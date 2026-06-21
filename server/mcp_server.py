@@ -1652,22 +1652,6 @@ def delegate_to_agent(
         from core.state.project_key import ProjectKeyResolver
 
         _project_key = ProjectKeyResolver.from_spec_path(spec_path)
-        _paused_state = SupervisorState.find_latest(_project_key)
-
-        if start_fresh and _paused_state is not None:
-            _abandon_paused_state(_paused_state)
-            _paused_state = None
-
-        if _paused_state is not None and answer is None:
-            return _response_payload_paused_reminder(_paused_state)
-
-        if _paused_state is not None and answer is not None:
-            return _handle_resume(
-                state=_paused_state,
-                answer=answer,
-                task=task,
-                ctx=ctx,
-            )
         ws = obs.default_workspace_path()
         usage_report_enabled = obs.resolve_usage_report_enabled(ws)
         ensure_workspace_spec_layout(ws)
@@ -1725,6 +1709,22 @@ def delegate_to_agent(
         t_sess = time.perf_counter()
         storage = SessionStore().acquire(ws, policy, host_hint)
         session_decision_ms = int((time.perf_counter() - t_sess) * 1000)
+
+        _paused_state = SupervisorState.find_latest(_project_key)
+        if start_fresh and _paused_state is not None:
+            _abandon_paused_state(_paused_state)
+            _paused_state = None
+        if _paused_state is not None and answer is None:
+            return _response_payload_paused_reminder(_paused_state)
+        if _paused_state is not None and answer is not None:
+            return _handle_resume(
+                state=_paused_state,
+                answer=answer,
+                task=task,
+                ctx=ctx,
+                mcp_session_id=storage.mcp_session_id,
+            )
+
         bind_delegation_trace_scope(
             workspace=ws,
             session_dir=storage.session_dir,

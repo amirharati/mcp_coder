@@ -124,8 +124,23 @@ pytest -q tests/test_supervisor_state_p12_001.py tests/test_delegate_tool.py
 
 ## § Results
 
-*(Worker fills this in when done.)*
+**Date completed:** 2026-06-21
 
-**Date completed:**  
 **Tests:**  
+`pytest -q tests/test_supervisor_state_p12_001.py tests/test_delegate_tool.py`  
+Result: 26 passed, 1 warning.
+
 **Notes / blockers:**
+- Updated `server/mcp_server.py` so paused-state detection/resume handling now runs after
+  `SessionStore().acquire(...)` in `delegate_to_agent()`.
+- Resume path now forwards `mcp_session_id=storage.mcp_session_id` to `_handle_resume(...)`.
+- Preserved implicit resume semantics:
+  - `start_fresh=True` abandons paused state then continues fresh.
+  - paused + no answer returns paused reminder early.
+  - paused + answer resumes and returns early.
+- No payload schema changes made.
+- Updated `tests/test_supervisor_state_p12_001.py`:
+  - resume test now asserts acquired session id is forwarded to `_handle_resume(...)` via
+    `mcp_session_id`.
+  - existing paused-reminder and start_fresh tests remain and pass, verifying early return
+    / pipeline skip and stale-state abandonment behavior.
