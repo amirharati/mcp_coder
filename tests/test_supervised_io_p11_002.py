@@ -198,13 +198,10 @@ def test_supervisor_parse_and_fallback_abort(tmp_path):
         architect_plan=None,
         output_tail_provider=lambda: "",
     )
-    with patch("core.engine.supervisor.run_owned_helper_completion") as completion:
-        completion.return_value = MagicMock(
-            text="garbled",
-            error=None,
-            tokens={"input": 1, "output": 1, "total": 2},
-            duration_ms=5,
-        )
+    with patch(
+        "core.engine.supervisor_tool_runner.build_phase12_tool_runner"
+    ) as build_runner:
+        build_runner.return_value = MagicMock(run=MagicMock(return_value="garbled"))
         with patch("core.engine.supervisor.provider_hint_for_model", return_value=None):
             result = supervisor.evaluate(question="shell?", risk_tier="high")
     assert result.decision == "abort"

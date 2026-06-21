@@ -12,7 +12,6 @@ from typing import Any, Literal
 from core.config.providers import apply_provider_env
 from core.config.models import provider_hint_for_model
 from core.config.role_models import ROLE_SUPERVISOR, resolve_role_model_name
-from core.engine.owned_helper_llm import run_owned_helper_completion
 
 DecisionKind = Literal["approve", "deny", "abort", "escalate"]
 
@@ -145,6 +144,7 @@ class DelegationSupervisor:
         self._decision_log: list[dict[str, Any]] = []
         self._total_duration_ms = 0
         self._last_model = ""
+        self._project_state: Any | None = None
         self._token_totals: dict[str, Any] = {"input": 0, "output": 0, "total": 0, "source": "supervisor"}
 
     @property
@@ -188,23 +188,42 @@ class DelegationSupervisor:
             )
 
         t0 = time.perf_counter()
-        completion = run_owned_helper_completion(
-            [{"role": "user", "content": prompt}],
-            model=model,
-        )
-        duration_ms = completion.duration_ms or int((time.perf_counter() - t0) * 1000)
-        self._total_duration_ms += duration_ms
-        self._accumulate_tokens(completion.tokens)
+        try:
+            from core.engine.supervisor_tool_runner import build_phase12_tool_runner
+            from core.state.project_key import ProjectKeyResolver
 
-        if completion.error:
+            project_key = ProjectKeyResolver.from_spec_path(self._spec_contract or None)
+            if self._project_state is None:
+                from core.state.project_state import ProjectState
+
+                self._project_state = ProjectState.load(project_key)
+            runner = build_phase12_tool_runner(
+                workspace_path=str(self._workspace_path),
+                project_key=project_key,
+                project_state=self._project_state,
+                event_sink=None,
+                model=model,
+            )
+            text = runner.run(
+                system_prompt="",
+                messages=[{"role": "user", "content": prompt}],
+            )
+            completion_error: str | None = None
+        except Exception as exc:
+            text = ""
+            completion_error = f"{type(exc).__name__}: {exc}"
+        duration_ms = int((time.perf_counter() - t0) * 1000)
+        self._total_duration_ms += duration_ms
+
+        if completion_error:
             return self._fallback_abort(
                 risk_tier=risk_tier,
-                reasoning=f"supervisor_error: {completion.error}",
+                reasoning=f"supervisor_error: {completion_error}",
                 model=model,
                 duration_ms=duration_ms,
             )
 
-        decision, reasoning, parse_error = parse_supervisor_output(completion.text)
+        decision, reasoning, parse_error = parse_supervisor_output(text)
         if parse_error or decision is None:
             err = parse_error or "unparseable supervisor response"
             return self._fallback_abort(
@@ -223,12 +242,12 @@ class DelegationSupervisor:
             duration_ms=duration_ms,
             risk_tier=risk_tier,
             model=model,
-            tokens=completion.tokens,
+            tokens={},
         )
         self._emit_llm_call_event(
             question=question,
             prompt=prompt,
-            response=completion.text or "",
+            response=text or "",
             decision=sd,
         )
         return sd

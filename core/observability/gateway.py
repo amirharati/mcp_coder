@@ -27,6 +27,7 @@ class GatewayCompletion:
     duration_ms: int
     reasoning_text: str | None = None
     error: str | None = None
+    tool_calls: list[dict] | None = None
 
 
 def _unavailable_tokens() -> dict[str, Any]:
@@ -59,6 +60,37 @@ def _extract_text_and_reasoning(response_obj: Any) -> tuple[str, str | None]:
         return text, reasoning_text
     except (AttributeError, IndexError, TypeError):
         return "", None
+
+
+def _extract_tool_calls(response_obj: Any) -> list[dict] | None:
+    if response_obj is None:
+        return None
+    try:
+        choices = getattr(response_obj, "choices", None)
+        if not choices:
+            return None
+        first = choices[0]
+        message = getattr(first, "message", None)
+        if message is None and isinstance(first, dict):
+            message = first.get("message")
+        if message is None:
+            return None
+        if isinstance(message, dict):
+            raw_tool_calls = message.get("tool_calls") or []
+        else:
+            raw_tool_calls = getattr(message, "tool_calls", None) or []
+        tool_calls_out = [
+            {
+                "id": tc.id,
+                "name": tc.function.name,
+                "arguments": tc.function.arguments,
+            }
+            for tc in raw_tool_calls
+            if hasattr(tc, "function")
+        ]
+        return tool_calls_out or None
+    except (AttributeError, IndexError, TypeError):
+        return None
 
 
 class LlmGateway:
@@ -100,6 +132,7 @@ class LlmGateway:
         messages: list[dict[str, Any]],
         max_tokens: int = 4096,
         role: str,
+        tools: list[dict] | None = None,
     ) -> GatewayCompletion:
         """Execute litellm.completion and record via backend; never raises."""
         t0 = time.perf_counter()
@@ -154,9 +187,12 @@ class LlmGateway:
                     if params.top_p is not None:
                         completion_kwargs["top_p"] = params.top_p
                     completion_kwargs.update(params.extra_params)
+                    if tools is not None:
+                        completion_kwargs["tools"] = tools
                     response = litellm.completion(**completion_kwargs)
                     captured = merged_capture(stdout_cap, stderr_cap)
                     text, reasoning_text = _extract_text_and_reasoning(response)
+                    tool_calls_out = _extract_tool_calls(response)
                     if captured.strip() and not text:
                         text = captured.strip()
 
@@ -178,6 +214,7 @@ class LlmGateway:
                         tokens=tokens,
                         duration_ms=duration_ms,
                         reasoning_text=reasoning_text,
+                        tool_calls=tool_calls_out,
                     )
             except Exception as exc:
                 return GatewayCompletion(
@@ -218,12 +255,14 @@ class NullLlmGateway(LlmGateway):
         messages: list[dict[str, Any]],
         max_tokens: int = 4096,
         role: str,
+        tools: list[dict] | None = None,
     ) -> GatewayCompletion:
         return GatewayCompletion(
             text="",
             model=model,
             tokens={"input": None, "output": None, "total": None, "source": "null_gateway"},
             duration_ms=0,
+            tool_calls=None,
         )
 
 

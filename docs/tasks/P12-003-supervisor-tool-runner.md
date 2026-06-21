@@ -494,8 +494,71 @@ Add at least **8 tests**:
 
 ## § Results
 
-*(Worker fills this in when done.)*
+**Date completed:** 2026-06-21
 
-**Date completed:**  
-**Tests:**  
+**What was implemented:**
+
+1. **`core/observability/gateway.py`**
+   - Added `tool_calls: list[dict] | None = None` field to `GatewayCompletion`.
+   - Added `tools: list[dict] | None = None` param to both `LlmGateway.complete()` and
+     `NullLlmGateway.complete()`. When non-None, `"tools"` is added to `completion_kwargs`
+     (after `params.extra_params.update`, so `drop_params=True` still handles models that
+     don't support function-calling).
+   - Added module-level `_extract_tool_calls()` helper that pulls `id`/`name`/`arguments`
+     from the first choice's `message.tool_calls` (handles both attr- and dict-style
+     messages); result populated into `GatewayCompletion.tool_calls`. `NullLlmGateway`
+     returns `tool_calls=None`. All existing callers default to `tools=None` → fully
+     backward compatible.
+
+2. **`core/engine/supervisor_tool_runner.py`** (new)
+   - `SupervisorToolRunner` with `register_tool()`, `run()` (max 3 rounds, appends the
+     assistant tool-call message then each `tool` result message; on the final round does
+     one no-tools `gw.complete()` call), `_execute_tool()` (`_TOOL_RESULT_BUDGET=2000` char
+     cap, `[tool_error]` on unknown tool / exceptions), `_build_tools_spec()`
+     (OpenAI function-call format), and `_emit_tool_call_event()` emitting
+     `supervisor_tool_call`. Returns `""` on `completion.error`. No-tools / unsupported-model
+     cases return on round 0 naturally (no special fallback branch).
+   - `build_phase12_tool_runner(...)` factory registering `get_project_state` (compact JSON
+     of last decisions/risks/hot areas/last_delegation), `get_delegation_history`
+     (`list_delegations` over-fetched and filtered by `project_key` prefix, `limit` clamped
+     1–10), and `read_file` (rejects `..` traversal, `[tool_error] file not found` if
+     missing, truncated to budget).
+
+3. **`core/engine/supervisor_agent.py`** — `_llm_decide()` now builds a Phase 12 runner via
+   `build_phase12_tool_runner(...)` (project_key via `ProjectKeyResolver.from_spec_path`,
+   passing the already-loaded `self._project_state` and `self._event_sink`) and calls
+   `.run(system_prompt=_DECISION_PREAMBLE, messages=[{user: prompt}])`. `_build_decision_prompt`
+   and `_DECISION_PREAMBLE` unchanged. Existing `_policy_decide()` fallback preserved on any
+   exception, on unparseable action, and on provider config hint.
+
+4. **`core/engine/supervisor.py`** — `DelegationSupervisor` gained `self._project_state`
+   (lazy, cached on first `evaluate()`). `evaluate()` derives `project_key` from
+   `spec_contract` (else `"default"`), loads `ProjectState` once, builds the runner
+   (`event_sink=None`), and calls `.run(system_prompt="", messages=[{user: prompt}])`.
+   Errors raised during runner construction/run are caught and routed through the existing
+   `_fallback_abort` path; empty/garbled text still flows through `parse_supervisor_output`
+   → `_fallback_abort`. Removed now-unused `run_owned_helper_completion` import.
+
+**Tests:**
+- New `tests/test_supervisor_tool_runner_p12_003.py` — 8 tests (all checklist items),
+  using a `_ScriptedGateway` stub registered via `set_llm_gateway`.
+- Updated one pre-existing test (`tests/test_supervised_io_p11_002.py::
+  test_supervisor_parse_and_fallback_abort`) to patch
+  `core.engine.supervisor_tool_runner.build_phase12_tool_runner` instead of the removed
+  `run_owned_helper_completion`.
+- Required suite green: `pytest -q tests/test_supervisor_state_p12_001.py
+  tests/test_supervisor_agent_p12_001.py tests/test_project_state_p12_002.py
+  tests/test_delegate_tool.py tests/test_supervisor_tool_runner_p12_003.py` → **64 passed**.
+- Broader sweep (`-k "supervisor or gateway or owned_helper or project_state or delegate"`)
+  → **200 passed**.
+
 **Notes / blockers:**
+- `DelegationSupervisor` token accounting: `runner.run()` returns text only, so per-call
+  token totals are no longer accumulated there (`SupervisorDecision.tokens={}`). This matches
+  the spec's target flow; `_accumulate_tokens()` remains defined but unused.
+- `read_file` traversal guard checks for a `..` path segment (not substring), so filenames
+  containing `..` are not falsely rejected.
+
+**Suggested for master session:**
+- Phase 13 could thread tool-result token usage back through `SupervisorToolRunner` so
+  `DelegationSupervisor.usage_record` regains accuracy under the tool-calling loop.

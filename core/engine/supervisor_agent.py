@@ -530,7 +530,8 @@ class SupervisorAgent:
             from core.config.providers import apply_provider_env
             from core.config.models import provider_hint_for_model
             from core.config.role_models import ROLE_SUPERVISOR, resolve_role_model_name
-            from core.engine.owned_helper_llm import run_owned_helper_completion
+            from core.engine.supervisor_tool_runner import build_phase12_tool_runner
+            from core.state.project_key import ProjectKeyResolver
 
             apply_provider_env()
             model = self._supervisor_model or resolve_role_model_name(
@@ -541,27 +542,30 @@ class SupervisorAgent:
 
             prompt = self._build_decision_prompt(ctx)
             t0 = time.perf_counter()
-            completion = run_owned_helper_completion(
-                [{"role": "user", "content": prompt}], model=model
+            runner = build_phase12_tool_runner(
+                workspace_path=str(self._workspace_path),
+                project_key=ProjectKeyResolver.from_spec_path(self._spec_path),
+                project_state=self._project_state,
+                event_sink=self._event_sink,
+                model=model,
             )
-            duration_ms = completion.duration_ms or int((time.perf_counter() - t0) * 1000)
-            if completion.error:
-                fallback = self._policy_decide(ctx)
-                fallback.model = model
-                fallback.duration_ms = duration_ms
-                return fallback
-            action = _parse_decision_action(completion.text)
+            text = runner.run(
+                system_prompt=_DECISION_PREAMBLE,
+                messages=[{"role": "user", "content": prompt}],
+            )
+            duration_ms = int((time.perf_counter() - t0) * 1000)
+            action = _parse_decision_action(text)
             if action is None:
                 fallback = self._policy_decide(ctx)
                 fallback.model = model
                 fallback.duration_ms = duration_ms
                 return fallback
-            reason = _parse_decision_reason(completion.text) or f"supervisor {action}"
+            reason = _parse_decision_reason(text) or f"supervisor {action}"
             return SupervisorTurnDecision(
                 action=action,
                 reason=reason,
                 model=model,
-                tokens=completion.tokens or {},
+                tokens={},
                 duration_ms=duration_ms,
             )
         except Exception:
