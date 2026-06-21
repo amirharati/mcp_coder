@@ -22,10 +22,11 @@ callable producing an :class:`ExecutionResult`.
 
 from __future__ import annotations
 
+import inspect
 import time
 from collections.abc import Callable
 from dataclasses import asdict, dataclass, field
-from typing import Any, Literal
+from typing import Any, Literal, cast
 
 from core.engine.base import ExecutionResult
 from core.state.supervisor_state import SupervisorState
@@ -33,12 +34,40 @@ from core.state.supervisor_state import SupervisorState
 SupervisorAction = Literal["rerun_aider", "done", "escalate_host"]
 SupervisorOutcome = Literal["success", "escalated", "error"]
 
-# Worker: given (turn_index, correction_note) produce an ExecutionResult.
-ExecutorFn = Callable[[int, "str | None"], ExecutionResult]
+# Worker: given (turn_index, correction_note, reset_session) produce an ExecutionResult.
+ExecutorFn = Callable[[int, "str | None", bool], ExecutionResult]
 # Checks: given (turn_index, result) produce a compact check summary (or None).
 ReviewerFn = Callable[[int, ExecutionResult], "dict[str, Any] | None"]
 # Event sink: receives each canonical trace record (used by tests / custom routing).
 EventSink = Callable[["dict[str, Any]"], None]
+
+
+def _normalize_executor_fn(executor_fn: Callable[..., ExecutionResult]) -> ExecutorFn:
+    """Accept legacy 2-arg executor callables and adapt to the 3-arg contract."""
+    try:
+        params = list(inspect.signature(executor_fn).parameters.values())
+    except (TypeError, ValueError):
+        return cast(ExecutorFn, executor_fn)
+    has_varargs = any(p.kind == inspect.Parameter.VAR_POSITIONAL for p in params)
+    positional = [
+        p
+        for p in params
+        if p.kind in (inspect.Parameter.POSITIONAL_ONLY, inspect.Parameter.POSITIONAL_OR_KEYWORD)
+    ]
+    if has_varargs or len(positional) >= 3:
+        return cast(ExecutorFn, executor_fn)
+    if len(positional) == 2:
+        legacy_fn = cast(Callable[[int, str | None], ExecutionResult], executor_fn)
+
+        def _wrapped_executor(
+            turn_index: int,
+            correction_note: str | None,
+            _reset_session: bool,
+        ) -> ExecutionResult:
+            return legacy_fn(turn_index, correction_note)
+
+        return _wrapped_executor
+    return cast(ExecutorFn, executor_fn)
 
 
 @dataclass
@@ -126,6 +155,20 @@ def resolve_supervisor_max_turns(workspace: str | Any) -> int:
     return max(1, min(5, resolved))
 
 
+def _resolve_session_reset_every() -> int:
+    """Reset executor session every N turns. 0/unset = never. Env-only for v1."""
+    import os
+
+    raw = os.environ.get("MCP_CODER_SUPERVISOR_SESSION_RESET_EVERY", "").strip()
+    if not raw:
+        return 0
+    try:
+        value = int(raw)
+    except ValueError:
+        return 0
+    return value if value > 0 else 0
+
+
 def _parse_decision_action(raw: str) -> SupervisorAction | None:
     text = (raw or "").strip()
     if not text:
@@ -180,7 +223,7 @@ class SupervisorAgent:
         self._delegation_id = delegation_id
         self._workspace_path = workspace_path
         self._spec_path = spec_path
-        self._executor_fn = executor_fn
+        self._executor_fn = _normalize_executor_fn(executor_fn)
         self._reviewer_fn = reviewer_fn
         self._decision_fn = decision_fn
         self._max_turns = max(1, int(max_turns))
@@ -199,6 +242,7 @@ class SupervisorAgent:
         self._pending_host_clarification: str | None = None
         self._project_state: Any | None = None
         self._project_state_trace_enabled = False
+        self._resumed_from_pause: bool = False
 
     @property
     def loop_id(self) -> str:
@@ -229,7 +273,7 @@ class SupervisorAgent:
         Keeps cross-delegation state intact: _project_state, _workspace_path.
         """
         self._delegation_id = delegation_id
-        self._executor_fn = executor_fn
+        self._executor_fn = _normalize_executor_fn(executor_fn)
         self._reviewer_fn = reviewer_fn
         self._decision_fn = decision_fn
         self._max_turns = max(1, int(max_turns))
@@ -246,6 +290,7 @@ class SupervisorAgent:
         self._last_result = None
         self._completed_turn_artifacts = []
         self._pending_host_clarification = None
+        self._resumed_from_pause = False
         # Reset so begin() re-enables it when spec_path is not None.
         self._project_state_trace_enabled = False
         # _project_state and _workspace_path are intentionally preserved.
@@ -282,6 +327,7 @@ class SupervisorAgent:
         answer = (host_answer or "").strip()
         if answer:
             agent._pending_host_clarification = f"## Host clarification\n{answer}"
+        agent._resumed_from_pause = True
         agent._emit(
             {
                 "type": "supervisor_resumed",
@@ -310,10 +356,26 @@ class SupervisorAgent:
                 turns_completed = turn_index
                 t0 = time.perf_counter()
                 self._emit_turn_start(turn_index)
+                resumed_first_turn = bool(
+                    self._resumed_from_pause and turn_index == self._cur_turn + 1
+                )
+                reset_session = self._should_reset_executor_session(turn_index)
+                if reset_session:
+                    self._emit(
+                        {
+                            "type": "supervisor_session_reset",
+                            "turn_index": turn_index,
+                            "reason": (
+                                "resumed_first_turn" if resumed_first_turn else "interval"
+                            ),
+                        }
+                    )
 
                 try:
-                    result = self._executor_fn(turn_index, correction)
+                    result = self._executor_fn(turn_index, correction, reset_session)
                 except Exception as exc:  # worker blew up — close loop cleanly
+                    if resumed_first_turn:
+                        self._resumed_from_pause = False
                     last_result = last_result
                     final_action = "escalate_host"
                     end_reason = f"executor_exception: {type(exc).__name__}"
@@ -332,6 +394,8 @@ class SupervisorAgent:
                         decisions=decisions,
                     )
 
+                if resumed_first_turn:
+                    self._resumed_from_pause = False
                 last_result = result
                 checks = None
                 if self._reviewer_fn is not None:
@@ -894,3 +958,21 @@ class SupervisorAgent:
         if not questions and decisions and decisions[-1].reason.strip():
             questions.append(decisions[-1].reason.strip())
         return questions[:5]
+
+    def _should_reset_executor_session(self, turn_index: int) -> bool:
+        """Decide whether the executor session should be reset before this turn.
+
+        Backend-neutral: returns a boolean intent. The caller's executor_fn decides
+        how to honor it (e.g. drop a cached Aider Coder). Reasons:
+        - First turn of a resumed delegation: the cached session predates the pause
+          and is stale.
+        - Every N turns when MCP_CODER_SUPERVISOR_SESSION_RESET_EVERY is set (drift bound).
+        Richer adaptation policy is deferred to a later phase (BL-546).
+        """
+        if self._resumed_from_pause and turn_index == self._cur_turn + 1:
+            # _cur_turn is the resumed-at turn; the next turn is the first new one.
+            return True
+        every = _resolve_session_reset_every()
+        if every > 0 and turn_index > 1 and (turn_index - 1) % every == 0:
+            return True
+        return False

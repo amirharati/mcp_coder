@@ -2294,48 +2294,65 @@ delegate_to_agent(resume_token="sv_abc123", answer="yes, also add rate limiting"
 
 ---
 
-### BL-545: Supervisor-owned executor session lifecycle
+### BL-545: Supervisor-owned executor session lifecycle (v1 — control plane)
 
-**Status:** `idea` — 2026-06-21. **End of Phase 12 / Phase 13 candidate.**
-**Related:** BL-544 (pause/resume), BL-543 (context lifecycle), P12-ISS-002 (singleton Supervisor).
+**Status:** `in_phase` — 2026-06-21. **Worker spec:** `docs/tasks/BL-545-supervisor-owned-executor-session.md`.
+**Related:** BL-544 (pause/resume), BL-543 (context lifecycle), BL-546 (deferred adaptation), P12-ISS-002/003 (shipped interim fixes).
 
 **Problem:**
 Aider session lifetime is currently controlled by `session_policy` (env var / workspace config) keyed on the **host Cursor session ID** — an external signal that has nothing to do with the project's needs. This leads to two problems:
 
 1. **Wrong owner.** The host (Cursor) decides when to reset Aider's context; the Supervisor — the only component with project knowledge — has no say.
-2. **Stale session after pause/resume.** When a delegation pauses and resumes, the cached Aider Coder (pre-pause) stays in `executor_cache._CODERS[mcp_session_id]`. The resume turn uses a fresh, uncached Coder (`mcp_session_id=None`). The next normal delegation then picks up the stale pre-pause Coder — a conversation history gap that Aider cannot reason about.
+2. **Stale session after pause/resume.** When a delegation pauses and resumes, a cached pre-pause Coder can be reused (P12-ISS-003 now passes real `mcp_session_id` on resume). That session predates the pause gap and is stale.
 
-**Goal:** The Supervisor decides when to reset the executor session. It is the only layer with the information needed to make that decision:
-- Turn count (Aider's context window growing)
-- Hot-areas drift (files changed diverge from what Aider loaded)
-- Pause/resume happened (session gap → stale)
-- Explicit user signal (`start_fresh`)
+**Goal (v1 — infrastructure-first):** Put the *control* of executor-session reset in the Supervisor and wire the plumbing end to end. **Not** smart context adaptation — keep current session/context behavior except where correctness forces a reset. Improve the reset *mechanism* later (see **BL-546**).
 
-**Design (backend-neutral):**
+**v1 scope (ships now):**
 
-Extend `ExecutorFn` with an optional `reset_session` hint:
+Extend `ExecutorFn` with a `reset_session` hint:
 ```python
-# Before:
-ExecutorFn = Callable[[int, str | None], ExecutionResult]
-# After:
 ExecutorFn = Callable[[int, str | None, bool], ExecutionResult]
 #                      turn  correction  reset_session
 ```
 
-`SupervisorAgent` decides `reset_session=True` when:
-- First turn after a resume (`_resumed_from_pause = True`)
-- Hot-areas overlap with `_completed_turn_artifacts` is below threshold
-- Turn count exceeds a configurable max (e.g. every 5 turns)
+`SupervisorAgent` signals `reset_session=True` only when:
+- **First turn after a resume** (`_resumed_from_pause`) — correctness requirement
+- **Optional every-N turns** via `MCP_CODER_SUPERVISOR_SESSION_RESET_EVERY` — **default OFF** (env unset = never); proves the control plane without changing normal behavior
 
-`mcp_server.py` handles the Aider-specific eviction inside `_executor_fn` — `drop_coder(mcp_session_id)` — so no Aider API leaks into the Supervisor.
+On reset, v1 only calls `drop_coder(mcp_session_id)` in `mcp_server.py`; the existing Coder creation path rebuilds context exactly as today (no new context logic).
 
-`session_policy` env var becomes a default hint (override for `always_new` disables reuse entirely); the Supervisor's own policy takes precedence otherwise.
+`mcp_server.py` handles Aider-specific eviction inside `_executor_fn` — no Aider API in `supervisor_agent.py`.
 
-**Interim fix (P12-ISS-002 scope):**
-- Drop the stale Coder from `executor_cache` when a delegation pauses (before returning `needs_input`).
-- Pass `mcp_session_id` into `_handle_resume` so the resume turn can at minimum benefit from the warm repo map cache when policy allows.
+**Interim fixes (shipped):**
+- P12-ISS-002: `drop_coder` on pause (`needs_input` / escalated outcome).
+- P12-ISS-003: resume path receives acquired `mcp_session_id` after `SessionStore().acquire(...)`.
 
-**Phase placement:** End of Phase 12 (after P12-005) or Phase 13. Depends on P12-ISS-002 (Supervisor singleton). The interim fix ships in P12-ISS-002.
+**Deferred → BL-546:** hot-area drift, `session_policy` as Supervisor hint, token-window signals, smarter context rebuild on reset.
+
+**Phase placement:** Phase 12 close-out (after P12-005 + P12 issues). Depends on P12-ISS-002/003.
+
+---
+
+### BL-546: Executor session context adaptation (smarter reset policy)
+
+**Status:** `deferred` — 2026-06-21. **Later phase** (post BL-545 v1 control plane).
+**Related:** BL-545 (control plane), BL-543 (context lifecycle), BL-542 (two-tier context).
+
+**Problem:**
+BL-545 v1 only lays plumbing: Supervisor can signal `reset_session`, but the policy is deliberately trivial (resume-first-turn + optional every-N). Real value comes from resetting (and rebuilding) executor context when the session's loaded files / conversation no longer match what the delegation needs.
+
+**Goal:** Richer, project-aware reset decisions and context adaptation **after** the BL-545 control plane is in place and stable.
+
+**Candidate signals (not v1):**
+- Hot-area drift — files actually changed diverge from what the executor session loaded
+- Turn / token budget — context window growth beyond a threshold
+- `session_policy` becomes a default hint; Supervisor policy takes precedence
+- Workspace yaml config for reset interval (not env-only)
+- Smarter rebuild on reset — selective re-inject of project state, hot areas, plan (pairs with BL-543)
+
+**Design constraint:** keep backend-neutral signals in Supervisor; Aider-specific eviction/rebuild stays in `server/` / `core/session/`.
+
+**Phase placement:** Phase 13+ candidate. Do not block BL-545 v1.
 
 ---
 
@@ -2482,6 +2499,7 @@ The MCP-facilitated path is the architectural win: the junior PM host calls `mcp
 
 | Date | Change |
 |------|--------|
+| 2026-06-21 | **BL-545 updated + BL-546 added** — BL-545 reframed as v1 control-plane slice (resume-first-turn reset + optional every-N, default off; worker spec `BL-545-supervisor-owned-executor-session.md`). Smarter context adaptation deferred to **BL-546** (later phase). |
 | 2026-06-21 | **BL-545 added** — Supervisor-owned executor session lifecycle: Supervisor decides when to reset Aider session (turn count, hot-area drift, post-resume); `ExecutorFn` gains `reset_session` hint; interim fix (drop stale Coder on pause, pass `mcp_session_id` to resume) ships in P12-ISS-002. End of Phase 12 / Phase 13. |
 | 2026-06-20 | **BL-530 + BL-542 updated** — revised to reflect two-tier context model (D-ARCH-11) and `SupervisorToolRunner` as the Phase 12 implementation. Tier 1 = slow-changing base context; Tier 2 = on-demand tool calls driven by Supervisor LLM reasoning. Phase 13+ tools (RAG search, cross-project) deferred. |
 | 2026-06-20 | **BL-544 added** — Supervisor pause/resume: stateful agent across multiple `delegate_to_agent` calls via `resume_token`; skips already-completed pipeline stages on resume; host answer injected into continuation brief. High priority for real production use. |

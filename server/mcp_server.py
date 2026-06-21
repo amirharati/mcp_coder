@@ -1435,7 +1435,7 @@ def _get_or_create_supervisor(
         agent = SupervisorAgent(
             delegation_id=None,  # will be set by begin_delegation()
             workspace_path=workspace_path,
-            executor_fn=lambda _t, _c: None,  # placeholder; overwritten by begin_delegation
+            executor_fn=lambda _t, _c, _reset=False: None,  # placeholder; overwritten by begin_delegation
             spec_path=spec_path,
         )
         _SUPERVISOR_REGISTRY[project_key] = agent
@@ -1483,7 +1483,15 @@ def _handle_resume(
 
             event_sink = _resume_event_sink
 
-        def _executor_fn(_turn_index: int, correction_note: str | None) -> ExecutionResult:
+        def _executor_fn(
+            _turn_index: int,
+            correction_note: str | None,
+            reset_session: bool = False,
+        ) -> ExecutionResult:
+            if reset_session and mcp_session_id:
+                from core.session.executor_cache import drop_coder
+
+                drop_coder(mcp_session_id)
             prompt = base_prompt
             if correction_note:
                 prompt = f"{prompt}\n\n{correction_note}"
@@ -2136,7 +2144,7 @@ def delegate_to_agent(
                 delegation_id=delegation_id,
                 # executor_fn/reviewer_fn unused in host-driven mode (mcp_server owns
                 # the executor + reviewer plumbing and drives the loop turn-by-turn).
-                executor_fn=lambda _turn, _correction: result,
+                executor_fn=lambda _turn, _correction, _reset=False: result,
                 max_turns=_supervisor_max_turns,
                 event_sink=_supervisor_event_sink,
                 spec_path=spec_rel_path,
