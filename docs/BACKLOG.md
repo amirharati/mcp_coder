@@ -2400,6 +2400,41 @@ When a sub-helper would block on a question answerable from known project contex
 
 ---
 
+### BL-548: Mid-loop crash recovery (per-turn agent checkpoint)
+
+**Status:** `deferred` — 2026-06-21. **Phase 13+ candidate** (not Phase 13 cleanup scope).
+**Related:** P13-007 (steady-state agent checkpoint at delegation boundaries), BL-544 (pause/resume), BL-545 (executor session lifecycle).
+
+**Problem:**
+P13-007 shipped `AgentCheckpoint` — a steady-state snapshot of the `SupervisorAgent` written at the end of **every delegation** (success / error / escalated) to `projects/<project_key>/agent_state.json`, rehydrated by `_get_or_create_supervisor()` on a fresh process. This makes the agent genuinely stateful across restarts **between delegations**: CLI ≡ server invariant holds, the in-memory `_SUPERVISOR_REGISTRY` is a cache of the on-disk truth.
+
+But P13-007 deliberately does **not** cover **mid-loop crash recovery**. If a process dies at turn 3 of a 5-turn delegation (laptop sleep, OOM, deploy, Ctrl-C), the `AgentCheckpoint` on disk reflects the *previous* delegation's end-state — not turn 3 of the in-flight one. On restart, `_get_or_create_supervisor()` rehydrates to the prior delegation's checkpoint, and the in-flight delegation's turn progress (`_cur_turn`, `_decisions`, `_completed_turn_artifacts`) is lost. The host would have to re-run the delegation from turn 0.
+
+Today this is acceptable because:
+- Most delegations are short (1–3 turns).
+- `SupervisorState` (escalation-only, expiring) already handles the *intentional* pause case — the host paused to answer a question.
+- The unintentional crash case is rare and the cost of re-running a short delegation is low.
+
+**Goal (BL-548):**
+Checkpoint the agent's **intra-delegation turn state** periodically during the loop, so a crash at turn N can resume from turn N (or N-1) rather than restarting the delegation. Distinct from `SupervisorState` (which is for *intentional* pause/resume with a host answer) and `AgentCheckpoint` (which is steady-state between delegations).
+
+**Candidate approaches (not committed):**
+- **Per-turn checkpoint:** write a `turn_state.json` after each `complete_turn()` with `_cur_turn`, `_decisions`, `_completed_turn_artifacts`, `executor_result` summary. On restart, detect an unfinished delegation and offer resume.
+- **Write-ahead log:** append-only JSONL of turn events; replay on restart. Heavier but survives partial writes.
+- **Hybrid:** checkpoint every N turns (configurable) to bound disk writes; crash loses at most N-1 turns of progress.
+
+**Open questions:**
+- How does the host learn a delegation was in-flight on restart? (Response payload field? CLI flag? Auto-detect via unfinished `turn_state.json`?)
+- Should mid-loop resume re-run the executor for the lost turn, or trust the last `executor_result`? (Re-running is safer; trusting is faster but may double-apply file edits.)
+- How does this interact with `SupervisorState` (escalation pause)? Two resume paths could confuse the host.
+
+**Cost/benefit:**
+Defer until delegations routinely span many turns or long wall-clock time, OR until a real crash causes meaningful lost work. P13-007's steady-state checkpoint is the high-value 80%; BL-548 is the long-tail 20%.
+
+**Phase placement:** Phase 13+ candidate. Do not block P13-007 on this.
+
+---
+
 ## Done
 
 | ID | Item | Completed |
@@ -2543,6 +2578,7 @@ The MCP-facilitated path is the architectural win: the junior PM host calls `mcp
 
 | Date | Change |
 |------|--------|
+| 2026-06-21 | **BL-548 added** — mid-loop crash recovery (per-turn agent checkpoint). Deferred from P13-007, which shipped steady-state checkpoint at delegation boundaries only. Long-tail 20% after P13-007's high-value 80%. |
 | 2026-06-21 | **Phase 12 closed** — P12-001..P12-005 + issues + BL-545 v1 shipped; partial items (BL-543, BL-529, BL-525) and D-ARCH-8 → **BL-547** deferred; Phase 13 opened (stabilize + dogfood). |
 | 2026-06-21 | **BL-547 added** — D-ARCH-8 supervisor autonomous interception (`supervisor_intercept`); deferred post–Phase 12 infra. |
 | 2026-06-21 | **BL-545 added** — Supervisor-owned executor session lifecycle: Supervisor decides when to reset Aider session (turn count, hot-area drift, post-resume); `ExecutorFn` gains `reset_session` hint; interim fix (drop stale Coder on pause, pass `mcp_session_id` to resume) ships in P12-ISS-002. End of Phase 12 / Phase 13. |

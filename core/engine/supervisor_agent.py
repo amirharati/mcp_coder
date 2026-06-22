@@ -23,6 +23,7 @@ callable producing an :class:`ExecutionResult`.
 from __future__ import annotations
 
 import inspect
+import logging
 import time
 from collections.abc import Callable
 from dataclasses import asdict, dataclass, field
@@ -30,6 +31,8 @@ from typing import Any, Literal, cast
 
 from core.engine.base import ExecutionResult
 from core.state.supervisor_state import SupervisorState
+
+logger = logging.getLogger(__name__)
 
 SupervisorAction = Literal["rerun_aider", "done", "escalate_host"]
 SupervisorOutcome = Literal["success", "escalated", "error"]
@@ -243,6 +246,22 @@ class SupervisorAgent:
         self._project_state: Any | None = None
         self._project_state_trace_enabled = False
         self._resumed_from_pause: bool = False
+        # P13-005: shared lifecycle context (persisted to SupervisorState on escalation)
+        self._lifecycle_context: dict[str, Any] = {}
+        self._lifecycle_phases: dict[str, str] = {}  # phase → status
+        self._lifecycle_started: bool = False  # P13-006: envelope started by set_lifecycle_context/emit_lifecycle_start
+        # P13-008: True once emit_lifecycle_end has fired for the current envelope.
+        # Subsequent emit_lifecycle_end / emit_lifecycle_phase_* calls become no-ops
+        # (with a warning) — the per-delegation envelope is single-shot. Reset to
+        # False in begin_delegation() so the same agent instance (registry cache hit)
+        # can open a fresh envelope on the next delegation.
+        self._lifecycle_closed: bool = False
+        # P13-007: True when this agent was rehydrated from an AgentCheckpoint
+        # (post-restart / CLI mode). Identity + lifecycle context restored, but
+        # _lifecycle_started stays False — the next delegation emits a fresh
+        # lifecycle_start(resumed=False). The checkpoint is history, not an
+        # open envelope.
+        self._resumed_from_checkpoint: bool = False
 
     @property
     def loop_id(self) -> str:
@@ -254,6 +273,53 @@ class SupervisorAgent:
 
     def set_plan(self, plan: str | None) -> None:
         self._plan = plan
+
+    # P13-006: late-binding setters so the server can create the agent early
+    # (before delegation_id / event_sink / spec_path are known) and wire them
+    # in once the session is acquired. This lets the agent own the lifecycle
+    # envelope from the very first event, before preloop work begins.
+    def set_delegation_id(self, delegation_id: str | None) -> None:
+        self._delegation_id = delegation_id
+        self._loop_id = (
+            f"{delegation_id}:supervisor:1" if delegation_id else "supervisor:1"
+        )
+
+    def set_lifecycle_event_sink(self, sink: EventSink | None) -> None:
+        self._event_sink = sink
+
+    def set_spec_path(self, spec_path: str | None) -> None:
+        self._spec_path = spec_path
+
+    # P13-007: rehydrate steady-state identity + lifecycle context from a
+    # checkpoint saved at the end of the previous delegation. Called by
+    # _get_or_create_supervisor() when the in-memory registry misses (fresh
+    # process, post-restart, or CLI invocation). Restores identity + lifecycle
+    # position but NOT _lifecycle_started — the next delegation must emit a
+    # fresh lifecycle_start(resumed=False). The checkpoint is history, not an
+    # open envelope.
+    def rehydrate_from(self, checkpoint: "object") -> None:
+        from core.state.agent_checkpoint import AgentCheckpoint
+
+        if not isinstance(checkpoint, AgentCheckpoint):
+            return
+        self._lifecycle_context = dict(checkpoint.lifecycle_context)
+        self._lifecycle_context.setdefault("project_key", checkpoint.project_key)
+        # Deliberately do NOT set _lifecycle_started=True. A new delegation
+        # emits a fresh envelope; the checkpoint is prior history.
+        self._resumed_from_checkpoint = True
+        # P13-007: emit a trace event so dogfood traces can confirm rehydration
+        # happened (observability for the CLI ≡ server invariant). Best-effort:
+        # the sink may not be wired yet at rehydrate time (server creates agent
+        # before setting sink); in that case the event is silently dropped.
+        self._emit(
+            {
+                "type": "agent_rehydrated",
+                "project_key": checkpoint.project_key,
+                "last_delegation_id": checkpoint.last_delegation_id,
+                "last_outcome": checkpoint.last_outcome,
+                "last_finished_at": checkpoint.last_finished_at,
+            }
+        )
 
     def begin_delegation(
         self,
@@ -294,6 +360,18 @@ class SupervisorAgent:
         # Reset so begin() re-enables it when spec_path is not None.
         self._project_state_trace_enabled = False
         # _project_state and _workspace_path are intentionally preserved.
+        # P13-005: reset lifecycle tracking per delegation.
+        # P13-006: but preserve context that was set before preloop (lifecycle_start +
+        # phase_start(preloop) already emitted by the server's early agent creation).
+        # If the caller already started the envelope (via set_lifecycle_context /
+        # emit_lifecycle_start), keep it; otherwise reset to a clean slate.
+        if not self._lifecycle_started:
+            self._lifecycle_context = {}
+            self._lifecycle_phases = {}
+        # P13-008: a fresh delegation opens a fresh envelope — clear the closed
+        # flag even when the caller pre-populated lifecycle context (the prior
+        # delegation's close must not poison this one).
+        self._lifecycle_closed = False
 
     @classmethod
     def resume(
@@ -323,11 +401,17 @@ class SupervisorAgent:
 
         agent._project_state = ProjectState.load(state.project_key)
         agent._project_state_trace_enabled = True
-        agent._emit_project_state_loaded(state.project_key)
         answer = (host_answer or "").strip()
         if answer:
             agent._pending_host_clarification = f"## Host clarification\n{answer}"
         agent._resumed_from_pause = True
+        # P13-005: restore lifecycle context from persisted state
+        agent._lifecycle_context = dict(state.lifecycle_context or {})
+        agent._lifecycle_context.setdefault("project_key", state.project_key)
+        # P13-005: emit coherent lifecycle envelope for resumed path (preloop already done)
+        # Order: lifecycle_start → phase_start(loop) → supervisor_resumed → project_state_loaded
+        agent.emit_lifecycle_start(resumed=True)
+        agent.emit_lifecycle_phase_start("loop", resumed=True)
         agent._emit(
             {
                 "type": "supervisor_resumed",
@@ -337,9 +421,81 @@ class SupervisorAgent:
                 "host_answer_chars": len(host_answer or ""),
             }
         )
+        agent._emit_project_state_loaded(state.project_key)
         return agent
 
     # ── public API ─────────────────────────────────────────────────────────
+
+    # P13-006: delegate() and resume_and_delegate() are the canonical ownership
+    # entry points. Today the server still wires workers (executor/reviewer) and
+    # drives the loop turn-by-turn for implement mode, so these methods are thin
+    # markers that emit the lifecycle envelope the agent owns. They exist so a
+    # future refactor can move the orchestration body behind them without
+    # changing the public surface. Callers may use begin_delegation()/run()
+    # directly; these wrappers are for code that wants to signal "the agent
+    # owns this delegation" explicitly.
+    def delegate(
+        self,
+        *,
+        delegation_id: str,
+        executor_fn: ExecutorFn,
+        reviewer_fn: ReviewerFn | None = None,
+        max_turns: int = 1,
+        event_sink: EventSink | None = None,
+        spec_path: str | None = None,
+        plan: str | None = None,
+    ) -> None:
+        """Agent-owned delegation entry point.
+
+        Emits the lifecycle envelope (lifecycle_start + phase_start(preloop))
+        the agent owns, then delegates to begin_delegation() for state setup.
+        The server's delegate_to_agent() is the thin caller of this method.
+        """
+        if self._delegation_id is None or self._delegation_id != delegation_id:
+            self.set_delegation_id(delegation_id)
+        if event_sink is not None:
+            self.set_lifecycle_event_sink(event_sink)
+        if spec_path is not None:
+            self.set_spec_path(spec_path)
+        # Only emit if not already emitted by an earlier set_lifecycle_context path.
+        if not self._lifecycle_phases:
+            self.emit_lifecycle_start(resumed=False)
+            self.emit_lifecycle_phase_start("preloop", resumed=False)
+        self.begin_delegation(
+            delegation_id=delegation_id,
+            executor_fn=executor_fn,
+            reviewer_fn=reviewer_fn,
+            max_turns=max_turns,
+            event_sink=event_sink,
+            spec_path=spec_path,
+            plan=plan,
+        )
+
+    @classmethod
+    def resume_and_delegate(
+        cls,
+        state: SupervisorState,
+        host_answer: str,
+        *,
+        workspace_path: str,
+        executor_fn: ExecutorFn,
+        reviewer_fn: ReviewerFn | None = None,
+        event_sink: EventSink | None = None,
+    ) -> "SupervisorAgent":
+        """Agent-owned resume entry point (thin alias for resume()).
+
+        resume() already emits lifecycle_start(resumed=True) + phase_start(loop,
+        resumed=True). This alias exists so callers can signal "the agent owns
+        the resumed delegation" without coupling to the internal resume() name.
+        """
+        return cls.resume(
+            state,
+            host_answer,
+            workspace_path=workspace_path,
+            executor_fn=executor_fn,
+            reviewer_fn=reviewer_fn,
+            event_sink=event_sink,
+        )
 
     def run(self) -> SupervisorAgentResult:
         """Drive the supervisor loop to completion and return the final outcome."""
@@ -711,6 +867,12 @@ class SupervisorAgent:
         if outcome == "escalated":
             pause_reason = "max_turns_reached" if end_reason == "max_turns_reached" else "needs_input"
             paused_questions = self._paused_questions(executor_result, decisions)
+            # P13-005: include lifecycle context so resume can restore lifecycle position
+            _lc_for_state = dict(self._lifecycle_context)
+            _lc_for_state["phases_completed"] = [
+                phase for phase, status in self._lifecycle_phases.items()
+                if status not in ("in_progress",)
+            ]
             state = SupervisorState.create(
                 spec_path=self._spec_path,
                 context_ref=self._delegation_id or self._loop_id,
@@ -720,6 +882,7 @@ class SupervisorAgent:
                 turn_index=turns_completed,
                 questions=list(paused_questions),
                 pause_reason=pause_reason,
+                lifecycle_context=_lc_for_state,
             )
             state.save()
             resume_token = state.resume_token
@@ -760,6 +923,13 @@ class SupervisorAgent:
                         "file_path": str(saved_path),
                     }
                 )
+        # P13-007: checkpoint the agent's steady-state identity + lifecycle
+        # position at the end of EVERY delegation (success / error / escalated).
+        # This is what makes the agent genuinely stateful across restarts —
+        # _get_or_create_supervisor() rehydrates from this file when the
+        # in-memory registry misses. Distinct from SupervisorState (which is
+        # escalation-only, expiring, intra-delegation resume).
+        self._save_agent_checkpoint(outcome=outcome)
         return SupervisorAgentResult(
             outcome=outcome,
             turns_completed=turns_completed,
@@ -773,6 +943,60 @@ class SupervisorAgent:
             completed_turn_artifacts=list(self._completed_turn_artifacts),
         )
 
+    def _save_agent_checkpoint(self, *, outcome: str) -> None:
+        """P13-007: write AgentCheckpoint (steady-state, non-expiring) to disk.
+
+        Called from _finish() for every outcome (success / error / escalated).
+        Best-effort: never raises — a checkpoint failure must not fail the
+        delegation. Emits an additive `agent_checkpoint_saved` trace event.
+        """
+        try:
+            from core.state.agent_checkpoint import AgentCheckpoint, utc_now_iso
+            from core.state.project_key import ProjectKeyResolver
+
+            project_key = self._lifecycle_context.get("project_key") or (
+                ProjectKeyResolver.from_spec_path(self._spec_path)
+                if self._spec_path
+                else ""
+            )
+            if not project_key:
+                # No project_key resolvable — skip checkpoint (can't namespace it).
+                return
+            # Build phases_completed summary (mirror P13-005 SupervisorState logic)
+            lc_for_checkpoint = dict(self._lifecycle_context)
+            lc_for_checkpoint["phases_completed"] = [
+                phase
+                for phase, status in self._lifecycle_phases.items()
+                if status not in ("in_progress",)
+            ]
+            checkpoint = AgentCheckpoint(
+                project_key=project_key,
+                last_delegation_id=self._delegation_id,
+                last_outcome=outcome,
+                last_spec_path=self._spec_path,
+                last_finished_at=utc_now_iso(),
+                lifecycle_context=lc_for_checkpoint,
+            )
+            saved_path = checkpoint.save()
+            self._emit(
+                {
+                    "type": "agent_checkpoint_saved",
+                    "project_key": project_key,
+                    "last_delegation_id": self._delegation_id,
+                    "last_outcome": outcome,
+                    "file_path": str(saved_path),
+                }
+            )
+        except Exception as exc:
+            # Best-effort: log + emit warning, never fail the delegation.
+            logger.warning("Agent checkpoint save failed: %s", exc)
+            self._emit(
+                {
+                    "type": "agent_checkpoint_save_failed",
+                    "error": f"{type(exc).__name__}: {exc}",
+                }
+            )
+
     def context_block(self, result: SupervisorAgentResult) -> dict[str, Any]:
         """Delegation-record block describing the agent loop (replaces supervisor_outer_loop)."""
         return {
@@ -781,6 +1005,123 @@ class SupervisorAgent:
             "final_action": result.final_action,
             "end_reason": result.end_reason,
         }
+
+    # ── P13-005: lifecycle envelope public API ───────────────────────────────
+    # Used by the server (regular path) and by resume() (resume path).
+    # In the regular path the server calls set_lifecycle_context() +
+    # update_reviewer_pass_result() so the context is persisted on escalation;
+    # the emit_* methods are used by the resume path and by tests.
+
+    def set_lifecycle_context(
+        self,
+        *,
+        project_key: str = "",
+        session_policy: str = "",
+        session_action: str = "",
+        mcp_session_id: str = "",
+    ) -> None:
+        """Store lifecycle metadata for traces and pause/resume persistence."""
+        self._lifecycle_context.update(
+            {
+                "project_key": project_key,
+                "session_policy": session_policy,
+                "session_action": session_action,
+                "mcp_session_id": mcp_session_id,
+            }
+        )
+        self._lifecycle_started = True  # P13-006: caller started the envelope
+
+    def update_reviewer_pass_result(self, result: str) -> None:
+        """Record latest reviewer pass result in lifecycle context."""
+        self._lifecycle_context["reviewer_pass_result"] = result
+
+    def emit_lifecycle_start(self, *, resumed: bool = False) -> None:
+        """Emit delegation_lifecycle_start event (additive envelope, P13-005)."""
+        self._lifecycle_started = True  # P13-006: envelope started
+        self._emit(
+            {
+                "type": "delegation_lifecycle_start",
+                "project_key": self._lifecycle_context.get("project_key", ""),
+                "spec_path": self._spec_path,
+                "session_policy": self._lifecycle_context.get("session_policy", ""),
+                "session_action": self._lifecycle_context.get("session_action", ""),
+                "mcp_session_id": self._lifecycle_context.get("mcp_session_id", ""),
+                "resumed": resumed,
+            }
+        )
+
+    def emit_lifecycle_phase_start(self, phase: str, *, resumed: bool = False) -> None:
+        """Emit delegation_phase_start event (additive envelope, P13-005)."""
+        if self._lifecycle_closed:
+            # P13-008: envelope already closed — a phase event here is a bug
+            # (e.g. an early-close branch fell through to the postloop block).
+            # No-op + warn rather than emit a stray event that breaks the
+            # single-envelope-per-delegation invariant.
+            logger.warning(
+                "emit_lifecycle_phase_start(%s) called after lifecycle envelope "
+                "already closed; ignoring.", phase,
+            )
+            return
+        self._lifecycle_phases[phase] = "in_progress"
+        self._emit(
+            {
+                "type": "delegation_phase_start",
+                "project_key": self._lifecycle_context.get("project_key", ""),
+                "phase": phase,
+                "resumed": resumed,
+            }
+        )
+
+    def emit_lifecycle_phase_end(
+        self, phase: str, *, status: str = "ok", detail: str | None = None
+    ) -> None:
+        """Emit delegation_phase_end event (additive envelope, P13-005)."""
+        if self._lifecycle_closed:
+            # P13-008: see emit_lifecycle_phase_start.
+            logger.warning(
+                "emit_lifecycle_phase_end(%s) called after lifecycle envelope "
+                "already closed; ignoring.", phase,
+            )
+            return
+        self._lifecycle_phases[phase] = status
+        rec: dict[str, Any] = {
+            "type": "delegation_phase_end",
+            "project_key": self._lifecycle_context.get("project_key", ""),
+            "phase": phase,
+            "status": status,
+        }
+        if detail is not None:
+            rec["detail"] = detail
+        self._emit(rec)
+
+    def emit_lifecycle_end(self, outcome: str) -> None:
+        """Emit delegation_lifecycle_end event (additive envelope, P13-005).
+
+        P13-008: idempotent — the per-delegation envelope closes exactly once.
+        A second call (e.g. from an early-close branch that fell through to the
+        postloop block) is a no-op with a warning, rather than emitting a stray
+        second ``delegation_lifecycle_end`` that would break the
+        single-envelope-per-delegation invariant and corrupt checkpoint
+        ``phases_completed``.
+        """
+        if self._lifecycle_closed:
+            logger.warning(
+                "emit_lifecycle_end(%s) called after lifecycle envelope already "
+                "closed; ignoring (previous outcome was emitted).", outcome,
+            )
+            return
+        self._lifecycle_closed = True
+        self._emit(
+            {
+                "type": "delegation_lifecycle_end",
+                "project_key": self._lifecycle_context.get("project_key", ""),
+                "outcome": outcome,
+                "phase_summary": dict(self._lifecycle_phases),
+                "reviewer_pass_result": self._lifecycle_context.get(
+                    "reviewer_pass_result"
+                ),
+            }
+        )
 
     def _emit_loop_start(self) -> None:
         self._loop_start_emitted = True

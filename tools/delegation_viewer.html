@@ -418,6 +418,9 @@
     /* mcp scope: amber */
     .ev-row.scope-mcp    { border-left-color: #f59e0b; }
     .ev-r-type.scope-mcp { color: #f59e0b; }
+    /* agent scope: teal (P13-008 — lifecycle envelope + checkpoint events) */
+    .ev-row.scope-agent   { border-left-color: #2dd4bf; }
+    .ev-r-type.scope-agent { color: #2dd4bf; }
     .ev-row.scope-post   { border-left-color: #94a3b8; opacity: 0.92; }
     .ev-r-type.scope-post { color: #94a3b8; }
     /* executor → llm (send): blue */
@@ -446,6 +449,14 @@
     }
     .ev-step-div-name { font-weight: 700; color: #94a3b8; letter-spacing: 0.04em; min-width: 120px; }
     .ev-step-div-kind { color: #64748b; }
+    /* P13-008: agent phase dividers get a teal accent (vs executor step dividers) */
+    .ev-step-divider.ev-step-divider-agent {
+      background: #0f2a26;
+      border-top-color: #2dd4bf;
+      border-bottom-color: #2dd4bf;
+    }
+    .ev-step-divider.ev-step-divider-agent .ev-step-div-name { color: #2dd4bf; }
+    .ev-step-divider.ev-step-divider-agent .ev-step-div-kind { color: #5eead4; }
   </style>
 </head>
 <body>
@@ -1259,6 +1270,8 @@
         if (n === "mcp→post")        return { cls: "scope-mcp scope-post", label: "mcp→post" };
         if (n === "mcp→index")       return { cls: "scope-mcp scope-post", label: "index" };
         if (n.startsWith("mcp."))    return { cls: "scope-mcp", label: n.replace("mcp.", "") };
+        // P13-008: agent lifecycle envelope + checkpoint events (teal)
+        if (n.startsWith("agent."))  return { cls: "scope-agent", label: n.replace("agent.", "") };
         if (n.startsWith("executor→llm")) return { cls: "ve-send", label: "exec→llm" };
         if (n.startsWith("llm→executor")) return { cls: "ve-recv", label: "llm→exec" };
         if (n === "executor→mcp")    return { cls: "ve-recv", label: "exec→mcp" };
@@ -1321,7 +1334,10 @@
       // ── Full view_events path ─────────────────────────────────────────
       for (const ve of viewEvents) {
         if (ve.is_divider) {
-          html += `<div class="ev-step-divider">
+          // P13-008: agent phase boundaries get a teal accent so they're
+          // distinguishable from executor step dividers.
+          const divCls = (ve.scope === "agent") ? " ev-step-divider-agent" : "";
+          html += `<div class="ev-step-divider${divCls}">
             <span class="ev-step-div-name">${esc(ve.name || "step")}</span>
             <span class="ev-step-div-kind">${esc(ve.summary || "")}</span>
           </div>`;

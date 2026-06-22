@@ -27,8 +27,9 @@ After Phase 13:
 1. **Dogfood complete** — at least one multi-delegation scenario run via CLI and one via Cursor MCP; trace/log checklist signed off in P13-001 § Results.
 2. **Sequence validated** — pause/resume, project state load/save, singleton warm path, reviewer→state, planner pre-injection, and `supervisor_session_reset` (when applicable) observed in traces with expected ordering.
 3. **Docs match reality** — `supervisor-orchestration-layer.md` and phase exit tables reflect shipped Phase 12; stale Phase 12 planning cruft archived or marked historical.
-4. **Regression safety** — integration tests added for gaps found in dogfood (P13-003).
-5. **Backlog trimmed** — end-of-phase backlog review: 2–4 low-hanging items closed or explicitly deferred; no unbounded scope creep.
+4. **Single-agent lifecycle semantics** — MCP delegation is represented as one Supervisor-owned lifecycle (`preloop` + `loop` + `postloop`) with shared state awareness, even where deterministic gates remain outside LLM decisions.
+5. **Regression safety** — integration tests added for gaps found in dogfood (P13-003).
+6. **Backlog trimmed** — end-of-phase backlog review: 2–4 low-hanging items closed or explicitly deferred; no unbounded scope creep.
 
 ## Strategic context
 
@@ -50,12 +51,16 @@ Those stay in backlog until Phase 13 exit review prioritizes them for a later ph
 
 | Order | Milestone | Spec | Status | Notes |
 |-------|-----------|------|--------|-------|
-| 1 | P13-001 | [P13-001](../tasks/P13-001-dogfood-persistent-agent.md) | **pending** | Dogfood: existing CLI + Cursor; trace analysis (master session; no new scripts) |
-| 2 | P13-002 | *(pending)* | **pending** | Doc consolidation: architecture note, BACKLOG sync, archive stale notes |
-| 3 | P13-003 | *(pending)* | **pending** | Test hardening from P13-001 findings |
-| 4 | P13-004 | *(pending)* | **pending** | Low-hanging fixes + **end-of-phase backlog review** (items TBD after P13-001) |
+| 1 | P13-005 | [P13-005](../tasks/P13-005-supervisor-lifecycle-envelope.md) | **done** | Implemented: lifecycle envelope events + resume lifecycle context + tests (74 pass subset) |
+| 2 | P13-001 | [P13-001](../tasks/P13-001-dogfood-persistent-agent.md) | **done** | Dogfood verified lifecycle envelope in CLI traces (delegation `d1b0bea1`); pause/resume path verified (`3d0bb96e`); revealed P13-ISS-007 (envelope is retroactive, not agent-owned) |
+| 3 | P13-006 | [P13-006](../tasks/P13-006-supervisor-owns-lifecycle.md) | **done** | Move lifecycle ownership from server into `SupervisorAgent` — agent emits phase events as it transitions (non-retroactive), server becomes thin. Fixes P13-ISS-007. |
+| 4 | P13-007 | [P13-007](../tasks/P13-007-supervisor-agent-checkpoint.md) | **done** | Agent checkpoint at every delegation end (`AgentCheckpoint` / `agent_state.json`) — agent genuinely stateful across restarts; CLI ≡ server invariant holds. Mid-loop crash recovery deferred to BL-548. |
+| 4.5 | P13-008 | [P13-008](../tasks/P13-008-lifecycle-envelope-visibility.md) | **done** | Lifecycle envelope closure guard + viewer visibility + delegations-log parity. Fixes P13-ISS-008 (double-close on early-close paths), P13-ISS-009 (orphan delegations.jsonl rows), P13-ISS-010 (viewer dropped all 8 agent-envelope event types). |
+| 5 | P13-002 | *(pending)* | **pending** | Doc consolidation: architecture note, BACKLOG sync, archive stale notes |
+| 6 | P13-003 | *(pending)* | **pending** | Test hardening from P13-001 + P13-005 + P13-006 + P13-007 findings |
+| 7 | P13-004 | *(pending)* | **pending** | Low-hanging fixes + **end-of-phase backlog review** (items TBD after P13-001/P13-005/P13-006/P13-007) |
 
-**Gate:** P13-002..P13-004 scope is informed by P13-001 results. Do not pre-commit P13-004 backlog picks before dogfood analysis.
+**Gate:** P13-005 + P13-001 + P13-006 + P13-007 complete (agent owns lifecycle + persists state). P13-002..P13-004 scope is informed by P13-001/P13-005/P13-006/P13-007 results. Do not pre-commit P13-004 backlog picks before that analysis.
 
 ---
 
@@ -97,6 +102,94 @@ Those stay in backlog until Phase 13 exit review prioritizes them for a later ph
 
 ---
 
+### P13-005 — Single Supervisor lifecycle envelope
+
+**Status:** `done`
+**Goal:** Make the MCP delegation feel and behave like one persistent Supervisor-owned lifecycle, while preserving deterministic policy gates.
+
+**Problem observed in dogfood:** Supervisor currently owns execution-turn control flow, but not the full delegation envelope. This is technically valid but weakens single-agent mental model and trace readability.
+
+**Scope (target):**
+- Add a top-level lifecycle span per delegation (`delegation_lifecycle_start/end`) with explicit phase boundaries: `preloop`, `loop`, `postloop`.
+- Ensure all phases are state-aware through a shared Supervisor context (project/session/host/reviewer state), not disconnected utilities.
+- Preserve deterministic guards (`spec_validation`, `clarity_check`) but represent them as Supervisor-owned lifecycle phases in observability.
+- Keep pause/resume continuity at lifecycle level (resume should carry phase-aware context, not only loop turn state).
+- No requirement to move all decisions into LLM policy; this is lifecycle ownership + coherence, not autonomous replanning.
+
+**Acceptance (phase-level):**
+- Trace for one delegation clearly shows single lifecycle envelope with phase transitions.
+- Pause/resume preserves lifecycle context and ends with coherent lifecycle completion semantics.
+- Existing P12 behavior checks remain green (no regressions in project_state, reviewer->state, planner pre-injection).
+
+**Depends on:** P13-001 findings; feeds P13-002 docs and P13-003 tests.
+
+---
+
+### P13-006 — Supervisor owns the full lifecycle (`preloop` + `loop` + `postloop`)
+
+**Status:** `done`
+**Goal:** Move lifecycle ownership from `server/mcp_server.py` into `SupervisorAgent` so the agent emits phase events as it transitions (non-retroactive), making P13-005's envelope honest.
+
+**What shipped:** Agent is created early (before preloop), owns the lifecycle envelope via `set_lifecycle_context` + `emit_lifecycle_start` + `emit_lifecycle_phase_start("preloop")` BEFORE preloop work. Phase transitions (`phase_end(preloop)` + `phase_start(loop)`, etc.) are emitted by the agent at execution entry, not retroactively by the server. Added `delegate()` / `resume_and_delegate()` as the canonical agent-owned entry-point API surface. `begin_delegation()` preserves lifecycle context when the envelope was pre-started (via `_lifecycle_started` flag). Preloop hard-gates (invalid_spec / clarity) close the envelope coherently via agent-emitted `phase_end(blocked)` + `lifecycle_end(error|needs_input)`.
+
+**Deferred to a future milestone:** The preloop/postloop *work code* (spec_validation, clarity, post_gateway, RAG indexing) still lives in `mcp_server.py`; moving it behind `agent.run_preloop()` / `agent.run_postloop()` is a body-migration that can reuse the stable `delegate()` entry point. See P13-006 § Results → Follow-up.
+
+**Scope (target):**
+- Add `SupervisorAgent.delegate()` as the single high-level entry point that owns preloop → loop → postloop.
+- Add `run_preloop()` / `run_loop()` / `run_postloop()` methods; phase events emitted *around* the work.
+- `delegate_to_agent` in `server/mcp_server.py` becomes thin: load agent → `agent.delegate(...)` → return payload.
+- Resume is agent-owned: agent skips preloop based on its own `phases_completed` state, not server logic.
+- Worker callables (Planner, Reviewer, Clarity, Executor) stay injected by the server — agent remains backend-neutral.
+
+**Non-goals:** No autonomous interception (BL-547), no LLM-driven phase routing, no worker implementation changes, no `SupervisorToolRunner` changes.
+
+**Acceptance (phase-level):**
+- Phase events emitted by the agent around the work (not retroactive by the server).
+- Resume skips preloop based on agent state.
+- Deterministic gates still gate (clarity/spec_validation block → no loop).
+- Server's `delegate_to_agent` is thin (<100 lines of orchestration).
+- All existing tests pass (with updates); new ownership tests pass.
+
+**Depends on:** P13-005 (envelope schema); feeds P13-003 (test hardening) and P13-002 (docs).
+
+---
+
+### P13-007 — SupervisorAgent checkpoint at every delegation end
+
+**Status:** `done`
+**Goal:** Make the agent genuinely stateful across process restarts by checkpointing its identity + lifecycle state to disk at the end of **every** delegation (success, error, escalated), and rehydrating from that checkpoint when `_get_or_create_supervisor` builds a fresh agent.
+
+**Problem:** P13-005/P13-006 made the agent *own* the lifecycle envelope and *emit* phase events as it transitions. But the agent's in-memory state (`_lifecycle_context`, `_lifecycle_phases`, cross-delegation identity) was still ephemeral — it lived only in the module-level `_SUPERVISOR_REGISTRY` dict, which dies when the process exits. Only `project_state.json` (project memory) survived; `SupervisorState` was saved only on escalation. The design principle — "the agent is the source of truth; the process is an implementation detail" — was not yet realized.
+
+**What shipped:**
+- New `core/state/agent_checkpoint.py` — `AgentCheckpoint` dataclass (steady-state, non-expiring, one file per project at `projects/<project_key>/agent_state.json`). Atomic write; tolerant load (never raises on missing/corrupt files).
+- `SupervisorAgent._finish()` writes `AgentCheckpoint` unconditionally (success/error/escalated) via new `_save_agent_checkpoint()` helper. Emits `agent_checkpoint_saved` trace event. Best-effort: never fails the delegation.
+- `SupervisorAgent.rehydrate_from(checkpoint)` — restores `_lifecycle_context` + sets `_resumed_from_checkpoint=True`, but deliberately does NOT set `_lifecycle_started` (next delegation emits a fresh `lifecycle_start(resumed=False)`; the checkpoint is history, not an open envelope).
+- `_get_or_create_supervisor()` calls `AgentCheckpoint.find_for_project()` + `agent.rehydrate_from()` on a cache miss (fresh process / post-restart / CLI). The in-memory registry is now a cache; the on-disk checkpoint is the source of truth.
+- CLI ≡ server invariant holds: both modes rehydrate from the same `agent_state.json`, produce identical steady-state agents.
+
+**Deferred to BL-548:** Mid-loop crash recovery (per-turn checkpoint at turn 3 of 5) — separate, harder problem with worse cost/benefit. P13-007 is the high-value 80% (steady-state between delegations); BL-548 is the long-tail 20%.
+
+**Depends on:** P13-006 (agent owns lifecycle; `_lifecycle_context` fields exist).
+
+---
+
+### P13-008 — lifecycle envelope closure guard + viewer visibility + delegations-log parity
+
+**Status:** `done`
+
+Three fixes from the P13-007 server dogfood (`d8842b66`), all concerning the delegation lifecycle envelope:
+
+- **P13-ISS-008 (high):** Early-close preloop gates (`clarity_check`, `invalid_spec`, `review_target_files_error`) emitted `lifecycle_end` and then fell through to the unconditional postloop block, producing a stray `phase_end(loop)` + `phase_start/end(postloop)` + a **second** `lifecycle_end`. Fixed with: (a) agent-side idempotent `emit_lifecycle_end` (no-op + warn on 2nd call) and `emit_lifecycle_phase_*` guards after close, (b) server-side `_lifecycle_closed` flag set in the 3 early-close branches, gating the postloop block.
+- **P13-ISS-009 (low):** Orphan delegation `e110fdbb` (cancelled `delegate_to_agent` call) had a trace but no `delegations.jsonl` row. Fixed with a `_delegation_record_appended` flag + minimal interrupted-record append in the `finally` block, so cancellations/exceptions still log a row.
+- **P13-ISS-010 (high):** Viewer (`delegation_view_enrich.py::_build_view_events`) silently dropped all 8 P13-005/006/007 event types — agent boundary invisible in UI. Fixed with 8 new `elif` handlers (scope=`agent`): `delegation_lifecycle_start/end`, `delegation_phase_start/end`, `agent_checkpoint_saved`, `agent_rehydrated`, `project_state_loaded/saved`.
+
+20 new tests + 45 regression tests passing. Live re-dogfood suggested for master session to confirm end-to-end in server mode.
+
+**Depends on:** P13-007 (agent owns lifecycle + checkpoint).
+
+---
+
 ### P13-003 — Test hardening
 
 **Status:** `pending`
@@ -130,4 +223,11 @@ Those stay in backlog until Phase 13 exit review prioritizes them for a later ph
 
 | Date | Event |
 |------|-------|
+| 2026-06-22 | P13-008 implemented: lifecycle envelope closure guard (ISS-008 — idempotent `emit_lifecycle_end` + server `_lifecycle_closed` flag in 3 early-close branches), delegations-log parity (ISS-009 — `finally`-block interrupted-record append for cancelled/exception paths), viewer visibility (ISS-010 — 8 new `scope=agent` handlers in `delegation_view_enrich.py` for all P13-005/006/007 event types). 20 new tests + 45 regression tests pass. ISS-008/009/010 marked fixed-pending-verify. |
+| 2026-06-21 | P13-007 implemented: `AgentCheckpoint` (`agent_state.json`) saved at end of every delegation (success/error/escalated); `_get_or_create_supervisor` rehydrates from disk on cache miss. CLI ≡ server invariant holds — in-memory registry is now a cache, on-disk checkpoint is the source of truth. 16 new tests; 144 supervisor+checkpoint tests pass. Dogfood `3ad38219` confirms `agent_checkpoint_saved` trace event + file written. Mid-loop crash recovery deferred to BL-548. |
+| 2026-06-21 | P13-006 implemented: agent now owns the lifecycle envelope — created early, emits `lifecycle_start` + `phase_start(preloop)` BEFORE preloop work, emits phase transitions at execution entry (non-retroactive). Added `delegate()` / `resume_and_delegate()` API surface + `_lifecycle_started` preserve-vs-reset semantics. Preloop hard-gates close envelope coherently. 15 new tests; 89 spec-validation tests pass; 0 new failures in full suite. Dogfood `eea1e0c4` trace confirms honest ordering. P13-ISS-007 fixed. |
+| 2026-06-21 | P13-006 spec written: move lifecycle ownership from server into `SupervisorAgent` (fixes P13-ISS-007). P13-001 marked done (dogfood verified envelope). Worker order updated. |
+| 2026-06-21 | P13-005 implemented (worker spec completed): lifecycle envelope + resume context + regression tests; Phase flow advanced to P13-001 re-verification. |
+| 2026-06-21 | Reordered worker sequence: P13-005 executes first, then P13-001 verification resumes. |
+| 2026-06-21 | Added P13-005 priority milestone: single Supervisor lifecycle envelope (`preloop`/`loop`/`postloop`) before remaining Phase 13 work. |
 | 2026-06-21 | Phase 13 opened — stabilize + dogfood + docs + test hardening + backlog review. Phase 12 closed same day. |

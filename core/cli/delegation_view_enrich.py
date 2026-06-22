@@ -1180,6 +1180,219 @@ def _build_view_events(
                 is_boundary=False,
             ))
 
+        # ── P13-005/006/007: agent lifecycle envelope + checkpoint events ───────
+        # These were silently dropped before P13-008 (no `elif` branch matched),
+        # so the agent boundary was invisible in the viewer despite being
+        # correctly emitted and persisted in the trace JSONL. All use scope=
+        # "agent" to distinguish from mcp / executor / host events.
+
+        elif t == "delegation_lifecycle_start":
+            _resumed = bool(line.get("resumed"))
+            _summary = "lifecycle start" + (" · resumed" if _resumed else "")
+            _emit(_view_event(
+                ev_id=f"agent.lifecycle.start.{line.get('timestamp')}",
+                name="agent.lifecycle_start",
+                direction="→",
+                scope="agent",
+                timestamp=line.get("timestamp"),
+                summary=_summary,
+                detail={
+                    "event_type": "delegation_lifecycle_start",
+                    "project_key": line.get("project_key"),
+                    "spec_path": line.get("spec_path"),
+                    "session_policy": line.get("session_policy"),
+                    "session_action": line.get("session_action"),
+                    "mcp_session_id": line.get("mcp_session_id"),
+                    "resumed": _resumed,
+                    "raw": line,
+                },
+                is_boundary=True,
+                is_divider=False,
+            ))
+
+        elif t == "delegation_lifecycle_end":
+            _outcome = line.get("outcome") or ""
+            _reviewer = line.get("reviewer_pass_result")
+            _summary_parts = [p for p in [
+                "lifecycle end",
+                f"outcome={_outcome}" if _outcome else None,
+                f"reviewer={_reviewer}" if _reviewer else None,
+            ] if p]
+            _emit(_view_event(
+                ev_id=f"agent.lifecycle.end.{line.get('timestamp')}",
+                name="agent.lifecycle_end",
+                direction="←",
+                scope="agent",
+                timestamp=line.get("timestamp"),
+                summary=" · ".join(_summary_parts),
+                detail={
+                    "event_type": "delegation_lifecycle_end",
+                    "project_key": line.get("project_key"),
+                    "outcome": _outcome,
+                    "phase_summary": line.get("phase_summary"),
+                    "reviewer_pass_result": _reviewer,
+                    "raw": line,
+                },
+                is_boundary=True,
+                is_divider=False,
+            ))
+
+        elif t == "delegation_phase_start":
+            _phase = line.get("phase") or ""
+            _resumed = bool(line.get("resumed"))
+            _summary = f"phase: {_phase}" + (" · resumed" if _resumed else "")
+            _emit(_view_event(
+                ev_id=f"agent.phase.start.{_phase}.{line.get('timestamp')}",
+                name="agent.phase_start",
+                direction="→",
+                scope="agent",
+                timestamp=line.get("timestamp"),
+                summary=_summary,
+                detail={
+                    "event_type": "delegation_phase_start",
+                    "project_key": line.get("project_key"),
+                    "phase": _phase,
+                    "resumed": _resumed,
+                    "raw": line,
+                },
+                is_boundary=False,
+                is_divider=True,
+            ))
+
+        elif t == "delegation_phase_end":
+            _phase = line.get("phase") or ""
+            _status = line.get("status") or ""
+            _detail_txt = line.get("detail")
+            _summary_parts = [p for p in [
+                f"phase: {_phase}",
+                _status or None,
+                _detail_txt or None,
+            ] if p]
+            _emit(_view_event(
+                ev_id=f"agent.phase.end.{_phase}.{line.get('timestamp')}",
+                name="agent.phase_end",
+                direction="←",
+                scope="agent",
+                timestamp=line.get("timestamp"),
+                summary=" · ".join(_summary_parts),
+                detail={
+                    "event_type": "delegation_phase_end",
+                    "project_key": line.get("project_key"),
+                    "phase": _phase,
+                    "status": _status,
+                    "detail": _detail_txt,
+                    "raw": line,
+                },
+                is_boundary=False,
+                is_divider=True,
+            ))
+
+        elif t == "agent_checkpoint_saved":
+            _last_outcome = line.get("last_outcome") or ""
+            _last_del = line.get("last_delegation_id") or ""
+            _summary_parts = [p for p in [
+                "checkpoint saved",
+                f"outcome={_last_outcome}" if _last_outcome else None,
+                f"delegation={_last_del[:8]}" if _last_del else None,
+            ] if p]
+            _emit(_view_event(
+                ev_id=f"agent.checkpoint.saved.{line.get('timestamp')}",
+                name="agent.checkpoint_saved",
+                direction="·",
+                scope="agent",
+                timestamp=line.get("timestamp"),
+                summary=" · ".join(_summary_parts),
+                detail={
+                    "event_type": "agent_checkpoint_saved",
+                    "project_key": line.get("project_key"),
+                    "last_delegation_id": _last_del,
+                    "last_outcome": _last_outcome,
+                    "file_path": line.get("file_path"),
+                    "delegation_id": line.get("delegation_id"),
+                    "raw": line,
+                },
+                is_boundary=False,
+                is_divider=False,
+            ))
+
+        elif t == "agent_rehydrated":
+            _last_del = line.get("last_delegation_id") or ""
+            _last_outcome = line.get("last_outcome") or ""
+            _summary_parts = [p for p in [
+                "rehydrated",
+                f"from={_last_del[:8]}" if _last_del else None,
+                f"outcome={_last_outcome}" if _last_outcome else None,
+            ] if p]
+            _emit(_view_event(
+                ev_id=f"agent.rehydrated.{line.get('timestamp')}",
+                name="agent.rehydrated",
+                direction="·",
+                scope="agent",
+                timestamp=line.get("timestamp"),
+                summary=" · ".join(_summary_parts),
+                detail={
+                    "event_type": "agent_rehydrated",
+                    "project_key": line.get("project_key"),
+                    "last_delegation_id": _last_del,
+                    "last_outcome": _last_outcome,
+                    "last_finished_at": line.get("last_finished_at"),
+                    "delegation_id": line.get("delegation_id"),
+                    "raw": line,
+                },
+                is_boundary=False,
+                is_divider=False,
+            ))
+
+        elif t == "project_state_loaded":
+            _pk = line.get("project_key") or ""
+            _emit(_view_event(
+                ev_id=f"agent.project_state.loaded.{line.get('timestamp')}",
+                name="agent.project_state_loaded",
+                direction="·",
+                scope="agent",
+                timestamp=line.get("timestamp"),
+                summary=f"project_state loaded" + (f" · {_pk}" if _pk else ""),
+                detail={
+                    "event_type": "project_state_loaded",
+                    "project_key": _pk,
+                    "raw": line,
+                },
+                is_boundary=False,
+                is_divider=False,
+            ))
+
+        elif t == "project_state_saved":
+            _pk = line.get("project_key") or ""
+            _hot = line.get("hot_areas_updated")
+            _dec = line.get("decisions_added")
+            _risk = line.get("risks_added")
+            _summary_parts = [p for p in [
+                "project_state saved",
+                _pk or None,
+                f"hot_areas={_hot}" if _hot is not None else None,
+                f"decisions_added={_dec}" if _dec is not None else None,
+                f"risks_added={_risk}" if _risk is not None else None,
+            ] if p]
+            _emit(_view_event(
+                ev_id=f"agent.project_state.saved.{line.get('timestamp')}",
+                name="agent.project_state_saved",
+                direction="·",
+                scope="agent",
+                timestamp=line.get("timestamp"),
+                summary=" · ".join(_summary_parts),
+                detail={
+                    "event_type": "project_state_saved",
+                    "project_key": _pk,
+                    "hot_areas_updated": _hot,
+                    "decisions_added": _dec,
+                    "risks_added": _risk,
+                    "file_path": line.get("file_path"),
+                    "raw": line,
+                },
+                is_boundary=False,
+                is_divider=False,
+            ))
+
         elif t == "tool_call":
             tool = line.get("tool") or ""
             step = line.get("step_index")

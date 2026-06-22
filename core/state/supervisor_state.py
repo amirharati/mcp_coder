@@ -3,7 +3,7 @@ from __future__ import annotations
 import json
 import logging
 import os
-from dataclasses import asdict, dataclass
+from dataclasses import asdict, dataclass, field
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from uuid import uuid4
@@ -38,6 +38,8 @@ class SupervisorState:
     context_ref: str
     paused_at: str
     expires_at: str
+    # P13-005: lifecycle context persisted for coherent resume events
+    lifecycle_context: dict = field(default_factory=dict)
 
     @classmethod
     def create(
@@ -52,6 +54,7 @@ class SupervisorState:
         questions: list[str],
         pause_reason: str = "needs_input",
         ttl_seconds: int = 86400,
+        lifecycle_context: dict | None = None,
     ) -> "SupervisorState":
         ttl = _resolve_ttl(ttl_seconds)
         paused = datetime.now(timezone.utc)
@@ -69,6 +72,7 @@ class SupervisorState:
             context_ref=context_ref,
             paused_at=_iso_z(paused),
             expires_at=_iso_z(expires),
+            lifecycle_context=dict(lifecycle_context or {}),
         )
 
     def save(self) -> Path:
@@ -85,6 +89,8 @@ class SupervisorState:
         if not path.is_file():
             raise ResumeTokenNotFound(resume_token)
         data = json.loads(path.read_text(encoding="utf-8"))
+        # P13-005: backward compat — old state files lack lifecycle_context
+        data.setdefault("lifecycle_context", {})
         state = cls(**data)
         if _parse_iso(state.expires_at) <= datetime.now(timezone.utc):
             raise ResumeTokenExpired(state.expires_at)

@@ -1426,6 +1426,11 @@ def _get_or_create_supervisor(
     """Return the existing SupervisorAgent for this project_key, or create a fresh one.
 
     Creation loads project_state from disk (first call or after server restart).
+    P13-007: on a cache miss, also rehydrate the agent's steady-state identity +
+    lifecycle context from `agent_state.json` (the AgentCheckpoint) so the
+    freshly-created agent is the same agent that ran before the restart —
+    CLI and server mode become behaviorally identical. The in-memory registry
+    is a cache; the on-disk checkpoint is the source of truth.
     The returned agent has NOT had begin_delegation() called yet — caller must do that.
     """
     from core.engine.supervisor_agent import SupervisorAgent
@@ -1438,6 +1443,16 @@ def _get_or_create_supervisor(
             executor_fn=lambda _t, _c, _reset=False: None,  # placeholder; overwritten by begin_delegation
             spec_path=spec_path,
         )
+        # P13-007: rehydrate steady-state identity + lifecycle context from disk
+        try:
+            from core.state.agent_checkpoint import AgentCheckpoint
+
+            checkpoint = AgentCheckpoint.find_for_project(project_key)
+            if checkpoint is not None:
+                agent.rehydrate_from(checkpoint)
+        except Exception:
+            # Best-effort: never block delegation on checkpoint rehydrate failure.
+            pass
         _SUPERVISOR_REGISTRY[project_key] = agent
     return agent
 
@@ -1518,6 +1533,17 @@ def _handle_resume(
         _SUPERVISOR_REGISTRY[_pk] = agent
         result = agent.run()
         exec_result = result.executor_result or ExecutionResult(success=False, output="")
+
+        # P13-005: close lifecycle for resumed delegation (loop phase started in resume())
+        # Guard with hasattr for test mocks / future subclasses that may not implement lifecycle.
+        if hasattr(agent, "emit_lifecycle_phase_end"):
+            _resume_loop_status = (
+                "escalated" if result.outcome == "escalated"
+                else ("error" if result.outcome == "error" else "ok")
+            )
+            agent.emit_lifecycle_phase_end("loop", status=_resume_loop_status)
+        if hasattr(agent, "emit_lifecycle_end"):
+            agent.emit_lifecycle_end(result.outcome)
 
         needs_input_payload = None
         payload_outcome = OUTCOME_SUCCESS if result.outcome == "success" else "error"
@@ -1795,6 +1821,55 @@ def delegate_to_agent(
             backend=backend,
             task_preview=task,
         )
+        # P13-006: create the SupervisorAgent early so it OWNS the lifecycle envelope
+        # from the very first event. Phase events are emitted by the agent as it
+        # transitions, not retroactively by the server after each phase completes.
+        from core.engine.supervisor_agent import (
+            SupervisorAgent,
+            resolve_supervisor_max_turns,
+        )
+
+        supervisor_agent: SupervisorAgent | None = None
+        supervisor_agent_result = None
+        _supervisor_max_turns = resolve_supervisor_max_turns(ws)
+
+        def _supervisor_event_sink(rec: dict[str, Any]) -> None:
+            append_trace_record(
+                rec,
+                delegation_id=delegation_id,
+                session_dir=storage.session_dir,
+                workspace=ws,
+            )
+
+        # P13-006: agent owns lifecycle — create early, set context, emit start + preloop
+        if delegate_mode == DELEGATE_MODE_IMPLEMENT:
+            supervisor_agent = _get_or_create_supervisor(
+                _project_key, ws, None  # spec_rel_path not yet known; set later
+            )
+            supervisor_agent.set_lifecycle_event_sink(_supervisor_event_sink)
+            supervisor_agent.set_lifecycle_context(
+                project_key=_project_key,
+                session_policy=storage.session_policy,
+                session_action=storage.session_action,
+                mcp_session_id=storage.mcp_session_id,
+            )
+            supervisor_agent.set_delegation_id(delegation_id)
+            supervisor_agent.emit_lifecycle_start(resumed=False)
+            supervisor_agent.emit_lifecycle_phase_start("preloop", resumed=False)
+        # P13-008: tracks whether an early-close preloop gate (clarity_check /
+        # invalid_spec / review_target_files_error) has already emitted
+        # ``delegation_lifecycle_end`` for this delegation. When True, the
+        # postloop closure block (loop phase_end + postloop phase_start/end +
+        # a second lifecycle_end) must be skipped — the envelope is closed.
+        # The agent-side emit_lifecycle_end is also idempotent (P13-008), so
+        # this flag is the source fix and the agent guard is the backstop.
+        _lifecycle_closed = False
+        # P13-008: tracks whether the delegation record was appended to
+        # delegations.jsonl on the normal completion path. If an exception or
+        # host cancellation propagates before line ~3587, the finally block
+        # builds + appends a minimal "interrupted" record so the delegations
+        # log and the trace tree stay 1:1 (ISS-009).
+        _delegation_record_appended = False
         model: str | None = None
         result: ExecutionResult | None = None
         success = False
@@ -1936,22 +2011,9 @@ def delegate_to_agent(
         # P12-001: unified supervisor agent loop owns all post-planning control flow
         # (replaces the former supervisor_outer_loop_* events). The agent emits the
         # canonical supervisor_loop_* / supervisor_turn_* / supervisor_decision events.
-        from core.engine.supervisor_agent import (
-            SupervisorAgent,
-            resolve_supervisor_max_turns,
-        )
-
-        supervisor_agent: SupervisorAgent | None = None
-        supervisor_agent_result = None
-        _supervisor_max_turns = resolve_supervisor_max_turns(ws)
-
-        def _supervisor_event_sink(rec: dict[str, Any]) -> None:
-            append_trace_record(
-                rec,
-                delegation_id=delegation_id,
-                session_dir=storage.session_dir,
-                workspace=ws,
-            )
+        # P13-006: agent was created early (before preloop) and already owns the
+        # lifecycle envelope. The block below only remains for variable initialization
+        # that other code references; agent/sink/max_turns are already set above.
 
         if (
             pipeline_recorder is not None
@@ -2104,10 +2166,20 @@ def delegate_to_agent(
             success = False
             error = spec_invalid_reason
             output = spec_invalid_reason
+            # P13-006: agent closes preloop + lifecycle on hard gate
+            if supervisor_agent is not None and delegate_mode == DELEGATE_MODE_IMPLEMENT:
+                supervisor_agent.set_spec_path(spec_rel_path)
+                supervisor_agent.emit_lifecycle_phase_end("preloop", status="blocked", detail="invalid_spec")
+                supervisor_agent.emit_lifecycle_end("error")
+                _lifecycle_closed = True  # P13-008: skip postloop block
         elif review_target_files_error:
             success = False
             error = review_target_files_error
             output = review_target_files_error
+            if supervisor_agent is not None and delegate_mode == DELEGATE_MODE_IMPLEMENT:
+                supervisor_agent.emit_lifecycle_phase_end("preloop", status="blocked", detail="review_target_files_error")
+                supervisor_agent.emit_lifecycle_end("error")
+                _lifecycle_closed = True  # P13-008: skip postloop block
         elif clarity_check_blocked:
             # Hard gate: execution is paused; host must add answers to spec Q&A and re-delegate.
             success = False
@@ -2128,6 +2200,12 @@ def delegate_to_agent(
                     append_clarity_qa(_spec_abs, clarity_check_questions)
                 except Exception:
                     pass  # best-effort; never block
+            # P13-006: agent closes preloop + lifecycle on clarity gate
+            if supervisor_agent is not None and delegate_mode == DELEGATE_MODE_IMPLEMENT:
+                supervisor_agent.set_spec_path(spec_rel_path)
+                supervisor_agent.emit_lifecycle_phase_end("preloop", status="blocked", detail="clarity_check")
+                supervisor_agent.emit_lifecycle_end("needs_input")
+                _lifecycle_closed = True  # P13-008: skip postloop block
         else:
             progress.notify(
                 (
@@ -2137,9 +2215,19 @@ def delegate_to_agent(
                 force=True,
             )
             progress.notify("[executor] Starting delegated run…", force=True)
-            supervisor_agent = _get_or_create_supervisor(
-                _project_key, ws, spec_rel_path
-            )
+            # P13-006: agent owns lifecycle — close preloop, open loop.
+            # (lifecycle_start + phase_start(preloop) were emitted earlier before
+            # spec_validation/clarity ran; this is the honest, non-retroactive path.)
+            if delegate_mode == DELEGATE_MODE_IMPLEMENT and supervisor_agent is not None:
+                supervisor_agent.set_spec_path(spec_rel_path)
+                supervisor_agent.emit_lifecycle_phase_end("preloop", status="ok")
+                supervisor_agent.emit_lifecycle_phase_start("loop", resumed=False)
+            else:
+                # REVIEW mode (or agent not yet created): create here without lifecycle
+                # envelope — review mode does not participate in the implement lifecycle.
+                supervisor_agent = _get_or_create_supervisor(
+                    _project_key, ws, spec_rel_path
+                )
             supervisor_agent.begin_delegation(
                 delegation_id=delegation_id,
                 # executor_fn/reviewer_fn unused in host-driven mode (mcp_server owns
@@ -2970,12 +3058,24 @@ def delegate_to_agent(
                     error_class=error_class,
                 )
             )
+            # P13-005: persist reviewer pass result into lifecycle context before finish()
+            # so escalation SupervisorState captures it; non-fatal for delegation success.
+            if delegate_mode == DELEGATE_MODE_IMPLEMENT:
+                supervisor_agent.update_reviewer_pass_result(reviewer_pass_result)
             supervisor_agent.complete_turn(_agent_turn_result, _reviewer_checks)
             supervisor_agent_result = supervisor_agent.finish()
             supervisor_paused_questions = list(supervisor_agent_result.paused_questions or [])
             context_block["supervisor_agent_loop"] = supervisor_agent.context_block(
                 supervisor_agent_result
             )
+            # P13-006: agent owns loop phase end
+            if delegate_mode == DELEGATE_MODE_IMPLEMENT and not _lifecycle_closed:
+                _loop_outcome_status = (
+                    "escalated"
+                    if supervisor_agent_result.outcome == "escalated"
+                    else ("error" if supervisor_agent_result.outcome == "error" else "ok")
+                )
+                supervisor_agent.emit_lifecycle_phase_end("loop", status=_loop_outcome_status)
             if supervisor_agent_result.outcome == "escalated":
                 success = False
                 needs_input_payload = build_needs_input_payload(
@@ -3010,6 +3110,16 @@ def delegate_to_agent(
             context_block["clarity_round_cap"] = clarity_round_cap
         if clarity_auto_passed is not None:
             context_block["clarity_auto_passed"] = clarity_auto_passed
+
+        # P13-006: agent owns postloop phase start (post_gateway + spec_report + indexing)
+        _postloop_started = False
+        if (
+            supervisor_agent is not None
+            and delegate_mode == DELEGATE_MODE_IMPLEMENT
+            and not _lifecycle_closed  # P13-008: early-close paths skip postloop
+        ):
+            supervisor_agent.emit_lifecycle_phase_start("postloop", resumed=False)
+            _postloop_started = True
 
         if (
             spec_path
@@ -3252,6 +3362,20 @@ def delegate_to_agent(
 
         index_workspace_paths_after_delegate(ws, files_changed)
 
+        # P13-006: agent owns postloop phase end + lifecycle end (non-fatal reviewer)
+        if _postloop_started and supervisor_agent is not None and not _lifecycle_closed:
+            _postloop_status = "ok"
+            supervisor_agent.emit_lifecycle_phase_end("postloop", status=_postloop_status)
+            _lifecycle_final_outcome = (
+                "escalated"
+                if (
+                    supervisor_agent_result is not None
+                    and supervisor_agent_result.outcome == "escalated"
+                )
+                else ("success" if success else "error")
+            )
+            supervisor_agent.emit_lifecycle_end(_lifecycle_final_outcome)
+
         delegation_diff_payload: dict[str, Any] | None = None
         judgment_checklist_payload: dict[str, Any] | None = None
         if delegate_mode == DELEGATE_MODE_IMPLEMENT and workspace_snapshot is not None:
@@ -3467,6 +3591,7 @@ def delegate_to_agent(
             trace_ref=_trace_ref,
         )
         log_path = obs.append_delegation_record(record, ws=ws)
+        _delegation_record_appended = True  # P13-008: normal completion path
         obs.log_delegation_sent(
             delegation_id=delegation_id,
             success=success,
@@ -3534,6 +3659,77 @@ def delegate_to_agent(
 
         return json.dumps(response, ensure_ascii=False)
     finally:
+        # P13-008 (ISS-009): if the delegation was interrupted (host cancel,
+        # uncaught exception) before the normal completion path appended a
+        # record, append a minimal "interrupted" record now so delegations.jsonl
+        # stays 1:1 with the trace tree. Best-effort: never mask the original
+        # exception.
+        if not _delegation_record_appended:
+            try:
+                _ts_end = obs.utc_now_iso()
+                _dur = int((time.perf_counter() - t0) * 1000)
+                _interrupted_record = obs.build_delegation_record(
+                    delegation_id=delegation_id,
+                    timestamp_start=timestamp_start,
+                    timestamp_end=_ts_end,
+                    duration_ms=_dur,
+                    mcp_request=mcp_request,
+                    backend=backend,
+                    model=model,
+                    success=False,
+                    error="interrupted before completion",
+                    response_to_cursor=None,
+                    files_requested=list(target_files),
+                    files_changed=[],
+                    files_unexpected=[],
+                    context_block={},
+                    context_mode=None,
+                    timing=None,
+                    tokens=None,
+                    project_key=storage.project_key,
+                    mcp_session_id=storage.mcp_session_id,
+                    session_dir=storage.session_dir,
+                    log_path=storage.log_path,
+                    session_action=storage.session_action,
+                    session_reason=storage.session_reason,
+                    session_policy=storage.session_policy,
+                    host_kind=None,
+                    host_session_id=None,
+                    host_transcript_path=None,
+                    host_context=None,
+                    executor_reused=False,
+                    executor_recreated=False,
+                    prompt_full=None,
+                    spec_path=spec_rel_path,
+                    spec_report_path=None,
+                    spec_sha256=None,
+                    spec_mtime=None,
+                    outcome="interrupted",
+                    delegate_mode=delegate_mode,
+                    spec_files_missing_from_target=None,
+                    contract_warnings=None,
+                    delegation_policies=None,
+                    scope_violations=None,
+                    usage=None,
+                    error_class="interrupted",
+                    error_message="delegation interrupted before completion",
+                    workspace_snapshot=None,
+                    post_gateway=None,
+                    checkpoint=None,
+                    auto_merged_read_paths=None,
+                    auto_merge_spec_read=None,
+                    model_roles=None,
+                    context_refs=None,
+                    trace_ref=(
+                        f"traces/{delegation_id}.jsonl"
+                        if _obs_verbosity in ("standard", "full")
+                        else None
+                    ),
+                )
+                obs.append_delegation_record(_interrupted_record, ws=ws)
+            except Exception:
+                # Best-effort: never mask the original exception/cancel.
+                pass
         if host_policy_token is not None:
             host_model_policy_var.reset(host_policy_token)
         _delegation_scope.__exit__(None, None, None)
