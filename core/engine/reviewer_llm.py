@@ -25,10 +25,19 @@ _ERROR_MARKERS = (
     "openaierror",
 )
 
-_HEADING_RE = re.compile(r"^##\s+\S", re.MULTILINE)
-_CODE_FENCE_LINE_RE = re.compile(r"^```\w*\s*$", re.MULTILINE)
-_LGTM_RE = re.compile(r"^##\s+LGTM\s*$", re.MULTILINE | re.IGNORECASE)
-_ISSUES_RE = re.compile(r"^##\s+ISSUES\s*$", re.MULTILINE | re.IGNORECASE)
+_HEADING_RE = re.compile(
+    r"^[ \t]*(?:#{1,6}[ \t]+\S|(?:[-*][ \t]*)?(?:#{1,6}[ \t]*)?(?:\*\*)?(?:LGTM|ISSUES?)(?:\*\*)?[ \t]*(?:[:\-–—][ \t]*)?)",
+    re.MULTILINE | re.IGNORECASE,
+)
+_CODE_FENCE_LINE_RE = re.compile(r"^\s*```")
+_LGTM_RE = re.compile(
+    r"^[ \t]*(?:[-*][ \t]*)?(?:#{1,6}[ \t]*)?(?:\*\*)?LGTM(?:\*\*)?[ \t]*(?:[:\-–—][ \t]*)?(.*)$",
+    re.MULTILINE | re.IGNORECASE,
+)
+_ISSUES_RE = re.compile(
+    r"^[ \t]*(?:[-*][ \t]*)?(?:#{1,6}[ \t]*)?(?:\*\*)?ISSUES?(?:\*\*)?[ \t]*(?:[:\-–—][ \t]*)?(.*)$",
+    re.MULTILINE | re.IGNORECASE,
+)
 _BULLET_RE = re.compile(r"^[-*]\s+(.+)$")
 
 _MAX_ISSUES = 3
@@ -36,10 +45,22 @@ _MAX_NOTE_CHARS = 500
 
 
 def _strip_code_fences(text: str) -> str:
-    m = _CODE_FENCE_LINE_RE.search(text)
-    if m is None:
+    lines = text.splitlines()
+    if not lines:
         return text
-    return text[: m.start()].rstrip()
+    cleaned: list[str] = []
+    in_fence = False
+    saw_fence = False
+    for line in lines:
+        if _CODE_FENCE_LINE_RE.match(line):
+            in_fence = not in_fence
+            saw_fence = True
+            continue
+        if not in_fence:
+            cleaned.append(line)
+    if not saw_fence:
+        return text
+    return "\n".join(cleaned).strip()
 
 
 def _strip_reasoning_preamble(text: str) -> str:
@@ -86,14 +107,18 @@ def parse_reviewer_output(
     lgtm_match = _LGTM_RE.search(narrative)
     if lgtm_match is not None:
         body = narrative[lgtm_match.end() :].strip()
-        first_line = body.splitlines()[0].strip() if body else ""
+        inline_note = lgtm_match.group(1).strip()
+        first_line = inline_note or (body.splitlines()[0].strip() if body else "")
         return "lgtm", _clamp_note(first_line), None
 
     issues_match = _ISSUES_RE.search(narrative)
     if issues_match is None:
         return None, "", "missing LGTM or ISSUES heading"
 
-    body = narrative[issues_match.end() :].strip()
+    inline_body = issues_match.group(1).strip()
+    body = "\n".join(
+        part for part in (inline_body, narrative[issues_match.end() :].strip()) if part
+    )
     bullets = _parse_issue_bullets(body)
     if not bullets:
         return None, "", "ISSUES heading without bullet points"

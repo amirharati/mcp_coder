@@ -881,23 +881,10 @@ def _count_clarity_blocked_rounds(
 ) -> int:
     """Count how many prior delegations in this session were blocked by clarity for this spec."""
     import json as _json
-    from core.logging.delegation_log import CLARITY_CHECK_CLARIFICATION_NEEDED
-
-    def _norm_spec(path: str | None) -> str:
-        text = str(path or "").strip().replace("\\", "/")
-        if text.startswith("./"):
-            text = text[2:]
-        return text
-
-    def _same_spec(a: str, b: str) -> bool:
-        if not a or not b:
-            return False
-        return a == b or a.endswith("/" + b) or b.endswith("/" + a)
 
     log_path = Path(session_dir) / "delegations.jsonl"
     if not log_path.is_file():
         return 0
-    target_spec = _norm_spec(spec_rel_path)
     count = 0
     try:
         for line in log_path.read_text(encoding="utf-8", errors="replace").splitlines():
@@ -908,28 +895,66 @@ def _count_clarity_blocked_rounds(
                 rec = _json.loads(line)
             except Exception:
                 continue
-            if rec.get("outcome") != "needs_input":
-                continue
-            # Count only structured clarity outcomes; avoid text-matching heuristics.
-            ctx = rec.get("context") or {}
-            clarity_result = str(ctx.get("clarity_check_result") or "").strip().lower()
-            if clarity_result != CLARITY_CHECK_CLARIFICATION_NEEDED:
-                continue
-            # Optionally scope to same spec.
-            if target_spec:
-                req = rec.get("mcp_request") or {}
-                rec_spec = _norm_spec(
-                    req.get("spec_path")
-                    or rec.get("spec_path")
-                    or ctx.get("task_spec")
-                    or ""
-                )
-                if not rec_spec or not _same_spec(rec_spec, target_spec):
-                    continue
-            count += 1
+            if _is_clarity_blocked_record_for_spec(rec, spec_rel_path):
+                count += 1
     except Exception:
         return 0
     return count
+
+
+def _count_workspace_clarity_blocked_delegations(
+    workspace: "Path | str",
+    spec_rel_path: str | None,
+) -> int:
+    """Count prior clarity-blocked delegations across workspace session logs."""
+    try:
+        records = load_delegations_for_workspace(workspace)
+    except Exception:
+        return 0
+    return sum(
+        1
+        for rec in records
+        if _is_clarity_blocked_record_for_spec(rec, spec_rel_path)
+    )
+
+
+def _is_clarity_blocked_record_for_spec(
+    rec: dict[str, Any],
+    spec_rel_path: str | None,
+) -> bool:
+    from core.logging.delegation_log import CLARITY_CHECK_CLARIFICATION_NEEDED
+
+    if rec.get("outcome") != "needs_input":
+        return False
+    ctx = rec.get("context") or {}
+    clarity_result = str(ctx.get("clarity_check_result") or "").strip().lower()
+    if clarity_result != CLARITY_CHECK_CLARIFICATION_NEEDED:
+        return False
+
+    target_spec = _normalize_spec_for_match(spec_rel_path)
+    if not target_spec:
+        return True
+    req = rec.get("mcp_request") or {}
+    rec_spec = _normalize_spec_for_match(
+        req.get("spec_path")
+        or rec.get("spec_path")
+        or ctx.get("task_spec")
+        or ""
+    )
+    return bool(rec_spec and _same_spec_for_match(rec_spec, target_spec))
+
+
+def _normalize_spec_for_match(path: str | None) -> str:
+    text = str(path or "").strip().replace("\\", "/")
+    if text.startswith("./"):
+        text = text[2:]
+    return text
+
+
+def _same_spec_for_match(a: str, b: str) -> bool:
+    if not a or not b:
+        return False
+    return a == b or a.endswith("/" + b) or b.endswith("/" + a)
 
 
 def _collect_reviewer_unified_diff(workspace: str, files_changed: list[str]) -> str:
@@ -969,6 +994,34 @@ def _collect_reviewer_unified_diff(workspace: str, files_changed: list[str]) -> 
         return "\n\n".join(parts)
     except (OSError, subprocess.TimeoutExpired) as exc:
         raise RuntimeError(str(exc)) from exc
+
+
+def _collect_reviewer_changed_file_contents(
+    workspace: str,
+    files_changed: list[str],
+) -> dict[str, str]:
+    """Read current changed-file contents for deterministic reviewer sanity checks."""
+    from core.engine.git_diff import normalize_repo_path
+
+    root = Path(workspace).resolve()
+    contents: dict[str, str] = {}
+    for rel in files_changed[:10]:
+        normalized = normalize_repo_path(rel)
+        abs_path = (root / normalized).resolve()
+        try:
+            abs_path.relative_to(root)
+        except ValueError:
+            continue
+        if not abs_path.is_file():
+            continue
+        try:
+            contents[normalized] = abs_path.read_text(
+                encoding="utf-8",
+                errors="replace",
+            )[:50_000]
+        except OSError:
+            continue
+    return contents
 
 
 _SPEC_VALIDATION_BLOCK_OUTPUT = SPEC_VALIDATION_BLOCK_OUTPUT
@@ -1374,6 +1427,7 @@ def _abandon_paused_state(state: SupervisorState) -> None:
             append_trace_record(
                 {
                     "type": "supervisor_state_abandoned",
+                    "timestamp": obs.utc_now_iso(),
                     "resume_token": state.resume_token,
                     "project_key": state.project_key,
                     "pause_reason": state.pause_reason,
@@ -1531,20 +1585,18 @@ def _handle_resume(
 
         _pk = ProjectKeyResolver.from_spec_path(state.spec_path)
         _SUPERVISOR_REGISTRY[_pk] = agent
-        result = agent.run()
+        try:
+            result = agent.run()
+        except Exception:
+            if hasattr(agent, "emit_lifecycle_phase_end"):
+                agent.emit_lifecycle_phase_end("loop", status="error")
+            if hasattr(agent, "emit_lifecycle_end"):
+                agent.emit_lifecycle_end("error")
+            raise
         exec_result = result.executor_result or ExecutionResult(success=False, output="")
 
         # P13-005: close lifecycle for resumed delegation (loop phase started in resume())
         # Guard with hasattr for test mocks / future subclasses that may not implement lifecycle.
-        if hasattr(agent, "emit_lifecycle_phase_end"):
-            _resume_loop_status = (
-                "escalated" if result.outcome == "escalated"
-                else ("error" if result.outcome == "error" else "ok")
-            )
-            agent.emit_lifecycle_phase_end("loop", status=_resume_loop_status)
-        if hasattr(agent, "emit_lifecycle_end"):
-            agent.emit_lifecycle_end(result.outcome)
-
         needs_input_payload = None
         payload_outcome = OUTCOME_SUCCESS if result.outcome == "success" else "error"
         payload_success = result.outcome == "success" and exec_result.success
@@ -1579,6 +1631,21 @@ def _handle_resume(
                 if paused_questions_out
                 else "Supervisor requires host clarification."
             )
+        elif payload_error_class == "unknown" and not payload_error_message:
+            payload_error_message = (
+                "supervisor_loop_unknown"
+                if str(result.end_reason or "") == "unknown"
+                else "executor_unknown_failure"
+            )
+
+        if hasattr(agent, "emit_lifecycle_phase_end"):
+            _resume_loop_status = (
+                "escalated" if result.outcome == "escalated"
+                else ("error" if result.outcome == "error" else "ok")
+            )
+            agent.emit_lifecycle_phase_end("loop", status=_resume_loop_status)
+        if hasattr(agent, "emit_lifecycle_end"):
+            agent.emit_lifecycle_end(payload_outcome)
 
         payload = _response_payload(
             success=payload_success,
@@ -1643,21 +1710,29 @@ def delegate_to_agent(
     host_policy_token = None
     host_policy_overrides: dict[str, dict] = {}
     model_policy_warnings: list[str] = []
+    t0 = time.perf_counter()
+    timestamp_start = obs.utc_now_iso()
+    mcp_request: dict[str, Any] = {
+        "task": task,
+        "target_files": target_files,
+        "context_summary": context_summary,
+        "backend": backend,
+    }
+    ws = obs.default_workspace_path()
+    storage = None
+    delegate_mode = DELEGATE_MODE_IMPLEMENT
+    spec_rel_path: str | None = None
+    model: str | None = None
+    _obs_verbosity = resolve_observability_verbosity(ws)
+    _delegation_record_appended = False
+    _interrupted_record_armed = False
+    supervisor_agent: Any | None = None
+    _lifecycle_closed = False
     try:
         host_policy_overrides, model_policy_warnings = normalize_host_model_policy(model_policy)
         host_policy_token = host_model_policy_var.set(
             host_policy_overrides if host_policy_overrides else None
         )
-
-        t0 = time.perf_counter()
-        timestamp_start = obs.utc_now_iso()
-
-        mcp_request = {
-            "task": task,
-            "target_files": target_files,
-            "context_summary": context_summary,
-            "backend": backend,
-        }
         if host_policy_overrides:
             mcp_request["model_policy_applied"] = summarize_model_policy_applied(
                 host_policy_overrides
@@ -1686,12 +1761,10 @@ def delegate_to_agent(
         from core.state.project_key import ProjectKeyResolver
 
         _project_key = ProjectKeyResolver.from_spec_path(spec_path)
-        ws = obs.default_workspace_path()
         usage_report_enabled = obs.resolve_usage_report_enabled(ws)
         ensure_workspace_spec_layout(ws)
         progress.notify("[compile] Starting context compilation…", force=True)
 
-        spec_rel_path: str | None = None
         spec_abs_path = None
         spec_read = None
         spec_invalid_reason: str | None = None
@@ -1748,9 +1821,38 @@ def delegate_to_agent(
         if start_fresh and _paused_state is not None:
             _abandon_paused_state(_paused_state)
             _paused_state = None
-        if _paused_state is not None and answer is None:
-            return _response_payload_paused_reminder(_paused_state)
-        if _paused_state is not None and answer is not None:
+        # P13-016 (ISS-014, revised): when the last delegation paused for any
+        # reason, the host coming back is a resume — not a fresh start. Two
+        # pause shapes are handled:
+        #
+        # - Escalation pause (``needs_input`` / ``max_turns_reached``): the
+        #   supervisor asked a question mid-loop. Resume = continue the executor
+        #   loop with the host's answer. Routed through ``_handle_resume``.
+        #   The host may pass the answer via ``answer`` or via context; either
+        #   way the next delegation resumes. Without any new signal at all, we
+        #   still resume (the host returning IS the signal) — but if ``answer``
+        #   is empty we fall back to the paused reminder so the host sees the
+        #   pending question rather than silently re-running.
+        # - Clarity-block pause (``clarity_check``): a soft preloop handoff.
+        #   Resume = re-enter the preloop pipeline (re-run clarity, round-cap
+        #   auto-pass still applies). The host may have answered via edited spec
+        #   Q&A, ``answer``, or ``context_summary``. We abandon the stale pause
+        #   (so a new one can be recorded if this round also blocks) but carry a
+        #   ``_resumed_from_pause`` flag so the fresh delegation emits resume
+        #   lineage markers (``lifecycle_start(resumed=true)`` +
+        #   ``supervisor_resumed``) — the host returning is resume continuity,
+        #   not a fresh start.
+        _paused_is_clarity_block = bool(
+            _paused_state is not None
+            and str(getattr(_paused_state, "pause_reason", "") or "") == "clarity_check"
+        )
+        _resumed_from_pause_token: str | None = None
+        if _paused_state is not None and _paused_is_clarity_block:
+            # Clarity-block pause: re-run the preloop pipeline as a resume.
+            _resumed_from_pause_token = _paused_state.resume_token
+            _abandon_paused_state(_paused_state)
+            _paused_state = None
+        elif _paused_state is not None and answer is not None:
             return _handle_resume(
                 state=_paused_state,
                 answer=answer,
@@ -1758,7 +1860,12 @@ def delegate_to_agent(
                 ctx=ctx,
                 mcp_session_id=storage.mcp_session_id,
             )
+        elif _paused_state is not None and answer is None:
+            # Escalation pause without a host answer: surface the pending
+            # question rather than silently re-running.
+            return _response_payload_paused_reminder(_paused_state)
 
+        _interrupted_record_armed = True
         bind_delegation_trace_scope(
             workspace=ws,
             session_dir=storage.session_dir,
@@ -1829,7 +1936,7 @@ def delegate_to_agent(
             resolve_supervisor_max_turns,
         )
 
-        supervisor_agent: SupervisorAgent | None = None
+        supervisor_agent = None
         supervisor_agent_result = None
         _supervisor_max_turns = resolve_supervisor_max_turns(ws)
 
@@ -1846,6 +1953,16 @@ def delegate_to_agent(
             supervisor_agent = _get_or_create_supervisor(
                 _project_key, ws, None  # spec_rel_path not yet known; set later
             )
+            supervisor_agent.begin_delegation(
+                delegation_id=delegation_id,
+                executor_fn=lambda _turn, _correction, _reset=False: ExecutionResult(
+                    success=False,
+                    output="",
+                ),
+                max_turns=_supervisor_max_turns,
+                event_sink=_supervisor_event_sink,
+                spec_path=spec_rel_path,
+            )
             supervisor_agent.set_lifecycle_event_sink(_supervisor_event_sink)
             supervisor_agent.set_lifecycle_context(
                 project_key=_project_key,
@@ -1854,8 +1971,28 @@ def delegate_to_agent(
                 mcp_session_id=storage.mcp_session_id,
             )
             supervisor_agent.set_delegation_id(delegation_id)
-            supervisor_agent.emit_lifecycle_start(resumed=False)
-            supervisor_agent.emit_lifecycle_phase_start("preloop", resumed=False)
+            # P13-016 (revised): if this delegation is resuming from a prior
+            # clarity-block pause, emit resume lineage markers so the trace
+            # shows pause→resume continuity (the host returning is a resume,
+            # not a fresh start). The preloop pipeline still runs normally
+            # (clarity re-runs, round-cap auto-pass applies); only the lineage
+            # labeling changes.
+            if _resumed_from_pause_token is not None:
+                supervisor_agent.emit_lifecycle_start(resumed=True)
+                supervisor_agent._emit(
+                    {
+                        "type": "supervisor_resumed",
+                        "resume_token": _resumed_from_pause_token,
+                        "resumed_at_turn": 0,
+                        "project_key": _project_key,
+                        "host_answer_chars": len(answer or ""),
+                        "resume_reason": "clarity_block_reentry",
+                    }
+                )
+                supervisor_agent.emit_lifecycle_phase_start("preloop", resumed=True)
+            else:
+                supervisor_agent.emit_lifecycle_start(resumed=False)
+                supervisor_agent.emit_lifecycle_phase_start("preloop", resumed=False)
         # P13-008: tracks whether an early-close preloop gate (clarity_check /
         # invalid_spec / review_target_files_error) has already emitted
         # ``delegation_lifecycle_end`` for this delegation. When True, the
@@ -1864,13 +2001,52 @@ def delegate_to_agent(
         # The agent-side emit_lifecycle_end is also idempotent (P13-008), so
         # this flag is the source fix and the agent guard is the backstop.
         _lifecycle_closed = False
+
+        def _close_lifecycle_once(
+            lifecycle_outcome: str,
+            *,
+            phase: str | None = None,
+            phase_status: str = "ok",
+            detail: str | None = None,
+        ) -> None:
+            """Close the implement lifecycle envelope exactly once."""
+            nonlocal _lifecycle_closed
+            if (
+                delegate_mode != DELEGATE_MODE_IMPLEMENT
+                or supervisor_agent is None
+                or _lifecycle_closed
+            ):
+                return
+            if bool(getattr(supervisor_agent, "_lifecycle_closed", False)):
+                _lifecycle_closed = True
+                return
+
+            if phase is not None and hasattr(supervisor_agent, "emit_lifecycle_phase_end"):
+                supervisor_agent.emit_lifecycle_phase_end(
+                    phase,
+                    status=phase_status,
+                    detail=detail,
+                )
+            elif hasattr(supervisor_agent, "emit_lifecycle_phase_end"):
+                phases = getattr(supervisor_agent, "_lifecycle_phases", {}) or {}
+                in_progress = [
+                    name for name, status in phases.items() if status == "in_progress"
+                ]
+                if in_progress:
+                    supervisor_agent.emit_lifecycle_phase_end(
+                        in_progress[-1],
+                        status=phase_status,
+                        detail=detail,
+                    )
+
+            if hasattr(supervisor_agent, "emit_lifecycle_end"):
+                supervisor_agent.emit_lifecycle_end(lifecycle_outcome)
+            _lifecycle_closed = True
         # P13-008: tracks whether the delegation record was appended to
         # delegations.jsonl on the normal completion path. If an exception or
         # host cancellation propagates before line ~3587, the finally block
         # builds + appends a minimal "interrupted" record so the delegations
         # log and the trace tree stay 1:1 (ISS-009).
-        _delegation_record_appended = False
-        model: str | None = None
         result: ExecutionResult | None = None
         success = False
         error: str | None = None
@@ -1988,6 +2164,7 @@ def delegate_to_agent(
         clarity_round_index: int | None = None
         clarity_round_cap: int | None = None
         clarity_auto_passed: bool | None = None
+        clarity_followup_lineage: dict[str, Any] | None = None
         reviewer_pass_ran = False
         reviewer_pass_outcome: str | None = None
         reviewer_pass_note: str | None = None
@@ -2097,6 +2274,17 @@ def delegate_to_agent(
             _prior_blocked = _count_clarity_blocked_rounds(
                 storage.session_dir, spec_rel_path
             )
+            _prior_clarity_lineage_count = _prior_blocked or (
+                _count_workspace_clarity_blocked_delegations(ws, spec_rel_path)
+            )
+            if _prior_clarity_lineage_count > 0 and start_fresh:
+                clarity_followup_lineage = {
+                    "mode": "fresh_by_override",
+                    "reason": "start_fresh_true",
+                    "prior_clarity_blocked_count": _prior_clarity_lineage_count,
+                    "resumed": False,
+                }
+                mcp_request["clarity_followup_lineage"] = clarity_followup_lineage
 
             pipeline_recorder.start("clarity_check")
             (
@@ -2145,6 +2333,7 @@ def delegate_to_agent(
                     "clarity_round_index": clarity_round_index,
                     "clarity_round_cap": clarity_round_cap,
                     "clarity_auto_passed": clarity_auto_passed,
+                    "clarity_followup_lineage": clarity_followup_lineage,
                     "error": clarity_check_error,
                     "timestamp": obs.utc_now_iso(),
                 },
@@ -2169,21 +2358,28 @@ def delegate_to_agent(
             # P13-006: agent closes preloop + lifecycle on hard gate
             if supervisor_agent is not None and delegate_mode == DELEGATE_MODE_IMPLEMENT:
                 supervisor_agent.set_spec_path(spec_rel_path)
-                supervisor_agent.emit_lifecycle_phase_end("preloop", status="blocked", detail="invalid_spec")
-                supervisor_agent.emit_lifecycle_end("error")
-                _lifecycle_closed = True  # P13-008: skip postloop block
+                _close_lifecycle_once(
+                    OUTCOME_INVALID_SPEC,
+                    phase="preloop",
+                    phase_status="blocked",
+                    detail="invalid_spec",
+                )
         elif review_target_files_error:
             success = False
             error = review_target_files_error
             output = review_target_files_error
             if supervisor_agent is not None and delegate_mode == DELEGATE_MODE_IMPLEMENT:
-                supervisor_agent.emit_lifecycle_phase_end("preloop", status="blocked", detail="review_target_files_error")
-                supervisor_agent.emit_lifecycle_end("error")
-                _lifecycle_closed = True  # P13-008: skip postloop block
+                _close_lifecycle_once(
+                    "error",
+                    phase="preloop",
+                    phase_status="blocked",
+                    detail="review_target_files_error",
+                )
         elif clarity_check_blocked:
             # Hard gate: execution is paused; host must add answers to spec Q&A and re-delegate.
             success = False
             error = None
+            supervisor_paused_questions = list(clarity_check_questions or [])
             _spec_hint = (
                 f" in `{spec_rel_path}`" if spec_rel_path else " in the spec"
             )
@@ -2203,9 +2399,47 @@ def delegate_to_agent(
             # P13-006: agent closes preloop + lifecycle on clarity gate
             if supervisor_agent is not None and delegate_mode == DELEGATE_MODE_IMPLEMENT:
                 supervisor_agent.set_spec_path(spec_rel_path)
-                supervisor_agent.emit_lifecycle_phase_end("preloop", status="blocked", detail="clarity_check")
-                supervisor_agent.emit_lifecycle_end("needs_input")
-                _lifecycle_closed = True  # P13-008: skip postloop block
+                try:
+                    _pause_lifecycle_context = dict(
+                        getattr(supervisor_agent, "_lifecycle_context", {}) or {}
+                    )
+                    _pause_lifecycle_context.setdefault("project_key", _project_key)
+                    _paused_state = SupervisorState.create(
+                        spec_path=spec_rel_path,
+                        context_ref=delegation_id,
+                        plan=architect_plan,
+                        decision_log=[],
+                        completed_turn_artifacts=[],
+                        turn_index=0,
+                        questions=supervisor_paused_questions,
+                        pause_reason="clarity_check",
+                        lifecycle_context=_pause_lifecycle_context,
+                    )
+                    _paused_state.save()
+                    append_trace_record(
+                        {
+                            "type": "supervisor_paused",
+                            "resume_token": _paused_state.resume_token,
+                            "turn_index": _paused_state.turn_index,
+                            "pause_reason": _paused_state.pause_reason,
+                            "questions": _paused_state.questions,
+                            "expires_at": _paused_state.expires_at,
+                            "timestamp": obs.utc_now_iso(),
+                        },
+                        delegation_id=delegation_id,
+                        session_dir=storage.session_dir,
+                        workspace=ws,
+                    )
+                except Exception:
+                    # Best-effort: clarity gate response should not fail if pause
+                    # persistence cannot be written for any reason.
+                    pass
+                _close_lifecycle_once(
+                    "needs_input",
+                    phase="preloop",
+                    phase_status="blocked",
+                    detail="clarity_check",
+                )
         else:
             progress.notify(
                 (
@@ -2819,6 +3053,8 @@ def delegate_to_agent(
             context_block["clarity_check_result"] = clarity_check_result
         if clarity_check_audit is not None:
             context_block["clarity_check"] = clarity_check_audit
+        if clarity_followup_lineage is not None:
+            context_block["clarity_followup_lineage"] = clarity_followup_lineage
         from core.logging.delegation_log import supervisor_audit_fields
 
         context_block.update(supervisor_audit_fields(tokens))
@@ -2988,7 +3224,10 @@ def delegate_to_agent(
             and reviewer_pass_note
             and supervisor_agent._project_state is not None
         ):
-            from core.engine.reviewer_findings_classifier import classify_reviewer_findings
+            from core.engine.reviewer_findings_classifier import (
+                classify_reviewer_findings,
+                should_promote_finding_to_risk,
+            )
 
             findings = classify_reviewer_findings(
                 reviewer_pass_note,
@@ -2999,6 +3238,11 @@ def delegate_to_agent(
             )
 
             promoted_count = 0
+            suppressed_count = 0
+            changed_file_contents = _collect_reviewer_changed_file_contents(
+                ws,
+                list(files_changed or []),
+            )
             for finding in findings:
                 supervisor_agent._project_state.add_reviewer_finding(
                     text=finding.text,
@@ -3007,18 +3251,24 @@ def delegate_to_agent(
                     spec_path=spec_rel_path,
                     files=list(files_changed or [])[:10],
                 )
-                if finding.severity in ("notable", "critical"):
+                if should_promote_finding_to_risk(
+                    finding,
+                    changed_file_contents=changed_file_contents,
+                ):
                     supervisor_agent._project_state.add_risk(
                         text=finding.text,
                         severity=finding.severity,
                         source_delegation_id=delegation_id,
                     )
                     promoted_count += 1
+                elif finding.severity in ("notable", "critical"):
+                    suppressed_count += 1
 
             _supervisor_event_sink({
                 "type": "reviewer_findings_classified",
                 "finding_count": len(findings),
                 "promoted_to_risks": promoted_count,
+                "suppressed_risk_promotions": suppressed_count,
                 "severities": [f.severity for f in findings],
                 "delegation_id": delegation_id,
             })
@@ -3030,7 +3280,14 @@ def delegate_to_agent(
                     "delegation_id": delegation_id,
                 })
 
-        if supervisor_agent is not None:
+        # P13-016 (ISS-017): when an early-close preloop gate (clarity_check /
+        # invalid_spec / review_target_files_error) already closed the lifecycle
+        # envelope, the executor loop never started. Skip the host-driven
+        # turn/loop closure block entirely — otherwise complete_turn() + finish()
+        # would emit synthetic supervisor_turn_end(worker_outcome=failure) and
+        # supervisor_loop_end(end_reason=executor_error) markers for a loop that
+        # never ran, misrepresenting a pause/back-to-host handoff as a failure.
+        if supervisor_agent is not None and not _lifecycle_closed:
             # Translate the reviewer signal into the agent's per-turn check summary, then
             # let the agent emit supervisor_turn_end + supervisor_decision and close the
             # loop. With max_turns=1 (default) this is a single turn ending in `done`.
@@ -3151,12 +3408,14 @@ def delegate_to_agent(
             if pipeline_recorder is not None:
                 pipeline_recorder.end("post_gateway", status="ok")
 
-        if clarity_check_blocked:
+        if spec_invalid_reason:
+            # Invalid spec is the canonical terminal outcome even if clarity
+            # also flagged blocked in the same preloop run.
+            outcome = OUTCOME_INVALID_SPEC
+        elif clarity_check_blocked:
             outcome = OUTCOME_NEEDS_INPUT
         elif spec_path:
-            if spec_invalid_reason:
-                outcome = OUTCOME_INVALID_SPEC
-            elif spec_abs_path is not None and spec_abs_path.is_file():
+            if spec_abs_path is not None and spec_abs_path.is_file():
                 if pipeline_recorder is not None:
                     pipeline_recorder.start("spec_report")
                 report_abs_path = ensure_task_report(spec_abs_path, workspace=ws)
@@ -3223,6 +3482,25 @@ def delegate_to_agent(
 
             if storage.mcp_session_id:
                 drop_coder(storage.mcp_session_id)
+
+        _supervisor_end_reason = (
+            str(supervisor_agent_result.end_reason or "")
+            if supervisor_agent_result is not None
+            else ""
+        )
+        if not success and (
+            error_class == "unknown"
+            or (error_class is None and _supervisor_end_reason == "unknown")
+        ):
+            error_class = "unknown"
+            if not error_message:
+                error_message = (
+                    "supervisor_loop_unknown"
+                    if _supervisor_end_reason == "unknown"
+                    else "executor_unknown_failure"
+                )
+            if not error:
+                error = error_message
 
         verify_result: VerifyResult | None = None
         verify_enabled = auto_verify_enabled(ws)
@@ -3365,16 +3643,12 @@ def delegate_to_agent(
         # P13-006: agent owns postloop phase end + lifecycle end (non-fatal reviewer)
         if _postloop_started and supervisor_agent is not None and not _lifecycle_closed:
             _postloop_status = "ok"
-            supervisor_agent.emit_lifecycle_phase_end("postloop", status=_postloop_status)
-            _lifecycle_final_outcome = (
-                "escalated"
-                if (
-                    supervisor_agent_result is not None
-                    and supervisor_agent_result.outcome == "escalated"
-                )
-                else ("success" if success else "error")
+            _lifecycle_final_outcome = outcome or ("success" if success else "error")
+            _close_lifecycle_once(
+                _lifecycle_final_outcome,
+                phase="postloop",
+                phase_status=_postloop_status,
             )
-            supervisor_agent.emit_lifecycle_end(_lifecycle_final_outcome)
 
         delegation_diff_payload: dict[str, Any] | None = None
         judgment_checklist_payload: dict[str, Any] | None = None
@@ -3430,8 +3704,14 @@ def delegate_to_agent(
             files_changed=files_changed,
             files_unexpected=files_unexpected,
             session_reused=storage.session_action == "reuse",
-            session_reason=storage.session_reason,
-            session_policy=storage.session_policy,
+            session_reason=(
+                "resumed" if _resumed_from_pause_token is not None
+                else storage.session_reason
+            ),
+            session_policy=(
+                "resume" if _resumed_from_pause_token is not None
+                else storage.session_policy
+            ),
             mcp_session_id=storage.mcp_session_id,
             log_path=str(storage.log_path),
             host_kind=host_hint.host_kind,
@@ -3664,8 +3944,17 @@ def delegate_to_agent(
         # record, append a minimal "interrupted" record now so delegations.jsonl
         # stays 1:1 with the trace tree. Best-effort: never mask the original
         # exception.
-        if not _delegation_record_appended:
+        if (
+            _interrupted_record_armed
+            and not _delegation_record_appended
+            and storage is not None
+        ):
             try:
+                _close_lifecycle_once(
+                    "error",
+                    phase_status="error",
+                    detail="interrupted",
+                )
                 _ts_end = obs.utc_now_iso()
                 _dur = int((time.perf_counter() - t0) * 1000)
                 _interrupted_record = obs.build_delegation_record(
@@ -3678,7 +3967,12 @@ def delegate_to_agent(
                     model=model,
                     success=False,
                     error="interrupted before completion",
-                    response_to_cursor=None,
+                    response_to_cursor={
+                        "success": False,
+                        "output": "interrupted before completion",
+                        "files_changed": [],
+                        "outcome": "interrupted",
+                    },
                     files_requested=list(target_files),
                     files_changed=[],
                     files_unexpected=[],

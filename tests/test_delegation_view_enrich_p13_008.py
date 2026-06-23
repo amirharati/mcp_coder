@@ -217,3 +217,123 @@ def test_full_envelope_phase_count(tmp_path):
     agent_events = [e for e in events if e.get("scope") == "agent"]
     assert _names(agent_events).count("agent.phase_start") == 3
     assert _names(agent_events).count("agent.phase_end") == 3
+
+
+# ── P13-016: pause / resume / abandoned handlers + executor-ran guard ───────
+
+
+def test_supervisor_paused_renders(tmp_path):
+    """supervisor_paused must render as an agent row (not be silently dropped)."""
+    events = _enrich_with_trace(tmp_path, [
+        {"type": "supervisor_paused", "timestamp": "2026-06-22T04:00:05.000Z",
+         "resume_token": "tok-1", "turn_index": 0, "pause_reason": "clarity_check",
+         "questions": ["what color?"], "expires_at": "2026-06-22T05:00:00Z"},
+    ])
+    e = next(e for e in events if e["name"] == "agent.supervisor_paused")
+    assert e["scope"] == "agent"
+    assert "paused" in e["summary"]
+    assert "clarity_check" in e["summary"]
+    assert e["detail"]["pause_reason"] == "clarity_check"
+    assert e["detail"]["resume_token"] == "tok-1"
+    assert e["detail"]["questions"] == ["what color?"]
+
+
+def test_supervisor_resumed_renders(tmp_path):
+    """supervisor_resumed must render as an agent row (not be silently dropped)."""
+    events = _enrich_with_trace(tmp_path, [
+        {"type": "supervisor_resumed", "timestamp": "2026-06-22T04:10:00.000Z",
+         "resume_token": "tok-1", "resumed_at_turn": 0,
+         "project_key": "pk", "host_answer_chars": 42,
+         "resume_reason": "clarity_block_reentry"},
+    ])
+    e = next(e for e in events if e["name"] == "agent.supervisor_resumed")
+    assert e["scope"] == "agent"
+    assert "resumed" in e["summary"]
+    assert "clarity_block_reentry" in e["summary"]
+    assert e["detail"]["resume_reason"] == "clarity_block_reentry"
+    assert e["detail"]["host_answer_chars"] == 42
+
+
+def test_supervisor_state_abandoned_renders(tmp_path):
+    """supervisor_state_abandoned must render as an agent row."""
+    events = _enrich_with_trace(tmp_path, [
+        {"type": "supervisor_state_abandoned", "timestamp": "2026-06-22T04:10:00.000Z",
+         "resume_token": "tok-1", "project_key": "pk",
+         "pause_reason": "clarity_check"},
+    ])
+    e = next(e for e in events if e["name"] == "agent.supervisor_state_abandoned")
+    assert e["scope"] == "agent"
+    assert "abandoned" in e["summary"]
+    assert "clarity_check" in e["summary"]
+    assert e["detail"]["pause_reason"] == "clarity_check"
+
+
+def test_clarity_block_preloop_does_not_emit_synthetic_executor_close(tmp_path):
+    """A clarity-blocked preloop (helper LLM call but no executor step-indexed
+    LLM call) must NOT trigger the synthetic executor→mcp close event.
+
+    Regression guard for P13-016 viewer bug 1: previously _executor_ran was
+    True whenever ANY proxy_llm_call existed, including the clarity check's
+    helper call (no step_index). That caused the viewer to render a
+    clarity-blocked pause as if the executor ran and produced the clarity
+    questions as its output.
+    """
+    trace_lines = [
+        {"type": "trace_header", "timestamp": "2026-06-22T04:00:00.000Z"},
+        {"type": "delegation_lifecycle_start", "timestamp": "2026-06-22T04:00:00.100Z",
+         "resumed": False},
+        {"type": "delegation_phase_start", "timestamp": "2026-06-22T04:00:00.200Z",
+         "phase": "preloop"},
+        # clarity check helper LLM call — NO step_index (helper, not executor)
+        {"type": "proxy_llm_call", "timestamp": "2026-06-22T04:00:00.500Z",
+         "step_index": None, "call_index": 0, "model": "gpt-4",
+         "status_code": 200, "raw_request": "{}"},
+        {"type": "backend_llm_call", "timestamp": "2026-06-22T04:00:01.000Z",
+         "step_index": None, "call_index": 0, "model": "gpt-4",
+         "usage": {"input": 100, "output": 50}, "thinking_tokens": 0},
+        {"type": "clarity_result", "timestamp": "2026-06-22T04:00:01.100Z",
+         "passed": False, "ran": True, "has_questions": True,
+         "questions_count": 2, "questions": ["q1?", "q2?"],
+         "clarity_round_index": 0, "clarity_round_cap": 3},
+        {"type": "supervisor_paused", "timestamp": "2026-06-22T04:00:01.200Z",
+         "resume_token": "tok-1", "turn_index": 0,
+         "pause_reason": "clarity_check", "questions": ["q1?", "q2?"]},
+        {"type": "delegation_phase_end", "timestamp": "2026-06-22T04:00:01.300Z",
+         "phase": "preloop", "status": "blocked", "detail": "clarity_check"},
+        {"type": "delegation_lifecycle_end", "timestamp": "2026-06-22T04:00:01.400Z",
+         "outcome": "needs_input"},
+    ]
+    events = _enrich_with_trace(tmp_path, trace_lines)
+    names = _names(events)
+
+    # Bug 1 guard: no synthetic executor→mcp close event
+    assert "executor→mcp" not in names, (
+        "clarity-blocked preloop must not emit synthetic executor→mcp close "
+        "(helper LLM calls without step_index must not count as executor ran)"
+    )
+    # The pause must be visible
+    assert "agent.supervisor_paused" in names
+    # The lifecycle end outcome must be visible
+    end_ev = next(e for e in events if e["name"] == "agent.lifecycle_end")
+    assert end_ev["detail"]["outcome"] == "needs_input"
+
+
+def test_executor_step_indexed_call_still_emits_synthetic_close(tmp_path):
+    """Sanity: a real executor run (step-indexed LLM call) still triggers the
+    synthetic executor→mcp close event. Ensures the bug-1 fix didn't over-correct.
+    """
+    trace_lines = [
+        {"type": "trace_header", "timestamp": "2026-06-22T04:00:00.000Z"},
+        {"type": "proxy_llm_call", "timestamp": "2026-06-22T04:00:02.000Z",
+         "step_index": 0, "call_index": 0, "model": "gpt-4",
+         "status_code": 200, "raw_request": "{}"},
+        {"type": "backend_llm_call", "timestamp": "2026-06-22T04:00:03.000Z",
+         "step_index": 0, "call_index": 0, "model": "gpt-4",
+         "usage": {"input": 100, "output": 50}, "thinking_tokens": 0},
+    ]
+    events = _enrich_with_trace(tmp_path, trace_lines)
+    names = _names(events)
+    assert "executor→mcp" in names, (
+        "real executor run (step-indexed LLM call) must still emit "
+        "synthetic executor→mcp close"
+    )

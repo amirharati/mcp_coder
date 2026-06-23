@@ -53,14 +53,18 @@ Each tier-0–2 file has an HTML **stewardship** comment at the top — agents m
 | [VISION_DOCS.md](./VISION_DOCS.md) | **Vision doc map & stewardship** — what agents may edit |
 | [INSTALL.md](./INSTALL.md) | **Install & reproducible env** — Python version, locked deps, bootstrap scripts |
 | [resources/spec-template.md](../resources/spec-template.md) | Task spec template (MCP copy: `.mcp-coder/spec-template.md`) |
-| [IDEA.md](./IDEA.md) | Vision, architecture, design principles (why we’re building this) |
-| [PHASES.md](./PHASES.md) | Multi-phase delivery plan (Phase 1–5+, technical detail) |
+| [IDEA.md](./IDEA.md) | Vision, architecture, design principles (why we're building this) |
+| [PHASES.md](./PHASES.md) | Multi-phase delivery plan (Phase 1–13+, technical detail) |
 | [PHASE1_MVP.md](./PHASE1_MVP.md) | **Phase 1 PM** — closed P1-199 |
 | [PHASE4_MVP.md](./PHASE4_MVP.md) | **Phase 4 PM** — closed P4 exit; active → Phase 5 / BACKLOG |
 | [PHASE4_ISSUES.md](./PHASE4_ISSUES.md) | **Phase 4 issues** — frozen; carried → BACKLOG |
 | [PHASE9_MVP.md](./PHASE9_MVP.md) | **Phase 9 PM** — closed 2026-06-17 (write-always + proxy + replay) |
 | [PHASE10_MVP.md](./PHASE10_MVP.md) | **Phase 10 PM** — closed 2026-06-18 (trustable real-project dogfood) |
-| [BACKLOG.md](./BACKLOG.md) | Project backlog (deferred / later / nice-to-have) |
+| [PHASE11_MVP.md](./PHASE11_MVP.md) | **Phase 11 PM** — closed 2026-06-20 (supervised execution + smarter context) |
+| [PHASE12_MVP.md](./PHASE12_MVP.md) | **Phase 12 PM** — closed 2026-06-21 (supervisor orchestration infrastructure) |
+| [PHASE13_MVP.md](./PHASE13_MVP.md) | **Phase 13 PM** — active (stabilize + dogfood + document + test hardening + backlog review) |
+| [notes/supervisor-orchestration-layer.md](./notes/supervisor-orchestration-layer.md) | **Phase 12+ architecture note** — Supervisor as intelligent orchestration layer (D-ARCH-7..11); Phase 12 shipped + Phase 13 dogfood verified |
+| [BACKLOG.md](./BACKLOG.md) | Project backlog (deferred / later / nice-to-have; includes Phase 13 watch-for-evidence items BL-549..BL-555) |
 | [PHASE1_ISSUES.md](./PHASE1_ISSUES.md) | **Phase 1 issue tracker** — gaps found during P1 (incl. server log) |
 | [TASK_SPEC_TEMPLATE.md](./TASK_SPEC_TEMPLATE.md) | Blank template — **do not edit**; copy into `docs/tasks/` |
 
@@ -103,9 +107,13 @@ E2E reference consumer: `mcp_coder_phase1_e2e` (expense-splitter epic).
 | [notes/spec-based-development.md](./notes/spec-based-development.md) | Spec-as-contract hypothesis → **live experiment** |
 | [notes/rag-gap-analysis.md](./notes/rag-gap-analysis.md) | **Living** — where RAG helps vs logging/index; Phase 5 corpora & open questions |
 | [notes/workflow-turns.md](./notes/workflow-turns.md) | **Living** — polish/refactor/document/digest turns & epic-boundary cadence |
+| [notes/supervisor-orchestration-layer.md](./notes/supervisor-orchestration-layer.md) | **Phase 12+ architecture** — Supervisor as intelligent orchestration layer (D-ARCH-7..11); Phase 12 shipped + Phase 13 dogfood verified |
+| [notes/delegation-workflow-vision.md](./notes/delegation-workflow-vision.md) | Full role hierarchy + delegation lifecycle + planner/executor separation + host hedging (BL-527) |
+| [notes/multi-model-roles.md](./notes/multi-model-roles.md) | Per-role models (D-P4-8) + role hierarchy + host hedging |
+| [notes/model-policy-layer.md](./notes/model-policy-layer.md) | `model_policy` design — per-role, per-delegation overrides |
 
 ## Quick start (planning)
 
 1. Read [IDEA.md](./IDEA.md) for context.
-2. Use [PHASE1_MVP.md](./PHASE1_MVP.md) for what to build next.
+2. Use the active phase PM board (currently [PHASE13_MVP.md](./PHASE13_MVP.md)) for what to build next.
 3. Deep dive: [PHASES.md](./PHASES.md) § Phase 1 · [storage-and-linking.md](./notes/storage-and-linking.md).

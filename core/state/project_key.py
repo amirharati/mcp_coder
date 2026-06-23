@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import os
+import re
 from pathlib import Path
 
 
@@ -15,11 +16,16 @@ class ProjectKeyResolver:
         if spec_path is None:
             return "default"
 
-        normalized = str(spec_path).strip().replace("\\", "/").lstrip("./").strip("/")
+        normalized = str(spec_path).strip().replace("\\", "/")
+        while normalized.startswith("./"):
+            normalized = normalized[2:]
+        normalized = normalized.strip("/")
         if not normalized:
             return "default"
 
         parts = [segment for segment in normalized.split("/") if segment and segment != "."]
+        if parts[:2] == [".mcp-coder", "specs"]:
+            parts = parts[2:]
         if not parts:
             return "default"
 
@@ -37,6 +43,5 @@ class ProjectKeyResolver:
         stem = Path(segment).stem.strip()
         if not stem:
             stem = segment.strip()
-        if "-" in stem:
-            stem = stem.split("-", 1)[0]
+        stem = re.sub(r"-\d+(?:-.+)?$", "", stem)
         return stem or "default"

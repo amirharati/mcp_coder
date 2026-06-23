@@ -365,7 +365,9 @@ class SupervisorAgent:
         # phase_start(preloop) already emitted by the server's early agent creation).
         # If the caller already started the envelope (via set_lifecycle_context /
         # emit_lifecycle_start), keep it; otherwise reset to a clean slate.
-        if not self._lifecycle_started:
+        if self._lifecycle_closed:
+            self._lifecycle_phases = {}
+        elif not self._lifecycle_started:
             self._lifecycle_context = {}
             self._lifecycle_phases = {}
         # P13-008: a fresh delegation opens a fresh envelope — clear the closed

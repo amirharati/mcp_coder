@@ -166,3 +166,31 @@ def test_api_delegation_enrich_endpoint(tmp_path):
     finally:
         server.shutdown()
         thread.join(timeout=2)
+
+
+def test_enrich_view_events_surface_row_level_typed_failure_fields():
+    record = {
+        "delegation_id": "unknown-delegation",
+        "timestamp_end": "2026-01-01T00:00:00Z",
+        "outcome": "needs_input",
+        "error": "supervisor_loop_unknown",
+        "error_detail": {
+            "error_class": "unknown",
+            "error_message": "supervisor_loop_unknown",
+        },
+        "response_to_cursor": {
+            "output_preview": "",
+            "output_bytes": 0,
+            "output_sha256": "abc",
+            "success": False,
+            "files_changed": [],
+        },
+    }
+
+    enriched = enrich_delegation_record(record)
+    host_event = next(
+        event for event in enriched["view_events"] if event.get("id") == "mcp.host.out"
+    )
+    assert host_event["detail"]["outcome"] == "needs_input"
+    assert host_event["detail"]["error_class"] == "unknown"
+    assert host_event["detail"]["error_message"] == "supervisor_loop_unknown"

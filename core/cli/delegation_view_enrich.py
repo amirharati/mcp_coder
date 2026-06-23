@@ -519,10 +519,13 @@ def _build_view_events(
             compile_by_stage[stage] = line
 
     # Did the executor actually run?
-    # True if proxy/backend LLM pairs, action/tool_call events, or a final_executor_prompt
-    # compile_event (which means the prompt was assembled, so executor was at least prepared).
+    # True only if executor-loop LLM pairs (step-indexed) or executor actions ran.
+    # Helper LLM calls (clarity, spec_validation, planner) have no step_index and
+    # must NOT count — otherwise a preloop clarity block is misrendered as an
+    # executor turn that produced the clarity questions as output.
     _executor_ran = bool(
-        proxy_by_key or backend_by_key
+        any(k[0] is not None for k in proxy_by_key)
+        or any(k[0] is not None for k in backend_by_key)
         or compile_by_stage.get("final_executor_prompt")
         or any(l.get("type") in ("action", "tool_call") for l in trace_lines)
     )
@@ -1139,6 +1142,81 @@ def _build_view_events(
                 is_boundary=False,
             ))
 
+        elif t == "supervisor_paused":
+            _reason = line.get("pause_reason") or ""
+            _questions = line.get("questions") or []
+            _summary_parts = [p for p in [
+                "paused",
+                f"reason={_reason}" if _reason else None,
+                f"{len(_questions)} question(s)" if _questions else None,
+            ] if p]
+            _emit(_view_event(
+                ev_id=f"agent.supervisor.paused.{line.get('timestamp')}",
+                name="agent.supervisor_paused",
+                direction="·",
+                scope="agent",
+                timestamp=line.get("timestamp"),
+                summary=" · ".join(_summary_parts),
+                detail={
+                    "event_type": "supervisor_paused",
+                    "resume_token": line.get("resume_token"),
+                    "turn_index": line.get("turn_index"),
+                    "pause_reason": _reason,
+                    "questions": _questions,
+                    "expires_at": line.get("expires_at"),
+                    "raw": line,
+                },
+                is_boundary=False,
+                is_divider=False,
+            ))
+
+        elif t == "supervisor_resumed":
+            _reason = line.get("resume_reason") or ""
+            _summary_parts = [p for p in [
+                "resumed",
+                f"reason={_reason}" if _reason else None,
+                f"turn={line.get('resumed_at_turn')}" if line.get("resumed_at_turn") is not None else None,
+            ] if p]
+            _emit(_view_event(
+                ev_id=f"agent.supervisor.resumed.{line.get('timestamp')}",
+                name="agent.supervisor_resumed",
+                direction="·",
+                scope="agent",
+                timestamp=line.get("timestamp"),
+                summary=" · ".join(_summary_parts),
+                detail={
+                    "event_type": "supervisor_resumed",
+                    "resume_token": line.get("resume_token"),
+                    "resumed_at_turn": line.get("resumed_at_turn"),
+                    "project_key": line.get("project_key"),
+                    "host_answer_chars": line.get("host_answer_chars"),
+                    "resume_reason": _reason,
+                    "raw": line,
+                },
+                is_boundary=False,
+                is_divider=False,
+            ))
+
+        elif t == "supervisor_state_abandoned":
+            _reason = line.get("pause_reason") or ""
+            _emit(_view_event(
+                ev_id=f"agent.supervisor.abandoned.{line.get('timestamp')}",
+                name="agent.supervisor_state_abandoned",
+                direction="·",
+                scope="agent",
+                timestamp=line.get("timestamp"),
+                summary="state abandoned" + (f" · reason={_reason}" if _reason else ""),
+                detail={
+                    "event_type": "supervisor_state_abandoned",
+                    "resume_token": line.get("resume_token"),
+                    "project_key": line.get("project_key"),
+                    "pause_reason": _reason,
+                    "raw": line,
+                },
+                is_boundary=False,
+                is_divider=False,
+            ))
+
         elif t == "clarity_result":
             passed = line.get("passed")
             auto_passed = line.get("clarity_auto_passed")
@@ -1453,6 +1531,7 @@ def _build_view_events(
         output_text = resolved.get("text") or ""
         files_changed = record.get("files_changed") or []
         rtc = record.get("response_to_cursor") or {}
+        error_detail = record.get("error_detail") or {}
 
         # Aggregate token totals across all proxy+backend pairs
         total_tokens_in  = sum(
@@ -1485,6 +1564,13 @@ def _build_view_events(
                 "output_text": output_text,
                 "output_source": resolved.get("source"),
                 "success": rtc.get("success"),
+                "outcome": record.get("outcome") or rtc.get("outcome"),
+                "error_class": rtc.get("error_class") or error_detail.get("error_class"),
+                "error_message": (
+                    rtc.get("error_message")
+                    or error_detail.get("error_message")
+                    or record.get("error")
+                ),
                 # aggregate stats
                 "llm_calls": llm_call_count,
                 "total_tokens_in":  total_tokens_in  or None,
@@ -1498,6 +1584,7 @@ def _build_view_events(
     rtc = record.get("response_to_cursor") or {}
     resolved = _resolve_output(record, trace_lines)
     output_text = resolved.get("text") or ""
+    error_detail = record.get("error_detail") or {}
     preview = rtc.get("output_preview") or output_text
     mcp_host_summary = (preview[:120] + "…") if len(preview) > 120 else preview
     _emit(_view_event(
@@ -1513,6 +1600,13 @@ def _build_view_events(
             "output_bytes": rtc.get("output_bytes"),
             "output_sha256": rtc.get("output_sha256"),
             "success": rtc.get("success"),
+            "outcome": record.get("outcome") or rtc.get("outcome"),
+            "error_class": rtc.get("error_class") or error_detail.get("error_class"),
+            "error_message": (
+                rtc.get("error_message")
+                or error_detail.get("error_message")
+                or record.get("error")
+            ),
             "source": resolved.get("source"),
         },
     ))

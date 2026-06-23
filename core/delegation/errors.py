@@ -57,6 +57,10 @@ _ERROR_CLASS_TABLE: list[tuple[str, list[str]]] = [
             "search/replace",
             "not unique",
             "failed to apply edit",
+            "failed to apply patch",
+            "patch failed",
+            "apply_patch",
+            "hunk",
         ],
     ),
     (
@@ -64,8 +68,10 @@ _ERROR_CLASS_TABLE: list[tuple[str, list[str]]] = [
         [
             "missing api key",
             "authenticationerror",
-            "notfounderror",
             "no api key",
+            "model not found",
+            "unknown model",
+            "invalid model",
         ],
     ),
     ("timeout", ["timeouterror", "futurestimeouterror", "timed out"]),
@@ -88,6 +94,33 @@ _SHORT_MESSAGES: dict[str, str] = {
     "provider": "LLM provider error; check model name and API key.",
     "unknown": "Delegation failed with an unclassified error; see JSONL log for details.",
 }
+
+_CONFIG_AUTH_MARKERS = (
+    "missing api key",
+    "authenticationerror",
+    "no api key",
+)
+
+_CONFIG_MODEL_MARKERS = (
+    "model not found",
+    "unknown model",
+    "unknown model id",
+    "invalid model",
+)
+
+_EDIT_FLOW_MARKERS = (
+    "search/replace",
+    "<<<<<<< search",
+    ">>>>>>> replace",
+    "*** begin patch",
+    "*** update file",
+    "failed to apply edit",
+    "failed to apply patch",
+    "apply_patch",
+    "patch failed",
+    "hunk",
+    "diff",
+)
 
 
 def classify_delegation_error(
@@ -115,6 +148,24 @@ def classify_delegation_error(
         combined = f"{exc_type}: {exc}\n{combined}"
 
     lower = combined.lower()
+    # If a pre-existing short_message is echoed into the error blob, do not let
+    # that synthetic phrase alone force a config classification.
+    evidence_lower = lower.replace(_SHORT_MESSAGES["config"].lower(), " ")
+    has_not_found = "notfounderror" in evidence_lower or "not found" in evidence_lower
+    has_config_auth_evidence = any(marker in evidence_lower for marker in _CONFIG_AUTH_MARKERS)
+    has_config_model_evidence = any(marker in evidence_lower for marker in _CONFIG_MODEL_MARKERS)
+    has_edit_flow_evidence = any(
+        marker in evidence_lower
+        for marker in _EDIT_FLOW_MARKERS
+    )
+    if (
+        has_not_found
+        and has_edit_flow_evidence
+        and not has_config_auth_evidence
+        and not has_config_model_evidence
+    ):
+        ec = "edit_format"
+        return ec, _SHORT_MESSAGES[ec]
 
     for error_class, hints in _ERROR_CLASS_TABLE:
         if any(h in lower for h in hints):

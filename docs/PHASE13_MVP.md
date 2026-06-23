@@ -8,7 +8,7 @@
 
 # Phase 13 — Stabilize, dogfood, document
 
-**Status:** **Active** — opened 2026-06-21.
+**Status:** **Active** — opened 2026-06-21. Code/issue work complete (P13-005..P13-016, 2026-06-23); docs sync in progress (P13-002); test hardening (P13-003) and end-of-phase backlog review (P13-004) pending.
 **Purpose:** Short focus phase after Phase 12's infrastructure push. Prove the Phase 12 stack under real use (CLI + Cursor), analyze traces/logs for correct sequencing, consolidate docs to match shipped reality, harden tests from findings, and close a small set of low-hanging backlog items. **Not** a major feature phase — details and smarter behaviour come later (BL-543 B/C, BL-547, BL-546, BL-526, etc.).
 **PM board:** this file · **Issues:** [PHASE13_ISSUES.md](./PHASE13_ISSUES.md)
 **Phase 12 (closed):** [PHASE12_MVP.md](./PHASE12_MVP.md) · [PHASE12_ISSUES.md](./PHASE12_ISSUES.md)
@@ -56,11 +56,19 @@ Those stay in backlog until Phase 13 exit review prioritizes them for a later ph
 | 3 | P13-006 | [P13-006](../tasks/P13-006-supervisor-owns-lifecycle.md) | **done** | Move lifecycle ownership from server into `SupervisorAgent` — agent emits phase events as it transitions (non-retroactive), server becomes thin. Fixes P13-ISS-007. |
 | 4 | P13-007 | [P13-007](../tasks/P13-007-supervisor-agent-checkpoint.md) | **done** | Agent checkpoint at every delegation end (`AgentCheckpoint` / `agent_state.json`) — agent genuinely stateful across restarts; CLI ≡ server invariant holds. Mid-loop crash recovery deferred to BL-548. |
 | 4.5 | P13-008 | [P13-008](../tasks/P13-008-lifecycle-envelope-visibility.md) | **done** | Lifecycle envelope closure guard + viewer visibility + delegations-log parity. Fixes P13-ISS-008 (double-close on early-close paths), P13-ISS-009 (orphan delegations.jsonl rows), P13-ISS-010 (viewer dropped all 8 agent-envelope event types). |
-| 5 | P13-002 | *(pending)* | **pending** | Doc consolidation: architecture note, BACKLOG sync, archive stale notes |
-| 6 | P13-003 | *(pending)* | **pending** | Test hardening from P13-001 + P13-005 + P13-006 + P13-007 findings |
-| 7 | P13-004 | *(pending)* | **pending** | Low-hanging fixes + **end-of-phase backlog review** (items TBD after P13-001/P13-005/P13-006/P13-007) |
+| 5 | P13-009 | [P13-009](../tasks/P13-009-project-key-normalization.md) | **done** | `project_key` normalization (strip `.mcp-coder/specs/` prefix + trailing step suffix). Fixes P13-ISS-001/002. |
+| 6 | P13-010 | [P13-010](../tasks/P13-010-error-classifier-and-reviewer-hardening.md) | **done** | Error classifier keyword tightening + reviewer parse tolerance. Fixes P13-ISS-005/006 first pass. |
+| 7 | P13-011 | [P13-011](../tasks/P13-011-reviewer-contradiction-guard.md) | **done** | Deterministic contradiction guard in findings classifier. Fixes P13-ISS-003. |
+| 8 | P13-012 | [P13-012](../tasks/P13-012-closure-and-resume-lineage.md) | **done** | Lifecycle envelope closure guard on needs_input/exception paths + clarity follow-up lineage label. Fixes P13-ISS-011/013. |
+| 9 | P13-013 | [P13-013](../tasks/P13-013-invalid-spec-outcome-parity.md) | **done** | Canonical `OUTCOME_INVALID_SPEC` precedence + outcome parity across artifacts. Fixes P13-ISS-012. |
+| 10 | P13-014 | [P13-014](../tasks/P13-014-clarity-resume-and-unknown-cause-typing.md) | **done** | Clarity-block true resume lineage + unknown-failure typed-cause surfacing. Fixes P13-ISS-014/015 (initial pass). |
+| 11 | P13-015 | [P13-015](../tasks/P13-015-bundle-b-reviewer-and-classifier-tail-hardening.md) | **done** | Reviewer parser + classifier tail hardening (Bundle B). Addresses ISS-005/006 residuals. |
+| 12 | P13-016 | [P13-016](../tasks/P13-016-pause-resume-and-handoff-semantics.md) | **done** | Pause/resume + handoff semantics (Bundle C): clarity-block auto-resume + blocked preloop = pause not failure. Fixes P13-ISS-014/017 (verified dogfood `28fbe283`). |
+| 13 | P13-002 | *(pending)* | **pending** | Doc consolidation: architecture note, BACKLOG sync, archive stale notes |
+| 14 | P13-003 | *(pending)* | **pending** | Test hardening from P13-001 + P13-005..P13-016 findings |
+| 15 | P13-004 | *(pending)* | **pending** | **End-of-phase backlog review** (BL-549..BL-555 watch-for-evidence items added during P13-009..016) |
 
-**Gate:** P13-005 + P13-001 + P13-006 + P13-007 complete (agent owns lifecycle + persists state). P13-002..P13-004 scope is informed by P13-001/P13-005/P13-006/P13-007 results. Do not pre-commit P13-004 backlog picks before that analysis.
+**Gate:** P13-005..P13-016 complete (agent owns lifecycle + persists state + dogfood-verified pause/resume + reviewer/classifier hardened + typed-cause surfacing). P13-002..P13-004 scope is informed by P13-005..P13-016 results. Backlog watch items (BL-549..BL-555) tracked for evidence in future runs.
 
 ---
 
@@ -68,7 +76,7 @@ Those stay in backlog until Phase 13 exit review prioritizes them for a later ph
 
 ### P13-001 — Dogfood capstone + trace analysis
 
-**Status:** `pending`
+**Status:** `done`
 **Goal:** Run real delegations exercising Phase 12 paths using **existing CLI** (`mcp-coder delegate`, `trace inspect`, `pytest`); capture delegation IDs; analyze traces; file `P13-ISS-*` for bugs.
 
 **No new dogfood scripts in repo.**
@@ -215,6 +223,8 @@ Three fixes from the P13-007 server dogfood (`d8842b66`), all concerning the del
 - **BL-518** remainder — unified log level DX
 - Bugs filed as `P13-ISS-*` during dogfood
 
+**Actual P13 outcome (post-dogfood):** No low-hanging fixes were promoted — the dogfood arc (P13-005..P13-016) consumed the available implementation budget on lifecycle/persistence/pause-resume/classifier hardening. Backlog **grew** with watch-for-evidence items (BL-549..BL-555) tied to ISS-006/015/014 residual observation needs and viewer-fidelity follow-ups. P13-004 scope is therefore reduced to the **end-of-phase backlog review** only: triage BL-549..BL-555, ensure no silent deletes, add one-line rationale for items left open.
+
 **Exit ritual:** Update BACKLOG statuses; move unpicked items with one-line rationale; no silent deletes.
 
 ---
@@ -223,6 +233,11 @@ Three fixes from the P13-007 server dogfood (`d8842b66`), all concerning the del
 
 | Date | Event |
 |------|-------|
+| 2026-06-23 | **Docs sync (P13-002 in progress)** — updated PHASES.md (Phase 11/12 rows marked complete, Phase 13 row added to arc table, Status line synced), VISION_DOCS.md (changelog entry for code/issue work completion + remaining milestones), PHASE13_MVP.md (worker order table extended with P13-009..P13-016, P13-001 status flipped to done, P13-004 scope clarified to backlog-review-only), notes/supervisor-orchestration-layer.md (Phase 12 shipped + Phase 13 dogfood verified). `guide/` folder intentionally untouched. |
+| 2026-06-23 | P13-016 implemented (Bundle C): fixed ISS-014 (clarity-block auto-resume with true lineage) and ISS-017 (blocked preloop = pause/handoff not failure). 5-delegation dogfood (session `28fbe283`) confirms both fixes end-to-end; 2 viewer rendering bugs also fixed. All P13 issues now resolved or fixed-pending-verify. |
+| 2026-06-23 | P13-015 implemented (Bundle B tail hardening): reviewer parser tolerance and classifier precision strengthened for ISS-005/006 residual cases; targeted suites pass (`16 + 38 + combined 85`). ISS-005/006 moved to fixed-pending-verify in issues log; ISS-017 remains the only open issue pre-dogfood. |
+| 2026-06-23 | ISS-016 forensic gate completed on canonical trace (`0f5d8db1` / `3c10501d`): failure cause confirmed as executor output-contract drift (whole-file markdown response) with unknown fallback. Opened ISS-017 for remaining preloop clarity-block observability bug (synthetic loop-failure events emitted despite no executor turn). |
+| 2026-06-23 | P13-014 implemented (Bundle A): clarity-block follow-up now resumes true paused lineage (ISS-014) and unknown loop failures persist typed row/view cause (ISS-015). Targeted regressions pass; keep ISS-016 as live-trace/dogfood verification gate for `0f5d8db1` / `3c10501d`. |
 | 2026-06-22 | P13-008 implemented: lifecycle envelope closure guard (ISS-008 — idempotent `emit_lifecycle_end` + server `_lifecycle_closed` flag in 3 early-close branches), delegations-log parity (ISS-009 — `finally`-block interrupted-record append for cancelled/exception paths), viewer visibility (ISS-010 — 8 new `scope=agent` handlers in `delegation_view_enrich.py` for all P13-005/006/007 event types). 20 new tests + 45 regression tests pass. ISS-008/009/010 marked fixed-pending-verify. |
 | 2026-06-21 | P13-007 implemented: `AgentCheckpoint` (`agent_state.json`) saved at end of every delegation (success/error/escalated); `_get_or_create_supervisor` rehydrates from disk on cache miss. CLI ≡ server invariant holds — in-memory registry is now a cache, on-disk checkpoint is the source of truth. 16 new tests; 144 supervisor+checkpoint tests pass. Dogfood `3ad38219` confirms `agent_checkpoint_saved` trace event + file written. Mid-loop crash recovery deferred to BL-548. |
 | 2026-06-21 | P13-006 implemented: agent now owns the lifecycle envelope — created early, emits `lifecycle_start` + `phase_start(preloop)` BEFORE preloop work, emits phase transitions at execution entry (non-retroactive). Added `delegate()` / `resume_and_delegate()` API surface + `_lifecycle_started` preserve-vs-reset semantics. Preloop hard-gates close envelope coherently. 15 new tests; 89 spec-validation tests pass; 0 new failures in full suite. Dogfood `eea1e0c4` trace confirms honest ordering. P13-ISS-007 fixed. |

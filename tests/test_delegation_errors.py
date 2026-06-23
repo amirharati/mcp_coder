@@ -60,6 +60,53 @@ class TestClassifyDelegationError:
         ec, _ = classify_delegation_error("litellm.AuthenticationError: invalid key")
         assert ec == "config"
 
+    def test_config_explicit_unknown_model_error(self):
+        ec, _ = classify_delegation_error("litellm.NotFoundError: model not found")
+        assert ec == "config"
+
+    def test_notfound_patch_attempt_is_not_config(self):
+        payload = """\
+litellm.NotFoundError: resource not found
+We need modify the file.
+<<<<<<< SEARCH
+old line
+=======
+new line
+>>>>>>> REPLACE
+failed to apply patch: hunk not found
+"""
+        ec, _ = classify_delegation_error(payload)
+        assert ec == "edit_format"
+
+    def test_generic_notfound_without_config_evidence_is_unknown(self):
+        ec, _ = classify_delegation_error("NotFoundError: resource not found")
+        assert ec == "unknown"
+
+    def test_notfound_with_synthetic_config_message_and_patch_is_edit_format(self):
+        payload = """\
+NotFoundError: resource not found
+*** Begin Patch
+*** Update File: habit_cli/storage.py
+@@
+-old
++new
+Configuration error (missing API key or unknown model id); check your .env.
+"""
+        ec, _ = classify_delegation_error(payload)
+        assert ec == "edit_format"
+
+    def test_auth_config_evidence_remains_config_even_with_patch_markers(self):
+        payload = """\
+litellm.AuthenticationError: invalid key
+<<<<<<< SEARCH
+old
+=======
+new
+>>>>>>> REPLACE
+"""
+        ec, _ = classify_delegation_error(payload)
+        assert ec == "config"
+
     def test_timeout_exception(self):
         exc = TimeoutError("timeout after 120s")
         ec, _ = classify_delegation_error("", exc=exc)

@@ -11,6 +11,7 @@ from uuid import UUID
 import pytest
 
 from core.engine.base import ExecutionResult
+from core.engine.clarity_llm import ClarityCheckResult
 from core.engine.supervisor_agent import (
     SupervisorAgent,
     SupervisorTurnContext,
@@ -54,6 +55,43 @@ def _state(
 
 def test_project_key_from_tasks_spec():
     assert ProjectKeyResolver.from_spec_path("tasks/auth-01.md") == "tasks/auth"
+
+
+def test_project_key_from_internal_specs_tasks_spec():
+    assert (
+        ProjectKeyResolver.from_spec_path(
+            ".mcp-coder/specs/tasks/p13-habit-01-models.md"
+        )
+        == "tasks/p13-habit"
+    )
+    assert (
+        ProjectKeyResolver.from_spec_path(
+            "./.mcp-coder/specs/tasks/p13-habit-01-models.md"
+        )
+        == "tasks/p13-habit"
+    )
+
+
+def test_project_key_from_flat_epic_step_spec():
+    assert (
+        ProjectKeyResolver.from_spec_path("tasks/p13-habit-01-models.md")
+        == "tasks/p13-habit"
+    )
+    assert (
+        ProjectKeyResolver.from_spec_path("tasks/p13-habit-12.md")
+        == "tasks/p13-habit"
+    )
+    assert (
+        ProjectKeyResolver.from_spec_path("tasks/p13-habit.md")
+        == "tasks/p13-habit"
+    )
+
+
+def test_project_key_from_nested_epic_step_spec():
+    assert (
+        ProjectKeyResolver.from_spec_path("tasks/p13-habit/01-models.md")
+        == "tasks/p13-habit"
+    )
 
 
 def test_project_key_from_docs_tasks_spec():
@@ -339,6 +377,425 @@ def test_delegate_start_fresh_abandons_paused_state_and_runs_fresh(tmp_path, mon
         )
     assert payload["success"] is True
     assert not paused_path.exists()
+
+
+def test_delegate_needs_input_outcome_matches_lifecycle_and_log(tmp_path, monkeypatch):
+    workspace = tmp_path / "workspace"
+    workspace.mkdir()
+    (workspace / "main.py").write_text("print('hello')\n", encoding="utf-8")
+    spec_dir = workspace / ".mcp-coder" / "specs" / "tasks"
+    spec_dir.mkdir(parents=True)
+    (spec_dir / "needs-input.md").write_text(
+        """\
+---
+spec_id: needs-input
+files_edit:
+  - main.py
+edit_scope: discover
+---
+
+# Needs input task
+
+## Goal
+
+Update main.
+
+## Done when
+
+`main.py` is updated.
+
+## Files
+
+### Edit
+- `main.py`
+""",
+        encoding="utf-8",
+    )
+    monkeypatch.chdir(workspace)
+    monkeypatch.setenv("MCP_CODER_HOME", str(tmp_path / "home"))
+    monkeypatch.setenv("MCP_CODER_USE_CONTEXT_PACKAGE", "0")
+    monkeypatch.setenv("MCP_CODER_SPEC_VALIDATION", "0")
+    monkeypatch.setenv("MCP_CODER_CLARITY_PASS", "0")
+    monkeypatch.setenv("MCP_CODER_REVIEWER_PASS", "1")
+    monkeypatch.setenv("MCP_CODER_SUPERVISOR_MAX_TURNS", "2")
+    _SUPERVISOR_REGISTRY.clear()
+
+    ok_result = ExecutionResult(
+        success=True,
+        output="done",
+        files_changed=["main.py"],
+        model="gpt-4o",
+        tokens={"source": "unavailable"},
+    )
+    mock_engine = type(
+        "MockEngine",
+        (),
+        {"model_name": "gpt-4o", "backend_id": "aider", "run": lambda *a, **k: ok_result},
+    )()
+
+    try:
+        with patch("server.mcp_server.get_engine", return_value=mock_engine), patch(
+            "server.mcp_server._collect_reviewer_unified_diff", return_value="diff --git"
+        ), patch(
+            "server.mcp_server._apply_reviewer_pass",
+            return_value=(
+                True,
+                "issues",
+                "- Still needs a follow-up edit.",
+                {"ran": True},
+                None,
+                {},
+            ),
+        ):
+            payload = json.loads(
+                delegate_to_agent(
+                    task="Update main",
+                    target_files=["main.py"],
+                    context_summary="Python project",
+                    backend="aider",
+                    spec_path="tasks/needs-input.md",
+                )
+            )
+    finally:
+        _SUPERVISOR_REGISTRY.clear()
+
+    assert payload["outcome"] == "needs_input"
+    record = json.loads(Path(payload["log_path"]).read_text(encoding="utf-8").strip())
+    assert record["outcome"] == "needs_input"
+
+    trace_path = Path(record["session_dir"]) / record["trace_ref"]
+    lifecycle_end_events = [
+        json.loads(line)
+        for line in trace_path.read_text(encoding="utf-8").splitlines()
+        if json.loads(line).get("type") == "delegation_lifecycle_end"
+    ]
+    assert len(lifecycle_end_events) == 1
+    assert lifecycle_end_events[0]["outcome"] == "needs_input"
+
+
+def test_delegate_unknown_failure_sets_typed_cause(tmp_path, monkeypatch):
+    workspace = tmp_path / "workspace"
+    workspace.mkdir()
+    (workspace / "main.py").write_text("print('hello')\n", encoding="utf-8")
+    spec_dir = workspace / ".mcp-coder" / "specs" / "tasks"
+    spec_dir.mkdir(parents=True)
+    (spec_dir / "unknown-failure.md").write_text(
+        """\
+---
+spec_id: unknown-failure
+files_edit:
+  - main.py
+edit_scope: discover
+---
+
+# Unknown failure task
+
+## Goal
+
+Update main.
+
+## Done when
+
+`main.py` is updated.
+
+## Files
+
+### Edit
+- `main.py`
+""",
+        encoding="utf-8",
+    )
+    monkeypatch.chdir(workspace)
+    monkeypatch.setenv("MCP_CODER_HOME", str(tmp_path / "home"))
+    monkeypatch.setenv("MCP_CODER_USE_CONTEXT_PACKAGE", "0")
+    monkeypatch.setenv("MCP_CODER_SPEC_VALIDATION", "0")
+    monkeypatch.setenv("MCP_CODER_CLARITY_PASS", "0")
+    monkeypatch.setenv("MCP_CODER_REVIEWER_PASS", "0")
+    monkeypatch.setenv("MCP_CODER_SUPERVISOR_MAX_TURNS", "1")
+    _SUPERVISOR_REGISTRY.clear()
+
+    unknown_result = ExecutionResult(
+        success=False,
+        output="",
+        files_changed=[],
+        model="gpt-4o",
+        error=None,
+        error_class="unknown",
+        tokens={"source": "unavailable"},
+    )
+    mock_engine = type(
+        "MockEngine",
+        (),
+        {
+            "model_name": "gpt-4o",
+            "backend_id": "aider",
+            "run": lambda *a, **k: unknown_result,
+        },
+    )()
+
+    try:
+        with patch("server.mcp_server.get_engine", return_value=mock_engine):
+            payload = json.loads(
+                delegate_to_agent(
+                    task="Update main",
+                    target_files=["main.py"],
+                    context_summary="Python project",
+                    backend="aider",
+                    spec_path="tasks/unknown-failure.md",
+                )
+            )
+    finally:
+        _SUPERVISOR_REGISTRY.clear()
+
+    assert payload["success"] is False
+    assert payload["outcome"] == "needs_input"
+    assert payload["error_class"] == "unknown"
+    assert payload["error_message"] == "supervisor_loop_unknown"
+
+    record = json.loads(Path(payload["log_path"]).read_text(encoding="utf-8").strip())
+    assert record["outcome"] == "needs_input"
+    assert record["error"] == "supervisor_loop_unknown"
+    assert record["error_detail"] == {
+        "error_class": "unknown",
+        "error_message": "supervisor_loop_unknown",
+    }
+
+    trace_path = Path(record["session_dir"]) / record["trace_ref"]
+    trace_events = [
+        json.loads(line)
+        for line in trace_path.read_text(encoding="utf-8").splitlines()
+        if line.strip()
+    ]
+    turn_end = next(
+        event for event in trace_events if event.get("type") == "supervisor_turn_end"
+    )
+    loop_end = next(
+        event for event in trace_events if event.get("type") == "supervisor_loop_end"
+    )
+    lifecycle_end = next(
+        event for event in trace_events if event.get("type") == "delegation_lifecycle_end"
+    )
+    assert turn_end["worker_outcome"] == "unknown"
+    assert loop_end["end_reason"] == "unknown"
+    assert lifecycle_end["outcome"] == "needs_input"
+
+
+def test_delegate_invalid_spec_with_clarity_block_keeps_outcome_parity(tmp_path, monkeypatch):
+    workspace = tmp_path / "workspace"
+    workspace.mkdir()
+    (workspace / "main.py").write_text("print('hello')\n", encoding="utf-8")
+    (workspace / ".mcp-coder" / "specs" / "tasks").mkdir(parents=True)
+    monkeypatch.chdir(workspace)
+    monkeypatch.setenv("MCP_CODER_HOME", str(tmp_path / "home"))
+    monkeypatch.setenv("MCP_CODER_USE_CONTEXT_PACKAGE", "0")
+    monkeypatch.setenv("MCP_CODER_SPEC_VALIDATION", "0")
+    monkeypatch.setenv("MCP_CODER_CLARITY_PASS", "1")
+    monkeypatch.setenv("MCP_CODER_REVIEWER_PASS", "0")
+    _SUPERVISOR_REGISTRY.clear()
+
+    blocked = ClarityCheckResult(
+        success=True,
+        passed=False,
+        questions=["Need more details."],
+        model="clarity-model",
+        duration_ms=12,
+    )
+
+    try:
+        with patch(
+            "core.engine.clarity_llm.run_clarity_check_llm",
+            return_value=blocked,
+        ), patch("server.mcp_server.get_engine") as get_engine:
+            payload = json.loads(
+                delegate_to_agent(
+                    task="Update main",
+                    target_files=["main.py"],
+                    context_summary="Python project",
+                    backend="aider",
+                    spec_path="tasks/missing.md",
+                )
+            )
+            get_engine.assert_not_called()
+    finally:
+        _SUPERVISOR_REGISTRY.clear()
+
+    assert payload["success"] is False
+    assert payload["outcome"] == "invalid_spec"
+    assert "spec-template.md" in payload["output"]
+
+    record = json.loads(
+        Path(payload["log_path"]).read_text(encoding="utf-8").splitlines()[-1]
+    )
+    assert record["outcome"] == "invalid_spec"
+
+    trace_path = Path(record["session_dir"]) / record["trace_ref"]
+    trace_events = [
+        json.loads(line)
+        for line in trace_path.read_text(encoding="utf-8").splitlines()
+        if line.strip()
+    ]
+    lifecycle_starts = [
+        event for event in trace_events if event.get("type") == "delegation_lifecycle_start"
+    ]
+    lifecycle_ends = [
+        event for event in trace_events if event.get("type") == "delegation_lifecycle_end"
+    ]
+    assert len(lifecycle_starts) == 1
+    assert len(lifecycle_ends) == 1
+    assert lifecycle_ends[0]["outcome"] == "invalid_spec"
+
+
+def test_delegate_exception_after_lifecycle_start_closes_envelope(tmp_path, monkeypatch):
+    workspace = tmp_path / "workspace"
+    workspace.mkdir()
+    home = tmp_path / "home"
+    monkeypatch.chdir(workspace)
+    monkeypatch.setenv("MCP_CODER_HOME", str(home))
+    monkeypatch.setenv("MCP_CODER_USE_CONTEXT_PACKAGE", "0")
+    monkeypatch.setenv("MCP_CODER_CLARITY_PASS", "1")
+    _SUPERVISOR_REGISTRY.clear()
+
+    try:
+        with patch(
+            "server.mcp_server._apply_clarity_check",
+            side_effect=RuntimeError("clarity crashed"),
+        ):
+            with pytest.raises(RuntimeError, match="clarity crashed"):
+                delegate_to_agent(
+                    task="Do work",
+                    target_files=["main.py"],
+                    context_summary="Python project",
+                    backend="aider",
+                )
+    finally:
+        _SUPERVISOR_REGISTRY.clear()
+
+    delegation_logs = list(home.rglob("delegations.jsonl"))
+    assert len(delegation_logs) == 1
+    record = json.loads(delegation_logs[0].read_text(encoding="utf-8").strip())
+    trace_path = Path(record["session_dir"]) / record["trace_ref"]
+    trace_events = [
+        json.loads(line)
+        for line in trace_path.read_text(encoding="utf-8").splitlines()
+    ]
+    lifecycle_starts = [
+        event for event in trace_events if event.get("type") == "delegation_lifecycle_start"
+    ]
+    lifecycle_ends = [
+        event for event in trace_events if event.get("type") == "delegation_lifecycle_end"
+    ]
+    assert len(lifecycle_starts) == 1
+    assert len(lifecycle_ends) == 1
+    assert lifecycle_ends[0]["outcome"] == "error"
+
+
+def test_delegate_clarity_block_preloop_is_pause_not_loop_failure(tmp_path, monkeypatch):
+    """P13-016 (ISS-017): clarity-blocked preloop is pause/handoff, not failure.
+
+    The blocked delegation must close with ``needs_input`` and must NOT emit
+    synthetic ``supervisor_turn_end`` / ``supervisor_loop_end`` markers for an
+    executor loop that never ran.
+    """
+    workspace = tmp_path / "workspace"
+    workspace.mkdir()
+    (workspace / "main.py").write_text("print('hello')\n", encoding="utf-8")
+    spec_dir = workspace / ".mcp-coder" / "specs" / "tasks"
+    spec_dir.mkdir(parents=True)
+    (spec_dir / "clarity-block.md").write_text(
+        """\
+---
+spec_id: clarity-block
+files_edit:
+  - main.py
+edit_scope: discover
+---
+
+# Clarity block task
+
+## Goal
+
+Update main.
+
+## Done when
+
+`main.py` is updated.
+
+## Files
+
+### Edit
+- `main.py`
+""",
+        encoding="utf-8",
+    )
+    monkeypatch.chdir(workspace)
+    monkeypatch.setenv("MCP_CODER_HOME", str(tmp_path / "home"))
+    monkeypatch.setenv("MCP_CODER_USE_CONTEXT_PACKAGE", "0")
+    monkeypatch.setenv("MCP_CODER_SPEC_VALIDATION", "0")
+    monkeypatch.setenv("MCP_CODER_CLARITY_PASS", "1")
+    monkeypatch.setenv("MCP_CODER_REVIEWER_PASS", "0")
+    _SUPERVISOR_REGISTRY.clear()
+
+    blocked = ClarityCheckResult(
+        success=True,
+        passed=False,
+        questions=["Need more details."],
+        model="clarity-model",
+        duration_ms=12,
+    )
+
+    try:
+        with patch(
+            "core.engine.clarity_llm.run_clarity_check_llm",
+            return_value=blocked,
+        ), patch("server.mcp_server.get_engine") as get_engine:
+            payload = json.loads(
+                delegate_to_agent(
+                    task="Update main",
+                    target_files=["main.py"],
+                    context_summary="Python project",
+                    backend="aider",
+                    spec_path="tasks/clarity-block.md",
+                )
+            )
+            get_engine.assert_not_called()
+    finally:
+        _SUPERVISOR_REGISTRY.clear()
+
+    # AC1: response + row + lifecycle outcome is needs_input (pause/handoff).
+    assert payload["success"] is False
+    assert payload["outcome"] == "needs_input"
+
+    record = json.loads(
+        Path(payload["log_path"]).read_text(encoding="utf-8").splitlines()[-1]
+    )
+    assert record["outcome"] == "needs_input"
+
+    trace_path = Path(record["session_dir"]) / record["trace_ref"]
+    trace_events = [
+        json.loads(line)
+        for line in trace_path.read_text(encoding="utf-8").splitlines()
+        if line.strip()
+    ]
+    lifecycle_ends = [
+        event for event in trace_events if event.get("type") == "delegation_lifecycle_end"
+    ]
+    assert len(lifecycle_ends) == 1
+    assert lifecycle_ends[0]["outcome"] == "needs_input"
+
+    paused = [event for event in trace_events if event.get("type") == "supervisor_paused"]
+    assert len(paused) == 1
+    assert paused[0]["pause_reason"] == "clarity_check"
+
+    # AC2: no synthetic loop-failure markers when the executor loop never ran.
+    assert not [
+        event for event in trace_events if event.get("type") == "supervisor_turn_end"
+    ]
+    assert not [
+        event for event in trace_events if event.get("type") == "supervisor_loop_end"
+    ]
+    assert not [
+        event for event in trace_events if event.get("type") == "supervisor_loop_start"
+    ]
 
 
 def test_response_payload_does_not_include_resume_token():

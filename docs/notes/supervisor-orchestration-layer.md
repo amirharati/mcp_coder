@@ -9,11 +9,11 @@
 
 # Supervisor as intelligent orchestration layer — architecture direction note
 
-**Status:** Direction note — **Phase 12 is the first delivery milestone**. Phase 11 shipped the structural foundation (SupervisorAgent as a class, canonical event set, model_policy layer). Phase 12 builds the intelligence.
+**Status:** Direction note — **Phase 12 shipped (2026-06-21) and Phase 13 dogfood verified (2026-06-23)**. Phase 11 shipped the structural foundation (SupervisorAgent as a class, canonical event set, model_policy layer). Phase 12 built the intelligence control plane. Phase 13 (P13-005..P13-016) unified the delegation lifecycle envelope, added `AgentCheckpoint` for cross-process statefulness, hardened reviewer/classifier paths, and verified pause/resume + escalation handoff in multi-delegation dogfood (session `28fbe283`). Remaining Phase 13 milestones: docs (P13-002), test hardening (P13-003), backlog review (P13-004). The vision items below (BL-543 B/C, BL-547 autonomous interception, BL-525 full planner-as-agent, BL-526 CTO/Architect, BL-546 executor adaptation) remain deferred to later phases — see [BACKLOG.md](../BACKLOG.md) § Phase 12/13 carry-over.
 **Created:** 2026-06-20
-**PM board:** [PHASE12_MVP.md](../PHASE12_MVP.md) (once written)
+**PM board:** [PHASE12_MVP.md](../PHASE12_MVP.md) (closed) · [PHASE13_MVP.md](../PHASE13_MVP.md) (active)
 **Related notes:** [phase11-master-session-bootstrap.md](./phase11-master-session-bootstrap.md), [multi-model-roles.md](./multi-model-roles.md), [model-policy-layer.md](./model-policy-layer.md)
-**Backlog:** BL-540 (persistent project state), BL-541 (reviewer feedback loop), BL-542 (context router), BL-543 (supervisor context lifecycle), BL-544 (pause/resume), BL-525 (planner as real agent), BL-529/530 (supervisor context window + HelperToolRunner)
+**Backlog:** BL-540 (persistent project state — shipped P12-002), BL-541 (reviewer feedback loop — shipped P12-004), BL-542 (context router — partial via tool registry P12-003), BL-543 (supervisor context lifecycle — shipped v1; B/C deferred), BL-544 (pause/resume — shipped P12-001; clarity-block auto-resume added P13-016), BL-525 (planner as real agent — v1 shipped P12-005; full loop deferred), BL-529/530 (supervisor context window + HelperToolRunner — P12-003 ships tool runner; sidecar HTTP deferred)
 
 ---
 
@@ -401,3 +401,35 @@ Phase 11 shipped the structural pieces this architecture builds on:
 - Reviewer (tier-1) producing structured findings
 
 Phase 12 does not redesign any of these. It builds on top of them: adds persistence (BL-540), adds intelligence (BL-543, interception), and adds the cross-call continuity that makes the Supervisor a real agent (BL-544).
+
+---
+
+## Phase 13 reality sync (added 2026-06-23)
+
+Phase 13 (P13-005..P13-016) shipped a tighter, dogfood-verified version of the Phase 12 control plane. The architecture above is the long-term target; the bullets below capture what is **actually shipped vs deferred** as of Phase 13 close-out (docs/tests/backlog review still pending).
+
+### Shipped in Phase 12 + Phase 13
+
+- **Single Supervisor lifecycle envelope (P13-005..P13-008):** `delegation_lifecycle_start/end` + `phase_start/end` for `preloop`/`loop`/`postloop`, owned and emitted by `SupervisorAgent` (non-retroactive). Server is thin. Idempotent close guard prevents double-envelopes on early-close preloop paths.
+- **Agent checkpoint (P13-007):** `AgentCheckpoint` (`agent_state.json`) saved at the end of every delegation (success/error/escalated). `_get_or_create_supervisor` rehydrates from disk on cache miss → CLI ≡ server invariant holds. In-memory `_SUPERVISOR_REGISTRY` is now a cache; on-disk checkpoint is the source of truth. (Mid-loop crash recovery deferred → BL-548.)
+- **Pause/resume + handoff semantics (P13-016):** Clarity-blocked preloop delegations pause cleanly (`supervisor_paused(clarity_check)`), emit **no** synthetic loop-failure events, and auto-resume on the next host return with `lifecycle_start(resumed=true)` + `supervisor_resumed(clarity_block_reentry)`. Escalation pauses (`needs_input` / `max_turns_reached` from inside the loop) remain answer-gated — see BL-553 for the watch item.
+- **Project state + reviewer feedback loop (P12-002 + P12-004):** `project_state.json` accumulates decisions + reviewer findings across delegations; Planner reads them on delegation N+1 via the same tool pattern.
+- **Supervisor tool runner (P12-003):** `SupervisorToolRunner` + tier-1/tier-2 context model; tools include `get_delegation_history`, `get_project_state`, `read_file`, `get_diff`, `get_reviewer_findings`.
+- **Reviewer/classifier hardening (P13-010, P13-011, P13-015):** tier-1 reviewer parser tolerates heading variants + fenced preambles; findings classifier has a deterministic contradiction guard; error classifier has tighter config/edit-format/needs-input boundaries.
+- **Typed-cause surfacing (P13-014):** unknown loop failures persist `error_class=unknown` + a machine-usable `error_message` in the delegation row and surface in viewer event details.
+- **Viewer visibility (P13-008 + P13-016):** all 8 agent-envelope event types render in the Cursor viewer; `supervisor_paused` / `supervisor_resumed` / `supervisor_state_abandoned` now render as agent-scoped rows.
+
+### Deferred to later phases (in backlog)
+
+- **BL-543 B/C** — full continuation brief + `confirm_ask` enrichment (interception layer is structural-only in shipped code).
+- **BL-547** — autonomous interception (D-ARCH-8 is a direction, not a shipped behavior; sub-helper questions still escalate to host unless answered by the host).
+- **BL-525 full** — Planner is a one-shot worker in shipped code, not a real tool-calling agent loop.
+- **BL-526** — CTO/Architect specialist role.
+- **BL-546** — smart executor context adaptation.
+- **BL-548** — mid-loop crash recovery (per-turn checkpoint).
+- **BL-530 full** — executor-pull sidecar HTTP server (P11 shipped prompt-only hint).
+- **BL-549..BL-555** — viewer fidelity / truncation policy / log policy / escalation pause-resume watch items (added during Phase 13 dogfood).
+
+### What this means for future workers
+
+The single-statefulness principle (D-ARCH-7) and the two-tier context model (D-ARCH-11) are **structurally in place** — workers should treat them as locked. What is *not* yet in place is the **intelligence layer** that uses those structures autonomously (interception, context routing decisions, plan revision). Workers touching `SupervisorAgent`, `project_state.json`, or the context pipeline should read this note + the Phase 13 changelog before changing behavior. The dogfood-verified contract is: one lifecycle envelope per delegation, agent-owned phase events, checkpoint-on-every-end, clarity-block = pause/resume (not failure), escalation pause = answer-gated resume.

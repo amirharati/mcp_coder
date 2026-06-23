@@ -248,6 +248,21 @@ def test_parse_reviewer_output_lgtm():
     assert err is None
 
 
+def test_parse_reviewer_output_lgtm_colon_variant():
+    outcome, note, err = parse_reviewer_output("LGTM: Imports look consistent.")
+    assert outcome == "lgtm"
+    assert note == "Imports look consistent."
+    assert err is None
+
+
+def test_parse_reviewer_output_lgtm_markdown_heading_variant():
+    raw = "Reviewer notes:\n### **LGTM** — Imports look consistent."
+    outcome, note, err = parse_reviewer_output(raw)
+    assert outcome == "lgtm"
+    assert note == "Imports look consistent."
+    assert err is None
+
+
 def test_parse_reviewer_output_issues_limits_three():
     raw = (
         "## ISSUES\n"
@@ -261,6 +276,30 @@ def test_parse_reviewer_output_issues_limits_three():
     assert err is None
     assert note.count("- ") == 3
     assert "Fourth" not in note
+
+
+def test_parse_reviewer_output_issues_colon_variant():
+    raw = "Issues:\n- Missing import\n- Wrong type hint\n"
+    outcome, note, err = parse_reviewer_output(raw)
+    assert outcome == "issues"
+    assert err is None
+    assert "- Missing import" in note
+    assert "- Wrong type hint" in note
+
+
+def test_parse_reviewer_output_issues_after_fenced_preamble():
+    raw = '```json\n{"scratch":"ignore"}\n```\n### ISSUES -\n- Missing import\n'
+    outcome, note, err = parse_reviewer_output(raw)
+    assert outcome == "issues"
+    assert err is None
+    assert "- Missing import" in note
+
+
+def test_parse_reviewer_output_issues_colon_without_bullets_is_not_promoted():
+    outcome, note, err = parse_reviewer_output("Issues: Looks concerning but no bullets.")
+    assert outcome is None
+    assert note == ""
+    assert err == "ISSUES heading without bullet points"
 
 
 def test_parse_reviewer_output_invalid():
