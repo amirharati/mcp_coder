@@ -40,6 +40,7 @@ Each file has an HTML stewardship comment at the top — read it before any edit
 ## Planning / master session
 
 - **OK:** status rows in `PHASE3_MVP` / `PHASE3_ISSUES` (active); `PHASE2_*` frozen; new BL-* / P3-ISS, small alignment with shipped reality.
+- **Backlog (split):** `docs/BACKLOG.md` = index only; full text in `docs/backlog/deferred.md` + `done.md`. Read/update recipes: `docs/backlog/README.md` § For LLMs. Always sync index row + full-text `**Status:**`.
 - **NOT OK:** delete original vision, replan phases, or contradict IDEA without user agreement.
 - When adapting vision docs: **add** context and phase reality; preserve intent from initial commit `074753b`.
 
