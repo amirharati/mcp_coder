@@ -7,7 +7,7 @@ generation-param + weak-model layers are wired in P9-012.
 
 Design: pure function, no class hierarchy. Aider is a read-only metadata source
 touched only inside `_aider_defaults()` (lazy import — no module-level coupling).
-See docs/notes/model-policy-layer.md.
+See docs/notes/model-routing-and-policy.md.
 """
 
 from __future__ import annotations

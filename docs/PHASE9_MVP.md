@@ -13,7 +13,7 @@
 **Purpose:** Prove "100% LLM call captured" by adding a universal internal HTTP proxy (litellm → proxy → provider) that captures raw bytes before any normalization layer; flip the write gate to always-on; add context package blobs and replay CLI.
 **PM board:** this file · **Issues:** [PHASE9_ISSUES.md](./PHASE9_ISSUES.md)
 **Phase 8 (frozen):** [PHASE8_MVP.md](./PHASE8_MVP.md) · [PHASE8_ISSUES.md](./PHASE8_ISSUES.md)
-**Design notes:** [notes/phase9-master-session-bootstrap.md](./notes/phase9-master-session-bootstrap.md) · [notes/llm-interception-strategies.md](./notes/llm-interception-strategies.md) · [notes/viewer-design-principles-v2.md](./notes/viewer-design-principles-v2.md) · [notes/viewer-design-principles.md](./notes/viewer-design-principles.md)
+**Design notes:** [notes/archive/phase9-master-session-bootstrap.md](./notes/archive/phase9-master-session-bootstrap.md) · [notes/llm-interception-strategies.md](./notes/archive/llm-interception-strategies.md) · [notes/viewer-and-trace-design.md](./notes/viewer-and-trace-design.md) · [notes/archive/viewer-design-principles.md](./notes/archive/viewer-design-principles.md)
 **Backlog inputs:** BL-367 (write-always + blob + replay), BL-357 (GC first slice), BL-507 (thinking token proof), BL-508 (universal proxy), BL-510 (prompt_full gate — Phase 9 follow-up)
 
 ---
@@ -54,7 +54,7 @@ The proxy also provides the universal architecture for Phase 10+ multi-backend c
 
 ## Locked design decisions
 
-*(Resolved in master session 2026-06-14 — see [notes/phase9-master-session-bootstrap.md](./notes/phase9-master-session-bootstrap.md) for full reasoning.)*
+*(Resolved in master session 2026-06-14 — see [notes/archive/phase9-master-session-bootstrap.md](./notes/archive/phase9-master-session-bootstrap.md) for full reasoning.)*
 
 | ID | Decision |
 |----|----------|
@@ -396,7 +396,7 @@ The pipeline-card model was implemented briefly, then removed.
 
 **Why now:** The proxy captures raw HTTP traffic but confirmed no `thinking` field is sent on any path. To turn thinking on and verify it via `proxy_llm_call.raw_request` (closing the BL-507 loop) we need a registry that controls generation params. A code review (2026-06-16) found that model ID + budget are already centralized in `role_models.py`, and that two "legacy" helpers (`workspace_summarizer`, `spec_review`) bypass the gateway and emit no `llm_call` event. So Stage 1 is a small refactor + a params layer, split into two reviewable milestones.
 
-**Settled architecture:** single front door `core/config/model_registry.py` → `resolve(role, workspace) → CallParams` (the one object carrying id + budget + generation params + weak model + metadata, with per-field `sources`). It reuses `role_models.py` for id/budget. One helper path (`LlmGateway`); `ExecutionEngine` stays pluggable. Aider is a read-only metadata source. Full detail: [model-policy-layer.md](../notes/model-policy-layer.md).
+**Settled architecture:** single front door `core/config/model_registry.py` → `resolve(role, workspace) → CallParams` (the one object carrying id + budget + generation params + weak model + metadata, with per-field `sources`). It reuses `role_models.py` for id/budget. One helper path (`LlmGateway`); `ExecutionEngine` stays pluggable. Aider is a read-only metadata source. Full detail: [model-policy-layer.md](../notes/archive/model-policy-layer.md).
 
 #### P9-011 — Unify helper path + registry front door
 
@@ -440,7 +440,7 @@ Env knobs `MCP_CODER_<ROLE>_{REASONING_EFFORT,THINKING_BUDGET,MAX_TOKENS,TEMPERA
 
 **Identified:** 2026-06-16 (Phase 9 post-completion dogfood)  
 **Promoted to:** P9-011 — needed now so proxy verification of thinking tokens is actually useful.  
-**Design note:** [docs/notes/model-policy-layer.md](notes/model-policy-layer.md)  
+**Design note:** [docs/notes/archive/model-policy-layer.md](notes/archive/model-policy-layer.md)  
 **Backlog:** BL-511 (Stage 1, this phase), BL-512–514 (Stages 2–4, future)
 
 **Summary:**  
@@ -502,7 +502,7 @@ P9-011 + P9-012 introduce `core/config/model_registry.py` (front door reusing `r
 |------|--------|
 | 2026-06-17 | **Phase 9 frozen.** PM + issues closed; deferred items → BL-516..BL-519. Guide synced (2026-06-17). Optional additive debt: T-07 tutorial. |
 | 2026-06-17 | **Phase 9 closed.** P9-014 deferred → BL-516; P9-ISS-007 deferred → BL-517. BL-518 (log-level DX) + BL-519 (proxy env toggle) added to backlog. No open Phase 9 issues remain. |
-| 2026-06-17 | P9-013 moved to **done** with significant scope evolution: shipped as v2 boundary viewer (`view_events[]` middleware + thin renderer), not the original card timeline. P9-015 marked **superseded** by this architecture. Linked `viewer-design-principles-v2.md` in design context. |
+| 2026-06-17 | P9-013 moved to **done** with significant scope evolution: shipped as v2 boundary viewer (`view_events[]` middleware + thin renderer), not the original card timeline. P9-015 marked **superseded** by this architecture. Linked `viewer-and-trace-design.md` in design context. |
 | 2026-06-17 | P9-013 + P9-014 added — viewer Phase 9 overhaul (BL-343) and trace-inspect power-up; P9-013 spec written and `spec_ready`; P9-014 `pending_spec`. |
 | 2026-06-17 | **A-to-Z dogfood complete** (3 runs; final session `f33fdbaf`: 6 delegations, 77 tests passing, 6/6 proxy↔llm_call alignment exact). Three post-dogfood fixes shipped: proxy routing catch-all (P9-ISS-008), streaming token counts (P9-ISS-009), executor `llm_call.policy_applied` (P9-ISS-010). Full suite 924 passing. |
 | 2026-06-16 | P9-012 **done**: generation params + weak-model default-fill resolve per role (env + role defaults via `model_registry.resolve()`); applied on executor (aider `set_reasoning_effort`/`set_thinking_tokens`/`extra_params`/`get_weak_model`) and helpers (gateway litellm kwargs, `drop_params=True`); `policy_applied` audit object now on every `backend_llm_call` + `llm_call` (carried via `model_policy_var` contextvar). Thinking/reasoning is now settable from env. Focused `23 passed`; full suite `924 passed, 2 skipped`. |

@@ -13,7 +13,7 @@
 **Purpose:** Make the Aider/MCP relationship qualitatively more powerful: supervised execution (Aider is no longer a blind `yes=True` process), smarter context before delegation, and output quality gates — all while keeping per-delegation cost bounded through context frugality.
 **PM board:** this file · **Issues:** [PHASE11_ISSUES.md](./PHASE11_ISSUES.md)
 **Phase 10 (frozen):** [PHASE10_MVP.md](./PHASE10_MVP.md) · [PHASE10_ISSUES.md](./PHASE10_ISSUES.md)
-**Design notes:** [notes/phase11-master-session-bootstrap.md](./notes/phase11-master-session-bootstrap.md)
+**Design notes:** [notes/archive/phase11-master-session-bootstrap.md](./notes/archive/phase11-master-session-bootstrap.md)
 **Backlog inputs:** BL-351 (supervised IO full), BL-521 (clarity pass, new), BL-354 (executor-pull v0), BL-358 (reviewer v0), BL-512 (host model policy), BL-522 (mid-run human gate, new)
 
 ---

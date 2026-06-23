@@ -2,9 +2,9 @@
 
 **Purpose:** Hand off from Phase 3 exit to a **new planning/master chat** for Phase 4. Read this first; do not load Phase 3 chat history.
 
-**Phase 3 status:** **Closed** (P3-499, 2026-06-09) — [PHASE3_MVP.md](../PHASE3_MVP.md), [PHASE3_ISSUES.md](../PHASE3_ISSUES.md) (frozen).  
-**Phase 4 status:** **Closed** (P4 exit, 2026-06-09) — [PHASE4_MVP.md](../PHASE4_MVP.md), [PHASE4_ISSUES.md](../PHASE4_ISSUES.md) (frozen).  
-**Phase 5 PM:** Start from [PHASES.md](../PHASES.md) § Phase 5 + [BACKLOG.md](../BACKLOG.md) BL-002.
+**Phase 3 status:** **Closed** (P3-499, 2026-06-09) — [PHASE3_MVP.md](../../PHASE3_MVP.md), [PHASE3_ISSUES.md](../../PHASE3_ISSUES.md) (frozen).  
+**Phase 4 status:** **Closed** (P4 exit, 2026-06-09) — [PHASE4_MVP.md](../../PHASE4_MVP.md), [PHASE4_ISSUES.md](../../PHASE4_ISSUES.md) (frozen).  
+**Phase 5 PM:** Start from [PHASES.md](../../PHASES.md) § Phase 5 + [BACKLOG.md](../../BACKLOG.md) BL-002.
 
 ---
 
@@ -15,7 +15,7 @@ You are the mcp-coder Phase 4 planning/master session (PM + task orchestration).
 
 ## Read first (in order — do NOT load prior chat history)
 
-1. docs/notes/phase4-master-session-bootstrap.md — this handoff
+1. docs/notes/archive/phase4-master-session-bootstrap.md — this handoff
 2. docs/VISION_DOCS.md — doc tiers + stewardship
 3. docs/PHASES.md — § Phase 4 + Phase 5 (skim Phase 1–3 as needed)
 4. docs/PHASE4_MVP.md — waves, decisions, open questions, success checklist
@@ -65,7 +65,7 @@ RAG is NOT Phase 4 — it is Phase 5 (after Phase 4 reveals what retrieval is ac
 
 ## Your job
 
-1. Read [PHASE4_MVP.md](../PHASE4_MVP.md) — confirm milestone order + open questions Q1–Q4 with user.
+1. Read [PHASE4_MVP.md](../../PHASE4_MVP.md) — confirm milestone order + open questions Q1–Q4 with user.
 2. Start with **Wave 1** (planner UX fixes — BL-324–327) — rules-only, fast to ship.
 3. Lock Q1 (builder opt-in?) and Q2 (cheap model?) before drafting P4-001.
 4. Dispatch one worker at a time; update PHASE4_MVP status after each § Results.

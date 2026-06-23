@@ -370,7 +370,7 @@ Executor reuse is audited: `executor_reused: true/false` and `executor_recreated
 | Context compiler full walkthrough | [context-pipeline.md](./context-pipeline.md) + T-04 tutorial |
 | Storage paths and JSONL schema | [storage-layout.md](./storage-layout.md) |
 | Per-role model registry | [per-role-models.md](./per-role-models.md) |
-| Multi-model role direction | [../notes/multi-model-roles.md](../../notes/multi-model-roles.md) |
+| Multi-model role direction | [../notes/archive/multi-model-roles.md](../../notes/archive/multi-model-roles.md) |
 | Module-by-module map | [code-structure.md](../code-structure.md) |
 | Terminology | [terminology.md](../terminology.md) |
 

@@ -195,7 +195,7 @@ Canonical delegation logs live under **`MCP_CODER_HOME`** (default `~/.mcp-coder
 
 `project_key` is the full SHA-256 hex of the resolved absolute workspace path. Each delegation updates `<workspace>/.mcp-coder/session.json` (system pointer). User settings live in `<workspace>/.mcp-coder/config.yaml` and are **never overwritten** by mcp-coder.
 
-See [docs/notes/storage-and-linking.md](docs/notes/storage-and-linking.md) for IDs, link fields, and migration notes from P1-100 workspace-local logs.
+See [docs/notes/context-storage-and-observability.md](docs/notes/context-storage-and-observability.md) for IDs, link fields, and migration notes from P1-100 workspace-local logs.
 
 ---
 
@@ -295,13 +295,13 @@ Pass optional `spec_path` (step task under `tasks/`) to `delegate_to_agent`:
 - Planner updates task spec (`revision++`, `status: ready`)
 - `mode=implement` (default) — edits `target_files` (include files to **read** for imports)
 
-See [docs/notes/spec-review-loop.md](docs/notes/spec-review-loop.md).
+See [docs/notes/spec-workflow.md](docs/notes/spec-workflow.md).
 
 If the file is missing, the tool returns `outcome: invalid_spec` (points at `spec-template.md`) and logs the attempt without calling Aider.
 
 **Prompt order when spec is set:** host transcript (if `host_transcript: dump`) → compiled spec sections → `task` → `context_summary`.
 
-Response adds `outcome`, `spec_path`, `spec_report_path`, `spec_sha256`, `spec_bytes`. See `docs/notes/storage-and-linking.md` and `resources/spec-template.md`.
+Response adds `outcome`, `spec_path`, `spec_report_path`, `spec_sha256`, `spec_bytes`. See `docs/notes/context-storage-and-observability.md` and `resources/spec-template.md`.
 
 ---
 

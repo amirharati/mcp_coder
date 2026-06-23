@@ -15,8 +15,8 @@
 **Vision:** [IDEA.md](./IDEA.md) · [VISION_DOCS.md](./VISION_DOCS.md)
 **Deferred work:** [BACKLOG.md](./BACKLOG.md)
 **Known gaps / follow-ups:** [PHASE3_ISSUES.md](./PHASE3_ISSUES.md)
-**Phase 2 (closed):** [PHASE2_MVP.md](./PHASE2_MVP.md) · [phase2-exit-validation.md](./notes/phase2-exit-validation.md)
-**Bootstrap:** [phase3-master-session-bootstrap.md](./notes/phase3-master-session-bootstrap.md)
+**Phase 2 (closed):** [PHASE2_MVP.md](./PHASE2_MVP.md) · [phase2-exit-validation.md](./notes/archive/phase2-exit-validation.md)
+**Bootstrap:** [phase3-master-session-bootstrap.md](./notes/archive/phase3-master-session-bootstrap.md)
 
 ---
 
@@ -123,7 +123,7 @@ Task specs: `docs/tasks/P3-*.md` (gitignored; created per worker session).
 
 **Goal:** Close P3-ISS-001; foundation for revert, gates, and planner-visible diffs.  
 **Design:** [WORKSPACE_HISTORY.md](./OTEHR_RELATED_IDEAS/WORKSPACE_HISTORY.md)  
-**Validation:** [phase3-wave1-exit-validation.md](./notes/phase3-wave1-exit-validation.md) — P3-401 **signed off** 2026-06-09 (step 2); step 3 (`calculate_total`) extended dogfood 2026-06-09
+**Validation:** [phase3-wave1-exit-validation.md](./notes/archive/phase3-wave1-exit-validation.md) — P3-401 **signed off** 2026-06-09 (step 2); step 3 (`calculate_total`) extended dogfood 2026-06-09
 
 | Milestone | Task ID | Status | Implements | Summary |
 |-----------|---------|--------|------------|---------|

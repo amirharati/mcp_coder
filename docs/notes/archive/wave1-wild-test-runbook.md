@@ -106,4 +106,4 @@ Not “all steps green on Qwen” — realistic bar:
 
 ## Issues already tracked
 
-[PHASE2_ISSUES.md](../PHASE2_ISSUES.md) P2-ISS-001–006 from structured dogfood.
+[PHASE2_ISSUES.md](../../PHASE2_ISSUES.md) P2-ISS-001–006 from structured dogfood.

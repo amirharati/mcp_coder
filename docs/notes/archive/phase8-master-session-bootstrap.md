@@ -5,8 +5,8 @@
 **Status:** Active — scope locked at high level; interception approach TBD.
 **Authoritative PM docs:** PHASE8_MVP.md (to be created) · PHASE8_ISSUES.md (to be created)
 **Design ideas (read before planning):**
-- [AGENTIC_LOOP_LOGGING.md](../OTEHR_RELATED_IDEAS/AGENTIC_LOOP_LOGGING.md) — long-horizon product; Phase 8 builds the capture substrate it requires
-- [REASONING_TRACE_REUSE.md](../OTEHR_RELATED_IDEAS/REASONING_TRACE_REUSE.md) — thinking tokens are highest-value Phase 8 capture item
+- [AGENTIC_LOOP_LOGGING.md](../../OTEHR_RELATED_IDEAS/AGENTIC_LOOP_LOGGING.md) — long-horizon product; Phase 8 builds the capture substrate it requires
+- [REASONING_TRACE_REUSE.md](../../OTEHR_RELATED_IDEAS/REASONING_TRACE_REUSE.md) — thinking tokens are highest-value Phase 8 capture item
 **Related backlog:** BL-371, BL-369, BL-370, BL-367 (Phase 9 target), BL-350 (remainder), BL-357
 **Phase 7 exit (frozen):** [phase7-master-session-bootstrap.md](./phase7-master-session-bootstrap.md)
 
@@ -102,7 +102,7 @@ Phase 10+       : HTTP proxy for Claude Code / Codex / OpenCode
 
 Full analysis of all four approaches with pros/cons, comparison table, and recommended sequencing lives in the standalone design note:
 
-**→ [llm-interception-strategies.md](./llm-interception-strategies.md)**
+**→ [llm-interception-strategies.md](../llm-interception-strategies.md)**
 
 **Summary of recommendation for Phase 8:**
 - **P8-001 primary:** Approach 2 (monkey-patch `litellm.completion`) — closes Aider gap, thinking tokens guaranteed, opens Phase 9 control path
@@ -113,7 +113,7 @@ Full analysis of all four approaches with pros/cons, comparison table, and recom
 
 ## Open questions for master session
 
-Interception-approach-specific questions live in [llm-interception-strategies.md](./llm-interception-strategies.md) § Open questions.
+Interception-approach-specific questions live in [llm-interception-strategies.md](../llm-interception-strategies.md) § Open questions.
 
 Phase 8 planning questions:
 

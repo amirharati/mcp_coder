@@ -10,7 +10,7 @@
 
 **Status:** Living direction note — 2026-06-19.  
 **Purpose:** Make the eventual mcp-coder workflow explicit: who does what, at which scope, with what model tier. Replaces ad-hoc role naming with a stable vocabulary. Guards the design as phases ship incrementally.  
-**Related:** [multi-model-roles.md](./multi-model-roles.md) (model tiers per role), [workflow-turns.md](./workflow-turns.md) (special turn types), [phase11-master-session-bootstrap.md](./phase11-master-session-bootstrap.md) (Phase 12 preview).  
+**Related:** [multi-model-roles.md](./multi-model-roles.md) (model tiers per role), [workflow-turns.md](./workflow-turns.md) (special turn types), [phase11-master-session-bootstrap.md](./archive/phase11-master-session-bootstrap.md) (Phase 12 preview).  
 **Backlog:** BL-525 (Planner), BL-526 (Architect), BL-527 (host hedging), BL-523/524 (host escalation/detection).
 
 ---

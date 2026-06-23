@@ -286,7 +286,7 @@ If Corpus 4 / tier B patterns live in `~/.mcp-coder/global/` (or federated globa
 
 **Non-goals for v1 maintenance:** auto-delete without promote path; silent prune of checkpoints user might restore.
 
-**Backlog:** [BL-357](../BACKLOG.md#bl-357-storage-lifecycle--promote-prune-gc-logs--rag--traces) — cross-cutting storage lifecycle (logs, RAG, traces, checkpoints, not RAG-only). Pairs with [storage-and-linking.md](./storage-and-linking.md).
+**Backlog:** [BL-357](../BACKLOG.md#bl-357-storage-lifecycle--promote-prune-gc-logs--rag--traces) — cross-cutting storage lifecycle (logs, RAG, traces, checkpoints, not RAG-only). Pairs with [storage-and-linking.md](./archive/storage-and-linking.md).
 
 ---
 
@@ -424,7 +424,7 @@ ContextRef { kind, id, sha256, snippet, score, source_line_range?, corpus }
 | [BL-335](../BACKLOG.md) | Per-role token audit |
 | [T-04](../guide/tutorials/04-context-compiler.md) | Context compiler — what executor sees |
 | [T-02](../guide/tutorials/02-sessions-storage-logs.md) | JSONL shape |
-| [phase2-owned-context.md](./phase2-owned-context.md) | Compiler design (tiers, contract) |
+| [phase2-owned-context.md](./archive/phase2-owned-context.md) | Compiler design (tiers, contract) |
 
 ---
 

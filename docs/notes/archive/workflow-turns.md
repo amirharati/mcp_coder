@@ -89,7 +89,7 @@ See **BL-332** (host-agnostic rules) — content can be generic; triggers may st
 
 | Need | Tool |
 |------|------|
-| “What did we decide last week?” | RAG / history ([rag-gap-analysis.md](./rag-gap-analysis.md)) |
+| “What did we decide last week?” | RAG / history ([retrieval-and-rag-strategy.md](./retrieval-and-rag-strategy.md)) |
 | “Explain this module after 5 steps” | **Digest turn** — fresh compile + optional delegation RAG input |
 | “Add comments after implement” | **Polish turn** ([BL-358](../BACKLOG.md#bl-358-post-executor-polish-pass--reviewer-model-comments-tests-alignment)) |
 

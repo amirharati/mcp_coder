@@ -2,7 +2,7 @@
 
 **Milestone:** Wave 1 — honesty + safety foundations (P2-110, P2-115, P2-120, P2-125)  
 **Status:** Wave 1 **complete** — structured dogfood + wild test (expense-splitter epic, 9 pytest)  
-**Issues:** [PHASE2_ISSUES.md](../PHASE2_ISSUES.md) P2-ISS-001–008  
+**Issues:** [PHASE2_ISSUES.md](../../PHASE2_ISSUES.md) P2-ISS-001–008  
 **Automated gate:** `pytest -q` — all tests must pass
 
 ---

@@ -10,7 +10,7 @@
 
 **Status:** **Closed / frozen** at P2-499 (2026-06-08). Active PM → [PHASE3_MVP.md](./PHASE3_MVP.md)
 **Host:** Cursor (Aider backend; other hosts deferred)
-**Technical reference:** [PHASES.md](./PHASES.md) § Phase 2 · [phase2-owned-context.md](./notes/phase2-owned-context.md)
+**Technical reference:** [PHASES.md](./PHASES.md) § Phase 2 · [phase2-owned-context.md](./notes/archive/phase2-owned-context.md)
 **Vision:** [IDEA.md](./IDEA.md) · [VISION_DOCS.md](./VISION_DOCS.md)
 **Deferred work:** [BACKLOG.md](./BACKLOG.md)
 **Known gaps / follow-ups:** [PHASE2_ISSUES.md](./PHASE2_ISSUES.md)
@@ -32,7 +32,7 @@
 
 Phase 1 learned: lean prompts work (~4.2k executor tokens vs ~44k dump); read-deps discipline is critical; honest `files_unexpected` reporting matters. Phase 2 codifies those lessons into owned tooling.
 
-**Design reference:** [notes/phase2-owned-context.md](./notes/phase2-owned-context.md) — three layers, behavioral contract, audit loop, capabilities, examples.
+**Design reference:** [notes/phase2-owned-context.md](./notes/archive/phase2-owned-context.md) — three layers, behavioral contract, audit loop, capabilities, examples.
 
 ---
 
@@ -64,7 +64,7 @@ L3 ADAPTER      translate(package) → Aider (or other) → ExecutionResult
 | D-P2-6 | `target_files` = hint; when `spec_path` set, spec Files wins | P2-110, P2-115, P2-200 |
 | D-P2-7 | Compiler testable without live backend | P2-200, P2-215 |
 
-Details + examples: [phase2-owned-context.md](./notes/phase2-owned-context.md).
+Details + examples: [phase2-owned-context.md](./notes/archive/phase2-owned-context.md).
 
 ---
 
@@ -94,20 +94,20 @@ Work proceeds in four waves. Milestones within a wave can run in sequence or be 
 ### Wave 1 — Honesty + safety foundations ✓
 
 **Goal:** L1 **behavioral contract** in spec + MCP; safer executor failures — **without** entrenching Aider `fnames` semantics.  
-**Design:** [phase2-owned-context.md § L1](./notes/phase2-owned-context.md#l1--behavioral-contract-not-api-contract)  
-**Exit:** [wave1-exit-validation.md](./notes/wave1-exit-validation.md) · wild test [runbook](./notes/wave1-wild-test-runbook.md)
+**Design:** [phase2-owned-context.md § L1](./notes/archive/phase2-owned-context.md#l1--behavioral-contract-not-api-contract)  
+**Exit:** [wave1-exit-validation.md](./notes/archive/wave1-exit-validation.md) · wild test [runbook](./notes/archive/wave1-wild-test-runbook.md)
 
 | Milestone | Task ID | Status | Implements (D-P2 / BL) | Summary |
 |-----------|---------|--------|------------------------|---------|
 | Read-deps warn | P2-110 | `done` | `P2-1.10-read-deps-warn.md` | D-P2-6, BL-311a — `spec_files_missing_from_target` + `contract_warnings`; warn-only; 143 pytest |
 | Delegation policies in spec | P2-115 | `done` | `P2-1.15-spec-policies.md` | D-P2-2, D-P2-3, D-SPEC-8, BL-315a/b — YAML policies + markdown fallback; `scope_violation` on strict post-check; 157 pytest |
 | Usage telemetry | P2-120 | `done` | `P2-1.20-usage-telemetry.md` | BL-154 partial — preflight + actual + static `model_rates.yaml`; JSONL + report always; MCP `usage` when `usage_report` (default on); BL-319 dynamic rates deferred; 172 pytest |
-| Delegation hardening + Wave 1 exit | P2-125 | `done` | `P2-1.25-delegation-hardening.md` | BL-309a/b/e — 212 pytest; dogfood Phases 1–4 pass; wild test → [wave1-wild-test-runbook.md](./notes/wave1-wild-test-runbook.md) |
+| Delegation hardening + Wave 1 exit | P2-125 | `done` | `P2-1.25-delegation-hardening.md` | BL-309a/b/e — 212 pytest; dogfood Phases 1–4 pass; wild test → [wave1-wild-test-runbook.md](./notes/archive/wave1-wild-test-runbook.md) |
 
 ### Wave 2 — Context compiler core ✓
 
 **Goal:** L2 compiler + L3 adapter hinge — **architectural center of Phase 2**.  
-**Design:** [phase2-owned-context.md § L2–L3](./notes/phase2-owned-context.md#three-layers-backend-agnostic-middle)  
+**Design:** [phase2-owned-context.md § L2–L3](./notes/archive/phase2-owned-context.md#three-layers-backend-agnostic-middle)  
 **Exit:** `COMPILER_VERSION` 0.3.0; pipeline `assemble → capability_adjust → budget → run_context`
 
 | Milestone | Task ID | Status | Implements (D-P2 / BL) | Summary |
@@ -121,10 +121,10 @@ Work proceeds in four waves. Milestones within a wave can run in sequence or be 
 
 ### Wave 3 — Executor + host contracts ✓ (tail; P2-315 deferred)
 
-**Exit:** P2-499 done — [phase2-exit-validation.md](./notes/phase2-exit-validation.md)
+**Exit:** P2-499 done — [phase2-exit-validation.md](./notes/archive/phase2-exit-validation.md)
 
 **Goal:** Close audit loop layers 3–4; richer outcomes back to Cursor and spec reports.  
-**Design:** [phase2-owned-context.md § Audit loop](./notes/phase2-owned-context.md#audit-loop-four-layers)
+**Design:** [phase2-owned-context.md § Audit loop](./notes/archive/phase2-owned-context.md#audit-loop-four-layers)
 
 | Milestone | Task ID | Status | Implements (D-P2 / BL) | Summary |
 |-----------|---------|--------|------------------------|---------|

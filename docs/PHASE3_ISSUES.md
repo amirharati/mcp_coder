@@ -124,7 +124,7 @@ Status: `open` | `scheduled` | `done` | `wontfix-p3` | `carried`
 ### Replication
 
 1. E2E workspace open in Cursor; MCP restarted; rules v2 present.
-2. Paste step-3 prompt from [phase3-wave1-exit-validation.md](./notes/phase3-wave1-exit-validation.md) (or equivalent: `calculate_total` + explicit Files → Edit).
+2. Paste step-3 prompt from [phase3-wave1-exit-validation.md](./notes/archive/phase3-wave1-exit-validation.md) (or equivalent: `calculate_total` + explicit Files → Edit).
 3. In **new Composer chat**, do not mention inspect tools in the prompt.
 4. After host finishes, check transcript for `CallMcpTool` with `get_delegation_diff` / `list_delegations` **between** delegate and mark-done — expect **absent** on 2026-06-09 run.
 5. Verify storage independently:

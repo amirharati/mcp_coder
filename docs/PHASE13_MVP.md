@@ -12,7 +12,7 @@
 **Purpose:** Short focus phase after Phase 12's infrastructure push. Prove the Phase 12 stack under real use (CLI + Cursor), analyze traces/logs for correct sequencing, consolidate docs to match shipped reality, harden tests from findings, and close a small set of low-hanging backlog items. **Not** a major feature phase — details and smarter behaviour come later (BL-543 B/C, BL-547, BL-546, BL-526, etc.).
 **PM board:** this file · **Issues:** [PHASE13_ISSUES.md](./PHASE13_ISSUES.md)
 **Phase 12 (closed):** [PHASE12_MVP.md](./PHASE12_MVP.md) · [PHASE12_ISSUES.md](./PHASE12_ISSUES.md)
-**Design notes:** [notes/supervisor-orchestration-layer.md](./notes/supervisor-orchestration-layer.md) (needs Phase 12 reality sync in P13-002)
+**Design notes:** [notes/supervisor-orchestration-layer.md](./notes/archive/supervisor-orchestration-layer.md) (needs Phase 12 reality sync in P13-002)
 
 ---
 
@@ -101,10 +101,10 @@ Those stay in backlog until Phase 13 exit review prioritizes them for a later ph
 **Goal:** Update docs to Phase 12 shipped reality. Freeze is already done on PHASE12_MVP; this milestone makes the **design notes** and navigation docs accurate.
 
 **Scope (typical):**
-- Update [notes/supervisor-orchestration-layer.md](./notes/supervisor-orchestration-layer.md) — shipped vs deferred (BL-543, BL-547, implicit resume, singleton, BL-545).
+- Update [notes/supervisor-orchestration-layer.md](./notes/archive/supervisor-orchestration-layer.md) — shipped vs deferred (BL-543, BL-547, implicit resume, singleton, BL-545).
 - Sync [VISION_DOCS.md](./VISION_DOCS.md) / [PHASES.md](./PHASES.md) if drift found.
 - Archive or mark historical any superseded Phase 12 planning fragments.
-- Optional: `notes/phase13-master-session-bootstrap.md` for next master session.
+- Optional: `notes/archive/phase13-master-session-bootstrap.md` for next master session.
 
 **Depends on:** P13-001 findings (what to emphasize in docs).
 

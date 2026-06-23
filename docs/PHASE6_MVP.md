@@ -13,7 +13,7 @@
 **Purpose:** Build a clean central observability layer (`core/observability/`) as the POC/MVP of the AGENTIC_LOOP_LOGGING separate-product vision; fix live token accounting (BL-335); capture reasoning tokens + session hot buffer; lay training-data schema foundations.
 **PM board:** this file · **Issues:** [PHASE6_ISSUES.md](./PHASE6_ISSUES.md) (frozen)
 **Phase 5 (closed):** [PHASE5_MVP.md](./PHASE5_MVP.md)
-**Design notes:** [notes/phase6-master-session-bootstrap.md](./notes/phase6-master-session-bootstrap.md) · [OTEHR_RELATED_IDEAS/AGENTIC_LOOP_LOGGING.md](./OTEHR_RELATED_IDEAS/AGENTIC_LOOP_LOGGING.md) · [OTEHR_RELATED_IDEAS/REASONING_TRACE_REUSE.md](./OTEHR_RELATED_IDEAS/REASONING_TRACE_REUSE.md)
+**Design notes:** [notes/archive/phase6-master-session-bootstrap.md](./notes/archive/phase6-master-session-bootstrap.md) · [OTEHR_RELATED_IDEAS/AGENTIC_LOOP_LOGGING.md](./OTEHR_RELATED_IDEAS/AGENTIC_LOOP_LOGGING.md) · [OTEHR_RELATED_IDEAS/REASONING_TRACE_REUSE.md](./OTEHR_RELATED_IDEAS/REASONING_TRACE_REUSE.md)
 **Backlog:** [BACKLOG.md](./BACKLOG.md) § Phase 6 exit — BL-350, BL-353 (partial), BL-333, BL-368, BL-367, BL-357
 
 ---

@@ -3,8 +3,8 @@
 **Created:** 2026-06-18
 **Status:** Active — Phase 11 milestones P11-001..P11-007 scoped.
 **Purpose:** Record all Phase 11 scope decisions, cross-phase architectural decisions, and the reasoning behind them. Workers read the PM doc; this note is the *why* behind it.
-**PM board:** [PHASE11_MVP.md](../PHASE11_MVP.md)
-**Related notes:** [phase10-master-session-bootstrap.md](./phase10-master-session-bootstrap.md), [model-policy-layer.md](./model-policy-layer.md)
+**PM board:** [PHASE11_MVP.md](../../PHASE11_MVP.md)
+**Related notes:** [phase10-master-session-bootstrap.md](./phase10-master-session-bootstrap.md), [model-policy-layer.md](../model-policy-layer.md)
 
 ---
 

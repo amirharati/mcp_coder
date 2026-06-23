@@ -121,7 +121,7 @@ CLI dogfood delegation `db96b1ce-e5ed-490f-84aa-606282bfdf8d` returned `error_cl
 **Filed:** 2026-06-21 (post-P13-001 re-verification)
 **Severity:** medium
 
-P13-005 shipped the lifecycle envelope events (`delegation_lifecycle_start/end`, `delegation_phase_start/end`) but the *control flow* remains in `server/mcp_server.py`. The server emits preloop phase events *after* preloop work completes (retroactive), and the agent only owns the loop phase. This contradicts the design principle in [notes/supervisor-orchestration-layer.md](../notes/supervisor-orchestration-layer.md): "Only the Supervisor is stateful. Every other component is a pure worker."
+P13-005 shipped the lifecycle envelope events (`delegation_lifecycle_start/end`, `delegation_phase_start/end`) but the *control flow* remains in `server/mcp_server.py`. The server emits preloop phase events *after* preloop work completes (retroactive), and the agent only owns the loop phase. This contradicts the design principle in [notes/supervisor-orchestration-layer.md](../notes/archive/supervisor-orchestration-layer.md): "Only the Supervisor is stateful. Every other component is a pure worker."
 
 **Observed:** Delegation `d1b0bea1` trace shows `delegation_phase_start(preloop)` (event 8) emitted after `spec_validation` and `clarity_check` already ran. The envelope is a trace-level illusion of agent ownership.
 

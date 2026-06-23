@@ -3,7 +3,7 @@
 **Milestone:** P2-499 — Phase 2 sign-off  
 **Workspace:** `mcp_coder_phase1_e2e`  
 **Code repo:** `mcp_coder` (`main` @ P2-3.15+)  
-**Issues:** [PHASE2_ISSUES.md](../PHASE2_ISSUES.md)
+**Issues:** [PHASE2_ISSUES.md](../../PHASE2_ISSUES.md)
 
 Structured phases first (specific tasks), then **wild test** (natural multi-step epic).
 

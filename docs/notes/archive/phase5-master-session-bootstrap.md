@@ -3,8 +3,8 @@
 **Created:** 2026-06-13  
 **Purpose:** Frozen summary of Phase 5 planning session decisions. Use as context for future master sessions continuing Phase 5 work.  
 **Status:** Frozen — Phase 5 **closed** 2026-06-13 (recommended exit).
-**Authoritative PM docs:** [PHASE5_MVP.md](../PHASE5_MVP.md) · [PHASE5_ISSUES.md](../PHASE5_ISSUES.md)  
-**Design note:** [rag-gap-analysis.md](./rag-gap-analysis.md)
+**Authoritative PM docs:** [PHASE5_MVP.md](../../PHASE5_MVP.md) · [PHASE5_ISSUES.md](../../PHASE5_ISSUES.md)  
+**Design note:** [retrieval-and-rag-strategy.md](../retrieval-and-rag-strategy.md)
 
 ---
 
@@ -64,7 +64,7 @@ Move the context builder from *recency + `rg`* toward *relevance retrieval*, sta
 | T-07 (end-to-end trace) | Pending → BL-362 |
 | `docs/guide/architecture/overview.md` | Done — D-1…D-8 locked |
 | Architecture sub-pages | Pending → BL-363 |
-| Gap analysis (formal doc) | Absorbed into `rag-gap-analysis.md` + architecture overview |
+| Gap analysis (formal doc) | Absorbed into `retrieval-and-rag-strategy.md` + architecture overview |
 | P4.5 fixes (001–005) | Done |
 | All P4.5 issues | Frozen → BACKLOG BL-341–363 |
 

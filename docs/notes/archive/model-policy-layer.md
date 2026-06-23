@@ -11,7 +11,7 @@
 
 **Created:** 2026-06-16  
 **Status:** Stage 1 **shipped in Phase 9** — **P9-011** (unify helper path + registry front door) and **P9-012** (generation params + weak model + `policy_applied` logging) both **done** (2026-06-16; full suite `924 passed, 2 skipped`). `policy_applied` landed as a **top-level trace field** carried via the `model_policy_var` contextvar. Stages 2–4 and prompt policy layer remain backlogged.  
-**Related notes:** [multi-model-roles.md](./multi-model-roles.md) (per-role model vision), [phase9-master-session-bootstrap.md](./phase9-master-session-bootstrap.md) (proxy + auditable log)  
+**Related notes:** [multi-model-roles.md](./multi-model-roles.md) (per-role model vision), [phase9-master-session-bootstrap.md](./archive/phase9-master-session-bootstrap.md) (proxy + auditable log)  
 **Backlog:** BL-511 (Stage 1, Phase 9), BL-512 (Stage 2 — host-set), BL-513 (Stage 3 — AI-suggested), BL-514 (Stage 4 — escalation), BL-515 (model tiers/classes); BL-162 (multi-model routing), BL-321 (tiered escalation)
 
 ---

@@ -181,4 +181,4 @@ API keys and model ids live in `.env` (OpenRouter is the common provider for eve
 | Hands-on walkthroughs | [tutorials/](./tutorials/) (T-01…T-07) |
 | Subsystem internals | [architecture/](./architecture/) |
 | What's planned / deferred | [../PHASES.md](../PHASES.md), [../BACKLOG.md](../BACKLOG.md) |
-| Known gaps from dogfooding | [../PHASE5_ISSUES.md](../PHASE5_ISSUES.md) (frozen), [../notes/rag-gap-analysis.md](../notes/rag-gap-analysis.md) |
+| Known gaps from dogfooding | [../PHASE5_ISSUES.md](../PHASE5_ISSUES.md) (frozen), [../notes/retrieval-and-rag-strategy.md](../notes/retrieval-and-rag-strategy.md) |

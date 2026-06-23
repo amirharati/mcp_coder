@@ -10,7 +10,7 @@
 
 **Status:** Idea — captured from mcp-coder Phase 4 dogfood discussion (2026-06-09)
 **Backlog:** [BL-333](../BACKLOG.md#bl-333-reasoning-trace-capture--cross-delegation-context-feed)
-**Related:** [CONTEXT_AS_GIT.md](./CONTEXT_AS_GIT.md) · [WORKSPACE_HISTORY.md](./WORKSPACE_HISTORY.md) · [multi-model-roles.md](../notes/multi-model-roles.md)
+**Related:** [CONTEXT_AS_GIT.md](./CONTEXT_AS_GIT.md) · [WORKSPACE_HISTORY.md](./WORKSPACE_HISTORY.md) · [multi-model-roles.md](../notes/archive/multi-model-roles.md)
 
 ---
 

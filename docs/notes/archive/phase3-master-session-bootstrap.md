@@ -2,8 +2,8 @@
 
 **Purpose:** Hand off from Phase 2 exit to a **new planning/master chat** without loading full history. This session can run in **parallel** with the Phase 2 wrap-up chat until Phase 3 PM owns the board.
 
-**Phase 2 status:** **Closed / frozen** (2026-06-08) — [phase2-exit-validation.md](./phase2-exit-validation.md), [PHASE2_MVP.md](../PHASE2_MVP.md).
-**Phase 3 PM:** [PHASE3_MVP.md](../PHASE3_MVP.md) · [PHASE3_ISSUES.md](../PHASE3_ISSUES.md).
+**Phase 2 status:** **Closed / frozen** (2026-06-08) — [phase2-exit-validation.md](./phase2-exit-validation.md), [PHASE2_MVP.md](../../PHASE2_MVP.md).
+**Phase 3 PM:** [PHASE3_MVP.md](../../PHASE3_MVP.md) · [PHASE3_ISSUES.md](../../PHASE3_ISSUES.md).
 
 ---
 
@@ -14,13 +14,13 @@ You are the mcp-coder Phase 3 planning/master session (PM + task orchestration).
 
 ## Read first (in order — do NOT load prior chat history)
 
-1. docs/notes/phase3-master-session-bootstrap.md — this handoff
+1. docs/notes/archive/phase3-master-session-bootstrap.md — this handoff
 2. docs/VISION_DOCS.md — doc tiers + stewardship
 3. docs/PHASES.md — phase arc table + § Phase 3–5 (skim Phase 1–2 as needed)
 4. docs/PHASE3_MVP.md — waves, D-P3 decisions, milestone order, open questions
 5. docs/PHASE3_ISSUES.md — P3-ISS-001–004 (carried from P2)
 6. docs/PHASE2_MVP.md — frozen; exit reference only
-7. docs/notes/phase2-exit-validation.md — P2-499 dogfood sign-off
+7. docs/notes/archive/phase2-exit-validation.md — P2-499 dogfood sign-off
 8. docs/OTEHR_RELATED_IDEAS/WORKSPACE_HISTORY.md — BL-322 design (scan rules, schema)
 9. docs/BACKLOG.md — BL-322, BL-320, BL-002, BL-151, BL-323
 10. .cursor/rules/mcp-coder-vision.mdc — worker vs master boundaries
@@ -106,7 +106,7 @@ L2 COMPILER   assemble_context() → ContextPackage
 L3 ADAPTER    translate → Aider → ExecutionResult
 ```
 
-Design reference: [phase2-owned-context.md](./phase2-owned-context.md)
+Design reference: [phase2-owned-context.md](../phase2-owned-context.md)
 
 ---
 
@@ -116,7 +116,7 @@ Design reference: [phase2-owned-context.md](./phase2-owned-context.md)
 
 Shipped: `delegate_to_agent`, `mode=review|implement`, spec epics/tasks/reports, cursor rules sync, read-deps convention, `files_changed` / `files_unexpected`, JSONL audit.
 
-PM: [PHASE1_MVP.md](../PHASE1_MVP.md) (closed P1-199). Issues: [PHASE1_ISSUES.md](../PHASE1_ISSUES.md) (historical).
+PM: [PHASE1_MVP.md](../../PHASE1_MVP.md) (closed P1-199). Issues: [PHASE1_ISSUES.md](../../PHASE1_ISSUES.md) (historical).
 
 ---
 
@@ -138,7 +138,7 @@ PM: [PHASE1_MVP.md](../PHASE1_MVP.md) (closed P1-199). Issues: [PHASE1_ISSUES.md
 
 **Deferred to Phase 3:** P2-ISS-002 → BL-322; P2-ISS-007 → BL-320; P2-ISS-008 → BL-321.
 
-PM: [PHASE2_MVP.md](../PHASE2_MVP.md) · Issues: [PHASE2_ISSUES.md](../PHASE2_ISSUES.md)
+PM: [PHASE2_MVP.md](../../PHASE2_MVP.md) · Issues: [PHASE2_ISSUES.md](../../PHASE2_ISSUES.md)
 
 ---
 
@@ -148,7 +148,7 @@ Two tracks that **overlap** and can ship incrementally:
 
 ### Track A — Workspace truth (audit + revert)
 
-**BL-322** [WORKSPACE_HISTORY.md](../OTEHR_RELATED_IDEAS/WORKSPACE_HISTORY.md)
+**BL-322** [WORKSPACE_HISTORY.md](../../OTEHR_RELATED_IDEAS/WORKSPACE_HISTORY.md)
 
 - Delegation-granularity snapshots (not user git)
 - Honest `files_changed` in non-git workspaces (closes P2-ISS-002)
@@ -215,7 +215,7 @@ Overlap is OK: e.g. Phase 3 master drafts BL-322a worker spec while Phase 2 chat
 3. ~~**P3-320** spec versioning rules~~ — **done** 2026-06-09.
 4. ~~**P3-002-lite** delegation RAG~~ — **done** 2026-06-09; `core/rag/`; 431 pytest (+17); workspace-file RAG + usage → Phase 5 (Phase 4 = context builder first).
 5. ~~**P3-499 exit**~~ — **done** 2026-06-09; Phase 3 closed; issues → BACKLOG BL-324–328.
-6. **Phase 4** — context builder + manager; start from [PHASES.md](../PHASES.md) § Phase 4.
+6. **Phase 4** — context builder + manager; start from [PHASES.md](../../PHASES.md) § Phase 4.
 
 ---
 

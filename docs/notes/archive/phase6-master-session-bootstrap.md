@@ -3,11 +3,11 @@
 **Created:** 2026-06-13  
 **Purpose:** Frozen summary of Phase 6 planning session decisions. Use as context for future master sessions and worker sessions.  
 **Status:** Frozen at Phase 6 exit (2026-06-13) — P6-001…P6-008 shipped; issues → BACKLOG § Phase 6 exit.  
-**Authoritative PM docs:** [PHASE6_MVP.md](../PHASE6_MVP.md) (frozen) · [PHASE6_ISSUES.md](../PHASE6_ISSUES.md) (frozen)  
+**Authoritative PM docs:** [PHASE6_MVP.md](../../PHASE6_MVP.md) (frozen) · [PHASE6_ISSUES.md](../../PHASE6_ISSUES.md) (frozen)  
 **Design ideas (read before dispatching workers):**  
-- [AGENTIC_LOOP_LOGGING.md](../OTEHR_RELATED_IDEAS/AGENTIC_LOOP_LOGGING.md) — long-horizon product vision; Phase 6 is its POC/MVP  
-- [REASONING_TRACE_REUSE.md](../OTEHR_RELATED_IDEAS/REASONING_TRACE_REUSE.md) — reasoning token capture + in-product uses (BL-333 substrate)  
-- [CONTEXT_AS_GIT.md](../OTEHR_RELATED_IDEAS/CONTEXT_AS_GIT.md) — "stored context vs runtime context" mental model; informs hot buffer design  
+- [AGENTIC_LOOP_LOGGING.md](../../OTEHR_RELATED_IDEAS/AGENTIC_LOOP_LOGGING.md) — long-horizon product vision; Phase 6 is its POC/MVP  
+- [REASONING_TRACE_REUSE.md](../../OTEHR_RELATED_IDEAS/REASONING_TRACE_REUSE.md) — reasoning token capture + in-product uses (BL-333 substrate)  
+- [CONTEXT_AS_GIT.md](../../OTEHR_RELATED_IDEAS/CONTEXT_AS_GIT.md) — "stored context vs runtime context" mental model; informs hot buffer design  
 **Related backlog:** BL-335, BL-353, BL-333, BL-334, BL-357, BL-366
 
 ---

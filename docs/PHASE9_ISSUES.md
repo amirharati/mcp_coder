@@ -17,7 +17,7 @@
 **Status:** done — P9-011 + P9-012 shipped 2026-06-16 (helper paths unified onto `LlmGateway`; generation params + weak-model default-fill resolve per role; `policy_applied` on every `backend_llm_call`/`llm_call`)  
 **Opened:** 2026-06-16 (Phase 9 post-completion dogfood)  
 **Promoted:** 2026-06-16 — needed now, not Phase 10; **split into P9-011 (refactor) + P9-012 (params + logging) after code review**  
-**Design note:** [docs/notes/model-policy-layer.md](notes/model-policy-layer.md)
+**Design note:** [docs/notes/archive/model-policy-layer.md](notes/archive/model-policy-layer.md)
 
 ### Summary
 

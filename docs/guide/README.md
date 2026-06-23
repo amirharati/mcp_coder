@@ -54,4 +54,4 @@ T-04 = how context is compiled (tiers, picker, builder). T-06 = every step on a 
 
 | Document | Topic |
 |----------|-------|
-| [../notes/rag-gap-analysis.md](../notes/rag-gap-analysis.md) | **Living** — corpora, litmus test, Phase 5 scope (shipped), open items (P5-005, BL-354) |
+| [../notes/retrieval-and-rag-strategy.md](../notes/retrieval-and-rag-strategy.md) | **Living** — corpora, litmus test, Phase 5 scope (shipped), open items (P5-005, BL-354) |

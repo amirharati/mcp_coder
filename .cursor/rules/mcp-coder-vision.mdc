@@ -11,7 +11,7 @@ alwaysApply: true
 
 - `docs/IDEA.md`, `docs/PHASES.md`, `docs/PHASE1_MVP.md`, `docs/PHASE2_MVP.md`, `docs/PHASE3_MVP.md`, `docs/BACKLOG.md`
 - `docs/PHASE1_ISSUES.md`, `docs/PHASE2_ISSUES.md`, `docs/PHASE3_ISSUES.md`
-- `docs/VISION_DOCS.md`, `docs/notes/spec-based-development.md`, `docs/notes/phase2-owned-context.md`
+- `docs/VISION_DOCS.md`, `docs/notes/spec-workflow.md`, `docs/notes/context-storage-and-observability.md`
 - `docs/OTEHR_RELATED_IDEAS/*` (related ideas, not product truth)
 
 Each file has an HTML stewardship comment at the top — read it before any edit.
@@ -47,7 +47,7 @@ Each file has an HTML stewardship comment at the top — read it before any edit
 ## Task spec quality (master writes specs)
 
 - Specs are **self-contained**: goal, scope, files policy, acceptance, and pointers to design notes — worker should not need to hunt PM docs.
-- Link design context once: e.g. [phase2-owned-context.md](docs/notes/phase2-owned-context.md) § L1 — not copy the whole doc.
+- Link design context once: e.g. [context-storage-and-observability.md](docs/notes/context-storage-and-observability.md) — not copy the whole doc.
 - One milestone per worker session.
 
 ## Quick anchors

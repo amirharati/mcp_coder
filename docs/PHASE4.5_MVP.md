@@ -181,7 +181,7 @@ Interactive sessions (PM + assistant together) — not dispatched workers unless
 
 - [x] Tutorials T-01 through T-05 written — each self-contained and usable by a new user; T-06 skeleton, T-07 pending → BL-362
 - [x] `docs/guide/architecture/overview.md` written — layer map, locked decisions D-1–D-8, gap table; sub-pages pending → BL-363
-- [x] Gap analysis: content absorbed into `rag-gap-analysis.md` (living) + architecture overview § Known gaps; formal `phase4.5-gap-analysis.md` deferred → BL-363
+- [x] Gap analysis: content absorbed into `retrieval-and-rag-strategy.md` (living) + architecture overview § Known gaps; formal `phase4.5-gap-analysis.md` deferred → BL-363
 - [ ] A-05 divergence log populated — "where reality differs from spec"
 - [ ] All Track 3 experiments run with results recorded
 - [ ] At least BL-335 (token audit) root cause understood; fix attempted
@@ -190,7 +190,7 @@ Interactive sessions (PM + assistant together) — not dispatched workers unless
 ---
 
 ## Changelog
-| 2026-06-13 | **Planning handoff complete** — Phase 5 scope locked; PHASE5_MVP.md + PHASE5_ISSUES.md created; all P4.5 issues carried to BACKLOG BL-341–363; rag-gap-analysis.md § MVP promoted to locked |
+| 2026-06-13 | **Planning handoff complete** — Phase 5 scope locked; PHASE5_MVP.md + PHASE5_ISSUES.md created; all P4.5 issues carried to BACKLOG BL-341–363; retrieval-and-rag-strategy.md § MVP promoted to locked |
 
 | Date | Change |
 |------|--------|

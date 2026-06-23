@@ -1,10 +1,10 @@
 # Phase 9 master session bootstrap
 
 **Created:** 2026-06-14  
-**Status:** **Complete and closed** — all Phase 9 milestones shipped 2026-06-16; frozen 2026-06-17. A-to-Z dogfood (6 delegations; 6/6 proxy↔llm_call alignment exact). PM doc at [PHASE9_MVP.md](../PHASE9_MVP.md) (frozen). Guide synced 2026-06-17.  
+**Status:** **Complete and closed** — all Phase 9 milestones shipped 2026-06-16; frozen 2026-06-17. A-to-Z dogfood (6 delegations; 6/6 proxy↔llm_call alignment exact). PM doc at [PHASE9_MVP.md](../../PHASE9_MVP.md) (frozen). Guide synced 2026-06-17.  
 **Outcome:** All 7 north-star acceptance criteria verified, including BL-507 (thinking tokens at HTTP boundary). Post-dogfood fixes shipped (P9-ISS-008..010). P9-013 v2 boundary viewer shipped. Remaining polish deferred to backlog: **BL-516**..**BL-519** (CLI log table, `policy_applied` ignored params, log-level DX, proxy env toggle).  
 **Purpose:** Record all Phase 9 scope decisions, design rationale, and locked choices made in the master planning session. Workers read the PM doc; this note is the *why* behind it.
-**Related notes:** [llm-interception-strategies.md](./llm-interception-strategies.md) (proxy architecture detail), [phase8-master-session-bootstrap.md](./phase8-master-session-bootstrap.md) (Phase 8 decisions)
+**Related notes:** [llm-interception-strategies.md](../llm-interception-strategies.md) (proxy architecture detail), [phase8-master-session-bootstrap.md](./phase8-master-session-bootstrap.md) (Phase 8 decisions)
 
 ---
 
@@ -96,7 +96,7 @@ The env vars we already use for LLM routing become the proxy's routing table. No
 
 In-process callers: proxy reads `delegation_id_var` and `step_index_var` from the active context store on each request. No header injection needed. Exact attribution, same quality as `ObservableModel`.
 
-Out-of-process backends (Phase 10+): header injection (`X-Mcp-Delegation-Id`) or timing correlation fallback (see [llm-interception-strategies.md](./llm-interception-strategies.md) § Attribution with the HTTP proxy).
+Out-of-process backends (Phase 10+): header injection (`X-Mcp-Delegation-Id`) or timing correlation fallback (see [llm-interception-strategies.md](../llm-interception-strategies.md) § Attribution with the HTTP proxy).
 
 ### D-P9-6: Dual capture — proxy is ground truth
 

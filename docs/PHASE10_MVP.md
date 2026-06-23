@@ -13,7 +13,7 @@
 **Purpose:** Make `mcp-coder` usable in real projects by adding three partial/POC capabilities — executor behavior shaping, live visibility during delegation, and supervised stall handling — plus clearing high-ROI deferred items from Phase 9.
 **PM board:** this file · **Issues:** [PHASE10_ISSUES.md](./PHASE10_ISSUES.md)
 **Phase 9 (frozen):** [PHASE9_MVP.md](./PHASE9_MVP.md) · [PHASE9_ISSUES.md](./PHASE9_ISSUES.md)
-**Design notes:** [notes/phase10-master-session-bootstrap.md](./notes/phase10-master-session-bootstrap.md)
+**Design notes:** [notes/archive/phase10-master-session-bootstrap.md](./notes/archive/phase10-master-session-bootstrap.md)
 **Backlog inputs:** BL-334 (executor options), BL-106 (MCP notifications), BL-520 (log tail), BL-351 (stall detection), BL-516 (trace summary), BL-517 (policy_applied ignored), BL-518 (log DX), BL-519 (proxy toggle)
 
 ---
@@ -65,7 +65,7 @@ P10-004: Backlog clearance           (high-ROI deferred items from Phase 9)
 
 ## Locked design decisions
 
-*(Resolved in planning session 2026-06-18 — see [notes/phase10-master-session-bootstrap.md](./notes/phase10-master-session-bootstrap.md) for full reasoning.)*
+*(Resolved in planning session 2026-06-18 — see [notes/archive/phase10-master-session-bootstrap.md](./notes/archive/phase10-master-session-bootstrap.md) for full reasoning.)*
 
 | ID | Decision |
 |----|----------|

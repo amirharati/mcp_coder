@@ -1,6 +1,6 @@
 # Delegation viewer — design principles v2
 
-**Supersedes:** `viewer-design-principles.md` (v1, pipeline/card era — keep for historical reference)  
+**Supersedes:** [`archive/viewer-design-principles.md`](./archive/viewer-design-principles.md) (v1, pipeline/card era — kept for historical reference)  
 **Scope:** `tools/delegation_viewer.html` + `core/cli/delegation_view_enrich.py` Phase 9+  
 **Status:** living reference — update when a new pattern is established
 

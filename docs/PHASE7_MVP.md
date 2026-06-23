@@ -13,7 +13,7 @@
 **Purpose:** Own every executor turn and route all LLM calls through a single proxy (`LlmGateway`) — so Phase 8 can capture 100% with no bypass paths remaining.
 **PM board:** this file · **Issues:** [PHASE7_ISSUES.md](./PHASE7_ISSUES.md)
 **Phase 6 (closed):** [PHASE6_MVP.md](./PHASE6_MVP.md) (frozen) · [PHASE6_ISSUES.md](./PHASE6_ISSUES.md) (frozen)
-**Design notes:** [notes/phase7-master-session-bootstrap.md](./notes/phase7-master-session-bootstrap.md) · [OTEHR_RELATED_IDEAS/AGENTIC_LOOP_LOGGING.md](./OTEHR_RELATED_IDEAS/AGENTIC_LOOP_LOGGING.md) · [OTEHR_RELATED_IDEAS/REASONING_TRACE_REUSE.md](./OTEHR_RELATED_IDEAS/REASONING_TRACE_REUSE.md)
+**Design notes:** [notes/archive/phase7-master-session-bootstrap.md](./notes/archive/phase7-master-session-bootstrap.md) · [OTEHR_RELATED_IDEAS/AGENTIC_LOOP_LOGGING.md](./OTEHR_RELATED_IDEAS/AGENTIC_LOOP_LOGGING.md) · [OTEHR_RELATED_IDEAS/REASONING_TRACE_REUSE.md](./OTEHR_RELATED_IDEAS/REASONING_TRACE_REUSE.md)
 **Backlog inputs:** BL-368, BL-350, BL-353 (remainder), BL-333 (extend)
 **Phase 8 (planned):** [PHASE8_MVP.md](./PHASE8_MVP.md) (to be created) — full 100% capture substrate; requires Phase 7 prerequisites
 
@@ -53,7 +53,7 @@ These are the prerequisites Phase 8 needs before it can safely say "write 100% o
 
 ## Locked design decisions
 
-*(Resolved in master session 2026-06-13 — see [notes/phase7-master-session-bootstrap.md](./notes/phase7-master-session-bootstrap.md) for Q1–Q6 reasoning.)*
+*(Resolved in master session 2026-06-13 — see [notes/archive/phase7-master-session-bootstrap.md](./notes/archive/phase7-master-session-bootstrap.md) for Q1–Q6 reasoning.)*
 
 | ID | Decision |
 |----|----------|

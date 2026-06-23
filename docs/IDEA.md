@@ -84,7 +84,7 @@ Actual LLM provider
 | **Storage** | `~/.mcp-coder` JSONL + sessions | `workspace_history.db`, attempt specs, optional RAG index |
 | **Specs** | Local worker specs + review loop (P1-151) | Pre/post gates (BL-151); product `.mcp-coder/specs/` later |
 
-**Current status (2026-06-08):** Phase 1 **closed** (P1-199). Phase 2 **closed** (P2-499) — owned context compiler, audit loop ([phase2-exit-validation.md](./notes/phase2-exit-validation.md)). **Active:** Phase 3 — workspace truth + planner history + RAG lite ([PHASE3_MVP.md](./PHASE3_MVP.md); entry **P3-322a**). Phase 4 = smart context builder / janitor / verify; Phase 5+ = interactive sessions and product surface — see [PHASES.md](./PHASES.md) phase arc table.
+**Current status (2026-06-08):** Phase 1 **closed** (P1-199). Phase 2 **closed** (P2-499) — owned context compiler, audit loop ([phase2-exit-validation.md](./notes/archive/phase2-exit-validation.md)). **Active:** Phase 3 — workspace truth + planner history + RAG lite ([PHASE3_MVP.md](./PHASE3_MVP.md); entry **P3-322a**). Phase 4 = smart context builder / janitor / verify; Phase 5+ = interactive sessions and product surface — see [PHASES.md](./PHASES.md) phase arc table.
 
 ---
 
@@ -119,7 +119,7 @@ Structured Markdown as the **main API/contract** between components — not raw 
 
 **Controlled access:** Do **not** let Aider/OpenCode write these files directly. Expose **dedicated MCP tools** that enforce structure, validation, section boundaries, and permissions.
 
-This mirrors how we build the product: planning chat → local `docs/tasks/P1-….md` → worker (see [notes/spec-based-development.md](./notes/spec-based-development.md)).
+This mirrors how we build the product: planning chat → local `docs/tasks/P1-….md` → worker (see [notes/spec-based-development.md](./notes/archive/spec-based-development.md)).
 
 ### Proposed MCP tools (spec layer — future)
 
@@ -220,7 +220,7 @@ MCP tools only receive JSON arguments — not full Cursor chat.
 
 - **Host transcript (Phase 1.4 — shipped):** read Cursor `agent-transcripts/*.jsonl` via host adapter (`host_transcript: dump`). Early ideation mentioned **SpecStory** (`.specstory/history/`); product path is **host adapter + optional dump**, not a hard SpecStory dependency.
 - **Fallback:** `context_summary` (+ optional `explicit_constraints`, snippets — P1-115).
-- **Long-term:** spec files as contract reduce need for full history ([notes/spec-based-development.md](./notes/spec-based-development.md)).
+- **Long-term:** spec files as contract reduce need for full history ([notes/spec-based-development.md](./notes/archive/spec-based-development.md)).
 
 ### Skills injection (future)
 

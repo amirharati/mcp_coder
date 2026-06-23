@@ -63,7 +63,8 @@ Each tier-0–2 file has an HTML **stewardship** comment at the top — agents m
 | [PHASE11_MVP.md](./PHASE11_MVP.md) | **Phase 11 PM** — closed 2026-06-20 (supervised execution + smarter context) |
 | [PHASE12_MVP.md](./PHASE12_MVP.md) | **Phase 12 PM** — closed 2026-06-21 (supervisor orchestration infrastructure) |
 | [PHASE13_MVP.md](./PHASE13_MVP.md) | **Phase 13 PM** — active (stabilize + dogfood + document + test hardening + backlog review) |
-| [notes/supervisor-orchestration-layer.md](./notes/supervisor-orchestration-layer.md) | **Phase 12+ architecture note** — Supervisor as intelligent orchestration layer (D-ARCH-7..11); Phase 12 shipped + Phase 13 dogfood verified |
+| [notes/system-design-overview.md](./notes/system-design-overview.md) | **Refined design entry** — how the current notes fit together (vision stays in IDEA) |
+| [notes/supervisor-agent-architecture.md](./notes/supervisor-agent-architecture.md) | **Supervisor agent architecture** — persistent project agent, state model, pause/resume, project memory, subagent/tool context control |
 | [BACKLOG.md](./BACKLOG.md) | Project backlog (deferred / later / nice-to-have; includes Phase 13 watch-for-evidence items BL-549..BL-555) |
 | [PHASE1_ISSUES.md](./PHASE1_ISSUES.md) | **Phase 1 issue tracker** — gaps found during P1 (incl. server log) |
 | [TASK_SPEC_TEMPLATE.md](./TASK_SPEC_TEMPLATE.md) | Blank template — **do not edit**; copy into `docs/tasks/` |
@@ -90,8 +91,7 @@ For repos using mcp-coder as planner ↔ worker (not building mcp-coder itself):
 
 | Doc | Topic |
 |-----|--------|
-| [notes/spec-based-development.md](./notes/spec-based-development.md) | Epic + step specs, roles, layout v2 (**shipped** P1-151) |
-| [notes/spec-review-loop.md](./notes/spec-review-loop.md) | `mode=review` → refine → `mode=implement` |
+| [notes/spec-workflow.md](./notes/spec-workflow.md) | Current spec-driven workflow for master/worker and `review` / `implement` paths |
 | [PHASE1_ISSUES.md](./PHASE1_ISSUES.md) | E2E gaps (P1-ISS-013–016) and deferrals |
 | Root [README.md](../README.md) | `delegate_to_agent`, `spec_path`, `test-model` |
 
@@ -103,17 +103,16 @@ E2E reference consumer: `mcp_coder_phase1_e2e` (expense-splitter epic).
 
 | Note | Topic |
 |------|--------|
-| [notes/storage-and-linking.md](./notes/storage-and-linking.md) | `~/.mcp-coder` layout, IDs, session ↔ Cursor chat links, `specs/` |
-| [notes/spec-based-development.md](./notes/spec-based-development.md) | Spec-as-contract hypothesis → **live experiment** |
-| [notes/rag-gap-analysis.md](./notes/rag-gap-analysis.md) | **Living** — where RAG helps vs logging/index; Phase 5 corpora & open questions |
-| [notes/workflow-turns.md](./notes/workflow-turns.md) | **Living** — polish/refactor/document/digest turns & epic-boundary cadence |
-| [notes/supervisor-orchestration-layer.md](./notes/supervisor-orchestration-layer.md) | **Phase 12+ architecture** — Supervisor as intelligent orchestration layer (D-ARCH-7..11); Phase 12 shipped + Phase 13 dogfood verified |
-| [notes/delegation-workflow-vision.md](./notes/delegation-workflow-vision.md) | Full role hierarchy + delegation lifecycle + planner/executor separation + host hedging (BL-527) |
-| [notes/multi-model-roles.md](./notes/multi-model-roles.md) | Per-role models (D-P4-8) + role hierarchy + host hedging |
-| [notes/model-policy-layer.md](./notes/model-policy-layer.md) | `model_policy` design — per-role, per-delegation overrides |
+| [notes/context-storage-and-observability.md](./notes/context-storage-and-observability.md) | Contract/compiler/adapter split, storage model, observability/capture layers |
+| [notes/spec-workflow.md](./notes/spec-workflow.md) | Spec-as-contract workflow, review/implement loop, planner/worker split |
+| [notes/retrieval-and-rag-strategy.md](./notes/retrieval-and-rag-strategy.md) | Retrieval/RAG boundaries, corpora, dependency order, FTS vs embeddings |
+| [notes/viewer-and-trace-design.md](./notes/viewer-and-trace-design.md) | Delegation viewer mental model, trace mapping, event rendering rules |
+| [notes/delegation-roles-and-lifecycle.md](./notes/delegation-roles-and-lifecycle.md) | Stable role vocabulary, delegation lifecycle, shipped modes vs future turns |
+| [notes/model-routing-and-policy.md](./notes/model-routing-and-policy.md) | Current model-policy behavior plus future routing/escalation direction |
+| [notes/archive/](./notes/archive/README.md) | **Archive** — frozen phase master-session bootstrap handoffs (Phases 3–11) |
 
 ## Quick start (planning)
 
 1. Read [IDEA.md](./IDEA.md) for context.
 2. Use the active phase PM board (currently [PHASE13_MVP.md](./PHASE13_MVP.md)) for what to build next.
-3. Deep dive: [PHASES.md](./PHASES.md) § Phase 1 · [storage-and-linking.md](./notes/storage-and-linking.md).
+3. Deep dive: [PHASES.md](./PHASES.md) § Phase 1 · [context-storage-and-observability.md](./notes/context-storage-and-observability.md).

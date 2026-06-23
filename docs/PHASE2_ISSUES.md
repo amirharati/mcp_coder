@@ -121,7 +121,7 @@ Status: `open` | `scheduled` | `done` | `wontfix-p2` | `accepted`
 
 **Target:** Dogfood Phase 4 — `AIDER_MODEL=qwen…`, expect `error_class: upstream_5xx`, no browser, &lt; timeout.
 
-**Acceptance:** BACKLOG BL-309 §8 criteria met in live run; record `delegation_id` in `wave1-exit-validation.md`.
+**Acceptance:** BACKLOG BL-309 §8 criteria met in live run; record `delegation_id` in `archive/wave1-exit-validation.md`.
 
 **Update 2026-06-07:** Phase 4 dogfood — Qwen multi-file step timed out cleanly (`error_class: timeout`, no browser/stripe). Not `upstream_5xx`. Wild test may still trigger 500 path.
 

@@ -16,7 +16,7 @@
 **Deferred work:** [BACKLOG.md](./BACKLOG.md)  
 **Phase 3 (closed):** [PHASE3_MVP.md](./PHASE3_MVP.md) · [PHASE3_ISSUES.md](./PHASE3_ISSUES.md)  
 **Phase 4 gaps:** [PHASE4_ISSUES.md](./PHASE4_ISSUES.md)  
-**Bootstrap:** [phase4-master-session-bootstrap.md](./notes/phase4-master-session-bootstrap.md)
+**Bootstrap:** [phase4-master-session-bootstrap.md](./notes/archive/phase4-master-session-bootstrap.md)
 
 ---
 
@@ -83,7 +83,7 @@ Parallel:       planner UX fixes (spec path, inspect tools, error messages)
 | D-P4-5 | Builder opt-out: picker (P4-001a) opt-out from day 1. LLM brief (P4-001b) shipped opt-in; **flipped to opt-out (default on) 2026-06-09** after dogfood confirms stability. Disable via `context_builder_llm: false` / `MCP_CODER_CONTEXT_BUILDER_LLM=0`. | P4-001, done |
 | D-P4-6 | P4-001a is rules-based (spec edit paths + ripgrep) — no LLM. When P4-001b needs a model: `CONTEXT_BUILDER_MODEL` env or `context_builder_model:` in config.yaml; **Gemini Flash default** (largest context window, cheapest). Same pattern as `AIDER_MODEL`. | P4-001b |
 | D-P4-7 | Verify loop scope: configurable `test_command` (e.g. `pytest -x`); default = full suite when `auto_verify: true`. Spec-targeted test discovery deferred (fragile heuristic; false negatives worse than full suite). | P4-010 |
-| D-P4-8 | **Per-role models (start simple).** Each LLM role (executor, review, context builder, future critic) resolves its own model via the same precedence (`<role>_model` env + config.yaml; documented default) and logs its own `model` / `tokens` / `cost_est_usd` / `duration_ms` block in delegation JSONL. One model per role for now. Resolvers live in `core/config/` (backend-neutral). Future multi-model-per-role (escalation, critic redo, swarm/ensemble) is **deferred** — see [notes/multi-model-roles.md](./notes/multi-model-roles.md), BL-162. | P4-004; review/executor shipped |
+| D-P4-8 | **Per-role models (start simple).** Each LLM role (executor, review, context builder, future critic) resolves its own model via the same precedence (`<role>_model` env + config.yaml; documented default) and logs its own `model` / `tokens` / `cost_est_usd` / `duration_ms` block in delegation JSONL. One model per role for now. Resolvers live in `core/config/` (backend-neutral). Future multi-model-per-role (escalation, critic redo, swarm/ensemble) is **deferred** — see [notes/multi-model-roles.md](./notes/archive/multi-model-roles.md), BL-162. | P4-004; review/executor shipped |
 | D-P4-9 | Picker output is backend-neutral `candidate_files` → fed to `assemble_context()` as compiler input. Never `target_files`/`fnames` directly. Aider mapping stays in `core/engine/aider_engine.py`. | P4-001a |
 | D-P4-10 | **Edit files stay `edit-full` (correctness).** Aider SEARCH/REPLACE requires full text to produce valid patches — partial edit files cause broken patches. Large **read** deps use existing `read-excerpt`/`pointer` tiers. Chunked/symbol-scoped edit files require a new executor edit format — deferred Phase 5+ (BL-331). | P4-001a/b |
 | D-P4-11 | mcp-coder builds its **own backend-neutral repo map** from the workspace walk (`core/workspace/`), populating `TIER_MAP_ONLY` entries. Does not rely on Aider's `git-tracked-only` map. Works without git. | P4-001a |
@@ -161,7 +161,7 @@ Planner still passes `target_files` as a hint; picker merges and ranks. Rules up
 | Mode-aware history weighting | `mode` param | `implement` → prior APIs/contracts; `review` → spec-vs-diff delta; new subsystem → existing interfaces |
 | Host session summary (optional) | `host_transcript` (P1-140 infra) | Recent conversation decisions; used when available |
 
-Builder token usage logged via P4-004 role audit block (`model_roles.context_builder`). See [notes/multi-model-roles.md](./notes/multi-model-roles.md) for Stage 2+ escalation/critic vision.
+Builder token usage logged via P4-004 role audit block (`model_roles.context_builder`). See [notes/multi-model-roles.md](./notes/archive/multi-model-roles.md) for Stage 2+ escalation/critic vision.
 
 ### Wave 3 — Verify loop ✓ **core complete** (dogfood TBD — opt-in)
 

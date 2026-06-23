@@ -203,7 +203,7 @@ def _aggregate_tokens(events: list[dict[str, Any]]) -> dict[str, Any]:
     return {"input": total_input, "output": total_output, "thinking": total_thinking}
 
 
-# ── Canonical event model (viewer-design-principles-v2.md) ──────────────────
+# ── Canonical event model (viewer-and-trace-design.md) ──────────────────
 
 # compile_event stage → (display_name, direction, scope)
 # None = data-only, folded into a synthetic event rather than its own row.

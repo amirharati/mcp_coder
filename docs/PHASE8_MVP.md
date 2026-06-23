@@ -13,7 +13,7 @@
 **Purpose:** Capture every Aider LLM sub-call (including thinking tokens) with exact attribution — so Phase 9 can make an honest "100% captured" claim when it flips the write-always gate.
 **PM board:** this file · **Issues:** [PHASE8_ISSUES.md](./PHASE8_ISSUES.md)
 **Phase 7 (closed):** [PHASE7_MVP.md](./PHASE7_MVP.md) (frozen) · [PHASE7_ISSUES.md](./PHASE7_ISSUES.md) (frozen)
-**Design notes:** [notes/phase8-master-session-bootstrap.md](./notes/phase8-master-session-bootstrap.md) · [notes/llm-interception-strategies.md](./notes/llm-interception-strategies.md)
+**Design notes:** [notes/archive/phase8-master-session-bootstrap.md](./notes/archive/phase8-master-session-bootstrap.md) · [notes/llm-interception-strategies.md](./notes/archive/llm-interception-strategies.md)
 **Backlog inputs:** BL-371, BL-369, BL-370, BL-350 (remainder)
 **Phase 9 (planned):** [PHASE9_MVP.md](./PHASE9_MVP.md) (to be created) — write-always storage + blobs + replay; requires Phase 8 prerequisites
 
@@ -61,7 +61,7 @@ Phase 8 fixes all three. It is **passive observation only** — no control, no i
 
 ## Locked design decisions
 
-*(Resolved in master session 2026-06-13 — see [notes/llm-interception-strategies.md](./notes/llm-interception-strategies.md) for full reasoning.)*
+*(Resolved in master session 2026-06-13 — see [notes/llm-interception-strategies.md](./notes/archive/llm-interception-strategies.md) for full reasoning.)*
 
 | ID | Decision |
 |----|----------|

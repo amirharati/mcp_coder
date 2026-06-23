@@ -160,7 +160,7 @@ Terminal status: `done` | `wontfix-p1` | `carried` (→ BL-* in Notes)
 
 **Status:** `carried` — 2026-06-06 at P1-199 → [BL-304](./BACKLOG.md#observability--ops).
 
-**Found:** [storage-and-linking.md](./notes/storage-and-linking.md).
+**Found:** [storage-and-linking.md](./notes/archive/storage-and-linking.md).
 
 **Problem:** Finding all mcp sessions for a Cursor chat across repos requires scanning all `projects/*/sessions/*/session.json`.
 
@@ -269,7 +269,7 @@ Terminal status: `done` | `wontfix-p1` | `carried` (→ BL-* in Notes)
 
 ### P1-ISS-015: Review mode does not validate prior-step API
 
-**Status:** `wontfix-p1` — review scope is spec Q&A only ([notes/spec-review-loop.md](./notes/spec-review-loop.md)).
+**Status:** `wontfix-p1` — review scope is spec Q&A only ([notes/spec-review-loop.md](./notes/archive/spec-review-loop.md)).
 
 **Found:** E2E step 2 — review returned `READY_TO_IMPLEMENT`; implement #1 still wrong API.
 

@@ -301,14 +301,14 @@ When running log analysis or dogfood, check these conditions and close the sourc
 | 2026-06-17 | **BL-518** (runtime log level / verbosity DX) and **BL-519** (`MCP_CODER_PROXY_ENABLED` toggle) added — post-Phase 9 operational polish; scope TBD. |
 | 2026-06-17 | **Phase 9 formally closed.** P9-014 deferred → **BL-516** (CLI log health table + `trace inspect --summary`). P9-ISS-007 deferred → **BL-517** (executor `policy_applied` ignored params). No open Phase 9 issues. |
 | 2026-06-17 | **Phase 9 A-to-Z dogfood complete** — 6 delegations; 6/6 proxy↔llm_call exact alignment. Three post-dogfood fixes: P9-ISS-008 proxy routing catch-all (`google/*` → OpenRouter), P9-ISS-009 streaming token counts (`stream_options: include_usage`), P9-ISS-010 executor `llm_call.policy_applied` (contextvar re-derive + step builder). Guide synced 2026-06-17. |
-| 2026-06-16 | BL-511–514 added — model policy layer Stages 1–4; design note at [model-policy-layer.md](./notes/model-policy-layer.md). BL-511 implemented in Phase 9 (P9-011 + P9-012, done same day). BL-507/508/510 closed. BL-367/BL-353 fully done. |
+| 2026-06-16 | BL-511–514 added — model policy layer Stages 1–4; design note at [model-policy-layer.md](./notes/archive/model-policy-layer.md). BL-511 implemented in Phase 9 (P9-011 + P9-012, done same day). BL-507/508/510 closed. BL-367/BL-353 fully done. |
 | 2026-06-13 | **Phase 7 closeout sync** — BL-350/353/368 statuses updated to reflect P7 shipment; BL-369/370/371 added from carried P7 issues |
 | 2026-06-13 | **Phase 6 closed** — PHASE6_MVP + PHASE6_ISSUES frozen; P6-ISS-002 → BL-368; Phase 6 exit table added; BL-335 done (partial); BL-353 partial |
 | 2026-06-13 | BL-368 added — unified LlmGateway completion proxy (P6-ISS-002); Phase 7 target |
 | 2026-06-13 | Phase 6 planning locked — BL-335 → P6-002, BL-353 → P6-002/003, BL-333 → P6-004; phase refs updated |
 | 2026-06-13 | BL-365–366 added — RAG toolset DX gaps + P5-005 evaluation capstone; BL-002 § gaps table + shipped CLI/MCP reference; BL-363 guide sync note |
 | 2026-06-13 | BL-360–363 added — code layout refactor, always-review mode, T-06/T-07 tutorials, arch sub-pages (from Phase 4.5 handoff); BL-002 status updated to `active`; Phase 5 planning locked in PHASE5_MVP.md |
-| 2026-06-12 | BL-359 added — workflow turns (refactor, document, digest cadence; semi-auto suggest); [workflow-turns.md](./notes/workflow-turns.md) |
+| 2026-06-12 | BL-359 added — workflow turns (refactor, document, digest cadence; semi-auto suggest); [workflow-turns.md](./notes/archive/workflow-turns.md) |
 | 2026-06-12 | BL-358 added — post-executor polish pass (reviewer model: comments, tests, non-logic alignment); Phase 5+ |
 | 2026-06-12 | BL-357 added — storage lifecycle (promote/prune/gc) for logs, RAG, traces, checkpoints; Phase 6+ (RAG planning) |
 | 2026-06-11 | BL-356 added — RAG-backed context audit refs (lean JSONL, digest provenance); pairs with BL-002/BL-353 (T-04 observability pass) |

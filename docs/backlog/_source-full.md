@@ -135,7 +135,7 @@ Status: `idea` | `deferred` | `blocked` | `in_phase` | `done`
 
 ## Post–Phase 1 focus (priority after P1-199)
 
-**Direction (locked P1-199, 2026-06-06):** Three layers — **contract** (spec + policies) → **context compiler** (tiers, budget) → **execution adapter** (Aider today). `target_files` is a planner hint; spec Files is the contract when `spec_path` is set. Audit loop: contract → package → adapter input → result. PM board: [PHASE2_MVP.md](./PHASE2_MVP.md). Design: [notes/phase2-owned-context.md](./notes/phase2-owned-context.md).
+**Direction (locked P1-199, 2026-06-06):** Three layers — **contract** (spec + policies) → **context compiler** (tiers, budget) → **execution adapter** (Aider today). `target_files` is a planner hint; spec Files is the contract when `spec_path` is set. Audit loop: contract → package → adapter input → result. PM board: [PHASE2_MVP.md](./PHASE2_MVP.md). Design: [notes/phase2-owned-context.md](./notes/archive/phase2-owned-context.md).
 
 | Priority | ID | Item | Notes |
 |----------|-----|------|--------|
@@ -170,7 +170,7 @@ Phase 1 deferred executor conversation carry-over to here (BL-155); see P1-130 `
 | ID | Item | Notes | Related |
 |----|------|-------|---------|
 | BL-161 | **Multi-agent inside MCP** (planner → executor) | Single MCP tool call from Cursor still triggers an **internal pipeline**: architect/planner pass (steps, file plan, risks) **then** executor (Aider). Cursor stays thin; mcp-coder owns substeps, logs each phase. | BL-006 (janitor/critic) is adjacent; BL-503 grades output — this is **upstream planning** |
-| BL-162 | **Multi-model routing** | Different models per role: cheap for context build / cleanup / topic ID; expensive for execution. **Stage 1 (Phase 4, D-P4-8):** one configurable model per role (executor/review/context builder), each audited with cost. **Stage 2+:** multiple models within a role — tiered escalation (BL-321), critic redo (BL-006), failed-attempt-aware upgrade (P4-008 data), swarm/ensemble (BL-007). See [notes/multi-model-roles.md](./notes/multi-model-roles.md). | BL-007 ensemble; BL-321 escalation; BL-006 critic; env has `AIDER_MODEL` / OpenRouter |
+| BL-162 | **Multi-model routing** | Different models per role: cheap for context build / cleanup / topic ID; expensive for execution. **Stage 1 (Phase 4, D-P4-8):** one configurable model per role (executor/review/context builder), each audited with cost. **Stage 2+:** multiple models within a role — tiered escalation (BL-321), critic redo (BL-006), failed-attempt-aware upgrade (P4-008 data), swarm/ensemble (BL-007). See [notes/multi-model-roles.md](./notes/archive/multi-model-roles.md). | BL-007 ensemble; BL-321 escalation; BL-006 critic; env has `AIDER_MODEL` / OpenRouter |
 | BL-329 | **Pre-delegate spec validation + clarifying loop** | Builder reads host transcript, checks spec coherence vs session context before delegating; returns `clarification_needed: [...]` if ambiguous. | P4-009 (Wave 4 optional); pairs with BL-161 (pre+post Aider pipeline) and BL-324 (post-delegation judgment loop) |
 
 ### Interactive sessions (BL-160) — options to try later
@@ -191,7 +191,7 @@ Phase 1 deferred executor conversation carry-over to here (BL-155); see P1-130 `
 **Notes (2026-06 planning):**
 
 - **BL-161** is not “multiple MCP servers” — one server, multiple **internal** agent steps before/after Aider (could be rules-only v0, LLM planner v1).
-- **BL-162** may land partly in Phase 2 (context-builder model ≠ executor model); full ensemble voting stays later (BL-007). **Stage 1 = one model per role (D-P4-8); Stage 2 = escalation/critic; Stage 3 = swarm.** Full staging in [notes/multi-model-roles.md](./notes/multi-model-roles.md).
+- **BL-162** may land partly in Phase 2 (context-builder model ≠ executor model); full ensemble voting stays later (BL-007). **Stage 1 = one model per role (D-P4-8); Stage 2 = escalation/critic; Stage 3 = swarm.** Full staging in [notes/multi-model-roles.md](./notes/archive/multi-model-roles.md).
 
 ---
 
@@ -271,7 +271,7 @@ Items below have code fixes + regression tests in place but lack live dogfood ev
 | BL-356 | **RAG-backed context audit refs — lean JSONL + digest provenance** | As **BL-002** indexes digests (chat, delegations, workspace files), stop duplicating bodies in `delegations.jsonl`; store `context_refs[]` + hashes; index-time metadata for replay/retrieval. Pairs with **BL-353** wire log. **Phase 5+** (after RAG corpus); see § BL-356. From T-04 observability pass (2026-06-11). |
 | BL-357 | **Storage lifecycle — promote, prune, gc (logs + RAG + traces)** | `~/.mcp-coder` grows without bound (JSONL, traces, RAG DBs, checkpoints, blobs). **Later:** per-layer TTL, promote-then-prune, `mcp-coder maintenance` / gc, archive, global dedupe. Cross-cutting — not RAG-only. **Phase 6+** (after BL-356 lean refs + some RAG corpora); see § BL-357. From RAG planning (2026-06-12). |
 | BL-358 | **Post-executor polish pass — reviewer model (comments, tests, alignment)** | After Aider succeeds: optional **cheap / large-context** model reads changed files + module neighbors; adds comments, tests, style alignment, **non-logic** micro-refactors. Distinct from critic redo (BL-006) and `auto_verify`. **Phase 5+**; see § BL-358. Sub-mode of **BL-359**. From planning (2026-06-12). |
-| BL-359 | **Workflow turns — refactor, document, digest cadence** | Beyond `implement`/`review`: special turns (refactor, document, onboard/digest) + **when** to run (epic boundary, user, semi-auto suggest). Host rules + planner policy. **Phase 5+**; see § BL-359 + [workflow-turns.md](./notes/workflow-turns.md). From planning (2026-06-12). |
+| BL-359 | **Workflow turns — refactor, document, digest cadence** | Beyond `implement`/`review`: special turns (refactor, document, onboard/digest) + **when** to run (epic boundary, user, semi-auto suggest). Host rules + planner policy. **Phase 5+**; see § BL-359 + [workflow-turns.md](./notes/archive/workflow-turns.md). From planning (2026-06-12). |
 | BL-360 | **Code layout refactor — instance sub-folders, file size audit** | `core/engine/` and `core/host/` mix abstract factories with concrete implementations in flat folders. Later: `core/engine/backends/aider/`, `core/host/hosts/cursor/`; audit + split files > ~400 lines (`server/mcp_server.py` ~1750 today). Pure structural; **no behavior change**. **Phase 5+**. From P4.5-ISS-001. |
 | BL-361 | **"One step at a time" / always-review-before-implement delegate mode** | Today: fully automatic implement flow; `inspect-context` + `mode=review` cover manual pause. Later: small config flag for `review_before_implement: true` (always run `mode=review` then confirm before `implement`) or pipeline `pause_after: [file_picker]` style hook for step-by-step inspection without rewriting the whole pipeline. **Phase 5+**. From P4.5-ISS-004. |
 | BL-362 | **T-06 + T-07 tutorials — delegation pipeline + end-to-end trace** | T-06 (delegation pipeline full tutorial) exists as skeleton; T-07 (pick a real delegation\_id and trace it JSONL → brief → Aider output) not started. Complete when time allows; not required for Phase 5. From Phase 4.5 deferred. |
@@ -600,7 +600,7 @@ We want **good stuff** (worked patterns, promoted digests, spec outcomes) withou
 
 **Non-goals (v1):** silent auto-delete without promote path; prune checkpoints user might restore (**BL-322g**); mandatory cloud offload.
 
-**Phase:** **6+** — after **BL-356** lean refs and at least one RAG corpus in dogfood use; thin **report-only** slice could land earlier (disk breakdown, no delete). Pairs with [notes/rag-gap-analysis.md](./notes/rag-gap-analysis.md) § Retention and [notes/storage-and-linking.md](./notes/storage-and-linking.md).
+**Phase:** **6+** — after **BL-356** lean refs and at least one RAG corpus in dogfood use; thin **report-only** slice could land earlier (disk breakdown, no delete). Pairs with [notes/retrieval-and-rag-strategy.md](./notes/retrieval-and-rag-strategy.md) § Retention and [notes/storage-and-linking.md](./notes/archive/storage-and-linking.md).
 
 **Related:** **BL-002**, **BL-353**, **BL-356**, **BL-322** (checkpoints), **BL-348** (index staleness), Corpus 4 outcome-gated ingest (rag-gap-analysis).
 
@@ -645,7 +645,7 @@ We want **good stuff** (worked patterns, promoted digests, spec outcomes) withou
 
 **Phase:** **5+** (after D-P4-8 role audit stable; pairs with **BL-162** Stage 2, **BL-006** if critic and polish share infrastructure).
 
-**Related:** **BL-359** (umbrella workflow turns), [notes/multi-model-roles.md](./notes/multi-model-roles.md), **BL-335**, **BL-351**.
+**Related:** **BL-359** (umbrella workflow turns), [notes/multi-model-roles.md](./notes/archive/multi-model-roles.md), **BL-335**, **BL-351**.
 
 ---
 
@@ -653,7 +653,7 @@ We want **good stuff** (worked patterns, promoted digests, spec outcomes) withou
 
 **Status:** `idea` — 2026-06-12. **Horizon:** Phase 5+ / later (not near-term). **North star:** formalize the developer workflow into named turns while automating easy, repetitive tasks (digest, polish, verify, cadence hints) — judgment stays with planner/human.
 
-**Living note:** [notes/workflow-turns.md](./notes/workflow-turns.md)
+**Living note:** [notes/workflow-turns.md](./notes/archive/workflow-turns.md)
 
 **Problem:** Today: `mode=review` (pre-spec Q&A) + `mode=implement` (+ optional `auto_verify`). Missing first-class turns for:
 
@@ -690,7 +690,7 @@ We want **good stuff** (worked patterns, promoted digests, spec outcomes) withou
 
 **Phase:** **5+** — digest/report slice can precede polish/refactor; host rule text can land early without new modes.
 
-**Related:** **BL-358**, **BL-332**, **BL-351**, [spec-review-loop.md](./notes/spec-review-loop.md), **BL-002** (digest input).
+**Related:** **BL-358**, **BL-332**, **BL-351**, [spec-review-loop.md](./notes/archive/spec-review-loop.md), **BL-002** (digest input).
 
 ---
 
@@ -917,7 +917,7 @@ Phase 1 uses markdown `### Edit` / `### Read` only (P1-152).
 
 **Flow:** L1 contract (spec policies) → `assemble_context()` → `ContextPackage` → `BackendCapabilities` + adapter translate → `ExecutionResult` with audit fields. Extends BL-001.
 
-**Tasks:** P2-200 (assembler), P2-205 (excerpts), P2-210 (adapter hinge), P2-212 (capabilities), P2-215 (inspect dry-run). **Design:** [notes/phase2-owned-context.md](./notes/phase2-owned-context.md) (D-P2-1–7).
+**Tasks:** P2-200 (assembler), P2-205 (excerpts), P2-210 (adapter hinge), P2-212 (capabilities), P2-215 (inspect dry-run). **Design:** [notes/phase2-owned-context.md](./notes/archive/phase2-owned-context.md) (D-P2-1–7).
 
 **Source:** P1-199 thesis; bridges P1-152 read-deps + `files_unexpected`.
 
@@ -953,7 +953,7 @@ By design today: `project_key` = SHA-256(resolved path).
 **Delegation RAG:** indexed post-delegate (Phase 3); wired into builder + `rag_retrieval` (P5-002).
 **Workspace-file RAG:** `workspace_rag.db`, `index-workspace`, `search files`, picker/builder hints (P5-003…P5-004).
 **Defaults:** `builder_history_rag`, `workspace_file_rag`, `workspace_file_hints` → **on** (opt-out via yaml/env).
-**Living design note:** [notes/rag-gap-analysis.md](./notes/rag-gap-analysis.md)
+**Living design note:** [notes/retrieval-and-rag-strategy.md](./notes/retrieval-and-rag-strategy.md)
 **Code:** `core/rag/`, `core/config/rag.py`, `core/cli/search.py`, `core/cli/index_workspace.py`
 
 **Still open (Phase 5+):** see table below — corpora, integration modes, DX polish, measurement. **Not** “RAG missing from CLI” (core toolset shipped).
@@ -1438,7 +1438,7 @@ Until then: add rows to bundled `model_rates.yaml` when switching models; unknow
 
 | ID | Item | Notes |
 |----|------|-------|
-| BL-150 | ~~**Spec-based delegation**~~ | **done** — P1-150/151; [notes/spec-based-development.md](./notes/spec-based-development.md) |
+| BL-150 | ~~**Spec-based delegation**~~ | **done** — P1-150/151; [notes/spec-based-development.md](./notes/archive/spec-based-development.md) |
 | BL-151 | Gatekeeper MCP for protected specs | [OTEHR_RELATED_IDEAS/GATEKEEPING_MCP.md](./OTEHR_RELATED_IDEAS/GATEKEEPING_MCP.md) — **still deferred** post-P1-151 |
 | BL-152 | Mirror `delegations.jsonl` + reports in product UX | Partial: `specs/reports/` mirrors delegation audit; viewer TBD |
 
@@ -1543,7 +1543,7 @@ delegate_to_agent(backend=…)
 | **BL-356** | **RAG-backed context audit refs** — lean JSONL, digest provenance | See § BL-356; pairs with BL-002 + BL-353; **Phase 5+** |
 | **BL-357** | **Storage lifecycle** — promote, prune, gc (logs + RAG + traces) | See § BL-357; **Phase 6+** |
 | **BL-358** | **Post-executor polish pass** — reviewer model (comments, tests, alignment) | See § BL-358; sub-mode of BL-359; **Phase 5+** |
-| **BL-359** | **Workflow turns** — refactor, document, digest cadence | See § BL-359 + [workflow-turns.md](./notes/workflow-turns.md); **Phase 5+** |
+| **BL-359** | **Workflow turns** — refactor, document, digest cadence | See § BL-359 + [workflow-turns.md](./notes/archive/workflow-turns.md); **Phase 5+** |
 | **BL-364** | **Blocked-delegate skip reasons in JSONL** | See table; **Phase 5+** |
 | **BL-365** | **RAG toolset DX** — unified CLI, workspace stats | See § BL-365; **Phase 5+** |
 | **BL-366** | **RAG evaluation (P5-005)** — recall, cost, embeddings | See § BL-366; **Phase 5+** |
@@ -1556,10 +1556,10 @@ delegate_to_agent(backend=…)
 | **BL-508** | **Universal internal HTTP proxy** — `LocalLlmProxy` between litellm and real provider; all in-process callers route through it; model-prefix routing from env vars | **Phase 9 done (P9-003, P9-009)**; same proxy extended to out-of-process backends in Phase 10+ via base URL config |
 | **BL-509** | **Content-addressable dedup for trace bodies** — replace repeated large text fields in trace events with sha256 refs; store blobs once in CAS store | Post-Phase 9 once corpus exists to measure dedup ratio; context package blob (P9-002) is the proof-of-concept |
 | **BL-510** | **Remove `should_log_full_prompt` write gate from delegation row** | **Phase 9 done (P9-008)** — `MCP_CODER_LOG_FULL_PROMPT` gate removed; `prompt_full` written unconditionally; `should_log_full_prompt()` retired as no-op. |
-| **BL-511** | **Model registry Stage 1** — `core/config/model_registry.py` + unified helper path + generation params + `policy_applied` | **Phase 9 done (P9-011 + P9-012)** — both shipped 2026-06-16; `reasoning_effort=high` → thinking tokens verified end-to-end. See [model-policy-layer.md](./notes/model-policy-layer.md). |
-| **BL-512** | **Model policy layer — Stage 2: host-set policy** — MCP host passes `model_policy` block inside `delegate_to_agent` call; overrides env layer for that delegation; host can set per-role model, thinking budget, cost cap | Future (Phase 11+) — depends on BL-511; see [model-policy-layer.md](./notes/model-policy-layer.md) Stage 2 |
-| **BL-513** | **Model policy layer — Stage 3: AI-suggested parameters** — lightweight pre-delegation analysis step (cheap LLM or heuristic) that examines the incoming task and suggests policy overrides (e.g. hard refactor → higher thinking budget); suggestion logged as `policy_suggestion` trace event; can be accepted/rejected/overridden | Future — depends on BL-511/BL-512; see [model-policy-layer.md](./notes/model-policy-layer.md) Stage 3 |
-| **BL-514** | **Model policy layer — Stage 4: dynamic escalation** — outer-loop controller modifies active policy mid-delegation in response to runtime signals (retry exhausted → larger model; critic reject → more thinking; cost cap → downgrade); connects to BL-321/BL-006 signals | Future — depends on BL-511/BL-512/BL-513 and a critic or supervisor being in place; see [model-policy-layer.md](./notes/model-policy-layer.md) Stage 4 |
+| **BL-511** | **Model registry Stage 1** — `core/config/model_registry.py` + unified helper path + generation params + `policy_applied` | **Phase 9 done (P9-011 + P9-012)** — both shipped 2026-06-16; `reasoning_effort=high` → thinking tokens verified end-to-end. See [model-policy-layer.md](./notes/archive/model-policy-layer.md). |
+| **BL-512** | **Model policy layer — Stage 2: host-set policy** — MCP host passes `model_policy` block inside `delegate_to_agent` call; overrides env layer for that delegation; host can set per-role model, thinking budget, cost cap | Future (Phase 11+) — depends on BL-511; see [model-policy-layer.md](./notes/archive/model-policy-layer.md) Stage 2 |
+| **BL-513** | **Model policy layer — Stage 3: AI-suggested parameters** — lightweight pre-delegation analysis step (cheap LLM or heuristic) that examines the incoming task and suggests policy overrides (e.g. hard refactor → higher thinking budget); suggestion logged as `policy_suggestion` trace event; can be accepted/rejected/overridden | Future — depends on BL-511/BL-512; see [model-policy-layer.md](./notes/archive/model-policy-layer.md) Stage 3 |
+| **BL-514** | **Model policy layer — Stage 4: dynamic escalation** — outer-loop controller modifies active policy mid-delegation in response to runtime signals (retry exhausted → larger model; critic reject → more thinking; cost cap → downgrade); connects to BL-321/BL-006 signals | Future — depends on BL-511/BL-512/BL-513 and a critic or supervisor being in place; see [model-policy-layer.md](./notes/archive/model-policy-layer.md) Stage 4 |
 | **BL-516** | **CLI log health table + `trace inspect --summary`** — cross-delegation scan table (`mcp-coder log`), per-delegation health scorecard, `--no-truncate` on `trace inspect --field` | **Phase 10 — P10-004** (partial: `--summary` only); `mcp-coder log` table + `--no-truncate` → backlog. See § BL-516. |
 | **BL-517** | **Executor `policy_applied` ignored-params** — don't imply `temperature`/`top_p`/`max_tokens` were applied when Aider owns them | **Phase 10 — P10-004** (full). See § BL-517. |
 | **BL-518** | **Runtime log level / verbosity DX** — consolidate or document logging knobs; `.env.example` coverage; optional proxy debug logging | **Phase 10 — P10-004** (partial: docs + `.env.example`); unified master level + proxy debug → backlog. See § BL-518. |
@@ -1808,7 +1808,7 @@ Blobs stored at `sessions/<id>/blobs/<sha256>` (or a session-shared store). At a
 ### BL-511: Model registry Stage 1 (front door + unified helper path + params + logging)
 
 **Status:** `done` — 2026-06-16. Phase 9 (P9-011 + P9-012). 924 passed, 2 skipped. BL-507 end-to-end verified.  
-**Design note:** [docs/notes/model-policy-layer.md](./notes/model-policy-layer.md)  
+**Design note:** [docs/notes/model-policy-layer.md](./notes/archive/model-policy-layer.md)  
 **Specs:** [P9-011](./tasks/P9-011-model-policy-layer-v1.md) (unify helper path + registry front door), [P9-012](./tasks/P9-012-generation-params-logging-v1.md) (params + weak model + logging)
 
 **Problem:** Generation params (thinking/temperature/etc.) are set nowhere. Two helper paths emit `llm_call`; a third (`workspace_summarizer`, `spec_review`) bypasses the gateway and emits no trace event. Proxy confirmed `proxy_llm_call.raw_request` carries no `thinking` field. Model ID + budget are *already* centralized in `role_models.py` — reuse, do not rewrite.
@@ -1828,7 +1828,7 @@ Blobs stored at `sessions/<id>/blobs/<sha256>` (or a session-shared store). At a
 ### BL-512: Model policy layer — Stage 2 (host-set policy)
 
 **Status:** `in_phase` — **Phase 11 P11-007 owns Stage 2** (`model_policy` arg on `delegate_to_agent`, host > env precedence, all roles configurable).  
-**Design note:** [docs/notes/model-policy-layer.md § Stage 2](./notes/model-policy-layer.md)
+**Design note:** [docs/notes/model-policy-layer.md § Stage 2](./notes/archive/model-policy-layer.md)
 
 **What:** The MCP host (Cursor, Claude Code, CI automation) passes an optional `model_policy` object inside the `delegate_to_agent` call arguments. This overrides the env layer for the duration of that single delegation. The host knows its own context (latency budget, cost cap, task urgency) better than a static `.env` file does.
 
@@ -1852,7 +1852,7 @@ Blobs stored at `sessions/<id>/blobs/<sha256>` (or a session-shared store). At a
 ### BL-513: Model policy layer — Stage 3 (AI-suggested parameters)
 
 **Status:** `idea` — 2026-06-16; depends on BL-511/BL-512.  
-**Design note:** [docs/notes/model-policy-layer.md § Stage 3](./notes/model-policy-layer.md)
+**Design note:** [docs/notes/model-policy-layer.md § Stage 3](./notes/archive/model-policy-layer.md)
 
 **What:** A lightweight pre-delegation analysis step (cheap LLM call or rule-based heuristic) examines the incoming task and recommends policy overrides. Examples:
 
@@ -1869,7 +1869,7 @@ Suggestions are logged as a `policy_suggestion` trace event (fully auditable). I
 ### BL-514: Model policy layer — Stage 4 (dynamic escalation)
 
 **Status:** `idea` — 2026-06-16; depends on BL-511–513 and a critic/supervisor (BL-321/BL-006).  
-**Design note:** [docs/notes/model-policy-layer.md § Stage 4](./notes/model-policy-layer.md)
+**Design note:** [docs/notes/model-policy-layer.md § Stage 4](./notes/archive/model-policy-layer.md)
 
 **What:** The outer-loop controller can mutate the active policy mid-delegation in response to runtime signals:
 
@@ -1886,7 +1886,7 @@ This is the full outer-loop control capability. Stages 1–3 lay the resolver in
 ### BL-515: Model tiers and classes
 
 **Status:** `idea` — 2026-06-16; depends on BL-511 (registry infrastructure). Prerequisite for BL-514 (escalation).  
-**Design note:** [docs/notes/model-policy-layer.md § Model tiers and classes](./notes/model-policy-layer.md)
+**Design note:** [docs/notes/model-policy-layer.md § Model tiers and classes](./notes/archive/model-policy-layer.md)
 
 **What:** Assign every model a tier enum so the outer loop can escalate or downgrade automatically:
 
@@ -1968,7 +1968,7 @@ Operators tuning dogfood/debug runs must know this matrix by heart; `.env.exampl
 
 **Why deferred:** Phase 9 shipped write-always capture and dual-capture proxy; no exit blocker on log ergonomics. Pull when dogfood/debug friction justifies a planning pass.
 
-**Related:** BL-125 (server log shipped), P9-001 (write-always), BL-516 (CLI log scanning), [storage-and-linking.md](./notes/storage-and-linking.md).
+**Related:** BL-125 (server log shipped), P9-001 (write-always), BL-516 (CLI log scanning), [storage-and-linking.md](./notes/archive/storage-and-linking.md).
 
 ---
 
@@ -1990,7 +1990,7 @@ Operators tuning dogfood/debug runs must know this matrix by heart; `.env.exampl
 
 **Why deferred:** Proxy is core Phase 9 infrastructure and should stay on by default; toggle is convenience/DX, not missing functionality.
 
-**Related:** BL-508 (proxy shipped P9-003), P9-003 bootstrap, [llm-interception-strategies.md](./notes/llm-interception-strategies.md).
+**Related:** BL-508 (proxy shipped P9-003), P9-003 bootstrap, [llm-interception-strategies.md](./notes/archive/llm-interception-strategies.md).
 
 ---
 
@@ -2472,7 +2472,7 @@ Defer until delegations routinely span many turns or long wall-clock time, OR un
 
 **Status:** `partial` — 2026-06-21. **Phase 12 P12-005 shipped** (pre-injection v1; commit 69d93d8). Full tool-calling Planner → Phase 13+.
 **Related:** BL-350 (outer loop), BL-161 (internal pipeline), BL-526 (Architect), BL-351 (Supervisor — possible merge in Phase 12).
-**Design note:** [docs/notes/multi-model-roles.md § Role hierarchy](./notes/multi-model-roles.md)
+**Design note:** [docs/notes/multi-model-roles.md § Role hierarchy](./notes/archive/multi-model-roles.md)
 
 **Problem:** The current `architect_pass` is a one-shot task-level planner — it fires once before the executor and produces a static prompt prefix. There is no role that owns a mutable plan for the full task lifecycle (before / during / after executor) or that carries session context across delegations.
 
@@ -2495,7 +2495,7 @@ Defer until delegations routinely span many turns or long wall-clock time, OR un
 
 **Status:** `idea` — 2026-06-19.  
 **Related:** BL-525 (Planner), BL-006 (critic/reviewer at epic boundary), BL-350 (outer loop).  
-**Design note:** [docs/notes/multi-model-roles.md § Role hierarchy](./notes/multi-model-roles.md)
+**Design note:** [docs/notes/multi-model-roles.md § Role hierarchy](./notes/archive/multi-model-roles.md)
 
 **Problem:** No role today holds the strategic view of an epic. Each delegation is planned in isolation. When a task decision contradicts an earlier epic direction, there is no role to catch that.
 
@@ -2519,7 +2519,7 @@ Defer until delegations routinely span many turns or long wall-clock time, OR un
 
 **Status:** `idea` — 2026-06-19.  
 **Related:** BL-523 (host escalation), BL-524 (host detection), BL-525/526 (internal roles).  
-**Design note:** [docs/notes/multi-model-roles.md § Host layer](./notes/multi-model-roles.md)
+**Design note:** [docs/notes/multi-model-roles.md § Host layer](./notes/archive/multi-model-roles.md)
 
 **Principle:** mcp-coder's internal layers (Planner, Architect, Supervisor, Reviewer) must **hedge** the host's capability gaps. The system should work correctly regardless of whether the host is a cheap or expensive model.
 
@@ -2541,7 +2541,7 @@ Defer until delegations routinely span many turns or long wall-clock time, OR un
 
 **Status:** `idea` — 2026-06-19.  
 **Related:** BL-162 (multi-model executor roles), BL-321 (tiered escalation), BL-512 (host-set policy), BL-524 (host model detection).  
-**Design note:** [docs/notes/multi-model-roles.md § Host layer](./notes/multi-model-roles.md)
+**Design note:** [docs/notes/multi-model-roles.md § Host layer](./notes/archive/multi-model-roles.md)
 
 **Problem:** The host (Cursor) runs the same model for everything — lightweight status updates and heavyweight spec authoring use the same budget. Expensive model time is wasted on junior-PM work; cheap model is insufficient for high-stakes decisions.
 
@@ -2623,14 +2623,14 @@ The MCP-facilitated path is the architectural win: the junior PM host calls `mcp
 | 2026-06-17 | **BL-518** (runtime log level / verbosity DX) and **BL-519** (`MCP_CODER_PROXY_ENABLED` toggle) added — post-Phase 9 operational polish; scope TBD. |
 | 2026-06-17 | **Phase 9 formally closed.** P9-014 deferred → **BL-516** (CLI log health table + `trace inspect --summary`). P9-ISS-007 deferred → **BL-517** (executor `policy_applied` ignored params). No open Phase 9 issues. |
 | 2026-06-17 | **Phase 9 A-to-Z dogfood complete** — 6 delegations; 6/6 proxy↔llm_call exact alignment. Three post-dogfood fixes: P9-ISS-008 proxy routing catch-all (`google/*` → OpenRouter), P9-ISS-009 streaming token counts (`stream_options: include_usage`), P9-ISS-010 executor `llm_call.policy_applied` (contextvar re-derive + step builder). Guide synced 2026-06-17. |
-| 2026-06-16 | BL-511–514 added — model policy layer Stages 1–4; design note at [model-policy-layer.md](./notes/model-policy-layer.md). BL-511 implemented in Phase 9 (P9-011 + P9-012, done same day). BL-507/508/510 closed. BL-367/BL-353 fully done. |
+| 2026-06-16 | BL-511–514 added — model policy layer Stages 1–4; design note at [model-policy-layer.md](./notes/archive/model-policy-layer.md). BL-511 implemented in Phase 9 (P9-011 + P9-012, done same day). BL-507/508/510 closed. BL-367/BL-353 fully done. |
 | 2026-06-13 | **Phase 7 closeout sync** — BL-350/353/368 statuses updated to reflect P7 shipment; BL-369/370/371 added from carried P7 issues |
 | 2026-06-13 | **Phase 6 closed** — PHASE6_MVP + PHASE6_ISSUES frozen; P6-ISS-002 → BL-368; Phase 6 exit table added; BL-335 done (partial); BL-353 partial |
 | 2026-06-13 | BL-368 added — unified LlmGateway completion proxy (P6-ISS-002); Phase 7 target |
 | 2026-06-13 | Phase 6 planning locked — BL-335 → P6-002, BL-353 → P6-002/003, BL-333 → P6-004; phase refs updated |
 | 2026-06-13 | BL-365–366 added — RAG toolset DX gaps + P5-005 evaluation capstone; BL-002 § gaps table + shipped CLI/MCP reference; BL-363 guide sync note |
 | 2026-06-13 | BL-360–363 added — code layout refactor, always-review mode, T-06/T-07 tutorials, arch sub-pages (from Phase 4.5 handoff); BL-002 status updated to `active`; Phase 5 planning locked in PHASE5_MVP.md |
-| 2026-06-12 | BL-359 added — workflow turns (refactor, document, digest cadence; semi-auto suggest); [workflow-turns.md](./notes/workflow-turns.md) |
+| 2026-06-12 | BL-359 added — workflow turns (refactor, document, digest cadence; semi-auto suggest); [workflow-turns.md](./notes/archive/workflow-turns.md) |
 | 2026-06-12 | BL-358 added — post-executor polish pass (reviewer model: comments, tests, non-logic alignment); Phase 5+ |
 | 2026-06-12 | BL-357 added — storage lifecycle (promote/prune/gc) for logs, RAG, traces, checkpoints; Phase 6+ (RAG planning) |
 | 2026-06-11 | BL-356 added — RAG-backed context audit refs (lean JSONL, digest provenance); pairs with BL-002/BL-353 (T-04 observability pass) |

@@ -44,7 +44,7 @@ This document is the **delivery plan**: what to build, in what order, and how we
 | Phase | One-line focus | PM / design |
 |-------|----------------|-------------|
 | **1** | Delegate + pass-through context + sessions + specs | [PHASE1_MVP.md](./PHASE1_MVP.md) (frozen) |
-| **2** | **Context compiler** — what goes *in* the prompt per delegate | [PHASE2_MVP.md](./PHASE2_MVP.md) (frozen); [phase2-owned-context.md](./notes/phase2-owned-context.md) |
+| **2** | **Context compiler** — what goes *in* the prompt per delegate | [PHASE2_MVP.md](./PHASE2_MVP.md) (frozen); [phase2-owned-context.md](./notes/archive/phase2-owned-context.md) |
 | **3** | **Workspace truth** + planner history + delegation RAG shipped (scope → Phase 5) | [PHASE3_MVP.md](./PHASE3_MVP.md); [WORKSPACE_HISTORY.md](./OTEHR_RELATED_IDEAS/WORKSPACE_HISTORY.md) |
 | **4** | **Context builder + manager** — smart assembly, cheap LLM file picker, janitor, verify, internal pipeline | [PHASE4_MVP.md](./PHASE4_MVP.md) **complete** 2026-06-09; carried gaps → BACKLOG § Phase 4 exit |
 | **4.5** | **Full stack onboarding** — Phases 1–4 tutorials, architecture docs, live inspection, gap analysis; no new arc number | [PHASE4.5_MVP.md](./PHASE4.5_MVP.md) **active** |
@@ -102,7 +102,7 @@ Each tool invocation produces exactly one **`delegation`** record, written at en
 ~/.mcp-coder/projects/<project_key>/sessions/<mcp_session_id>/delegations.jsonl
 ```
 
-See [notes/storage-and-linking.md](./notes/storage-and-linking.md). Env: `MCP_CODER_HOME` (default `~/.mcp-coder`).
+See [notes/storage-and-linking.md](./notes/archive/storage-and-linking.md). Env: `MCP_CODER_HOME` (default `~/.mcp-coder`).
 
 **P1-100 legacy:** `<workspace>/.mcp-coder/logs/delegations.jsonl` — replaced by home store; optional mirror via `MCP_CODER_MIRROR_LOGS_TO_WORKSPACE=1`.
 
@@ -241,7 +241,7 @@ Same values as [Session persistence in Phase 1](#session-persistence-in-phase-1-
 | Workspace pointer | `<workspace>/.mcp-coder/project.json` (optional) |
 | Cursor transcript (read-only) | `~/.cursor/projects/<slug>/agent-transcripts/<host_session_id>.jsonl` |
 
-Full schema: [notes/storage-and-linking.md](./notes/storage-and-linking.md).
+Full schema: [notes/storage-and-linking.md](./notes/archive/storage-and-linking.md).
 
 ### Context in Phase 1: pass-through only (no owned context pipeline)
 
@@ -357,7 +357,7 @@ MCP_CODER_SESSION_POLICY=always_new   # default
 # MCP_CODER_SESSION_POLICY=align_host
 ```
 
-**Many mcp sessions per Cursor chat** is normal (record all; picking a “main” session is backlog). See [storage-and-linking.md](./notes/storage-and-linking.md).
+**Many mcp sessions per Cursor chat** is normal (record all; picking a “main” session is backlog). See [storage-and-linking.md](./notes/archive/storage-and-linking.md).
 
 #### Session reason enum (log + MCP return)
 
@@ -475,7 +475,7 @@ Track tasks in [PHASE1_MVP.md](./PHASE1_MVP.md).
 - [ ] Token usage on Cursor side stays low (tool call + summary, not full-repo agent loop).
 - [ ] Aider completes tasks on scoped files; user can review diffs in Cursor.
 - [ ] Mode A (summary) and Mode B (host transcript) documented with known limitations.
-- [ ] Home storage and session linking documented ([storage-and-linking.md](./notes/storage-and-linking.md)).
+- [ ] Home storage and session linking documented ([storage-and-linking.md](./notes/archive/storage-and-linking.md)).
 - [ ] Each delegation has a complete JSONL record (timing, context snapshot, model, tokens if available, response).
 - [ ] Notes captured from experiments (routing reliability, failure modes, follow-up behavior) for Phase 2/3—grounded in logs, not memory.
 
@@ -515,7 +515,7 @@ mcp_coder/
 
 ## Phase 2 and beyond: Owned context management
 
-Starting Phase 2, `mcp-coder` stops relying solely on pass-through (`context_summary`, opt-in transcript dump) and **builds and manages context itself** — a **context compiler** with per-path materialization tiers ([notes/phase2-owned-context.md](./notes/phase2-owned-context.md)). This is where the vision in [IDEA.md](./IDEA.md) (router, janitor, RAG, token tiers) is implemented.
+Starting Phase 2, `mcp-coder` stops relying solely on pass-through (`context_summary`, opt-in transcript dump) and **builds and manages context itself** — a **context compiler** with per-path materialization tiers ([notes/phase2-owned-context.md](./notes/archive/phase2-owned-context.md)). This is where the vision in [IDEA.md](./IDEA.md) (router, janitor, RAG, token tiers) is implemented.
 
 **Explicitly not Phase 2 focus:** OpenCode or other execution adapters ([BACKLOG.md](./BACKLOG.md) BL-004 — very low / if ever). **Aider + Cursor** until the product is useful. Other hosts (Claude Desktop, Windsurf) are also low priority (BL-201/202).
 
@@ -588,7 +588,7 @@ Phase 1 uses only the executor (via Aider). Phase 2+ adds the context-builder **
 | Theme | Backlog / intent |
 |-------|------------------|
 | **Smart context builder** | BL-001 — file picker (rules + ripgrep, D-P4-11 repo map) + cheap-LLM brief (session history, mode-aware, D-P4-12) |
-| **Per-role models** | D-P4-8 — one configurable model + audit per role (executor/review/builder); Stage 2+ escalation/critic/swarm → BL-162, [notes/multi-model-roles.md](./notes/multi-model-roles.md) |
+| **Per-role models** | D-P4-8 — one configurable model + audit per role (executor/review/builder); Stage 2+ escalation/critic/swarm → BL-162, [notes/multi-model-roles.md](./notes/archive/multi-model-roles.md) |
 | **Topic / skills** | BL-153 topic boundaries; BL-008 skills injection |
 | **Janitor / router** | BL-003 freshness audit; BL-006 critic / test-writer one-shots |
 | **Window & cache** | BL-155 multi-turn executor cache; BL-154 rolling transcript beyond per-call budget |
@@ -623,7 +623,7 @@ Phase 1 uses only the executor (via Aider). Phase 2+ adds the context-builder **
 
 ### Phase 5: RAG + retrieval integration *(closed 2026-06-13)*
 
-**PM board:** [PHASE5_MVP.md](./PHASE5_MVP.md) (frozen) · **Issues:** [PHASE5_ISSUES.md](./PHASE5_ISSUES.md) (frozen) · **Design:** [notes/rag-gap-analysis.md](./notes/rag-gap-analysis.md)
+**PM board:** [PHASE5_MVP.md](./PHASE5_MVP.md) (frozen) · **Issues:** [PHASE5_ISSUES.md](./PHASE5_ISSUES.md) (frozen) · **Design:** [notes/retrieval-and-rag-strategy.md](./notes/retrieval-and-rag-strategy.md)
 
 **Exit:** Recommended tier met (dogfood `712a04d9`, 5+5 `context_refs`). P5-001…P5-004 + P5-006 done. P5-005 deferred. RAG defaults **on**. Carried: BL-335, BL-364.
 
@@ -894,7 +894,7 @@ Phase 11+ — multi-backend + full outer-loop control
 ## Phase 10: Trustable real-project dogfood *(complete)*
 
 **Status:** Complete — closed 2026-06-18; P10-001..P10-004 shipped.
-**PM doc:** [PHASE10_MVP.md](./PHASE10_MVP.md) · **Issues:** [PHASE10_ISSUES.md](./PHASE10_ISSUES.md) · **Bootstrap:** [notes/phase10-master-session-bootstrap.md](./notes/phase10-master-session-bootstrap.md)
+**PM doc:** [PHASE10_MVP.md](./PHASE10_MVP.md) · **Issues:** [PHASE10_ISSUES.md](./PHASE10_ISSUES.md) · **Bootstrap:** [notes/archive/phase10-master-session-bootstrap.md](./notes/archive/phase10-master-session-bootstrap.md)
 
 ### One-line goal
 
@@ -933,7 +933,7 @@ Shape Aider's behavior before problems occur, see what is happening while it run
 ## Phase 11: Supervised execution + smarter context
 
 **Status:** Active — opened 2026-06-18; **P11-001 + P11-002 + P11-003 + P11-004 + P11-005 + P11-006 + P11-007 shipped** 2026-06-19; P11-008 pending.
-**PM doc:** [PHASE11_MVP.md](./PHASE11_MVP.md) · **Issues:** [PHASE11_ISSUES.md](./PHASE11_ISSUES.md) · **Bootstrap:** [notes/phase11-master-session-bootstrap.md](./notes/phase11-master-session-bootstrap.md)
+**PM doc:** [PHASE11_MVP.md](./PHASE11_MVP.md) · **Issues:** [PHASE11_ISSUES.md](./PHASE11_ISSUES.md) · **Bootstrap:** [notes/archive/phase11-master-session-bootstrap.md](./notes/archive/phase11-master-session-bootstrap.md)
 
 ### One-line goal
 

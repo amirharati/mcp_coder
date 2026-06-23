@@ -3,8 +3,8 @@
 **Created:** 2026-06-18
 **Status:** Frozen — Phase 10 closed 2026-06-18 (P10-001..P10-004 shipped).
 **Purpose:** Record all Phase 10 scope decisions, design rationale, and locked choices made in the master planning session. Workers read the PM doc; this note is the *why* behind it.
-**PM board:** [PHASE10_MVP.md](../PHASE10_MVP.md)
-**Related notes:** [phase9-master-session-bootstrap.md](./phase9-master-session-bootstrap.md), [model-policy-layer.md](./model-policy-layer.md)
+**PM board:** [PHASE10_MVP.md](../../PHASE10_MVP.md)
+**Related notes:** [phase9-master-session-bootstrap.md](./phase9-master-session-bootstrap.md), [model-policy-layer.md](../model-policy-layer.md)
 
 ---
 

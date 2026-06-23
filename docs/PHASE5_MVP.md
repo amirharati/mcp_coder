@@ -14,9 +14,9 @@
 **PM board:** this file · **Issues:** [PHASE5_ISSUES.md](./PHASE5_ISSUES.md)
 **Phase 4.5 (handoff done):** [PHASE4.5_MVP.md](./PHASE4.5_MVP.md)
 **Phase 4 (closed):** [PHASE4_MVP.md](./PHASE4_MVP.md)
-**Design note:** [docs/notes/rag-gap-analysis.md](./notes/rag-gap-analysis.md) — corpora, litmus test, hypotheses, open Qs closed
+**Design note:** [docs/notes/retrieval-and-rag-strategy.md](./notes/retrieval-and-rag-strategy.md) — corpora, litmus test, hypotheses, open Qs closed
 **Backlog:** [BACKLOG.md](./BACKLOG.md) § BL-002 + BL-335, BL-348–356
-**Master session bootstrap:** [docs/notes/phase5-master-session-bootstrap.md](./notes/phase5-master-session-bootstrap.md)
+**Master session bootstrap:** [docs/notes/archive/phase5-master-session-bootstrap.md](./notes/archive/phase5-master-session-bootstrap.md)
 
 ---
 
@@ -172,7 +172,7 @@ Builder pulls a relevant fact from a **different spec's** prior delegation **and
 - FTS recall test: 15–20 planner queries against the mcp-coder repo; score top-k hits vs known-correct answers (H3 validation)
 - Token cost delta: delegation with `builder_history_rag: true` + `workspace_file_hints: true` vs baseline — using BL-335-fixed token counts from P5-001
 - `context_refs[]` lean refs: ensure JSONL stores `{kind, corpus, id, sha256, score}` without duplicating full bodies (pre-shapes BL-356)
-- Record embeddings go/no-go verdict in `rag-gap-analysis.md` § Open evidence
+- Record embeddings go/no-go verdict in `retrieval-and-rag-strategy.md` § Open evidence
 
 **Acceptance criteria:**
 - FTS recall metric computed and recorded (pass/fail threshold: set after results)

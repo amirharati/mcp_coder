@@ -134,7 +134,7 @@ Stored in `~/.mcp-coder/projects/<key>/supervisor_states/<resume_token>.json`.
 
 **Shipped:** Delegation RAG indexed post-delegate; wired into builder + `rag_retrieval` (P5-002). Workspace-file RAG: `workspace_rag.db`, `index-workspace`, `search files`, picker/builder hints (P5-003…P5-004). Defaults on (`builder_history_rag`, `workspace_file_rag`, `workspace_file_hints`).
 
-**Living design note:** [notes/rag-gap-analysis.md](../notes/rag-gap-analysis.md)
+**Living design note:** [notes/retrieval-and-rag-strategy.md](../notes/retrieval-and-rag-strategy.md)
 **Code:** `core/rag/`, `core/config/rag.py`, `core/cli/search.py`, `core/cli/index_workspace.py`
 
 **Shipped CLI/MCP toolset (reference):**
@@ -286,7 +286,7 @@ Stored in `~/.mcp-coder/projects/<key>/supervisor_states/<resume_token>.json`.
 ### BL-511: Model registry Stage 1 (front door + unified helper path + params + logging)
 
 **Status:** `done` — 2026-06-16. Phase 9 (P9-011 + P9-012). 924 passed, 2 skipped. BL-507 end-to-end verified.
-**Design note:** [notes/model-policy-layer.md](../notes/model-policy-layer.md)
+**Design note:** [notes/model-policy-layer.md](../notes/archive/model-policy-layer.md)
 **Specs:** P9-011 (unify helper path + registry front door), P9-012 (params + weak model + logging)
 
 **Problem:** Generation params (thinking/temperature/etc.) are set nowhere. Two helper paths emit `llm_call`; a third (`workspace_summarizer`, `spec_review`) bypasses the gateway and emits no trace event. Proxy confirmed `proxy_llm_call.raw_request` carries no `thinking` field. Model ID + budget are *already* centralized in `role_models.py` — reuse, do not rewrite.

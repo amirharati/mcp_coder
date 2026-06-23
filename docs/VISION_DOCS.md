@@ -44,22 +44,26 @@ Use this page so **main vision** ([IDEA.md](./IDEA.md)) is not lost when editing
 | **2 — P1 gaps** | [PHASE1_ISSUES.md](./PHASE1_ISSUES.md) | Issues from P1 — **frozen / historical at P1-199** | Read-only; new gaps → BACKLOG |
 | **2 — P2 gaps** | [PHASE2_ISSUES.md](./PHASE2_ISSUES.md) | Issues from Phase 2 — **frozen at P2-499** | Read-only; carried → PHASE3_ISSUES |
 | **2 — P3 gaps** | [PHASE3_ISSUES.md](./PHASE3_ISSUES.md) | Issues from Phase 3 — **frozen at P3-499** | Read-only; carried → BL-324–328 |
-| **3 — Direction notes** | [notes/spec-based-development.md](./notes/spec-based-development.md) | Spec-as-contract — **shipped experiment** (P1-151) | Update when workflow changes |
-| **3 — Direction notes** | [notes/spec-review-loop.md](./notes/spec-review-loop.md) | Review vs implement modes | Same |
-| **3 — Direction notes** | [notes/phase2-owned-context.md](./notes/phase2-owned-context.md) | Context compiler design — locked P1-199 | Update as Phase 2 decisions land |
-| **3 — Direction notes** | [notes/multi-model-roles.md](./notes/multi-model-roles.md) | Per-role models (D-P4-8) + role hierarchy + host hedging (BL-527) | Update as multi-model decisions land |
-| **3 — Direction notes** | [notes/delegation-workflow-vision.md](./notes/delegation-workflow-vision.md) | Full role hierarchy + delegation lifecycle + planner/executor separation + host hedging — living target state | Update as roles ship and vocabulary is confirmed |
-| **3 — Direction notes** | [notes/rag-gap-analysis.md](./notes/rag-gap-analysis.md) | RAG vs not-RAG gaps, corpora, Phase 5 sequencing — **living** (T-04 / observability pass) | Update as we dogfood and plan Phase 5 |
-| **3 — Direction notes** | [notes/workflow-turns.md](./notes/workflow-turns.md) | Special turns (polish, refactor, document, digest) + cadence — **living** | Update as workflow modes are planned |
-| **3 — Handoff** | [notes/phase3-master-session-bootstrap.md](./notes/phase3-master-session-bootstrap.md) | Phase 3 master session prompt + summary | Frozen at P3-499 |
-| **3 — Handoff** | [notes/phase4-master-session-bootstrap.md](./notes/phase4-master-session-bootstrap.md) | Phase 4 master session prompt + summary | Frozen at P4 exit |
-| **3 — Handoff** | [notes/phase6-master-session-bootstrap.md](./notes/phase6-master-session-bootstrap.md) | Phase 6 planning decisions + bootstrap — observability/logging refactor | Frozen at Phase 6 exit |
-| **3 — Handoff** | [notes/phase5-master-session-bootstrap.md](./notes/phase5-master-session-bootstrap.md) | Phase 5 master session decisions + bootstrap | Frozen at Phase 5 planning handoff |
-| **3 — Handoff** | [notes/phase9-master-session-bootstrap.md](./notes/phase9-master-session-bootstrap.md) | Phase 9 planning decisions + proxy architecture | Frozen at Phase 9 close 2026-06-17 |
-| **3 — Handoff** | [notes/phase10-master-session-bootstrap.md](./notes/phase10-master-session-bootstrap.md) | Phase 10 planning — trust/visibility/executor capability cluster | **Frozen** — closed 2026-06-18 |
-| **3 — Handoff** | [notes/phase11-master-session-bootstrap.md](./notes/phase11-master-session-bootstrap.md) | Phase 11 planning — supervised execution, multi-LLM pattern, cross-arch decisions (D-ARCH-1..6) | **Frozen** — Phase 11 closed 2026-06-20 |
-| **3 — Architecture** | [notes/supervisor-orchestration-layer.md](./notes/supervisor-orchestration-layer.md) | Phase 12+ cross-phase design — Supervisor as main intelligence layer, single statefulness principle, pause/resume protocol, interception layer, multi-model Supervisor (D-ARCH-7..11) | **Active** — Phase 12 shipped + Phase 13 dogfood verified 2026-06-23; reality-sync section appended |
-| **3 — Exit** | [notes/phase2-exit-validation.md](./notes/phase2-exit-validation.md) | P2-499 dogfood sign-off | Frozen at exit |
+| **3 — Direction notes** | [notes/spec-workflow.md](./notes/spec-workflow.md) | Current spec-driven workflow for repo + consumer use | Update when workflow changes |
+| **3 — Direction notes** | [notes/context-storage-and-observability.md](./notes/context-storage-and-observability.md) | Current compiler/storage/observability foundation note | Update when architecture or storage model changes |
+| **3 — Direction notes** | [notes/model-routing-and-policy.md](./notes/model-routing-and-policy.md) | Current model-policy behavior and future routing/escalation | Update as model-policy behavior changes |
+| **3 — Direction notes** | [notes/delegation-roles-and-lifecycle.md](./notes/delegation-roles-and-lifecycle.md) | Current Host/Supervisor/subagent vocabulary, lifecycle, shipped modes vs future roles | Update as roles ship and vocabulary is confirmed |
+| **3 — Direction notes** | [notes/retrieval-and-rag-strategy.md](./notes/retrieval-and-rag-strategy.md) | Retrieval/RAG boundaries, corpora, dependency order, FTS vs embeddings | Update as retrieval behavior changes |
+| **3 — Direction notes** | [notes/viewer-and-trace-design.md](./notes/viewer-and-trace-design.md) | Delegation viewer mental model, trace mapping, event rendering rules | Update when viewer/event semantics change |
+| **3 — Archive index** | [notes/archive/README.md](./notes/archive/README.md) | Archived source notes, frozen handoffs, historical runbooks | Read-only archive |
+| **3 — Handoff** | [notes/archive/](./notes/archive/README.md) | Index of frozen phase master-session bootstrap handoffs (Phases 3–11) | Read-only archive |
+| **3 — Handoff** | [notes/archive/phase3-master-session-bootstrap.md](./notes/archive/phase3-master-session-bootstrap.md) | Phase 3 master session prompt + summary | Frozen at P3-499 |
+| **3 — Handoff** | [notes/archive/phase4-master-session-bootstrap.md](./notes/archive/phase4-master-session-bootstrap.md) | Phase 4 master session prompt + summary | Frozen at P4 exit |
+| **3 — Handoff** | [notes/archive/phase6-master-session-bootstrap.md](./notes/archive/phase6-master-session-bootstrap.md) | Phase 6 planning decisions + bootstrap — observability/logging refactor | Frozen at Phase 6 exit |
+| **3 — Handoff** | [notes/archive/phase5-master-session-bootstrap.md](./notes/archive/phase5-master-session-bootstrap.md) | Phase 5 master session decisions + bootstrap | Frozen at Phase 5 planning handoff |
+| **3 — Handoff** | [notes/archive/phase7-master-session-bootstrap.md](./notes/archive/phase7-master-session-bootstrap.md) | Phase 7 planning decisions + outer-loop scope | Frozen at Phase 7 close |
+| **3 — Handoff** | [notes/archive/phase8-master-session-bootstrap.md](./notes/archive/phase8-master-session-bootstrap.md) | Phase 8 capture substrate + interception planning | Frozen at Phase 8 close |
+| **3 — Handoff** | [notes/archive/phase9-master-session-bootstrap.md](./notes/archive/phase9-master-session-bootstrap.md) | Phase 9 planning decisions + proxy architecture | Frozen at Phase 9 close 2026-06-17 |
+| **3 — Handoff** | [notes/archive/phase10-master-session-bootstrap.md](./notes/archive/phase10-master-session-bootstrap.md) | Phase 10 planning — trust/visibility/executor capability cluster | **Frozen** — closed 2026-06-18 |
+| **3 — Handoff** | [notes/archive/phase11-master-session-bootstrap.md](./notes/archive/phase11-master-session-bootstrap.md) | Phase 11 planning — supervised execution, multi-LLM pattern, cross-arch decisions (D-ARCH-1..6) | **Frozen** — Phase 11 closed 2026-06-20 |
+| **3 — Design entry** | [notes/system-design-overview.md](./notes/system-design-overview.md) | Refined design map — how notes fit together; vision stays in IDEA | Update when primary note set or system relationships change |
+| **3 — Architecture** | [notes/supervisor-agent-architecture.md](./notes/supervisor-agent-architecture.md) | Supervisor agent architecture — persistent project agent, project memory, pause/resume, subagent/tool context control, shipped vs deferred | **Active** — Phase 12 shipped + Phase 13 dogfood verified 2026-06-23 |
+| **3 — Exit** | [notes/archive/phase2-exit-validation.md](./notes/archive/phase2-exit-validation.md) | P2-499 dogfood sign-off | Frozen at exit |
 | **3 — Related ideas** | [OTEHR_RELATED_IDEAS/](./OTEHR_RELATED_IDEAS/) | Gatekeeper, experiments — **not** canonical vision | Optional; may inform backlog only |
 
 ## Operational (not vision — safe to update when implementing)
@@ -67,7 +71,7 @@ Use this page so **main vision** ([IDEA.md](./IDEA.md)) is not lost when editing
 | Document | Role |
 |----------|------|
 | [INSTALL.md](./INSTALL.md) | Install, Python, locks |
-| [notes/storage-and-linking.md](./notes/storage-and-linking.md) | `~/.mcp-coder` layout |
+| [notes/context-storage-and-observability.md](./notes/context-storage-and-observability.md) | Current compiler/storage/observability foundation |
 | [TASK_SPEC_TEMPLATE.md](./TASK_SPEC_TEMPLATE.md) | Copy-only template |
 | `docs/tasks/P1-*.md` | **Gitignored** Phase 1 worker specs |
 | `docs/tasks/P2-*.md` | **Gitignored** Phase 2 worker specs |
@@ -91,7 +95,7 @@ Use this page so **main vision** ([IDEA.md](./IDEA.md)) is not lost when editing
 - **Problem:** Stateless coding agents → cross-session memory + task-level orchestration ([IDEA.md](./IDEA.md)).
 - **Two tiers:** Task-level (`mcp-coder`) + turn-level (`context_optimizer_proxy`) — separate repos.
 - **Phase 1:** Delegate + pass-through context + home storage + sessions + opt-in transcript — **no** owned RAG/router yet.
-- **Phase 2:** Owned context compiler — **exit complete** [PHASE2_MVP.md](./PHASE2_MVP.md), [phase2-exit-validation.md](./notes/phase2-exit-validation.md).
+- **Phase 2:** Owned context compiler — **exit complete** [PHASE2_MVP.md](./PHASE2_MVP.md), [phase2-exit-validation.md](./notes/archive/phase2-exit-validation.md).
 - **Phase 3 (closed P3-499):** [PHASE3_MVP.md](./PHASE3_MVP.md) — workspace tracker, versioned specs, delegation RAG shipped; issues frozen → [PHASE3_ISSUES.md](./PHASE3_ISSUES.md) / BL-324–328.
 - **Phase 4 (closed P4 exit):** Context builder + manager + verify + pipeline — [PHASE4_MVP.md](./PHASE4_MVP.md); gaps → [BACKLOG.md](./BACKLOG.md) § Phase 4 exit (BL-335–339).
 - **Phase 4.5 (planning handoff done 2026-06-13):** Stack literacy gate — tutorials, inspect, gap analysis — [PHASE4.5_MVP.md](./PHASE4.5_MVP.md). Phase 5 scope locked. Pending items → BL-362, BL-363.
@@ -111,6 +115,7 @@ Use this page so **main vision** ([IDEA.md](./IDEA.md)) is not lost when editing
 
 | Date | Change |
 |------|--------|
+| 2026-06-23 | **Notes archive** — `docs/notes/archive/` created; phase3–11 `*-master-session-bootstrap.md` moved; links updated in PHASE*_MVP and doc map. |
 | 2026-06-23 | **Phase 13 code/issue work complete** — P13-001..P13-008 + P13-009..P13-016 shipped; lifecycle envelope unified, pause/resume verified in dogfood (session `28fbe283`), reviewer/classifier tail-hardened, typed-cause surfacing; ISS-001/002/003/005/011/012/014/016/017 marked fixed; ISS-006/015 moved to watch-for-evidence backlog (BL-554/555); docs sync in progress. Remaining P13 milestones: P13-002 (docs), P13-003 (tests), P13-004 (backlog review). |
 | 2026-06-21 | **Phase 13 opened** — PHASE13_MVP + PHASE13_ISSUES; dogfood-first stabilize phase after Phase 12 close. |
 | 2026-06-21 | **Phase 12 closed** — orchestration infra shipped; partials → backlog (BL-543, BL-547, etc.). |
@@ -123,11 +128,11 @@ Use this page so **main vision** ([IDEA.md](./IDEA.md)) is not lost when editing
 | 2026-06-18 | **Phase 10 opened** — PHASE10_MVP + PHASE10_ISSUES + phase10-master-session-bootstrap; BL-334/106/520/351/516/517/518/519 promoted to P10-001..P10-004; PHASES.md updated |
 | 2026-06-13 | **Phase 6 closed** — PHASE6_MVP + PHASE6_ISSUES frozen; BL-368, BL-367; Phase 7 direction (BL-350 + BL-368 → BL-367) |
 | 2026-06-13 | **Phase 7 + Phase 8 scoped** — full 100% capture prerequisites mapped; Phase 7 = proxy + loop ownership; Phase 8 = write-always + blobs + replay; scope in PHASES.md § Phase 7 / § Phase 8 |
-| 2026-06-13 | **Phase 7 PM docs created** — PHASE7_MVP.md + PHASE7_ISSUES.md + notes/phase7-master-session-bootstrap.md; design decisions pending master session |
+| 2026-06-13 | **Phase 7 PM docs created** — PHASE7_MVP.md + PHASE7_ISSUES.md + notes/archive/phase7-master-session-bootstrap.md; design decisions pending master session |
 | 2026-06-13 | Phase 6 planning locked — PHASE6_MVP.md + phase6-master-session-bootstrap.md created; P6-001…P6-005 milestones; `ObservabilityBackend` seam + BL-335 + BL-333 + BL-353 + training opt-in |
 | 2026-06-13 | Phase 5 closed — recommended exit; RAG defaults on; PHASE5_ISSUES frozen → BL-335, BL-364 |
-| 2026-06-13 | Phase 5 planning locked — PHASE5_MVP.md + PHASE5_ISSUES.md created; PHASE4.5_ISSUES.md frozen; BL-360–363 added to BACKLOG; rag-gap-analysis.md § MVP promoted to locked |
-| 2026-06-11 | rag-gap-analysis.md — living RAG gap note (T-04 / observability pass); linked from BL-002 |
+| 2026-06-13 | Phase 5 planning locked — PHASE5_MVP.md + PHASE5_ISSUES.md created; PHASE4.5_ISSUES.md frozen; BL-360–363 added to BACKLOG; retrieval-and-rag-strategy.md § MVP promoted to locked |
+| 2026-06-11 | retrieval-and-rag-strategy.md — living RAG gap note (T-04 / observability pass); linked from BL-002 |
 | 2026-06-09 | Phase 4.5 created — PHASE4.5_MVP + PHASE4.5_ISSUES; stack literacy gate before Phase 5 |
 | 2026-06-09 | Phase 4 closed (P4 exit); PHASE4_MVP + PHASE4_ISSUES frozen; Phase 5 next; REASONING_TRACE_REUSE.md |
 | 2026-06-09 | multi-model-roles direction note added (D-P4-8 + future stages) |

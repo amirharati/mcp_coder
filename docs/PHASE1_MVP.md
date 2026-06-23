@@ -10,7 +10,7 @@
 
 **Status:** Phase 1 **closed** (P1-199, 2026-06-06) — **next:** Phase 2 owned context ([BACKLOG.md](./BACKLOG.md) § Post–Phase 1 focus)  
 **Host:** Cursor first (other hosts via adapter layer later)  
-**Technical reference:** [PHASES.md](./PHASES.md) § Phase 1 · [Storage & linking](./notes/storage-and-linking.md)  
+**Technical reference:** [PHASES.md](./PHASES.md) § Phase 1 · [Storage & linking](./notes/archive/storage-and-linking.md)  
 **Vision:** [IDEA.md](./IDEA.md) · [VISION_DOCS.md](./VISION_DOCS.md)  
 **Deferred work:** [BACKLOG.md](./BACKLOG.md)  
 **Known gaps / follow-ups:** [PHASE1_ISSUES.md](./PHASE1_ISSUES.md)
@@ -263,7 +263,7 @@ See local `docs/tasks/P1-1.2-host-adapter-cursor.md` § Results.
 3. `mode=implement` with `target_files` (edit + **read** deps for prior steps).
 4. Planner runs `pytest`; sets task `done` + epic Steps table — **not** MCP.
 
-See [notes/spec-review-loop.md](./notes/spec-review-loop.md), [notes/spec-based-development.md](./notes/spec-based-development.md).
+See [notes/spec-review-loop.md](./notes/archive/spec-review-loop.md), [notes/spec-based-development.md](./notes/archive/spec-based-development.md).
 
 ---
 
@@ -293,7 +293,7 @@ See [notes/spec-review-loop.md](./notes/spec-review-loop.md), [notes/spec-based-
 - [x] Re-read [IDEA.md](./IDEA.md) and Phase 2 in [PHASES.md](./PHASES.md)
 - [x] **Spec experiment (BL-150):** shipped at P1-151 — see **Decisions (spec workflow)** below; gatekeeper still deferred (BL-151)
 - [x] Spec decisions locked (D-SPEC-1–8); open issues migrated to [BACKLOG.md](./BACKLOG.md); [PHASE1_ISSUES.md](./PHASE1_ISSUES.md) frozen
-- [x] **Phase 2 direction locked:** context compiler owns prompt materialization ([notes/phase2-owned-context.md](./notes/phase2-owned-context.md)) — **not** OpenCode/other hosts
+- [x] **Phase 2 direction locked:** context compiler owns prompt materialization ([notes/phase2-owned-context.md](./notes/archive/phase2-owned-context.md)) — **not** OpenCode/other hosts
 - [x] **Later (on list):** interactive sessions, internal planner→executor, multi-model routing ([BACKLOG.md](./BACKLOG.md) BL-160–162) — timing TBD
 - [x] BL-403 A/B prompt-size experiment **deferred** (not blocking exit)
 
@@ -321,7 +321,7 @@ See [notes/spec-review-loop.md](./notes/spec-review-loop.md), [notes/spec-based-
 - [x] Server audit log: `server.jsonl` with lifecycle + delegation link fields (E2E 2026-06-05)
 - [x] Full context: opt-in transcript dump; overflow + size fields documented (E2E 2026-06-05)
 - [x] Spec workflow: epic/step specs, reports, review + implement modes (E2E expense-splitter 2026-06-05)
-- [x] P1-199 review completed; Phase 2 goals locked ([notes/phase2-owned-context.md](./notes/phase2-owned-context.md))
+- [x] P1-199 review completed; Phase 2 goals locked ([notes/phase2-owned-context.md](./notes/archive/phase2-owned-context.md))
 
 ---
 
@@ -414,7 +414,7 @@ See [notes/spec-review-loop.md](./notes/spec-review-loop.md), [notes/spec-based-
 
 ## Next action
 
-1. **Phase 2 Wave 1** — [BACKLOG.md](./BACKLOG.md) § Post–Phase 1 focus: **BL-316 / BL-001** (context compiler + tiers), **BL-154** (window budget), **BL-311a** (read-deps warn), **BL-315** (`edit_scope`). Design note: [notes/phase2-owned-context.md](./notes/phase2-owned-context.md).
+1. **Phase 2 Wave 1** — [BACKLOG.md](./BACKLOG.md) § Post–Phase 1 focus: **BL-316 / BL-001** (context compiler + tiers), **BL-154** (window budget), **BL-311a** (read-deps warn), **BL-315** (`edit_scope`). Design note: [notes/phase2-owned-context.md](./notes/archive/phase2-owned-context.md).
 2. Operator: reload Cursor MCP after any code deploy (`make mcp-kill` or Reload Window) — mitigated in README/INSTALL (P1-152).
 3. New gaps → [BACKLOG.md](./BACKLOG.md) BL-* only; [PHASE1_ISSUES.md](./PHASE1_ISSUES.md) frozen at exit.
 

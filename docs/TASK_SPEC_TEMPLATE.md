@@ -26,7 +26,7 @@
 - **`docs/IDEA.md`** — vision; not a working doc. No milestone updates, no status churn.
 - **`docs/PHASES.md`**, **`docs/PHASE1_MVP.md`**, **`docs/PHASE2_MVP.md`**, **`docs/BACKLOG.md`**
 - **`docs/PHASE1_ISSUES.md`**, **`docs/PHASE2_ISSUES.md`** — worker lists IDs in § Results; **master** updates trackers
-- **`docs/notes/phase2-owned-context.md`** — unless explicitly listed in § Scope
+- **`docs/notes/context-storage-and-observability.md`** — unless explicitly listed in § Scope
 - Other `docs/tasks/*.md` (sibling specs)
 - Do not expand scope into Makefile / singleton / config.yaml unless **listed in § Scope** below
 

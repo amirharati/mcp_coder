@@ -13,7 +13,7 @@
 **Purpose:** Transform the SupervisorAgent from a loop-runner into the main intelligence layer of mcp-coder: persistent project memory across delegations, context lifecycle management (continuation briefs, mid-turn enrichment), and pause/resume across host round-trips. All helpers remain stateless; the Supervisor owns all state and routing.
 **PM board:** this file · **Issues:** [PHASE12_ISSUES.md](./PHASE12_ISSUES.md)
 **Phase 11 (closed):** [PHASE11_MVP.md](./PHASE11_MVP.md) · [PHASE11_ISSUES.md](./PHASE11_ISSUES.md)
-**Design notes:** [notes/supervisor-orchestration-layer.md](./notes/supervisor-orchestration-layer.md) · [notes/phase11-master-session-bootstrap.md](./notes/phase11-master-session-bootstrap.md)
+**Design notes:** [notes/supervisor-agent-architecture.md](./notes/supervisor-agent-architecture.md) · [notes/archive/phase11-master-session-bootstrap.md](./notes/archive/phase11-master-session-bootstrap.md)
 **Backlog inputs:** BL-540 (project state), BL-529 (supervisor context window), BL-543 (context lifecycle), BL-544 (pause/resume), BL-541 (reviewer feedback loop), BL-525 (planner v1), BL-542 (context router)
 
 ---

@@ -3,11 +3,11 @@
 **Created:** 2026-06-13
 **Purpose:** Context and open decisions for the Phase 7 master session. Freeze this file once design decisions are locked and recorded in PHASE7_MVP.md.
 **Status:** Active — design decisions not yet locked.
-**Authoritative PM docs:** [PHASE7_MVP.md](../PHASE7_MVP.md) · [PHASE7_ISSUES.md](../PHASE7_ISSUES.md)
+**Authoritative PM docs:** [PHASE7_MVP.md](../../PHASE7_MVP.md) · [PHASE7_ISSUES.md](../../PHASE7_ISSUES.md)
 **Design ideas (read before planning):**
-- [AGENTIC_LOOP_LOGGING.md](../OTEHR_RELATED_IDEAS/AGENTIC_LOOP_LOGGING.md) — long-horizon product; Phase 7 is its prerequisite infrastructure
-- [REASONING_TRACE_REUSE.md](../OTEHR_RELATED_IDEAS/REASONING_TRACE_REUSE.md) — reasoning token capture; Phase 7 extends per-executor-turn
-- [CONTEXT_AS_GIT.md](../OTEHR_RELATED_IDEAS/CONTEXT_AS_GIT.md) — "stored context vs runtime context"; informs outer-loop design
+- [AGENTIC_LOOP_LOGGING.md](../../OTEHR_RELATED_IDEAS/AGENTIC_LOOP_LOGGING.md) — long-horizon product; Phase 7 is its prerequisite infrastructure
+- [REASONING_TRACE_REUSE.md](../../OTEHR_RELATED_IDEAS/REASONING_TRACE_REUSE.md) — reasoning token capture; Phase 7 extends per-executor-turn
+- [CONTEXT_AS_GIT.md](../../OTEHR_RELATED_IDEAS/CONTEXT_AS_GIT.md) — "stored context vs runtime context"; informs outer-loop design
 **Related backlog:** BL-368, BL-350, BL-333, BL-353, BL-354, BL-351
 **Phase 6 exit (frozen):** [phase6-master-session-bootstrap.md](./phase6-master-session-bootstrap.md)
 

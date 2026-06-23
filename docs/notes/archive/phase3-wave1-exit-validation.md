@@ -3,7 +3,7 @@
 **Milestone:** P3-401 — Wave 1 sign-off  
 **Workspace:** `~/Dropbox/CodingProjects/personal_tools/mcp_coder_phase1_e2e`  
 **Code repo:** `mcp_coder` (`main` @ P3-322f+)  
-**Issues:** [PHASE3_ISSUES.md](../PHASE3_ISSUES.md)
+**Issues:** [PHASE3_ISSUES.md](../../PHASE3_ISSUES.md)
 
 Validates **workspace history** shipped in P3-322a–f: manifest attribution, diffs, checkpoint metadata, MCP/CLI inspect.
 
@@ -242,7 +242,7 @@ print(workspace_history_db_path(Path('$WS').expanduser()))
 
 ## After sign-off
 
-- ~~Master: mark P3-401 / Wave 1 done in [PHASE3_MVP.md](../PHASE3_MVP.md)~~ — **done** 2026-06-09.
+- ~~Master: mark P3-401 / Wave 1 done in [PHASE3_MVP.md](../../PHASE3_MVP.md)~~ — **done** 2026-06-09.
 - **Extended dogfood (step 3):** `tip-calc-03-total` — 2 delegations (`602a1f73`, `65bdcdc1`); import miss caught by pytest; inspect tools used only on explicit prompt → **P3-ISS-005**.
 - If bisect/restore hurt: prioritize **P3-322g** / BL-322g.
-- **Done:** P3-311, P3-320, P3-002-lite, **P3-499** (2026-06-09). Phase 3 **closed** — see [PHASE3_MVP.md](../PHASE3_MVP.md) exit sign-off; issues [PHASE3_ISSUES.md](../PHASE3_ISSUES.md) → BL-324–328.
+- **Done:** P3-311, P3-320, P3-002-lite, **P3-499** (2026-06-09). Phase 3 **closed** — see [PHASE3_MVP.md](../../PHASE3_MVP.md) exit sign-off; issues [PHASE3_ISSUES.md](../../PHASE3_ISSUES.md) → BL-324–328.
