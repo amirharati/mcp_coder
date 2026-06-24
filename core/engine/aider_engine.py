@@ -371,6 +371,25 @@ class AiderEngine(ExecutionEngine):
                         contract_set = {
                             p.replace("\\", "/").lstrip("./") for p in (contract or []) if p
                         }
+                        # Build target_files dict with edit/read split (P14-001)
+                        files_edit_norm = sorted(target_set)
+                        files_edit_set = set(files_edit_norm)
+                        files_read_norm = sorted({
+                            p.replace("\\", "/").lstrip("./")
+                            for p in (contract or [])
+                            if p and p.replace("\\", "/").lstrip("./") not in files_edit_set
+                        })
+                        target_files_dict = {
+                            "files_edit": files_edit_norm,
+                            "files_read": files_read_norm,
+                        }
+                        # Load ProjectState and build summary (P14-001)
+                        from core.state.project_key import ProjectKeyResolver
+                        from core.state.project_state import ProjectState
+
+                        project_key = ProjectKeyResolver.from_spec_path(spec_path)
+                        project_state = ProjectState.load(project_key)
+                        project_state_summary = project_state.to_summary()
                         supervisor = DelegationSupervisor(
                             workspace_path=workspace_path,
                             delegation_id=delegation_id,
@@ -380,6 +399,8 @@ class AiderEngine(ExecutionEngine):
                                 buffer.getvalue() if hasattr(buffer, "getvalue") else "",
                                 max_chars=STALL_OUTPUT_TAIL_CHARS,
                             ),
+                            project_state_summary=project_state_summary,
+                            target_files=target_files_dict,
                         )
                         supervisor_holder["supervisor"] = supervisor
                         from core.engine.question_registry import _REGISTRY as _question_registry

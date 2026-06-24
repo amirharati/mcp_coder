@@ -25,6 +25,8 @@ _MAX_REASON_CHARS = 400
 _MAX_PROMPT_CHARS = 8000
 _MAX_PRIOR_DECISIONS = 8
 _MAX_PRIOR_CHARS = 1200
+_MAX_PROJECT_STATE_CHARS = 2000
+_MAX_TARGET_FILES_CHARS = 800
 
 _SUPERVISOR_PREAMBLE = """## Role: delegation supervisor
 
@@ -106,6 +108,8 @@ def build_supervisor_prompt(
     architect_plan: str | None,
     prior_decisions: list[dict[str, Any]],
     output_tail: str,
+    project_state_summary: str | None = None,
+    target_files: dict[str, list[str]] | None = None,
 ) -> str:
     sections = [_SUPERVISOR_PREAMBLE, f"## Risk tier\n{risk_tier}", f"## Question\n{question.strip()}"]
     contract = (spec_contract or "").strip()
@@ -114,6 +118,24 @@ def build_supervisor_prompt(
     plan = (architect_plan or "").strip()
     if plan:
         sections.append(f"## Planner plan\n{plan[:1500]}")
+    # Project state summary (inserted before Prior decisions per plan)
+    pss = (project_state_summary or "").strip()
+    if pss:
+        sections.append(f"## Project state\n{pss[:_MAX_PROJECT_STATE_CHARS]}")
+    # Target files (inserted before Prior decisions per plan)
+    if isinstance(target_files, dict):
+        fe = sorted({p.replace("\\", "/").lstrip("./") for p in (target_files.get("files_edit") or []) if p})
+        fr = sorted({p.replace("\\", "/").lstrip("./") for p in (target_files.get("files_read") or []) if p})
+        if fe or fr:
+            tf_lines: list[str] = []
+            if fe:
+                tf_lines.append("**files_edit:**")
+                tf_lines.extend(f"- `{p}`" for p in fe)
+            if fr:
+                tf_lines.append("**files_read:**")
+                tf_lines.extend(f"- `{p}`" for p in fr)
+            out = "\n".join(tf_lines)
+            sections.append(f"## Target files\n{out[:_MAX_TARGET_FILES_CHARS]}")
     sections.append(f"## Prior decisions\n{_summarize_prior_decisions(prior_decisions)}")
     tail = (output_tail or "").strip()
     if tail:
@@ -135,12 +157,16 @@ class DelegationSupervisor:
         spec_contract: str | None,
         architect_plan: str | None,
         output_tail_provider: Callable[[], str],
+        project_state_summary: str | None = None,
+        target_files: dict[str, list[str]] | None = None,
     ) -> None:
         self._workspace_path = workspace_path
         self._delegation_id = delegation_id
         self._spec_contract = spec_contract
         self._architect_plan = architect_plan
         self._output_tail_provider = output_tail_provider
+        self._project_state_summary = project_state_summary
+        self._target_files = target_files
         self._decision_log: list[dict[str, Any]] = []
         self._total_duration_ms = 0
         self._last_model = ""
@@ -174,6 +200,8 @@ class DelegationSupervisor:
             architect_plan=self._architect_plan,
             prior_decisions=self._decision_log,
             output_tail=self._output_tail_provider(),
+            project_state_summary=self._project_state_summary,
+            target_files=self._target_files,
         )
         apply_provider_env()
         model = resolve_role_model_name(ROLE_SUPERVISOR, self._workspace_path)
@@ -271,7 +299,7 @@ class DelegationSupervisor:
                 session_dir_var,
                 workspace_var,
             )
-            from core.observability.trace import append_trace_record, build_llm_call_record
+            from core.observability.trace import append_trace_record, build_trace_record
 
             delegation_id = delegation_id_var.get()
             session_dir = session_dir_var.get()
@@ -279,7 +307,7 @@ class DelegationSupervisor:
             if not delegation_id or not session_dir:
                 return
 
-            record = build_llm_call_record(
+            record = build_trace_record(
                 delegation_id=delegation_id,
                 role=ROLE_SUPERVISOR,
                 model=decision.model or "",

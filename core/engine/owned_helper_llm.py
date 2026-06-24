@@ -30,21 +30,27 @@ def run_owned_helper_completion(
     messages: list[dict[str, str]],
     *,
     model: str,
-    max_tokens: int = 4096,
+    max_tokens: int | None = None,
 ) -> OwnedHelperCompletion:
-    """ThreadPoolExecutor + copy_context + gateway.complete()."""
+    """ThreadPoolExecutor + copy_context + gateway.complete().
+
+    When max_tokens is None, the gateway uses its own default
+    (MCP_CODER_HELPER_MAX_TOKENS, default 8192).
+    """
     apply_provider_env()
     t0 = time.perf_counter()
 
     def _call() -> OwnedHelperCompletion:
         gw = get_llm_gateway()
         role = role_var.get() or CLI_FALLBACK_ROLE
-        result = gw.complete(
-            model=model,
-            messages=messages,
-            max_tokens=max_tokens,
-            role=role,
-        )
+        kwargs: dict[str, Any] = {
+            "model": model,
+            "messages": messages,
+            "role": role,
+        }
+        if max_tokens is not None:
+            kwargs["max_tokens"] = max_tokens
+        result = gw.complete(**kwargs)
         return OwnedHelperCompletion(
             text=result.text,
             model=result.model,

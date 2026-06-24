@@ -14,26 +14,42 @@ Full text of open, partial, and idea backlog items. **Read [../BACKLOG.md](../BA
 
 ## Supervisor & orchestration
 
-### BL-525: Planner role — session-bounded, mutable plan, RAG-aware
+### BL-525: Planner as agent — tool-calling loop, mutable plan, RAG-aware (was: session-bounded, mutable plan, RAG-aware)
 
-**Status:** `partial` — 2026-06-21. **Phase 12 P12-005 shipped** (pre-injection v1; commit 69d93d8). Full tool-calling Planner → Phase 13+.
-**Related:** BL-350 (outer loop), BL-161 (internal pipeline), BL-526 (Architect), BL-351 (Supervisor — possible merge in Phase 12).
+**Status:** `partial` — 2026-06-24. **Phase 12 P12-005 shipped** (pre-injection v1; commit 69d93d8): one-shot `planner_pass_llm.py` produces a static `## Planner plan` prompt prefix, no tool access. **Updated 2026-06-24** to reflect the real gap surfaced during Phase 14: the Supervisor already has a bounded tool-calling loop (`SupervisorToolRunner`, BL-530 done) but the Planner does not — it is still one-shot `run_owned_helper_completion()`. The Planner needs to become an agent with its own loop + tool use, mirroring the Supervisor's pattern.
+**Related:** BL-350 (outer loop), BL-161 (internal pipeline), BL-526 (Architect), BL-530 (SupervisorToolRunner — the pattern to mirror), BL-542 (two-tier context model — Planner is a tier-2 consumer), BL-557 (sharing layer — a tool-calling Planner can pull prior reasoning via RAG, which is the high-value path for the intelligence cascade), BL-529 (Supervisor context — Planner's plan is one of its inputs).
+
 **Design note:** [docs/notes/multi-model-roles.md § Role hierarchy](./notes/archive/multi-model-roles.md)
 
-**Problem:** The current `architect_pass` is a one-shot task-level planner — it fires once before the executor and produces a static prompt prefix. There is no role that owns a mutable plan for the full task lifecycle (before / during / after executor) or that carries session context across delegations.
+**Problem:** The shipped `planner_pass` (`core/engine/planner_pass_llm.py`) is a **one-shot** model call: it receives a compiled brief, returns a `## Planner plan` markdown section, and is done. It has:
+- no tool access (cannot read files, query project_state, search RAG, or pull delegation history mid-plan),
+- no loop (cannot refine a plan after seeing tool results),
+- no mutable plan artifact (its output is a frozen prompt prefix injected into the executor brief),
+- no mid-delegation updates (fires once pre-executor; cannot revise when the Supervisor surfaces a scope change or the executor stalls).
 
-**Goal:** Formalise a **Planner** role (senior engineer / manager tier) that:
-- Owns a mutable plan artifact for the current task
-- Fires before the executor with RAG access to prior similar plans and delegation history
-- Receives updates from the Supervisor when executor surfaces questions/scope changes
-- Reviews executor report at end; decides "done" or "needs another step"
-- Is session-bounded: plan state persists across multiple delegations in the same MCP session
+Meanwhile, the **Supervisor** already has a bounded tool-calling agent loop (`SupervisorToolRunner` — `core/engine/supervisor_tool_runner.py`, up to `max_tool_rounds` iterations with `get_project_state` / `get_delegation_history` / `read_file` / `get_reviewer_findings` tools). The Planner should mirror this shape.
 
-**Relationship to Supervisor (P11-002):** Both Planner and Supervisor operate at task scope with similar context budgets. They may merge into one "task intelligence" role in Phase 12 once the plan object exists. For now, keep separate: Supervisor is reactive (intercepts decisions), Planner is proactive (owns the plan). Review post-Phase-11 dogfood.
+**Goal:** Formalise the **Planner as an agent** (senior engineer / manager tier) that:
+- Runs as a **bounded tool-calling loop** (same pattern as `SupervisorToolRunner`): start from tier-1 context, pull tier-2 context via tools when needed, iterate a bounded number of rounds, emit a final plan.
+- Tool set (initial): `read_file` (spec / source files), `get_project_state` (decisions, hot areas, risks), `get_delegation_history` (prior similar work), `rag_search` (code/prior delegations). Mirrors Supervisor's tool set + RAG.
+- Owns a **mutable plan artifact** for the current task (not a frozen prefix): the plan can be revised mid-delegation if the Supervisor surfaces a scope change or the executor stalls (BL-543 B/C continuation brief is the injection path).
+- Fires **before the executor** with tool access to prior plans and delegation history (today's one-shot behavior, upgraded with tools).
+- Receives **updates from the Supervisor** when the executor surfaces questions/scope changes (turn-2+ continuation brief — ties to BL-543 C and P14-002's reviewer findings injection).
+- Reviews executor report at end; decides "done" or "needs another step" (ties to `supervisor_decision: done | rerun_aider`).
+- Is **session-bounded**: plan state persists across multiple delegations in the same MCP session.
 
-**Naming:** Current `architect_pass` in code is actually a task-level planner. Rename → `planner_pass` at end of Phase 11 (P11-008) to free up "architect" for the epic-level role (BL-526).
+**Why this matters now (Phase 14 connection):**
+- P14-001 just gave the Supervisor a context block (`project_state` + `target_files`). The Planner is the natural next consumer of the same context — and a tool-calling Planner can *retrieve* what it needs rather than receiving a static compiled brief.
+- BL-557 (the reasoning sharing layer) is only valuable if roles can pull prior reasoning. A one-shot Planner can't. A tool-calling Planner can query "prior reasoning relevant to this plan" via RAG — this is the high-value path for the intelligence cascade.
+- P14-002 (control loop) will exercise the Supervisor's tool loop more. Symmetry: the Planner should have the same capability for proactive (pre-executor) reasoning, not just reactive (mid-executor) reasoning.
 
-**Phase placement:** Phase 12 (depends on plan object from Phase 12). P11-008 is prerequisite (naming + role constants).
+**Relationship to Supervisor (P11-002):** Both Planner and Supervisor operate at task scope with similar context budgets and now-similar tool-loop patterns. They may merge into one "task intelligence" role in a future phase once the plan object exists. For now, keep separate: Supervisor is reactive (intercepts decisions mid-executor), Planner is proactive (owns the plan pre-executor and at turn boundaries).
+
+**Naming:** `architect_pass` was renamed → `planner_pass` at end of Phase 11 (P11-008). "Architect" is freed for the epic-level role (BL-526). The new agent loop should live in a new module (e.g. `core/engine/planner_agent.py` or extend `planner_pass_llm.py` with a tool-runner path) — keep the one-shot path as a fallback for low-stakes / trivial tasks (the `heuristic_trivial_task` gate already skips planner for one-liners).
+
+**Phase placement:** Post-Phase-14. The tool-calling substrate (`SupervisorToolRunner`) already ships (BL-530). What's missing: (a) a Planner-flavored tool runner (or generalization of the existing one), (b) the mutable plan artifact, (c) mid-delegation update path (ties to BL-543 C). Could be a Phase 15+ dedicated milestone or fold into a "task intelligence" phase if Supervisor and Planner merge.
+
+**Not in scope for Phase 14:** Phase 14 is the trust phase (context + control loop + audit). Planner-as-agent is a capability expansion, not a trust gap. File for post-P14 planning.
 
 ---
 

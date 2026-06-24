@@ -140,6 +140,58 @@ class ProjectState:
                 break
         self.hot_areas = merged
 
+    def to_summary(self) -> str:
+        """Bounded markdown summary for supervisor prompt (~500 tokens). Empty if no content."""
+        lines: list[str] = []
+        # Recent decisions (last 5, each text truncated to 160 chars)
+        dec_lines: list[str] = []
+        for d in self.decisions[-5:]:
+            text = str(d.get("text") or "").strip()
+            if not text:
+                continue
+            text = text[:160]
+            did = str(d.get("delegation_id") or "")[:8]
+            dec_lines.append(f"- {text} ({did})")
+        # Hot areas (first 10)
+        ha_lines: list[str] = []
+        for p in self.hot_areas[:10]:
+            p_str = str(p or "").strip()
+            if p_str:
+                ha_lines.append(f"- {p_str}")
+        # Open risks (last 5, text truncated to 160)
+        risk_lines: list[str] = []
+        for r in self.open_risks[-5:]:
+            text = str(r.get("text") or "").strip()
+            if not text:
+                continue
+            severity = str(r.get("severity") or "advisory")
+            text = text[:160]
+            risk_lines.append(f"- [{severity}] {text}")
+        # Reviewer findings tail (last 5, text truncated to 160)
+        finding_lines: list[str] = []
+        for f in self.reviewer_findings_summary[-5:]:
+            text = str(f.get("text") or "").strip()
+            if not text:
+                continue
+            severity = str(f.get("severity") or "advisory")
+            text = text[:160]
+            finding_lines.append(f"- [{severity}] {text}")
+        if dec_lines:
+            lines.append("### Recent decisions")
+            lines.extend(dec_lines)
+        if ha_lines:
+            lines.append("### Hot areas")
+            lines.extend(ha_lines)
+        if risk_lines:
+            lines.append("### Open risks")
+            lines.extend(risk_lines)
+        if finding_lines:
+            lines.append("### Reviewer findings (tail)")
+            lines.extend(finding_lines)
+        if not lines:
+            return ""
+        return "\n".join(lines)
+
     @staticmethod
     def state_path(project_key: str) -> Path:
         return mcp_coder_home() / "projects" / project_key / "project_state.json"

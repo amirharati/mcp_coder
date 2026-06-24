@@ -51,7 +51,7 @@ When running log analysis or dogfood, check these conditions and close the sourc
 
 | BL-ID | What | Status |
 |-------|------|--------|
-| BL-525 | Planner role — session-bounded, mutable plan, RAG-aware | partial |
+| BL-525 | Planner as agent — tool-calling loop, mutable plan, RAG-aware (mirror SupervisorToolRunner) | partial |
 | BL-526 | Architect role — CTO, epic-boundary, high-level context only | deferred |
 | BL-528 | Late-answer resume after human-gate timeout (`resume_token` continuation) | deferred |
 | BL-529 | Supervisor context window — task + spec + Aider output tail | partial |
@@ -272,6 +272,8 @@ When running log analysis or dogfood, check these conditions and close the sourc
 
 | Date | Change |
 |------|--------|
+| 2026-06-24 | **BL-525 reframed** — Planner as agent: tool-calling loop + mutable plan + RAG-aware. Updated to reflect the real gap surfaced in Phase 14 — the Supervisor already has a bounded tool-calling agent loop (`SupervisorToolRunner`, BL-530) but the Planner is still one-shot `run_owned_helper_completion()`. Planner should mirror the Supervisor's loop pattern with its own tool set (`read_file`, `get_project_state`, `get_delegation_history`, `rag_search`). Cross-linked BL-557 (sharing layer — a tool-calling Planner can pull prior reasoning via RAG, the high-value path for the intelligence cascade). Post-Phase-14. |
+| 2026-06-24 | **BL-557 added (reframed)** — cross-model reasoning sharing layer: peer-to-peer normalized reasoning summaries + curated shared store, with implicit (supervisor-mediated) + explicit (RAG) retrieval seams. Extends BL-333 beyond executor-only; depends on Phase 14 (P14-003c/P14-004) to verify reasoning-capture substrate first. Forcing-prompt convention for non-reasoning models included as deliverable (a). Reframed from "cascade downhill" to "peer-to-peer sharing among role-specific models" after user clarification. |
 | 2026-06-23 | **Phase 13 closed** — P13-003 deferred → **BL-556** (dogfood integration tests); BL-362/363 → `partial` (T-06 + guide sync done; T-07/T-08 stubs + arch sub-pages remain). |
 | 2026-06-23 | **Backlog split** — BACKLOG.md is now index-only; full text in `docs/backlog/deferred.md` + `docs/backlog/done.md`; archive at `docs/backlog/_source-full.md`. |
 | 2026-06-21 | **BL-548 added** — mid-loop crash recovery (per-turn agent checkpoint). Deferred from P13-007, which shipped steady-state checkpoint at delegation boundaries only. Long-tail 20% after P13-007's high-value 80%. |

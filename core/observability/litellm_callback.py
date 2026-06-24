@@ -237,15 +237,12 @@ def _extract_response_parts(response_obj: Any) -> tuple[str | None, str | None]:
             return None, None
         if isinstance(message, dict):
             content = message.get("content")
-            reasoning = message.get("reasoning_content") or message.get("reasoning")
         else:
             content = getattr(message, "content", None)
-            reasoning = getattr(message, "reasoning_content", None) or getattr(
-                message, "reasoning", None
-            )
+        from core.observability.reasoning_extract import extract_reasoning_text
+
         text = content if isinstance(content, str) else None
-        reasoning_text = reasoning if isinstance(reasoning, str) else None
-        return text, reasoning_text
+        return text, extract_reasoning_text(message)
     except (AttributeError, IndexError, TypeError):
         return None, None
 
@@ -273,6 +270,18 @@ def _append_trace_for_completion(
     prompt_text = _extract_prompt_text(kwargs)
     response_text, reasoning_text = _extract_response_parts(response_obj)
     verbosity = resolve_observability_verbosity(workspace)
+
+    # Respect MCP_CODER_CAPTURE_REASONING for helper (non-executor) roles too.
+    # Executor reasoning text is gated separately in _extract_from_success; this
+    # gate covers the synchronous owned-completion path used by helper roles.
+    if reasoning_text is not None and role != ROLE_EXECUTOR:
+        try:
+            from core.config.observability import capture_reasoning_enabled
+
+            if not capture_reasoning_enabled(workspace):
+                reasoning_text = None
+        except Exception:
+            pass
 
     policy = model_policy_var.get()
     if policy is None and workspace is not None and role:

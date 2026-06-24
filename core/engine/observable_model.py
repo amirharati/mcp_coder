@@ -39,17 +39,14 @@ def extract_thinking_from_response(result: Any) -> tuple[str | None, int]:
             if message is None and isinstance(first, dict):
                 message = first.get("message")
             if message is not None:
+                # Try thinking_blocks first (Anthropic native), then fall back to
+                # the shared reasoning extractor (covers reasoning_content,
+                # reasoning, provider_specific_fields, reasoning_details).
                 if isinstance(message, dict):
-                    reasoning = message.get("reasoning_content") or message.get("reasoning")
                     thinking_blocks = message.get("thinking_blocks")
                 else:
-                    reasoning = getattr(message, "reasoning_content", None) or getattr(
-                        message, "reasoning", None
-                    )
                     thinking_blocks = getattr(message, "thinking_blocks", None)
-                if isinstance(reasoning, str) and reasoning.strip():
-                    thinking_text = reasoning.strip()
-                elif thinking_blocks:
+                if thinking_blocks:
                     parts: list[str] = []
                     for block in thinking_blocks:
                         if isinstance(block, dict):
@@ -62,6 +59,10 @@ def extract_thinking_from_response(result: Any) -> tuple[str | None, int]:
                             parts.append(text.strip())
                     if parts:
                         thinking_text = "\n".join(parts)
+                if not thinking_text:
+                    from core.observability.reasoning_extract import extract_reasoning_text
+
+                    thinking_text = extract_reasoning_text(message)
     except (AttributeError, IndexError, TypeError):
         pass
 

@@ -4,12 +4,19 @@ from __future__ import annotations
 
 import concurrent.futures
 import contextvars
+import os
 import time
 from dataclasses import dataclass
 from typing import Any
 
 from core.engine.stdio_isolation import isolated_stdio, merged_capture
 from core.observability.base import ObservabilityBackend
+
+# Default max_tokens for helper-role completions. Reasoning models with
+# effort=high can produce 300+ reasoning tokens plus content + tool-call JSON,
+# so 4096 was tight for supervisor multi-turn tool use. 8192 gives headroom
+# while staying well within provider limits. Override via MCP_CODER_HELPER_MAX_TOKENS.
+_DEFAULT_HELPER_MAX_TOKENS = int(os.environ.get("MCP_CODER_HELPER_MAX_TOKENS", "8192"))
 
 # Used by litellm_callback.py to skip accumulation for gateway-managed calls.
 _gateway_call_active: contextvars.ContextVar[bool] = contextvars.ContextVar(
@@ -49,15 +56,12 @@ def _extract_text_and_reasoning(response_obj: Any) -> tuple[str, str | None]:
             return "", None
         if isinstance(message, dict):
             content = message.get("content")
-            reasoning = message.get("reasoning_content") or message.get("reasoning")
         else:
             content = getattr(message, "content", None)
-            reasoning = getattr(message, "reasoning_content", None) or getattr(
-                message, "reasoning", None
-            )
+        from core.observability.reasoning_extract import extract_reasoning_text
+
         text = (content or "").strip() if isinstance(content, str) else ""
-        reasoning_text = reasoning if isinstance(reasoning, str) else None
-        return text, reasoning_text
+        return text, extract_reasoning_text(message)
     except (AttributeError, IndexError, TypeError):
         return "", None
 
@@ -130,7 +134,7 @@ class LlmGateway:
         *,
         model: str,
         messages: list[dict[str, Any]],
-        max_tokens: int = 4096,
+        max_tokens: int = _DEFAULT_HELPER_MAX_TOKENS,
         role: str,
         tools: list[dict] | None = None,
     ) -> GatewayCompletion:
@@ -253,7 +257,7 @@ class NullLlmGateway(LlmGateway):
         *,
         model: str,
         messages: list[dict[str, Any]],
-        max_tokens: int = 4096,
+        max_tokens: int = _DEFAULT_HELPER_MAX_TOKENS,
         role: str,
         tools: list[dict] | None = None,
     ) -> GatewayCompletion:
