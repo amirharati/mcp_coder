@@ -1,7 +1,8 @@
 # Architecture overview
 
 **Status:** Living — update as shipped decisions change.  
-**How to use:** Read as a structural reference after [how-it-works.md](../how-it-works.md). That doc is the *operator* mental model; this one is the *layer map and design decisions*. Deeper per-subsystem docs live alongside this file.
+**Last updated:** 2026-06-23 (Phase 12/13 — Supervisor persistent state, lifecycle envelope, pause/resume, project memory).  
+**How to use:** Read after [how-it-works.md](../how-it-works.md) (operator mental model). This doc is the *layer map and locked design decisions*. For refined design intent see [../../notes/system-design-overview.md](../../notes/system-design-overview.md); for Supervisor-agent deep dive see [../../notes/supervisor-agent-architecture.md](../../notes/supervisor-agent-architecture.md).
 
 ---
 
@@ -9,21 +10,22 @@
 
 ```
 ┌───────────────────────────────────────────────────────────────────┐
-│  Host / Planner                                                   │
+│  Host agent                                                       │
 │  Cursor (only host today) — rules, chat, specs, tool calls        │
 │  core/host/   cursor.py  cursor_rules.py  cursor_transcript.py    │
 └──────────────────────────────┬────────────────────────────────────┘
                                │  MCP tool calls (stdio JSON-RPC)
+                               │  delegate_to_agent  answer  inspect…
                                ▼
 ┌───────────────────────────────────────────────────────────────────┐
-│  MCP server                                                       │
+│  MCP server  (thin entry, not orchestration owner)                │
 │  server/mcp_server.py                                             │
-│  • Registers tools: delegate_to_agent, inspect_context,           │
+│  • Registers MCP tools, runs preloop helpers, hands off to        │
+│    SupervisorAgent for delegation lifecycle                       │
+│  • Tools: delegate_to_agent, inspect_context,                     │
 │    answer_delegation_question, get_server_status,                 │
 │    list_delegations, get_delegation_diff, get_checkpoint_detail,  │
 │    get_file_history, rag_search, workspace_search                 │
-│  • Orchestrates the delegation pipeline                           │
-│  • Writes JSONL audit record + updates history DB after each run  │
 └──────────────────────────────┬────────────────────────────────────┘
                                │
           ┌────────────────────┼────────────────────┐
@@ -39,23 +41,24 @@
    └──────┬───────┘   └──────────────────┘   │ gateway,     │
           │                                   │ history_db   │
           ▼                                   └──────────────┘
-   ┌──────────────────────────────────────┐
-   │ Supervisor Agent Loop                │
-   │ core/engine/supervisor_agent.py      │
-   │                                      │
-   │ SupervisorAgent owns all             │
-   │ post-planning control flow:          │
-   │   • begin() / begin_turn()           │
-   │   • run Aider (executor)             │
-   │   • run reviewer check               │
-   │   • per-turn decision:               │
-   │     done | rerun_aider |             │
-   │     escalate_host                    │
-   │   • complete_turn() / finish()       │
-   │   • emit supervisor_loop_* events   │
-   └──────────────┬───────────────────────┘
-                  │
-                  ▼
+   ┌──────────────────────────────────────────────────────────┐
+   │  SupervisorAgent  (persistent project workflow agent)    │
+   │  core/engine/supervisor_agent.py                         │
+   │                                                          │
+   │  Owns delegation lifecycle envelope:                     │
+   │    preloop / loop / postloop phase events                │
+   │    pause/resume — resume_token, start_fresh              │
+   │    inter-turn decisions: done|rerun_aider|escalate_host  │
+   │    supervisor_tool_runner — on-demand context retrieval  │
+   │                                                          │
+   │  Reads / writes persistent state:                        │
+   │    project_state.json  cross-delegation memory           │
+   │    agent_state.json    checkpoint at delegation end      │
+   │    supervisor_states/  expiring pause payloads           │
+   │  (all via core/state/)                                   │
+   └───────────┬──────────────────────────────────────────────┘
+               │
+               ▼
    ┌──────────────────────────────────────┐
    │ Execution Backend                    │
    │ core/engine/aider_engine.py          │
@@ -78,10 +81,12 @@
    │                                          │
    │ LlmGateway + LiteLLM callback shim       │
    │ trace.py → per-delegation trace events   │
+   │   delegation_lifecycle_start/end         │
+   │   phase_start/end (preloop/loop/postloop)│
    │   llm_call, proxy_llm_call,              │
    │   backend_llm_call, compile_event,       │
-   │   tool_call, supervisor_loop_*,          │
    │   supervisor_turn_*, supervisor_decision │
+   │   supervisor_paused, supervisor_resumed  │
    │ stats.py → maintenance stats             │
    └──────────────────────────────────────────┘
           │
@@ -93,18 +98,20 @@
 │    config.yaml    specs/    reports/    session.json              │
 │                                                                   │
 │  ~/.mcp-coder/projects/<sha256>/  OUTSIDE repo                    │
+│    project_state.json  cross-delegation Supervisor memory         │
+│    agent_state.json    Supervisor checkpoint (process-restart)    │
+│    supervisor_states/  expiring pause/resume payloads             │
 │    workspace_history.db    delegation_rag.db    workspace_rag.db  │
 │    sessions/<id>/                                                 │
-│      delegations.jsonl    lean audit row (~12 KB, pointers only)  │
-│      traces/<id>.jsonl    helper + executor + compile events       │
+│      delegations.jsonl    lean audit row per delegation           │
+│      server.jsonl         server lifecycle events                 │
+│      traces/<id>.jsonl    full event stream per delegation        │
 └───────────────────────────────────────────────────────────────────┘
 ```
 
 ---
 
 ## Key architectural decisions (locked)
-
-These are concrete decisions baked into the codebase. Changing them would require significant rework.
 
 ### D-1: MCP stdio, not HTTP
 `mcp_server.py` runs as a stdio process registered in Cursor's `mcp.json`. All tool calls are JSON-RPC over stdin/stdout. Consequence: stdout is owned by MCP — `core/engine/stdio_isolation.py` captures Aider's output so it doesn't corrupt the transport.
@@ -121,45 +128,55 @@ These are concrete decisions baked into the codebase. Changing them would requir
 | Location | What | Why |
 |----------|------|-----|
 | `<workspace>/.mcp-coder/` | User-owned: config, specs, reports | User checks in, edits, reads |
-| `~/.mcp-coder/projects/<key>/` | System-owned: JSONL, history DB, RAG | Never committed; survives workspace moves |
+| `~/.mcp-coder/projects/<key>/` | System-owned: JSONL, history DB, RAG, Supervisor state | Never committed; survives workspace moves |
 
 `project_key` = `sha256(resolved_workspace_path)`.
 
 ### D-4: Spec is the contract
-The spec's `files_edit` list is the only way a path enters `edit-full` tier and Aider `fnames`. The file picker **discovers** read candidates but **never grants edit rights**. That invariant is enforced at compile time in `file_picker.py` + `assemble.py` and checked post-hoc by `post_gateway`.
+The spec's `files_edit` list is the only way a path enters `edit-full` tier and Aider `fnames`. The file picker **discovers** read candidates but **never grants edit rights**. Enforced at compile time in `file_picker.py` + `assemble.py` and checked post-hoc by `post_gateway`.
 
 ### D-5: One model per role
-Every LLM call is tagged with a `role` (`executor`, `planner`, `context_builder`, `supervisor`, `reviewer`, `clarity_check`, `spec_validation`). Each resolves its model independently via `model_registry.resolve()` — precedence: host `model_policy` arg → env var → `config.yaml` → built-in default. All calls are audited in `model_roles` JSONL with live token counts and a `policy_applied` provenance block on every `backend_llm_call` and `llm_call` event.
+Every LLM call is tagged with a `role` (`executor`, `planner_pass`, `context_builder`, `supervisor`, `reviewer_pass`, `clarity_check`, `spec_validation`, `review`). Each resolves independently via `model_registry.resolve()` — precedence: host `model_policy` arg → env var → `config.yaml` → built-in default. All calls are audited in `model_roles` with live token counts and a `policy_applied` block on every `backend_llm_call` and `llm_call` event.
 
 ### D-6: Snapshot-based file diffing (not git)
-Pre/post SHA-256 manifests of the workspace bracket the executor. `files_changed` comes from the manifest diff, not from git or from what Aider reports. This works on untracked files, gitignored paths, and repos with no git history. Git is a soft dependency only.
+Pre/post SHA-256 manifests of the workspace bracket the executor. `files_changed` comes from the manifest diff, not from git or from what Aider reports. Works on untracked files, gitignored paths, and repos with no git history. Git is a soft dependency only.
 
 ### D-7: JSONL as the audit record
-One record per delegation, appended (never mutated) to `delegations.jsonl` under the session dir. It is the canonical truth. Everything else — history DB, RAG, spec reports — is derived from or supplementary to the JSONL record.
+One lean row per delegation appended to `delegations.jsonl`. Full event stream in `traces/<id>.jsonl`. The JSONL records are canonical truth — history DB, RAG, spec reports are derived or supplementary.
 
-### D-8: Optional stages fail open; validation blocks closed
-Helper LLM calls (clarity, planner, builder, reviewer) are all non-fatal on failure. Spec validation is the only stage that can stop the pipeline before spending executor tokens — and only when it finds genuine ambiguity, not on error.
+### D-8: Optional stages fail open; hard gates block closed
+Helper LLM failures (planner, builder, reviewer) are non-fatal — the delegation proceeds with the mechanical context. `spec_validation` and `clarity_check` are the only stages that can stop the pipeline before spending executor tokens.
 
-### D-9: Supervisor owns post-planning control flow
-After the pre-handoff pipeline (spec_validation → clarity → planner → context_builder), the `SupervisorAgent` takes over. It runs the executor, collects reviewer results, and decides per-turn whether to finish, rerun, or escalate to the host. The host does **not** see intermediate turns. Supervisor events are the single source of truth for post-planning lifecycle — there is no separate outer-loop in `mcp_server.py`.
+### D-9: SupervisorAgent owns post-planning lifecycle and persistent state
+After the preloop pipeline hands off, `SupervisorAgent` owns the full delegation lifecycle. It emits the lifecycle envelope (`delegation_lifecycle_start/end`, `phase_start/end` for `preloop`/`loop`/`postloop`), runs executor turns, calls the reviewer, makes per-turn decisions, and handles pause/resume across host round-trips.
+
+Critically: the Supervisor also reads and writes **persistent state across delegations** via `core/state/`:
+- `project_state.json` — decisions, risks, hot areas, reviewer finding summaries
+- `agent_state.json` — checkpoint at every delegation end; rehydrates Supervisor on process restart (CLI ≡ server)
+- `supervisor_states/<token>.json` — expiring pause payloads for mid-delegation or across-call resume
+
+The host does **not** own this memory and does **not** see intermediate loop turns.
 
 ### D-10: Context frugality rule
 Every LLM call gets a purpose-built context bounded to its role. No call sees full session state:
 
 | Role | Budget | What it sees |
 |------|--------|--------------|
-| Clarity pass | ~3k tokens | Task + spec Files + last 3 delegation titles |
-| Planner | ~8k tokens | Spec + file map + repo outline |
-| Builder brief | ~16k tokens | Spec + relevant files (compiled) |
-| Executor | ~32k tokens | Full context package |
-| Supervisor (per-turn) | ~2k tokens | Spec contract + question + decision log + output tail |
-| Tier-1 reviewer | ~8k tokens | Diff + changed files + acceptance criteria |
+| Clarity check | ~3k | Task + spec files + last delegation titles |
+| Spec validation | ~3k | Spec text + recent conversation window |
+| Planner | ~8k | Spec + project state summary + file map |
+| Builder brief | ~16k | Spec + relevant files (compiled) |
+| Executor | ~32k | Full context package |
+| Supervisor (per decision) | Tier 1 + on-demand tier 2 | Spec + plan + decision log + tool-retrieved context |
+| Reviewer | ~8k | Diff + changed files + acceptance criteria |
+
+Supervisor context uses a two-tier model: slow baseline context (tier 1, at turn boundaries) + on-demand tool-pulled context (tier 2, mid-decision via `SupervisorToolRunner`).
 
 ---
 
 ## Delegation lifecycle (concrete path through code)
 
-For `mode=implement` with a valid spec, `mcp_server.py` runs these in order:
+For `mode=implement` with a valid spec:
 
 ```
 delegate_to_agent()
@@ -167,31 +184,47 @@ delegate_to_agent()
   ├── host context: core/host/cursor.py → transcript path, session hint
   ├── session: core/session/ → new or reuse Coder instance
   │
+  │── PRELOOP ──────────────────────────────────────────────────────────
+  │
   ├── spec_read           core/specs/read.py, sections.py → SpecRead
   ├── spec_validation*    core/engine/spec_validation_llm.py  [can BLOCK]
-  ├── clarity_check*      core/context/clarity_llm.py         [can BLOCK]
+  ├── clarity_check*      core/context/clarity_llm.py         [can BLOCK / PAUSE]
   │
   ├── file_picker         core/context/file_picker.py → CandidateFilesResult
   ├── rag_retrieval*      core/rag/builder_retrieval.py → context_refs + brief section
   ├── context_assemble    core/context/assemble.py → ContextPackage
-  ├── planner_pass*       core/engine/planner_pass_llm.py  (was: architect_pass)
+  ├── planner_pass*       core/engine/planner_pass_llm.py
+  │     └── reads project_state.json via helper_llm_pipeline.py
   ├── builder_llm*        core/engine/context_builder_llm.py
   │
-  ├── SupervisorAgent.begin()    ← supervisor loop opens here
+  │── SUPERVISOR LOOP ──────────────────────────────────────────────────
+  │
+  ├── SupervisorAgent.begin()         lifecycle: delegation_lifecycle_start
+  │   supervisor reads project_state  core/state/project_state.py
+  │   (via SupervisorToolRunner       core/engine/supervisor_tool_runner.py)
   │     │
-  │     └── turn 1:
-  │           ├── EXECUTOR         core/engine/aider_engine.py
+  │     └── turn 1..N (N = supervisor_max_turns, default 1):
+  │           │  phase_start(loop)
+  │           ├── EXECUTOR           core/engine/aider_engine.py
   │           │     └── translate_context_package() → fnames + prompt
   │           │     └── Coder.run(prompt) via SupervisedIO
   │           │           └── confirm_ask() → DelegationSupervisor LLM
   │           │                 (approve / deny / abort / escalate)
   │           │     └── workspace snapshot post-run
   │           │
-  │           ├── reviewer_pass*   core/engine/reviewer_llm.py (advisory)
+  │           ├── reviewer_pass*     core/engine/reviewer_llm.py (advisory)
   │           │
-  │           └── supervisor decision: done | rerun_aider | escalate_host
+  │           └── supervisor_decision: done | rerun_aider | escalate_host
+  │                 ├── done or max_turns → exit loop
+  │                 ├── rerun_aider → next turn
+  │                 └── escalate_host → supervisor_paused, return needs_input
+  │                       host may answer via `answer` param on next call
+  │                       or via answer_delegation_question (concurrent)
   │
-  ├── SupervisorAgent.finish()   ← supervisor loop closes here
+  ├── SupervisorAgent.finish()        project_state.save() + agent_state.save()
+  │                                   lifecycle: delegation_lifecycle_end
+  │
+  │── POSTLOOP ────────────────────────────────────────────────────────
   │
   ├── post_gateway        core/workspace/gateway.py
   │     └── diff snapshots → files_changed, files_unexpected
@@ -209,18 +242,29 @@ delegate_to_agent()
         └── core/rag/ → index delegation + incremental workspace files (FTS5)
 ```
 
-`*` = opt-in or conditional; `rag_retrieval` runs when `context_builder` on and RAG flags on (default on). Clarity and spec_validation are default on; planner_pass and reviewer_pass are default on.
+`*` = conditional/default-on. Clarity and spec_validation are default on; planner_pass, builder_llm, reviewer_pass default on. `rag_retrieval` runs when context_builder and RAG flags on (default on).
+
+### Pause / resume paths
+
+Two distinct pause semantics:
+
+| Pause type | Trigger | Resume |
+|---|---|---|
+| **Clarity-block** | clarity_check gate fires, unanswered questions | Host edits spec Q&A and re-delegates; clarity-block path can auto-resume without explicit `answer` |
+| **Escalation** | Supervisor decides `escalate_host` inside the loop | Host passes `answer` on next `delegate_to_agent`; `start_fresh=true` abandons the pause entirely |
+
+Completed preloop stages and executor turns are not replayed on resume where policy allows.
 
 ---
 
 ## Context compiler in brief
 
-The compiler converts spec + workspace → a structured `ContextPackage` that the backend adapter translates to executor inputs (Aider today: `fnames` + `prompt`).
+The compiler converts spec + workspace → a `ContextPackage` the backend adapter translates to executor inputs.
 
 ```
 spec contract
     + target_files hints        →  file_picker      →  CandidateFilesResult
-    + symbol scan (rg / py fallback)                     ranked paths + tiers
+    + symbol scan (rg / py)                              ranked paths + tiers
     + repo map (def/class outlines)
                                 →  assemble_context  →  ContextPackage
                                      PathEntry per file:
@@ -230,64 +274,89 @@ spec contract
                                 →  rag_retrieval*    →  ## Relevant prior work + context_refs
                                 →  builder_llm*      →  prepend ## Builder brief
                                 →  planner_pass*     →  prepend ## Planner plan
+                                     (may include project_state summary)
                                 →  translate_context_package()
                                      fnames = [edit-full paths]
                                      prompt = brief + fenced read blocks + map block
 ```
 
-The **mechanical brief** (paths, tiers, task, context_summary) is never rewritten by any LLM. LLMs only **prepend** above a separator line. See tutorial T-04 for a hands-on walkthrough.
+The **mechanical brief** (paths, tiers, task, context_summary) is never rewritten by any LLM. LLMs only **prepend** above a separator. See tutorial T-04 for a hands-on walkthrough.
 
 ---
 
-## Role model (all active LLM roles)
+## Role model
 
-Each role has its own model, budget, and trace audit line. Model precedence: host `model_policy` arg → env var → `config.yaml` → built-in default.
+Each role has its own model, budget, and trace audit line. Precedence: host `model_policy` → env var → `config.yaml` → built-in default.
 
-| Role | Code name | Default model tier | Input budget | Job |
-|------|-----------|-------------------|-------------|-----|
-| `spec_validation` | `spec_validation` | Flash | ~3k | Check spec/task coherence; block if ambiguous |
-| `clarity_check` | `clarity_check` | Flash | ~3k | Ask targeted questions if task is underspecified; block if unclear |
-| `planner` | `planner_pass` | Sonnet | ~8k | Produce implementation plan prepended to executor brief |
-| `context_builder` | `context_builder` | Flash | ~16k | Compress relevant context into Builder brief |
-| `supervisor` | `supervisor` | Sonnet | ~2k/call | Approve / deny / abort Aider confirm_ask decisions during execution |
-| `executor` | `executor` | Configurable | ~32k | Write code (Aider backend) |
-| `reviewer` | `reviewer_pass` | Flash | ~8k | Advisory scan of changed files; note appended to spec report |
+| Role | Code name | Default tier | Budget | Job |
+|------|-----------|--------------|--------|-----|
+| `spec_validation` | `spec_validation` | Flash | ~3k | Coherence check; can block |
+| `clarity_check` | `clarity_check` | Flash | ~3k | Task clarity; can block or pause |
+| `planner_pass` | `planner_pass` | Sonnet | ~8k | Plan in brief; reads project state |
+| `context_builder` | `context_builder` | Flash | ~16k | Builder brief narrative |
+| `supervisor` | `supervisor` | Sonnet | tier 1 + tool-pulled | Inter-turn decisions + confirm_ask resolution |
+| `executor` | `executor` | Configurable | ~32k | Write code (Aider) |
+| `reviewer_pass` | `reviewer_pass` | Flash | ~8k | Advisory post-exec scan; findings → project state |
+| `review` | `review` | executor fallback | — | `mode=review` Q&A only |
 
-Helper calls route via `LlmGateway` and remain audited in `model_roles` with live token counts. Every call emits an `llm_call` trace event with `role`, `model`, token summary, and `reasoning_tokens` when the provider returns reasoning.
+Helper calls route via `LlmGateway`; every call emits an `llm_call` trace event with `role`, `model`, token summary, and `reasoning_tokens` where returned.
 
 ---
 
-## Supervisor agent loop
+## Supervisor agent
 
-The `SupervisorAgent` (`core/engine/supervisor_agent.py`) owns all post-planning control flow. This replaced a dual-loop design (inner `supervised_io.py` + outer `mcp_server.py`) that was hard to reason about.
+`SupervisorAgent` (`core/engine/supervisor_agent.py`) is the persistent project workflow agent and the single owner of post-planning orchestration state.
 
-**Canonical trace events (one lifecycle per delegation that reaches executor):**
+### Lifecycle envelope (Phase 13)
+
+Every delegation that enters the Supervisor emits a canonical set of trace events:
 
 ```
-supervisor_loop_start     {loop_id, max_turns}
-  supervisor_turn_start   {loop_id, turn_index}
-    [executor runs]
-    [reviewer runs if enabled]
-  supervisor_turn_end     {loop_id, turn_index, worker_outcome, checks_result}
-  supervisor_decision     {loop_id, turn_index, action, reason, model, tokens}
-supervisor_loop_end       {loop_id, turns_completed, final_action, end_reason}
+delegation_lifecycle_start   {delegation_id, resumed, …}
+  phase_start(preloop)
+  phase_end(preloop)
+  phase_start(loop)
+    supervisor_turn_start    {loop_id, turn_index}
+      [executor runs]
+      [reviewer runs if enabled]
+    supervisor_turn_end      {loop_id, turn_index, worker_outcome, checks_result}
+    supervisor_decision      {loop_id, turn_index, action, reason, model, tokens}
+  phase_end(loop)
+  phase_start(postloop)
+  phase_end(postloop)
+delegation_lifecycle_end     {outcome, …}
 ```
 
-**`max_turns` config:** `MCP_CODER_SUPERVISOR_MAX_TURNS` / `supervisor_max_turns` yaml. Default `1` = single Aider run (current behavior). Set to `2`–`3` to enable autonomous fix+retry without a host roundtrip.
+Pause events: `supervisor_paused` (clarity-block or escalation) and `supervisor_resumed` (next host call). The viewer renders all of these as rows.
 
-**Intra-turn supervision** (separate from the loop): while the executor runs, `SupervisedIO` routes every Aider `confirm_ask()` to `DelegationSupervisor` — a separate, synchronous LLM call that returns `approve | deny | abort | escalate`. These fire at a finer granularity than the loop turns and are not the same as the per-turn `supervisor_decision` event.
+### Persistent state files (`core/state/`)
+
+| File | Class | Scope | Purpose |
+|------|-------|-------|---------|
+| `project_state.json` | `ProjectState` | cross-delegation | decisions, risks, hot areas, reviewer finding summaries |
+| `agent_state.json` | `AgentCheckpoint` | cross-process | non-expiring snapshot at delegation end; rehydrates Supervisor |
+| `supervisor_states/<token>.json` | `SupervisorState` | single pause | expiring; turn_index, plan, decision_log, questions |
+
+### Intra-turn supervision
+
+While the executor runs, `SupervisedIO` routes every Aider `confirm_ask()` to `DelegationSupervisor` (`core/engine/supervisor.py`) — a separate synchronous LLM call returning `approve | deny | abort | escalate`. This is finer-grained than the inter-turn `supervisor_decision` event.
+
+### `max_turns`
+
+`MCP_CODER_SUPERVISOR_MAX_TURNS` / `supervisor_max_turns` yaml. Default `1` = single Aider run. Set to `2`–`3` to enable autonomous fix+retry without a host roundtrip.
 
 ---
 
 ## Sessions and executor caching
 
-A **session** groups related delegations under one `mcp_session_id` and caches an Aider `Coder` instance (`core/session/executor_cache.py`). Reusing a `Coder` avoids startup overhead; the compiler still rebuilds the `ContextPackage` fresh each time.
+A **session** groups related delegations under one `mcp_session_id` and caches an Aider `Coder` instance (`core/session/executor_cache.py`). The compiler always rebuilds `ContextPackage` fresh.
 
-Session policy:
-- `always_new` — new session per delegation (clean, no executor state leakage)
-- `align_host` — try to match an active Cursor host session (more reuse, slight coupling)
+| Policy | Behavior |
+|--------|----------|
+| `always_new` | New session per delegation — clean, no executor state leakage |
+| `align_host` | Try to match an active Cursor host session — more reuse, slight coupling |
 
-Executor reuse is audited: `executor_reused: true/false` and `executor_recreated: true/false` in `delegations.jsonl`.
+`executor_reused` / `executor_recreated` audited in `delegations.jsonl`.
 
 ---
 
@@ -297,25 +366,29 @@ Executor reuse is audited: `executor_reused: true/false` and `executor_recreated
 ~/.mcp-coder/
   projects/
     <sha256(workspace_path)>/
+      project_state.json        cross-delegation Supervisor memory
+      agent_state.json          Supervisor checkpoint (non-expiring)
+      supervisor_states/
+        <resume_token>.json     pause/resume payload (expiring, configurable TTL)
       project.json
-      workspace_history.db          SQLite: manifests, checkpoints, file-level diffs
-      delegation_rag.db             SQLite FTS5: delegation index
-      workspace_rag.db              SQLite FTS5: per-file summary index
+      workspace_history.db      SQLite: manifests, checkpoints, file-level diffs
+      delegation_rag.db         SQLite FTS5: delegation index
+      workspace_rag.db          SQLite FTS5: per-file summary index
       sessions/
         <mcp_session_id>/
-          delegations.jsonl         canonical audit trail
-          server.jsonl              server-side event log
+          delegations.jsonl     canonical lean audit rows
+          server.jsonl          server lifecycle events
           traces/
-            <delegation_id>.jsonl   full event stream (all LLM + tool + supervisor events)
+            <delegation_id>.jsonl  full event stream (all LLM + supervisor + compile events)
 
 <workspace>/
   .mcp-coder/
-    config.yaml                     user-owned; never written by mcp-coder
-    session.json                    current session pointer (system-managed)
+    config.yaml                 user-owned; never written by mcp-coder
+    session.json                current session pointer (system-managed)
     specs/
       tasks/   <epic>-<step>.md     task specs (contracts)
       epics/   <slug>.md            epic specs
-      reports/ <spec-name>-report.md audit reports (appended)
+      reports/ <spec-name>-report.md  audit reports (appended)
     context/
       excerpts/ *.excerpt.txt        materialized read-excerpt files
 ```
@@ -326,39 +399,43 @@ Executor reuse is audited: `executor_reused: true/false` and `executor_recreated
 
 | Gap | Where it hurts | Backlog |
 |-----|----------------|---------|
-| **Live multi-turn rerun in mcp_server** | `SupervisorAgent` has rerun logic + tests; wiring a second Aider invocation in `mcp_server.py` is a bounded follow-up | BL-533 follow-up |
-| **Reasoning capture completeness** | Some providers redact or truncate reasoning tokens in their API response; gaps are labeled but text may be absent | BL-534 |
-| **Trace inspect for specless CLI runs** | `trace inspect <id>` fails when delegation not in history DB | BL-535 |
-| **Role attribution completeness** | Some `proxy_llm_call` events still have `role=None` | BL-536 |
-| **Backend-complete interception** | In-process callers fully covered; out-of-process (Claude Code, Codex) via base URL config only | BL-371 |
-| **Single executor backend (Aider)** | `opencode_engine.py` stub exists; no second backend | BL-340 |
+| **Autonomous interception** | Supervisor intercepts structurally but confirm_ask still escalates to host in many cases | BL-547 |
+| **Full continuation briefing** | Resume injects host answer but richer confirm_ask enrichment partial | BL-543 B/C |
+| **Full planner-as-agent loop** | Planner is one-shot in current code; full tool-calling loop deferred | BL-525 |
+| **Supervisor self-context policy** | Tier-1 / tier-2 model is in place; richer topic-based refresh not yet built | BL-529 |
+| **Escalation pause resume flow** | Clarity-block auto-resume shipped; escalation pause requires explicit answer; edge cases tracked | BL-553..BL-555 |
+| **Reasoning capture completeness** | Some providers redact reasoning tokens; gaps labeled but text may be absent | BL-534 |
+| **Role attribution completeness** | Some `proxy_llm_call` events have `role=None` | BL-536 |
+| **Backend-complete interception** | In-process fully covered; out-of-process (Claude Code, Codex) via base URL only | BL-371 |
+| **Single executor backend** | `opencode_engine.py` stub exists; no second backend | BL-340 |
 | **Embeddings / recall metric** | FTS-only retrieval; no measured recall | P5-005 deferred |
-| **Session policy heuristics** | `align_host` matching is fragile (slug-based) | BL-317 |
 
 ---
 
 ## What is intentionally NOT here
 
-- **No routing logic** — mcp-coder does not decide which tasks to attempt; the planner/human does.
+- **No routing logic** — mcp-coder does not choose which tasks to attempt; the planner/host does.
 - **No owned UI** — `view delegations` spawns a static HTML viewer; Cursor is the primary UI.
-- **No git dependency** — storage and diffing work without git; git is informational only.
-- **No multi-repo or cross-project coordination** — everything is scoped to one workspace path.
+- **No git dependency** — storage and diffing work without git.
+- **No multi-repo or cross-project coordination** — scoped to one workspace path per project key.
+- **No autonomous goal decomposition** — Supervisor executes a plan; it does not decompose high-level goals into specs.
 
 ---
 
-## Future direction
+## Deferred / future direction
 
-| Area | Note |
-|------|------|
-| **Autonomous multi-turn rerun** | Supervisor decides `rerun_aider` autonomously; second Aider invocation wired in `mcp_server.py` (bounded follow-up to current `max_turns=1` default) |
-| **Supervisor context enrichment** | Supervisor currently sees spec + question + output tail; add RAG history and cross-delegation signals (BL-529) |
-| **On-demand context retrieval** | Helper models get a minimal tool interface (`read_file`, `rag_search`) to pull dynamic context mid-call (BL-530) |
-| **Multi-turn helper loops** | Planner/supervisor/reviewer run an internal loop up to N turns to refine before producing final output (BL-531) |
-| **Architect role (CTO)** | Epic-boundary context only; no diffs/files; strategic misalignment detection (BL-526) |
-| **Full executor-pull sidecar** | Lightweight HTTP server exposing `rag_search`, `read_file`, `search_history` as Aider tools (BL-354 full) |
-| **Host model policy Stage 2+** | AI-suggested params (BL-513), dynamic escalation mid-delegation (BL-514) |
-| **Alternate backends** | Cursor-SDK executor (BL-340) |
-| **Storage lifecycle** | Retention, promote-then-prune, gc — first slice shipped; full policy BL-357 |
+| Area | Current status | Backlog |
+|------|---------------|---------|
+| Autonomous interception (D-ARCH-8) | structure in place; intelligence layer not yet wired | BL-547 |
+| Full planner-as-agent loop | one-shot today; multi-turn loop deferred | BL-525 |
+| Architect / CTO role | deferred; boundary with Host/Planner undecided | BL-526 |
+| Smarter executor context adaptation | deferred | BL-546 |
+| Host chat intent inference | deferred | BL-527 |
+| Supervisor self-context policy | tier model in place; richer refresh TBD | BL-529, BL-530 |
+| AI-suggested model params | manual config today | BL-513 |
+| Dynamic escalation mid-delegation | deferred | BL-514 |
+| Alternate executor backends | Aider only | BL-340 |
+| Storage lifecycle / GC | basic stats shipped; full retention policy deferred | BL-357 |
 
 ---
 
@@ -366,13 +443,15 @@ Executor reuse is audited: `executor_reused: true/false` and `executor_recreated
 
 | Topic | Document |
 |-------|---------|
-| Mental model / operator guide | [how-it-works.md](../how-it-works.md) |
-| Context compiler full walkthrough | [context-pipeline.md](./context-pipeline.md) + T-04 tutorial |
-| Storage paths and JSONL schema | [storage-layout.md](./storage-layout.md) |
-| Per-role model registry | [per-role-models.md](./per-role-models.md) |
-| Multi-model role direction | [../notes/archive/multi-model-roles.md](../../notes/archive/multi-model-roles.md) |
+| Operator mental model | [how-it-works.md](../how-it-works.md) |
+| Supervisor agent design | [../../notes/supervisor-agent-architecture.md](../../notes/supervisor-agent-architecture.md) |
+| Roles and lifecycle vocabulary | [../../notes/delegation-roles-and-lifecycle.md](../../notes/delegation-roles-and-lifecycle.md) |
+| Context / storage / observability | [../../notes/context-storage-and-observability.md](../../notes/context-storage-and-observability.md) |
+| Model routing and policy | [../../notes/model-routing-and-policy.md](../../notes/model-routing-and-policy.md) |
+| Whole-system design map | [../../notes/system-design-overview.md](../../notes/system-design-overview.md) |
 | Module-by-module map | [code-structure.md](../code-structure.md) |
 | Terminology | [terminology.md](../terminology.md) |
+| Context compiler walkthrough | T-04 tutorial |
 
 ---
 
@@ -380,9 +459,8 @@ Executor reuse is audited: `executor_reused: true/false` and `executor_recreated
 
 | Date | Change |
 |------|--------|
-| 2026-06-20 | Full rewrite — supervisor agent loop architecture, updated role model table (clarity/planner/supervisor/reviewer all first-class), D-9 + D-10 added, lifecycle updated with SupervisorAgent, known gaps refreshed |
-| 2026-06-17 | Phase 9 sync — observability layer updated, trace event families listed |
-| 2026-06-13 | Phase 7 sync — scope updated, trace/event descriptions updated |
-| 2026-06-13 | Phase 6 — observability seam + trace files; storage map updated |
-| 2026-06-13 | Phase 5 — rag_retrieval, workspace_rag.db, workspace_search |
+| 2026-06-23 | Phase 12/13 sync — lifecycle envelope events, pause/resume paths, persistent state (`project_state`, `agent_checkpoint`, `supervisor_states`), updated layer map with `core/state/`, updated D-9, updated Supervisor section, refreshed known gaps, removed broken sub-page links |
+| 2026-06-20 | Full rewrite — supervisor agent loop, updated role model, D-9 + D-10 |
+| 2026-06-17 | Phase 9 sync — observability layer, trace events |
+| 2026-06-13 | Phase 6/7 sync |
 | 2026-06-12 | Initial version |

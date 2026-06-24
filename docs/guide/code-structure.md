@@ -2,7 +2,7 @@
 
 **Purpose:** Read this first. Explains what every directory and module does so you can find your way around the codebase without loading the whole thing into your head.
 
-**Last updated:** 2026-06-17 (module map reflects Phases 1–9; Phase 9 additions: `core/proxy/`, `core/config/model_registry.py`, `core/cli/compare.py`, `core/cli/trace_inspect.py`, `core/cli/delegation_view_enrich.py`, `core/cli/replay.py`)
+**Last updated:** 2026-06-23 (Phases 1–13; Supervisor agent, project state, observability/proxy stack, lifecycle envelope).
 
 ---
 
@@ -16,25 +16,31 @@ mcp_coder/
   .env.example            Template for .env
 
   server/
-    mcp_server.py         The MCP server — all MCP tool handlers live here (~1750 lines)
+    mcp_server.py         MCP tool handlers + delegation entry (~thin orchestration; Supervisor owns lifecycle)
 
   core/                   All business logic — no Cursor/MCP transport here
-    cli/                  CLI-only entry points (not MCP tools): setup, test-model, inspect-context, view delegations, history, rag
-    config/               Feature flags, model resolution, runtime config
-    context/              Context compiler: assemble + picker + builder LLM
-    delegation/           Delegation-level errors
-    engine/               Execution backends (Aider) + spec review/validation LLMs
+    cli/                  CLI subcommands (inspect, delegate, view, trace, replay, logs, …)
+    config/               Feature flags, model registry/policy, runtime config
+    context/              Context compiler: assemble, picker, helper prompts
+    delegation/           Prepare path, artifacts, delegation errors
+    engine/               Backends (Aider), SupervisorAgent, helper/reviewer LLMs
     host/                 Host adapter (Cursor paths, transcript, rules sync)
     logging/              Delegation JSONL writer + reader, server log
-    pipeline/             Phase recorder (P4-020: delegation_pipeline audit)
-    rag/                  Delegation + workspace-file FTS5; builder retrieval (Phase 5)
+    observability/        Trace backend, LiteLLM callback, training capture, stats
+    pipeline/             Phase recorder (delegation_pipeline audit)
+    proxy/                Local LLM HTTP proxy (Phase 9 capture)
+    rag/                  Delegation + workspace-file FTS5; builder retrieval
     server/               MCP singleton (process-level server instance)
     session/              Session store, policy, executor cache
     specs/                Spec reading, contract enforcement, outcome labelling
+    state/                Project state, Supervisor pause state, agent checkpoint
     storage/              ~/.mcp-coder path layout, project registry, workspace config
     usage/                Token telemetry, cost rates, per-role audit records
-    verify/               Auto-verify runner (pytest hook, P4-010)
-    workspace/             Workspace history DB, manifest walk, diff, gateway, checkpoint
+    verify/               Auto-verify runner (pytest hook)
+    workspace/            Workspace history DB, manifest, diff, gateway, checkpoint
+
+  tools/
+    delegation_viewer.html  Static browser UI for delegation/trace inspection
 
   resources/
     cursor-rules/         Bundled Cursor rules (synced to workspace on MCP startup)
@@ -43,10 +49,10 @@ mcp_coder/
     spec-template.md      Copy-only spec template
 
   scripts/                Operational scripts (not installed; run manually)
-  tests/                  pytest suite (573 passing at Phase 4 exit)
+  tests/                  pytest suite (~1300 tests at Phase 13)
   docs/                   All documentation
     guide/                THIS FOLDER — onboarding, tutorials, architecture
-    notes/                Design decision records (PM/architecture notes)
+    notes/                Refined design notes (see system-design-overview.md)
     OTEHR_RELATED_IDEAS/  Future ideas (not canonical vision)
 ```
 
@@ -80,20 +86,25 @@ CLI subcommands (see `core/cli/` table below for implementations):
 | `mcp-coder test-model` | Ping configured model(s); `--all` tests every role |
 | `mcp-coder inspect-context` | Dry-run context compiler — builds the prompt without calling any backend; opt-in helper LLM flags; `--include-prompt` |
 | `mcp-coder delegate` | Full delegation pipeline (or `--stop-after context` for prepare-only); structured `artifacts` + `caller_response` |
-| `mcp-coder view delegations` | Delegation log browser UI (`delegations.jsonl`; default cwd workspace) |
+| `mcp-coder replay` | Replay one delegation from disk artifacts (JSONL + trace + context blob) |
+| `mcp-coder compare` | Compare `backend_llm_call` vs `proxy_llm_call` for one delegation |
+| `mcp-coder trace inspect` | Dump/filter events from a delegation trace |
+| `mcp-coder logs tail` | Tail delegation trace events in real time |
+| `mcp-coder view delegations` | Delegation viewer UI (`tools/delegation_viewer.html`) |
 | `mcp-coder history` | Browse `workspace_history.db` (list, diff, revert) |
-| `mcp-coder rag` | Delegation FTS5 search / index (legacy; prefer `search delegations`) |
 | `mcp-coder search` | `delegations` \| `files` keyword search |
 | `mcp-coder index-workspace` | Build / refresh `workspace_rag.db` summaries |
+| `mcp-coder maintenance stats` | Observability storage stats |
+| `mcp-coder ps` / `status` / `kill` | MCP stdio process management (`core/cli/mcp_process.py`) |
 
-### `server/mcp_server.py` — the hub (~1750 lines)
+### `server/mcp_server.py` — MCP entry hub
 
-This is the largest file and the place everything connects. It:
-- Registers MCP tools (`delegate_to_agent`, `inspect_context`, `list_delegations`, `get_delegation_diff`, `get_checkpoint_detail`, `get_file_history`, `rag_search`, `workspace_search`)
-- Runs the delegation pipeline on each `delegate_to_agent` call
-- Calls into `core/` for all the actual work
+Large file where MCP tools connect to `core/`. It:
+- Registers MCP tools (`delegate_to_agent`, `inspect_context`, `answer_delegation_question`, `list_delegations`, history/RAG helpers, …)
+- Runs pre-executor pipeline stages and hands off to `SupervisorAgent` for lifecycle ownership
+- Builds lean delegation records + trace files via observability layer
 
-**Reading tip:** the file is long but structured. Look for `@server.call_tool` decorators to find each tool handler. The `delegate_to_agent` handler is the one that does almost everything.
+**Reading tip:** search for `@server.call_tool` handlers. `delegate_to_agent` is the main path; post-planning control flow lives in `core/engine/supervisor_agent.py`.
 
 ---
 
@@ -101,15 +112,22 @@ This is the largest file and the place everything connects. It:
 
 | Module | Subcommand | What it does |
 |--------|-----------|-------------|
-| `setup.py` | `mcp-coder setup` | Print workspace info, model resolution, ready-to-paste `mcp.json` block; `--init-config` creates `config.yaml` |
-| `test_model.py` | `mcp-coder test-model` | Ping one model (or `--all` roles) using the same Aider/LiteLLM stack as delegations |
-| `inspect_context.py` | `mcp-coder inspect-context` | Dry-run the full context compiler; optional helper LLM flags (see `--help`) |
-| `delegate.py` | `mcp-coder delegate` | Run delegate pipeline; `--stop-after context` for pre-executor artifacts |
-| `history.py` | `mcp-coder history` | Browse `workspace_history.db` (list, diff, revert) |
-| `view_delegations.py` | `mcp-coder view delegations` | Serve `tools/delegation_viewer.html` for cwd workspace or one JSONL file |
-| `rag.py` | `mcp-coder rag` | Legacy delegation search / index |
-| `search.py` | `mcp-coder search` | Unified `delegations` / `files` search |
+| `setup.py` | `mcp-coder setup` | Workspace info, model resolution, `mcp.json` block; `--init-config` |
+| `test_model.py` | `mcp-coder test-model` | Ping model(s) via Aider or LiteLLM |
+| `inspect_context.py` | `mcp-coder inspect-context` | Dry-run context compiler |
+| `delegate.py` | `mcp-coder delegate` | Full pipeline; `--stop-after context` for prepare-only |
+| `replay.py` | `mcp-coder replay` | Replay delegation artifacts from disk |
+| `compare.py` | `mcp-coder compare` | Backend vs proxy LLM event comparison |
+| `trace_inspect.py` | `mcp-coder trace inspect` | Filter/dump trace events |
+| `logs_tail.py` | `mcp-coder logs tail` | Live tail of trace JSONL |
+| `history.py` | `mcp-coder history` | `workspace_history.db` browser |
+| `view_delegations.py` | `mcp-coder view delegations` | Serve delegation viewer HTML |
+| `delegation_view_enrich.py` | *(imported by viewer)* | Raw records → `view_events[]` boundary model |
+| `search.py` | `mcp-coder search` | Unified delegation / file search |
 | `index_workspace.py` | `mcp-coder index-workspace` | Workspace-file summary indexer |
+| `maintenance.py` | `mcp-coder maintenance stats` | Storage/observability maintenance stats |
+| `mcp_process.py` | `ps` / `status` / `kill` | MCP stdio process discovery and cleanup |
+| `rag.py` | `mcp-coder rag` | Legacy delegation search / index |
 
 ---
 
@@ -121,16 +139,20 @@ Everything that reads `.mcp-coder/config.yaml` or environment variables.
 
 | Module | What it resolves |
 |--------|-----------------|
-| `context_builder.py` | `context_builder_enabled()`, `context_builder_llm_enabled()` — on/off flags |
-| `architect_pass.py` | `architect_pass_enabled()` |
+| `context_builder.py` | `context_builder_enabled()`, `context_builder_llm_enabled()` |
+| `planner_pass.py` | `planner_pass_enabled()` (canonical; legacy `architect_pass` alias) |
+| `architect_pass.py` | Legacy shim → prefer `planner_pass.py` |
 | `auto_verify.py` | `auto_verify_enabled()`, `resolve_verify_command()` |
-| `spec_validation.py` | `spec_validation_enabled()` |
-| `role_models.py` | Per-role model resolution: `ROLE_EXECUTOR`, `ROLE_CONTEXT_BUILDER`, etc. Resolves env → yaml → default |
-| `models.py` | `resolve_model_name()` — the base executor model |
-| `aider_runtime.py` | Aider-specific config (headless URL policy, `infer_run_success`, delegation I/O) |
-| `openrouter_models.py` | OpenRouter-specific defaults |
-| `env.py` | Shared env-reading helpers |
-| `rag.py` | RAG feature flags — `rag_enabled`, `builder_history_rag`, `workspace_file_rag`, `workspace_file_hints` (defaults on) |
+| `spec_validation.py` | `spec_validation_enabled()`, `clarity_pass_enabled()` |
+| `role_models.py` | Per-role model + budget resolution |
+| `model_registry.py` | Layered `model_policy` resolution, registry front door, `policy_applied` |
+| `host_model_policy.py` | Parse host `model_policy` MCP arg |
+| `models.py` | `resolve_model_name()` — base executor model |
+| `aider_runtime.py` | Aider-specific runtime config |
+| `observability.py` | Observability backend selection |
+| `rag.py` | RAG feature flags (defaults on) |
+| `auto_merge.py` | `auto_merge_spec_read` flag |
+| `providers.py` | Provider env normalization |
 
 **Pattern:** every flag follows the same precedence: env var → yaml key → hardcoded default.
 
@@ -146,12 +168,15 @@ The heart of the system. Builds the prompt Aider sees.
 | `repo_map.py` | `build_repo_map_entries()` — walks workspace, extracts def/class outlines → `TIER_MAP_ONLY` entries |
 | `budget.py` | Token budget enforcement — trims entries to fit context window |
 | `excerpts.py` | Read-excerpt tier — pulls relevant sections from large files |
-| `builder_prompt.py` | Assembles the prompt sent to the builder LLM |
-| `builder_history.py` | `gather_builder_history()` — queries workspace history for past delegations on same spec |
-| `architect_prompt.py` | Assembles the prompt sent to the architect-pass LLM |
-| `spec_validation_prompt.py` | Assembles the spec validation prompt |
-| `inspect.py` | `inspect_context_package()` — dry-run path (no Aider); called by `inspect-context` CLI |
-| `helper_llm_pipeline.py` | Shared builder/architect/spec-validation helpers used by delegate and inspect |
+| `builder_prompt.py` | Builder LLM prompt assembly |
+| `builder_history.py` | `gather_builder_history()` — past delegations on same spec |
+| `planner_prompt.py` | Planner-pass prompt assembly |
+| `clarity_prompt.py` | Clarity-check prompt assembly |
+| `reviewer_prompt.py` | Reviewer-pass prompt assembly |
+| `architect_prompt.py` | Legacy planner prompt path (prefer `planner_prompt.py`) |
+| `spec_validation_prompt.py` | Spec validation prompt assembly |
+| `inspect.py` | `inspect_context_package()` — dry-run path (no Aider) |
+| `helper_llm_pipeline.py` | Shared helper pipeline; may inject `project_state` for planner |
 | `../delegation/prepare.py` | Delegate-faithful pre-executor compile (`prepare_delegation_context`) |
 | `../delegation/artifacts.py` | CLI artifact envelope (`executor_in` / `executor_out` / `post_delegate`) |
 | `capability_adjust.py` | Adjusts context based on Aider edit format capabilities |
@@ -162,23 +187,66 @@ The heart of the system. Builds the prompt Aider sees.
 
 **Reading tip:** start with `package.py` (the data model), then `assemble.py` (the main function), then `file_picker.py`.
 
-### `core/engine/` — execution backends and LLM calls
+### `core/engine/` — execution backends, Supervisor, helper LLMs
 
 | Module | What it does |
 |--------|-------------|
-| `aider_engine.py` | Main executor — wraps Aider `Coder` Python API; `translate_context_package()` → Aider inputs |
+| `supervisor_agent.py` | **`SupervisorAgent`** — owns post-planning lifecycle, pause/resume, multi-turn loop, lifecycle envelope events |
+| `supervisor_tool_runner.py` | Tool-calling loop for Supervisor decisions (`get_project_state`, `read_file`, …) |
+| `supervisor.py` | `DelegationSupervisor` — confirm-ask interception LLM (approve/deny/abort/escalate) |
+| `supervised_io.py` | Routes Aider `confirm_ask` to Supervisor during executor run |
+| `aider_engine.py` | Main executor — Aider `Coder` API; `translate_context_package()` |
+| `planner_pass_llm.py` | Planner-pass LLM call |
+| `clarity_llm.py` | Clarity-check LLM call |
+| `reviewer_llm.py` | Reviewer-pass LLM call |
+| `context_builder_llm.py` | Builder-brief LLM call |
+| `spec_validation_llm.py` | Spec-validation LLM call |
+| `spec_review.py` | `mode=review` LLM call |
+| `owned_helper_llm.py` | Owned helper LLM path via gateway/observability |
+| `observable_model.py` | Aider model wrapper for inner-loop capture (Phase 8) |
+| `interception_profile.py` | Backend interception profile config |
+| `planner_decision_extractor.py` | Extract durable decisions from planner output → project state |
+| `architect_pass_llm.py` | Legacy alias path for planner pass |
+| `architect_trigger.py` | Heuristic for when planner pass fires |
 | `base.py` | `ExecutionEngine` abstract base |
-| `factory.py` | `get_engine()` — returns the right backend by name |
-| `context_builder_llm.py` | `run_context_builder_llm()` — cheap LLM call for the builder brief |
-| `architect_pass_llm.py` | `run_architect_pass_llm()` — cheap LLM call for the architect plan |
-| `spec_validation_llm.py` | `run_spec_validation_llm()` — cheap LLM call for pre-delegate validation |
-| `spec_review.py` | `run_spec_review()` — `mode=review` LLM call |
-| `capabilities.py` | Edit-format capability detection per model |
-| `git_diff.py` | Git-based diff (fallback when workspace history isn't enough) |
-| `stdio_isolation.py` | Captures Aider's stdout/stderr without breaking MCP stdio transport |
-| `opencode_engine.py` | OpenCode stub — not used; exists for future backend |
+| `factory.py` | `get_engine()` — backend selection |
+| `stdio_isolation.py` | Captures Aider stdout/stderr without breaking MCP stdio |
+| `opencode_engine.py` | Stub backend (unused) |
 
-**Note:** `aider_engine.py` is the only place Aider API terms (`fnames`, `repo_map`, `yes=True`) should appear. Everything else is backend-neutral.
+**Note:** Aider API terms (`fnames`, `repo_map`, `yes=True`) belong only in `aider_engine.py` + `aider_runtime.py`.
+
+### `core/state/` — persistent Supervisor state (Phase 12–13)
+
+| Module | What it does |
+|--------|-------------|
+| `project_state.py` | `ProjectState` — cross-delegation memory at `project_state.json` |
+| `agent_checkpoint.py` | `AgentCheckpoint` — steady-state snapshot at `agent_state.json` (process rehydrate) |
+| `supervisor_state.py` | `SupervisorState` — expiring pause/resume payload under `supervisor_states/` |
+| `project_key.py` | Project key resolution helpers |
+
+### `core/observability/` — traces, capture, stats (Phase 6–9)
+
+| Module | What it does |
+|--------|-------------|
+| `base.py` | `ObservabilityBackend` protocol |
+| `local.py` | `LocalObservability` — writes traces, builds lean delegation records |
+| `null.py` | No-op backend for tests |
+| `trace.py` | Trace event types (`llm_call`, `compile_event`, lifecycle, supervisor, proxy, …) |
+| `litellm_callback.py` | LiteLLM callback shim for helper LLM capture |
+| `gateway.py` | Observability-facing LLM gateway wrapper |
+| `training_capture.py` | Opt-in training artifact capture |
+| `reasoning_buffer.py` | Hot reasoning-token buffer |
+| `stats.py` | Maintenance/storage stats |
+| `bootstrap.py` | Observability backend initialization |
+| `context.py` | Context blob persistence for replay |
+| `version_tags.py` | Version metadata on trace events |
+
+### `core/proxy/` — local LLM proxy (Phase 9)
+
+| Module | What it does |
+|--------|-------------|
+| `local_proxy.py` | `LocalLlmProxy` — HTTP proxy for raw provider capture |
+| `routing.py` | Provider routing helpers for proxy mode |
 
 ### `core/specs/` — spec reading and contract enforcement
 
@@ -199,11 +267,13 @@ The heart of the system. Builds the prompt Aider sees.
 
 | Module | What it does |
 |--------|-------------|
-| `paths.py` | `MCP_CODER_HOME`, `project_key(workspace)`, session dirs — the `~/.mcp-coder/` layout |
+| `paths.py` | `MCP_CODER_HOME`, `project_key(workspace)`, session dirs — `~/.mcp-coder/` layout |
 | `project_registry.py` | Register and look up projects by key |
-| `session_paths.py` | Paths under a session dir (delegations.jsonl, session.json) |
+| `session_paths.py` | Session dirs (`delegations.jsonl`, traces, `server.jsonl`) |
 | `workspace_config.py` | Read `.mcp-coder/config.yaml` |
 | `workspace_session.py` | Link workspace to session |
+
+Project-scoped persistent files (via `core/state/`): `project_state.json`, `agent_state.json`, `supervisor_states/<token>.json`.
 
 ### `core/session/` — session lifecycle
 
@@ -302,9 +372,7 @@ The heart of the system. Builds the prompt Aider sees.
 
 ## `tests/` — pytest suite
 
-573 tests at Phase 4 exit (2 skipped; `test_cli_test_model.py` skipped without Aider in env).
-
-Test files follow the module they cover: `test_file_picker.py` → `core/context/file_picker.py`. No integration tests that hit a live LLM — all LLM calls are mocked.
+~1300 tests at Phase 13. Tests mirror `core/` modules; LLM calls are mocked in unit tests.
 
 ---
 
@@ -312,15 +380,19 @@ Test files follow the module they cover: `test_file_picker.py` → `core/context
 
 | Question | Where to look |
 |----------|--------------|
-| How does a delegation start? | `server/mcp_server.py` → `delegate_to_agent` handler |
+| How does a delegation start? | `server/mcp_server.py` → `delegate_to_agent`; then `core/engine/supervisor_agent.py` |
+| Who owns pause/resume and lifecycle events? | `core/engine/supervisor_agent.py` + `core/state/supervisor_state.py` |
+| Where is project memory stored? | `core/state/project_state.py` → `~/.mcp-coder/projects/<key>/project_state.json` |
+| Where is cross-process Supervisor state? | `core/state/agent_checkpoint.py` → `agent_state.json` |
 | How is the prompt assembled? | `core/context/assemble.py` → `assemble_context()` |
 | What does Aider actually receive? | `core/engine/aider_engine.py` → `translate_context_package()` |
 | How are sessions persisted? | `core/storage/paths.py`, `core/session/store.py` |
 | How is `files_changed` computed? | `core/workspace/snapshot.py` + `diff_util.py` |
-| How does the builder LLM work? | `core/engine/context_builder_llm.py` + `core/context/builder_prompt.py` |
-| Where do config flags live? | `core/config/*.py` — one file per feature |
-| Where do per-event token counts come from? | `core/observability/trace.py` — `backend_llm_call.usage` (Phase 9 P9-012); `core/usage/aider_tokens.py` handles executor-internal counts from Aider stdout |
-| What does a JSONL record look like? | `core/logging/delegation_log.py` + any `delegations.jsonl` file |
+| Where do trace events come from? | `core/observability/trace.py`, `core/observability/local.py` |
+| How does the viewer map events? | `core/cli/delegation_view_enrich.py` + `tools/delegation_viewer.html` |
+| Supervisor tool-calling loop? | `core/engine/supervisor_tool_runner.py` |
+| Model policy resolution? | `core/config/model_registry.py` |
+| What does a JSONL record look like? | `core/logging/delegation_log.py` + `core/observability/local.py` |
 | Where do Cursor rules get written? | `core/host/cursor_rules.py` |
 
 ---
@@ -329,12 +401,12 @@ Test files follow the module they cover: `test_file_picker.py` → `core/context
 
 If you want to understand the full delegation flow from scratch:
 
-1. `pyproject.toml` — what depends on what
-2. `main.py` — entry points
-3. `server/mcp_server.py` lines 1–100 (imports + server init) — orientation
-4. `core/specs/read.py` + `delegation_policies.py` — what a spec provides
-5. `core/context/package.py` — the ContextPackage data model
-6. `core/context/assemble.py` — how context is assembled
-7. `core/engine/aider_engine.py` — how it becomes Aider input
-8. `core/logging/delegation_log.py` — what gets written to JSONL
-9. Back to `server/mcp_server.py` delegate handler — now you can read the full flow
+1. `pyproject.toml` — dependencies
+2. `main.py` — CLI + MCP entry
+3. `core/specs/read.py` + `delegation_policies.py` — spec contract
+4. `core/context/package.py` + `assemble.py` — context compiler
+5. `core/engine/supervisor_agent.py` — lifecycle owner (start here for Phase 12+ behavior)
+6. `core/state/project_state.py` + `agent_checkpoint.py` — persistent memory
+7. `core/engine/aider_engine.py` — executor adapter
+8. `core/observability/local.py` + `trace.py` — audit/trace output
+9. `server/mcp_server.py` `delegate_to_agent` — wiring it together

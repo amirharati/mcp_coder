@@ -162,8 +162,8 @@ When running log analysis or dogfood, check these conditions and close the sourc
 | BL-346 | Model-aware context budget defaults + cap enforcement | deferred |
 | BL-359 | Workflow turns — refactor, document, digest cadence | deferred |
 | BL-361 | "One step at a time" / always-review-before-implement delegate mode | deferred |
-| BL-362 | T-06 + T-07 tutorials — delegation pipeline + end-to-end trace | deferred |
-| BL-363 | Architecture sub-pages + guide depth | deferred |
+| BL-362 | T-06 done; T-07/T-08 tutorial stubs — full walkthroughs pending | partial |
+| BL-363 | Guide synced Phase 12/13; architecture sub-pages still pending | partial |
 
 ### Storage & lifecycle
 
@@ -184,6 +184,7 @@ When running log analysis or dogfood, check these conditions and close the sourc
 | BL-318 | `project_key` alias on repo move | deferred |
 | BL-323 | Context budget override semantics (dev ergonomics) | deferred |
 | BL-339 | P4-ISS-021 | deferred |
+| BL-556 | Dogfood integration test hardening (P13-003 carry) — multi-delegation project_state, pause/resume, reviewer→planner | deferred |
 
 ### Ideas / unscoped
 
@@ -271,6 +272,7 @@ When running log analysis or dogfood, check these conditions and close the sourc
 
 | Date | Change |
 |------|--------|
+| 2026-06-23 | **Phase 13 closed** — P13-003 deferred → **BL-556** (dogfood integration tests); BL-362/363 → `partial` (T-06 + guide sync done; T-07/T-08 stubs + arch sub-pages remain). |
 | 2026-06-23 | **Backlog split** — BACKLOG.md is now index-only; full text in `docs/backlog/deferred.md` + `docs/backlog/done.md`; archive at `docs/backlog/_source-full.md`. |
 | 2026-06-21 | **BL-548 added** — mid-loop crash recovery (per-turn agent checkpoint). Deferred from P13-007, which shipped steady-state checkpoint at delegation boundaries only. Long-tail 20% after P13-007's high-value 80%. |
 | 2026-06-21 | **Phase 12 closed** — P12-001..P12-005 + issues + BL-545 v1 shipped; partial items (BL-543, BL-529, BL-525) and D-ARCH-8 → **BL-547** deferred; Phase 13 opened (stabilize + dogfood). |

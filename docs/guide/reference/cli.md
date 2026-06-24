@@ -14,7 +14,11 @@
 | [`test-model`](#test-model) | Ping configured models to verify connectivity |
 | [`delegate`](#delegate) | Run the full delegation pipeline from the CLI |
 | [`inspect-context`](#inspect-context) | Dry-run context compiler, no backend |
-| [`view delegations`](#view-delegations) | Browser UI for `delegations.jsonl` |
+| [`replay`](#replay) | Replay one delegation from disk artifacts |
+| [`compare`](#compare) | Compare backend vs proxy LLM events for one delegation |
+| [`trace inspect`](#trace-inspect) | Dump/filter trace events for a delegation |
+| [`logs tail`](#logs-tail) | Tail trace events in real time |
+| [`view delegations`](#view-delegations) | Browser UI for delegations + trace timeline |
 | [`history`](#history) | Browse / diff / revert from `workspace_history.db` |
 | [`rag`](#rag) | Search / index delegation FTS5 (`delegation_rag.db`) |
 | [`search`](#search) | Unified search: `delegations` \| `files` |
@@ -74,7 +78,7 @@ mcp-coder test-model [--model MODEL] [--all] [--prompt TEXT]
 | Flag | Default | Meaning |
 |------|---------|---------|
 | `--model MODEL` | `AIDER_MODEL` | Test a specific model id |
-| `--all` | — | Test all configured roles (executor, context_builder, review) sequentially |
+| `--all` | — | Test configured role models sequentially |
 | `--prompt TEXT` | `"Reply with exactly: ok"` | Message to send |
 | `--max-tokens N` | `16` | litellm path only |
 | `--via` | `aider` | `aider` = `Model.send_completion`; `litellm` = raw completion; `both` = compare |
@@ -175,6 +179,57 @@ mcp-coder inspect-context \
 
 ---
 
+## `replay`
+
+Rebuild what happened for one delegation from persisted artifacts (JSONL row + trace + context blob). No backend call.
+
+```
+mcp-coder replay DELEGATION_ID [--workspace PATH] [--format human|json]
+```
+
+Useful for debugging context assembly and trace completeness without re-running Aider.
+
+---
+
+## `compare`
+
+Compare `backend_llm_call` vs `proxy_llm_call` events for one delegation (Phase 9 capture parity checks).
+
+```
+mcp-coder compare DELEGATION_ID [--workspace PATH] [--format human|json]
+```
+
+---
+
+## `trace inspect`
+
+Dump events from `traces/<delegation_id>.jsonl` with optional filters.
+
+```
+mcp-coder trace inspect DELEGATION_ID [--workspace PATH]
+       [--type EVENT_TYPE] [--event N] [--field FIELD] [--format human|json]
+```
+
+Examples:
+
+```bash
+mcp-coder trace inspect abc123 --type supervisor_decision
+mcp-coder trace inspect abc123 --type delegation_lifecycle_start
+```
+
+---
+
+## `logs tail`
+
+Follow trace output for the latest or a specific delegation (file polling).
+
+```
+mcp-coder logs tail [--latest | --delegation-id ID] [--workspace PATH]
+                  [--format human|json] [--poll-interval-s FLOAT]
+```
+
+---
+
 ## `view delegations`
 
 Opens a browser UI for browsing `delegations.jsonl` logs interactively.
@@ -194,11 +249,11 @@ mcp-coder view delegations [LOG_FILE] [--workspace PATH] [--port PORT] [--no-ope
 
 Viewer behavior:
 - Chronological, multi-delegation browser with collapsible delegation blocks
-- Boundary-oriented event timeline (`host→mcp`, `mcp.*`, `executor→llm`, `llm→executor`, `executor→mcp`, `mcp→host`)
-- Detail panel per row (context, request params, policy, prompt/response fields, tool activity)
-- Supervisor loop lifecycle rendered inline (`supervisor_loop_start/end`, `supervisor_turn_*`, `supervisor_decision`)
-- Thinking tokens / reasoning text displayed where captured
-- Enrichment loaded lazily from trace + RAG/context sources on card expand
+- Boundary-oriented timeline via `view_events[]` enrichment (`core/cli/delegation_view_enrich.py`)
+- Lifecycle envelope rows: `delegation_lifecycle_*`, `phase_*`, `supervisor_paused` / `supervisor_resumed`
+- Supervisor loop rows: `supervisor_turn_*`, `supervisor_decision`, `supervisor_tool_call`
+- Detail panel: context, policy, prompts/responses, tool activity, thinking tokens where captured
+- Lazy enrichment from trace + delegation record on card expand
 
 ---
 
@@ -513,7 +568,10 @@ mcp-coder kill --all
 | Path | Contents |
 |------|----------|
 | `~/.mcp-coder/projects/<key>/sessions/<id>/delegations.jsonl` | Audit log — one lean record per delegation |
-| `~/.mcp-coder/projects/<key>/sessions/<id>/traces/<id>.jsonl` | Per-delegation trace events (`llm_call`, `compile_event`, `supervisor_loop_*`, `supervisor_turn_*`, `supervisor_decision`, `clarity_result`, …) |
+| `~/.mcp-coder/projects/<key>/project_state.json` | Cross-delegation Supervisor memory (decisions, risks, findings) |
+| `~/.mcp-coder/projects/<key>/agent_state.json` | Supervisor checkpoint at last delegation end |
+| `~/.mcp-coder/projects/<key>/supervisor_states/<token>.json` | Expiring pause/resume state |
+| `~/.mcp-coder/projects/<key>/sessions/<id>/traces/<id>.jsonl` | Trace events (`delegation_lifecycle_*`, `phase_*`, `llm_call`, `compile_event`, `supervisor_*`, `proxy_llm_call`, …) |
 | `~/.mcp-coder/projects/<key>/workspace_history.db` | SQLite — snapshots + checkpoints + file deltas |
 | `~/.mcp-coder/projects/<key>/delegation_rag.db` | SQLite FTS5 — delegation summaries |
 | `~/.mcp-coder/projects/<key>/workspace_rag.db` | SQLite FTS5 — workspace-file summaries |
@@ -528,6 +586,7 @@ mcp-coder kill --all
 
 | Date | Change |
 |------|--------|
+| 2026-06-23 | Phase 12/13 sync — added `replay`, `compare`, `trace inspect`, `logs tail`; viewer lifecycle envelope; storage paths for `project_state.json`, `agent_state.json`, `supervisor_states/` |
 | 2026-06-20 | Added Phase 11 env vars (clarity, spec_validation, planner_pass, reviewer_pass, supervisor); per-role model vars; supervisor loop vars; restructured env table; updated inspect-context `--run-architect` note; updated viewer features; updated trace path description |
 | 2026-06-13 | Phase 7 sync — trace path note updated (all tiers), event-type description updated, maintenance stats sample now includes executor turns |
 | 2026-06-13 | Phase 6 — `maintenance stats` added; observability env vars; trace file storage path; lean JSONL note |

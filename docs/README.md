@@ -62,7 +62,7 @@ Each tier-0–2 file has an HTML **stewardship** comment at the top — agents m
 | [PHASE10_MVP.md](./PHASE10_MVP.md) | **Phase 10 PM** — closed 2026-06-18 (trustable real-project dogfood) |
 | [PHASE11_MVP.md](./PHASE11_MVP.md) | **Phase 11 PM** — closed 2026-06-20 (supervised execution + smarter context) |
 | [PHASE12_MVP.md](./PHASE12_MVP.md) | **Phase 12 PM** — closed 2026-06-21 (supervisor orchestration infrastructure) |
-| [PHASE13_MVP.md](./PHASE13_MVP.md) | **Phase 13 PM** — active (stabilize + dogfood + document + test hardening + backlog review) |
+| [PHASE13_MVP.md](./PHASE13_MVP.md) | **Phase 13 PM** — closed 2026-06-23 (stabilize + dogfood + document + backlog review) |
 | [notes/system-design-overview.md](./notes/system-design-overview.md) | **Refined design entry** — how the current notes fit together (vision stays in IDEA) |
 | [notes/supervisor-agent-architecture.md](./notes/supervisor-agent-architecture.md) | **Supervisor agent architecture** — persistent project agent, state model, pause/resume, project memory, subagent/tool context control |
 | [BACKLOG.md](./BACKLOG.md) | Project backlog (deferred / later / nice-to-have; includes Phase 13 watch-for-evidence items BL-549..BL-555) |

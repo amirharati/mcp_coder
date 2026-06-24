@@ -38,8 +38,8 @@ Use this page so **main vision** ([IDEA.md](./IDEA.md)) is not lost when editing
 | **2 — P11 gaps** | [PHASE11_ISSUES.md](./PHASE11_ISSUES.md) | Phase 11 promoted backlog + implementation issues | **Closed** — remaining issues moved to BL-535..BL-539 |
 | **2 — Phase 12 PM** | [PHASE12_MVP.md](./PHASE12_MVP.md) | Supervisor orchestration infrastructure — project state, tool runner, pause/resume, reviewer loop | **Frozen** — closed 2026-06-21 |
 | **2 — P12 gaps** | [PHASE12_ISSUES.md](./PHASE12_ISSUES.md) | Phase 12 implementation issues | **Frozen** — all closed; partials → backlog |
-| **2 — Phase 13 PM** | [PHASE13_MVP.md](./PHASE13_MVP.md) | Stabilize + dogfood + document + test hardening + backlog review | **Active** — opened 2026-06-21; P13-005..P13-016 done (code/issue work complete); P13-002/003/004 pending (docs/tests/backlog review) |
-| **2 — P13 gaps** | [PHASE13_ISSUES.md](./PHASE13_ISSUES.md) | Phase 13 dogfood + cleanup issues | **Active** — ISS-001/002/003/005/011/012/014/016/017 fixed; ISS-006/015 fixed-pending-verify → backlog watch (BL-554/555) |
+| **2 — Phase 13 PM** | [PHASE13_MVP.md](./PHASE13_MVP.md) | Stabilize + dogfood + document + backlog review | **Frozen** — closed 2026-06-23 |
+| **2 — P13 gaps** | [PHASE13_ISSUES.md](./PHASE13_ISSUES.md) | Phase 13 dogfood + cleanup issues | **Frozen** — all resolved; ISS-006/015 watch → BL-554/555 |
 | **2 — Deferred** | [BACKLOG.md](./BACKLOG.md) | BL-* items, priorities, post–P1/P2 focus | Add/defer with user; do not delete rows silently |
 | **2 — P1 gaps** | [PHASE1_ISSUES.md](./PHASE1_ISSUES.md) | Issues from P1 — **frozen / historical at P1-199** | Read-only; new gaps → BACKLOG |
 | **2 — P2 gaps** | [PHASE2_ISSUES.md](./PHASE2_ISSUES.md) | Issues from Phase 2 — **frozen at P2-499** | Read-only; carried → PHASE3_ISSUES |
@@ -107,7 +107,7 @@ Use this page so **main vision** ([IDEA.md](./IDEA.md)) is not lost when editing
 - **Phase 10 (closed 2026-06-18):** Trustable real-project dogfood shipped — executor option wiring (BL-334), MCP visibility + `logs tail` (BL-106/520 POF), stall → `needs_input` (BL-351 v0), backlog clearance (BL-517/519 full; BL-516/518 partial). See [PHASE10_MVP.md](./PHASE10_MVP.md) · [PHASE10_ISSUES.md](./PHASE10_ISSUES.md).
 - **Phase 11 (closed 2026-06-20):** Supervised execution — SupervisedIO, clarity pass, reviewer, model policy, planner rename, SupervisorAgent loop. See [PHASE11_MVP.md](./PHASE11_MVP.md) (frozen).
 - **Phase 12 (closed 2026-06-21):** Supervisor orchestration infrastructure — project state, tool runner, pause/resume, reviewer loop, planner pre-injection, executor reset control plane. See [PHASE12_MVP.md](./PHASE12_MVP.md) (frozen).
-- **Phase 13 (active):** Stabilize + dogfood + document + test hardening + backlog review. P13-005..P13-016 done (lifecycle envelope, agent checkpoint, dogfood-verified pause/resume, reviewer/classifier hardening, typed-cause surfacing); P13-002/003/004 pending (docs/tests/backlog review). See [PHASE13_MVP.md](./PHASE13_MVP.md).
+- **Phase 13 (closed 2026-06-23):** Stabilize + dogfood + document + backlog review. P13-001..P13-016 + P13-002 + P13-004 shipped; P13-003 → BL-556. See [PHASE13_MVP.md](./PHASE13_MVP.md) (frozen).
 - **Phase 13+:** Full Planner-as-real-agent (BL-525 complete), interception (BL-547), context lifecycle B/C (BL-543), CTO/Architect (BL-526), executor adaptation (BL-546), full executor-pull sidecar (BL-354 full), AI-suggested params (BL-513), dynamic escalation (BL-514), out-of-process backend proxy, multi-host, ensemble (BL-007).
 - **Executor:** Aider-first; OpenCode/other hosts very low priority.
 
@@ -115,6 +115,7 @@ Use this page so **main vision** ([IDEA.md](./IDEA.md)) is not lost when editing
 
 | Date | Change |
 |------|--------|
+| 2026-06-23 | **Phase 13 closed** — P13-002 (notes + guide consolidation), P13-004 (backlog review); P13-003 → BL-556; PHASE13_* frozen. |
 | 2026-06-23 | **Notes archive** — `docs/notes/archive/` created; phase3–11 `*-master-session-bootstrap.md` moved; links updated in PHASE*_MVP and doc map. |
 | 2026-06-23 | **Phase 13 code/issue work complete** — P13-001..P13-008 + P13-009..P13-016 shipped; lifecycle envelope unified, pause/resume verified in dogfood (session `28fbe283`), reviewer/classifier tail-hardened, typed-cause surfacing; ISS-001/002/003/005/011/012/014/016/017 marked fixed; ISS-006/015 moved to watch-for-evidence backlog (BL-554/555); docs sync in progress. Remaining P13 milestones: P13-002 (docs), P13-003 (tests), P13-004 (backlog review). |
 | 2026-06-21 | **Phase 13 opened** — PHASE13_MVP + PHASE13_ISSUES; dogfood-first stabilize phase after Phase 12 close. |

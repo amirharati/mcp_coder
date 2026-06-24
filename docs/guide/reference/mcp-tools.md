@@ -1,8 +1,8 @@
 # MCP tools reference
 
 **Status:** Living — update when tool signatures or response shapes change.  
-**Source:** `server/mcp_server.py` — every `@mcp.tool` decorator.  
-**How called:** All tools are invoked by the host (Cursor today) via JSON-RPC over stdio. The host sees the tool schema; Cursor's agent rules (`use-mcp-coder.mdc`) guide *when* to call each one.
+**Source:** `server/mcp_server.py` — every `@mcp.tool` handler.  
+**Last updated:** 2026-06-23 (Phase 12/13 — Supervisor lifecycle, pause/resume via `answer`, project state).
 
 ---
 
@@ -25,37 +25,52 @@
 
 ## `delegate_to_agent`
 
-**The primary tool.** Runs the full delegation pipeline: spec validation + clarity check → compiles context → supervisor loop (executor + reviewer) → audits the result → writes JSONL + spec report.
+**The primary tool.** Runs the delegation pipeline: preloop helpers → **SupervisorAgent** lifecycle (executor + reviewer) → audit + project memory updates.
+
+Host talks to mcp-coder through repeated `delegate_to_agent` calls. The **Supervisor** is the persistent project workflow agent inside mcp-coder; the host remains user-facing.
 
 ### Parameters
 
 | Param | Type | Required | Notes |
 |-------|------|----------|-------|
-| `task` | `str` | Yes | What the executor should do — free text, seen by executor |
-| `target_files` | `list[str]` | Yes | Repo-relative paths. For `implement`: edit targets (+ read deps if `auto_merge_spec_read` is on). For `review`: **must be `[]`** |
-| `context_summary` | `str` | Yes | Decisions from chat the executor can't otherwise see. Never omit — this is the planner's voice |
-| `spec_path` | `str` | No | Step task spec path under `.mcp-coder/specs/tasks/` (e.g. `tasks/auth-01-model.md`). Strongly recommended for all implement calls |
-| `mode` | `str` | No | `implement` (default) or `review` (questions only, no edits) |
+| `task` | `str` | Yes | What the executor should do |
+| `target_files` | `list[str]` | Yes | Repo-relative paths. `implement`: edit targets (+ read deps if `auto_merge_spec_read`). `review`: **must be `[]`** |
+| `context_summary` | `str` | Yes | Host/planner decisions the executor cannot infer — always pass something substantive |
+| `spec_path` | `str` | No | Step spec under `.mcp-coder/specs/tasks/` — strongly recommended for implement |
+| `mode` | `str` | No | `implement` (default) or `review` |
 | `backend` | `str` | No | `aider` (only backend today) |
-| `model_policy` | `dict` | No | Per-delegation role overrides. Keys: `executor`, `planner`, `supervisor`, `reviewer`, `context_builder`. Each value: `{model, reasoning_effort, thinking_budget}` |
+| `model_policy` | `dict` | No | Per-delegation role overrides. Keys include `executor`, `planner`, `supervisor`, `reviewer`, `context_builder`, `clarity_check`, `spec_validation`. Values: `{model, reasoning_effort, thinking_budget, …}` |
+| `answer` | `str` | No | Continue a **paused** delegation by answering Supervisor questions from the prior call |
+| `start_fresh` | `bool` | No | Abandon paused state (if any) and run a fresh delegation |
 
 ### Modes
 
-**`implement`** — executor edits `target_files` on disk. Full pipeline runs:
-`spec_validation?` → `clarity_check?` → `file_picker` → `assemble` → `planner_pass?` → `builder_llm?` → supervisor loop (`executor` + `reviewer_pass?`) → `post_gateway` → `spec_report` → `verify?`
+**`implement`** — full path:
 
-**`review`** — LLM answers questions about the spec / code. `target_files` must be `[]`. Most pipeline stages skipped. Returns answer text in `output`.
+`spec_validation?` → `clarity_check?` → `file_picker` → `rag_retrieval?` → `assemble` → `planner_pass?` → `builder_llm?` → **Supervisor lifecycle** (`preloop` / `loop` / `postloop`: executor + `reviewer_pass?`) → `post_gateway` → `spec_report` → `verify?`
+
+**`review`** — LLM Q&A about spec/code; `target_files` must be `[]`.
 
 ### Pre-execution gates
 
-Two stages can block execution before the executor runs, returning `outcome: needs_input`:
+| Stage | Env / yaml | When it blocks |
+|-------|------------|----------------|
+| `spec_validation` | `MCP_CODER_SPEC_VALIDATION` / `spec_validation` | Spec ambiguity or missing decisions |
+| `clarity_check` | `MCP_CODER_CLARITY_PASS` / `clarity_pass` | Task underspecified vs spec |
 
-| Stage | Env var | When it blocks |
-|-------|---------|----------------|
-| `spec_validation` | `MCP_CODER_SPEC_VALIDATION` | Spec text has genuine ambiguity or missing decisions |
-| `clarity_check` | `MCP_CODER_CLARITY_PASS` | Task description is underspecified or contradicts the spec |
+Blocked: `outcome: needs_input`, `clarification_needed: [...]` — executor not run.
 
-When blocked: `success: false`, `outcome: needs_input`, `clarification_needed: [...]` — no files changed, no executor tokens spent.
+**Clarity-block** may pause with questions appended to spec `## Q&A`; host edits spec and re-delegates. Clarity-block path can auto-resume on host return without repeating completed preloop work.
+
+### Pause / resume (host round-trip)
+
+When Supervisor pauses mid-delegation:
+
+1. Response has `outcome: needs_input` and often a `needs_input` object with `reason`, `message`, …
+2. Host answers on the **next** `delegate_to_agent` via **`answer`** (same workspace; paused state is discovered automatically), **or** uses `answer_delegation_question` while a concurrent in-flight call is supported.
+3. Use **`start_fresh=true`** to discard pause state and start cold.
+
+Escalation pauses generally require an explicit `answer`. Clarity-block semantics differ — see [how-it-works.md](../how-it-works.md) §3.
 
 ### Response fields (JSON string)
 
@@ -87,25 +102,29 @@ When blocked: `success: false`, `outcome: needs_input`, `clarification_needed: [
 
 | Field | Type | Meaning |
 |-------|------|---------|
-| `clarification_needed` | `list[str]` | Set when `spec_validation` or `clarity_check` blocks — questions for the planner |
-| `prior_failed_attempts` | `list` | Past failures on the same spec (surface for planner adjustment) |
-| `auto_merged_read_paths` | `list[str]` | Read paths auto-added from spec `files_read` |
-| `suggested_edit_paths` | `list[str]` | Symbol-scan hits in edit dirs (audit hint, not in contract) |
-| `model_roles` | `dict` | Per-role model + token counts. Roles: `executor`, `planner`, `context_builder`, `supervisor`, `reviewer`. `source` field indicates measurement method |
-| `context_refs` | `list` | RAG retrieval hits (delegation + workspace-file) when `rag_retrieval` ran |
+| `clarification_needed` | `list[str]` | Questions when validation/clarity blocks or clarity pause |
+| `needs_input` | `dict` | Structured pause/stall info (`status`, `reason`, `message`, …) |
+| `prior_failed_attempts` | `list` | Past failures on same spec |
+| `auto_merged_read_paths` | `list[str]` | Read paths auto-added from spec |
+| `model_roles` | `dict` | Per-role audit: `executor`, `planner_pass`, `context_builder`, `supervisor`, `reviewer_pass`, `clarity_check`, `spec_validation`, … |
+| `model_policy_applied` | `dict` | Resolved host policy overrides when `model_policy` passed |
+| `model_policy_warnings` | `list[str]` | Non-fatal policy parse warnings |
+| `context_refs` | `list` | RAG hits when `rag_retrieval` ran |
 | `usage` | `dict` | Token estimate + preflight info |
-| `verify_result` | `dict` | `auto_verify` outcome (command, exit_code, passed) |
-| `error_class` / `error_message` | `str` | Structured error info on failure |
-| `log_path` | `str` | Path to the session's `delegations.jsonl` file |
+| `verify_result` | `dict` | `auto_verify` outcome |
+| `error_class` / `error_message` | `str` | Structured failure info |
+| `log_path` | `str` | Session `delegations.jsonl` path |
 
 ### What gets written to disk
 
-- One **lean** record (~12 KB) appended to `~/.mcp-coder/projects/<key>/sessions/<id>/delegations.jsonl`
-- Per-delegation trace events written to `sessions/<id>/traces/<delegation_id>.jsonl` — includes `llm_call`, `compile_event`, `clarity_result`, `supervisor_loop_start/end`, `supervisor_turn_start/end`, `supervisor_decision`, and `backend_llm_call` events for every role
-- Spec report appended to `.mcp-coder/specs/reports/<spec-name>-report.md`
-- Workspace history row + checkpoint + file diffs in `workspace_history.db`
-- Delegation indexed in `delegation_rag.db` (FTS5)
-- Changed files incrementally re-indexed in `workspace_rag.db` when `workspace_file_rag` is on
+- Lean row appended to `delegations.jsonl`
+- Full trace: `traces/<delegation_id>.jsonl` — includes `delegation_lifecycle_start/end`, `phase_start/end`, `compile_event`, `llm_call`, `backend_llm_call`, `proxy_llm_call`, `supervisor_*`, `clarity_result`, …
+- Spec report under `.mcp-coder/specs/reports/` when spec used
+- `workspace_history.db` checkpoint + file diffs
+- RAG index updates (`delegation_rag.db`; incremental `workspace_rag.db` when on)
+- **`project_state.json`** — durable decisions/risks/findings when Supervisor persists them
+- **`agent_state.json`** — Supervisor checkpoint at delegation end (cross-process rehydrate)
+- **`supervisor_states/<token>.json`** — when paused (expiring)
 
 ### When a gate blocks
 
@@ -115,7 +134,9 @@ If `spec_validation` or `clarity_check` finds a problem: `success: false`, `outc
 
 ## `answer_delegation_question`
 
-Unblock a paused delegation by providing a human answer to an escalated supervisor question. Call while `delegate_to_agent` is still running after it emits a `[gate]` notification in the host.
+Unblock a **concurrently running** delegation by answering an escalated Supervisor `confirm_ask` or gate. Use when `delegate_to_agent` is still in-flight and the host supports parallel tool calls.
+
+For **between-call** pause/resume (delegation already returned `needs_input`), prefer passing **`answer`** on the next `delegate_to_agent` instead.
 
 ### Parameters
 
@@ -300,12 +321,12 @@ Ranked list with `path`, `score`, `snippet` (summary excerpt). Requires `mcp-cod
 
 Cursor's agent reads `use-mcp-coder.mdc` (synced by `mcp-coder setup`) which instructs it when to call each tool. Key rules:
 
-- `delegate_to_agent` when the user asks to build / create / change files — with `spec_path` when a step spec exists.
-- `answer_delegation_question` when a `[gate]` notification arrives mid-delegation (concurrent tool call).
-- `get_server_status` to confirm it is talking to the latest local server code before starting work.
-- `inspect_context` before delegating when scope or read-deps are uncertain.
-- History tools (`list_delegations`, `get_file_history`, etc.) when the user asks "what changed?", "what did the last step do?", or to inform the next `context_summary`.
-- `rag_search` / `workspace_search` when the user asks about prior work, a topic, or "where is X implemented?" — or to sanity-check what the builder will retrieve.
+- `delegate_to_agent` when the user asks to build / change files — with `spec_path` when a step spec exists.
+- Pass **`answer`** on the next `delegate_to_agent` when the prior call paused with `needs_input`.
+- `answer_delegation_question` only when a delegation is **still running** and a `[gate]` notification arrives (concurrent tool support).
+- `get_server_status` before long work to confirm fresh server code.
+- `inspect_context` when scope or read-deps are uncertain.
+- History/search tools when informing the next `context_summary` or checking prior work.
 
 ---
 
@@ -313,6 +334,7 @@ Cursor's agent reads `use-mcp-coder.mdc` (synced by `mcp-coder setup`) which ins
 
 | Date | Change |
 |------|--------|
+| 2026-06-23 | Phase 12/13 — `answer` + `start_fresh` params; Supervisor lifecycle envelope; pause/resume docs; `project_state.json` / `agent_state.json` disk writes; expanded `model_roles`; clarify `answer_delegation_question` vs between-call resume |
 | 2026-06-20 | Added `answer_delegation_question` and `get_server_status` tools; added `model_policy` param to `delegate_to_agent`; updated pipeline description with all 7 phases; added pre-execution gates section; updated `model_roles` response to include all 5 roles; updated disk-writes list with supervisor trace events |
 | 2026-06-13 | `model_roles` tokens now live (not null); lean JSONL note; trace file in disk-writes list |
 | 2026-06-13 | `workspace_search`, `context_refs`; builder RAG wired; validation-block note |

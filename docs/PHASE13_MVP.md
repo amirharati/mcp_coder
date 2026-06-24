@@ -8,11 +8,11 @@
 
 # Phase 13 — Stabilize, dogfood, document
 
-**Status:** **Active** — opened 2026-06-21. Code/issue work complete (P13-005..P13-016, 2026-06-23); docs sync in progress (P13-002); test hardening (P13-003) and end-of-phase backlog review (P13-004) pending.
+**Status:** **Closed** — opened 2026-06-21, closed 2026-06-23. P13-001..P13-016 + P13-002 + P13-004 complete. P13-003 (integration test hardening) deferred → **BL-556**.
 **Purpose:** Short focus phase after Phase 12's infrastructure push. Prove the Phase 12 stack under real use (CLI + Cursor), analyze traces/logs for correct sequencing, consolidate docs to match shipped reality, harden tests from findings, and close a small set of low-hanging backlog items. **Not** a major feature phase — details and smarter behaviour come later (BL-543 B/C, BL-547, BL-546, BL-526, etc.).
 **PM board:** this file · **Issues:** [PHASE13_ISSUES.md](./PHASE13_ISSUES.md)
 **Phase 12 (closed):** [PHASE12_MVP.md](./PHASE12_MVP.md) · [PHASE12_ISSUES.md](./PHASE12_ISSUES.md)
-**Design notes:** [notes/supervisor-orchestration-layer.md](./notes/archive/supervisor-orchestration-layer.md) (needs Phase 12 reality sync in P13-002)
+**Design notes:** [notes/supervisor-agent-architecture.md](./notes/supervisor-agent-architecture.md) · [notes/system-design-overview.md](./notes/system-design-overview.md) (P13-002 consolidated; archived source in `notes/archive/`)
 
 ---
 
@@ -64,9 +64,9 @@ Those stay in backlog until Phase 13 exit review prioritizes them for a later ph
 | 10 | P13-014 | [P13-014](../tasks/P13-014-clarity-resume-and-unknown-cause-typing.md) | **done** | Clarity-block true resume lineage + unknown-failure typed-cause surfacing. Fixes P13-ISS-014/015 (initial pass). |
 | 11 | P13-015 | [P13-015](../tasks/P13-015-bundle-b-reviewer-and-classifier-tail-hardening.md) | **done** | Reviewer parser + classifier tail hardening (Bundle B). Addresses ISS-005/006 residuals. |
 | 12 | P13-016 | [P13-016](../tasks/P13-016-pause-resume-and-handoff-semantics.md) | **done** | Pause/resume + handoff semantics (Bundle C): clarity-block auto-resume + blocked preloop = pause not failure. Fixes P13-ISS-014/017 (verified dogfood `28fbe283`). |
-| 13 | P13-002 | *(pending)* | **pending** | Doc consolidation: architecture note, BACKLOG sync, archive stale notes |
-| 14 | P13-003 | *(pending)* | **pending** | Test hardening from P13-001 + P13-005..P13-016 findings |
-| 15 | P13-004 | *(pending)* | **pending** | **End-of-phase backlog review** (BL-549..BL-555 watch-for-evidence items added during P13-009..016) |
+| 13 | P13-002 | — | **done** | Doc consolidation: notes → refined design set; `docs/guide/` synced to Phase 12/13; T-07/T-08 stubs |
+| 14 | P13-003 | — | **deferred** | Test hardening → **BL-556** (dogfood integration tests not speculative) |
+| 15 | P13-004 | — | **done** | End-of-phase backlog review — BL-549..BL-555 indexed; ISS-006/015 → watch (BL-554/555) |
 
 **Gate:** P13-005..P13-016 complete (agent owns lifecycle + persists state + dogfood-verified pause/resume + reviewer/classifier hardened + typed-cause surfacing). P13-002..P13-004 scope is informed by P13-005..P13-016 results. Backlog watch items (BL-549..BL-555) tracked for evidence in future runs.
 
@@ -97,16 +97,16 @@ Those stay in backlog until Phase 13 exit review prioritizes them for a later ph
 
 ### P13-002 — Doc consolidation
 
-**Status:** `pending`
-**Goal:** Update docs to Phase 12 shipped reality. Freeze is already done on PHASE12_MVP; this milestone makes the **design notes** and navigation docs accurate.
+**Status:** `done` (2026-06-23)
+**Goal:** Update docs to Phase 12/13 shipped reality.
 
-**Scope (typical):**
-- Update [notes/supervisor-orchestration-layer.md](./notes/archive/supervisor-orchestration-layer.md) — shipped vs deferred (BL-543, BL-547, implicit resume, singleton, BL-545).
-- Sync [VISION_DOCS.md](./VISION_DOCS.md) / [PHASES.md](./PHASES.md) if drift found.
-- Archive or mark historical any superseded Phase 12 planning fragments.
-- Optional: `notes/archive/phase13-master-session-bootstrap.md` for next master session.
+**Shipped:**
+- Backlog split (`BACKLOG.md` index + `backlog/deferred.md` / `done.md` + LLM stewardship).
+- Notes consolidated into refined primary set (`supervisor-agent-architecture.md`, `system-design-overview.md`, six sibling notes); sources archived under `notes/archive/`.
+- `docs/guide/` synced: `how-it-works`, `terminology`, `code-structure`, `architecture/overview`, `reference/` (cli, mcp-tools), `env-vars`; tutorials T-02/T-06 updated; T-07/T-08 stubs added.
+- [VISION_DOCS.md](./VISION_DOCS.md) / [PHASES.md](./PHASES.md) drift corrected at phase close.
 
-**Depends on:** P13-001 findings (what to emphasize in docs).
+**Remainder (not blocking phase exit):** T-07/T-08 full tutorials → **BL-362**; architecture sub-pages → **BL-363**.
 
 ---
 
@@ -200,21 +200,16 @@ Three fixes from the P13-007 server dogfood (`d8842b66`), all concerning the del
 
 ### P13-003 — Test hardening
 
-**Status:** `pending`
+**Status:** `deferred` → **BL-556** (2026-06-23)
 **Goal:** Add integration tests for gaps found in P13-001 (not speculative tests).
 
-**Examples (only if dogfood exposes gap):**
-- Cross-delegation `project_state` round-trip in one process.
-- Pause → resume → executor turn with `supervisor_session_reset` on first resumed turn.
-- Reviewer finding visible in planner context on delegation N+1.
-
-**Depends on:** P13-001 § Results recommended tests list.
+**Deferred rationale:** Dogfood arc (P13-005..P13-016) added targeted unit/regression coverage per fix; broad multi-delegation integration tests (project_state round-trip, pause→resume→reset, reviewer→planner N+1) remain valuable but not required to close stabilization phase. Carry as BL-556.
 
 ---
 
 ### P13-004 — Low-hanging fixes + backlog review
 
-**Status:** `pending`
+**Status:** `done` (2026-06-23)
 **Goal:** Close 2–4 small backlog items **or** bugs from dogfood. End with a backlog review to manage size and reprioritize deferred Phase 12 vision items.
 
 **Candidate pool (not committed until P13-001):**
@@ -233,6 +228,7 @@ Three fixes from the P13-007 server dogfood (`d8842b66`), all concerning the del
 
 | Date | Event |
 |------|-------|
+| 2026-06-23 | **Phase 13 closed.** P13-002 done (notes + guide consolidation); P13-004 done (backlog review — BL-549..BL-555 indexed, watch items for ISS-006/015); P13-003 deferred → BL-556. All P13-ISS-* resolved or watch-tracked. |
 | 2026-06-23 | **Docs sync (P13-002 in progress)** — updated PHASES.md (Phase 11/12 rows marked complete, Phase 13 row added to arc table, Status line synced), VISION_DOCS.md (changelog entry for code/issue work completion + remaining milestones), PHASE13_MVP.md (worker order table extended with P13-009..P13-016, P13-001 status flipped to done, P13-004 scope clarified to backlog-review-only), notes/supervisor-orchestration-layer.md (Phase 12 shipped + Phase 13 dogfood verified). `guide/` folder intentionally untouched. |
 | 2026-06-23 | P13-016 implemented (Bundle C): fixed ISS-014 (clarity-block auto-resume with true lineage) and ISS-017 (blocked preloop = pause/handoff not failure). 5-delegation dogfood (session `28fbe283`) confirms both fixes end-to-end; 2 viewer rendering bugs also fixed. All P13 issues now resolved or fixed-pending-verify. |
 | 2026-06-23 | P13-015 implemented (Bundle B tail hardening): reviewer parser tolerance and classifier precision strengthened for ISS-005/006 residual cases; targeted suites pass (`16 + 38 + combined 85`). ISS-005/006 moved to fixed-pending-verify in issues log; ISS-017 remains the only open issue pre-dogfood. |

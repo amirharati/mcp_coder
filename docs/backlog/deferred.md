@@ -1602,18 +1602,22 @@ Phase 1 uses markdown `### Edit` / `### Read` only (P1-152).
 **Notes:** Today: fully automatic implement flow; `inspect-context` + `mode=review` cover manual pause. Later: small config flag for `review_before_implement: true` (always run `mode=review` then confirm before `implement`) or pipeline `pause_after: [file_picker]` style hook for step-by-step inspection without rewriting the whole pipeline. Phase 5+. From P4.5-ISS-004.
 
 
-### BL-362: T-06 + T-07 tutorials — delegation pipeline + end-to-end trace
+### BL-362: T-06 + T-07/T-08 tutorials — delegation pipeline + end-to-end trace + supervisor pause/resume
 
-**Status:** `deferred` — index/table entry (no standalone section in pre-split backlog).
+**Status:** `partial` — 2026-06-23. T-06 done; T-07 and T-08 stubs created with planned outlines. Full try-it walkthroughs remain.
 
-**Notes:** T-06 (delegation pipeline full tutorial) exists as skeleton; T-07 (pick a real delegation\_id and trace it JSONL → brief → Aider output) not started. Complete when time allows; not required for Phase 5. From Phase 4.5 deferred.
+**Related:** P13-002, BL-363
+
+**Notes:** T-06 (delegation pipeline) is complete. T-07 (end-to-end trace: JSONL → trace → history → spec report) and T-08 (supervisor pause/resume + project memory) have stub files under `docs/guide/tutorials/`. Complete when time allows.
 
 
 ### BL-363: Architecture sub-pages + guide depth
 
-**Status:** `deferred` — index/table entry (no standalone section in pre-split backlog).
+**Status:** `partial` — 2026-06-23. Major `docs/guide/` sync done (Phase 12/13): how-it-works, terminology, code-structure, architecture/overview, reference, env-vars, tutorials T-02/T-06. Four architecture sub-pages still pending.
 
-**Notes:** `overview.md` + light Phase 5 guide sync done (2026-06-13); four sub-pages pending (context-pipeline, storage-layout, per-role-models, reality-vs-spec). From Phase 4.5 deferred.
+**Related:** P13-002
+
+**Notes:** `overview.md` rewritten 2026-06-23 with lifecycle envelope, persistent state, pause/resume. Sub-pages pending: context-pipeline, storage-layout, per-role-models, reality-vs-spec. From Phase 4.5 deferred.
 
 
 ## Storage & lifecycle
@@ -1735,6 +1739,23 @@ Result: workspace has ONLY the contract-allowed changes
 
 
 ## Reliability & error handling
+
+### BL-556: Dogfood integration test hardening (P13-003 carry)
+
+**Status:** `deferred` — 2026-06-23. Deferred from Phase 13 close; not blocking stabilization exit.
+
+**Related:** P13-001, P13-003, PHASE13_MVP.md
+
+**Goal:** Add integration tests for gaps found in dogfood — not speculative tests.
+
+**Candidate scenarios (from P13-001 / P13-003):**
+- Cross-delegation `project_state` round-trip in one process.
+- Pause → resume → executor turn with `supervisor_session_reset` on first resumed turn.
+- Reviewer finding visible in planner context on delegation N+1.
+- Clarity-block auto-resume lineage (`resumed=true`, no synthetic loop-failure events).
+
+**Rationale:** P13-005..P13-016 added targeted unit/regression coverage per fix; broad multi-delegation integration tests remain valuable for regression safety but were out of scope for Phase 13 close.
+
 
 ### BL-309: Delegation hardening (job failure vs workflow failure)
 

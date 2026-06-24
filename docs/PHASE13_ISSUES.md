@@ -8,8 +8,8 @@
 
 # Phase 13 issues
 
-**Status:** **Active** — Phase 13 opened 2026-06-21.
-**Open:** _(none — all P13 issues resolved or fixed-pending-verify)_
+**Status:** **Frozen** — Phase 13 closed 2026-06-23. All issues resolved or watch-tracked in backlog (BL-554, BL-555).
+**Open:** _(none)_
 **Related PM board:** [PHASE13_MVP.md](./PHASE13_MVP.md)
 
 ---
@@ -372,6 +372,7 @@ After a clarity block in preloop, traces still include loop-failure events even 
 
 | Date | Event |
 |------|-------|
+| 2026-06-23 | **Phase 13 closed.** All P13-ISS-* resolved; ISS-006/015 remain watch-tracked via BL-554/BL-555 in backlog index. |
 | 2026-06-23 | Dogfood evidence review (session `28fbe283`): closed P13-ISS-005 to **fixed** (4 clean reviewer runs, zero noise). ISS-006 and ISS-015 remain fixed-pending-verify (no error/unknown failure in this run to confirm live) — moved to backlog watch-for-evidence (BL-554, BL-555) for future log analysis. |
 | 2026-06-23 | P13-016 implemented (Bundle C): fixed P13-ISS-014 (clarity-block auto-resume with true lineage) and P13-ISS-017 (blocked preloop = pause/handoff, not failure). 5-delegation dogfood (session `28fbe283`) confirms both fixes end-to-end. Both issues marked **fixed**. Also fixed 2 viewer rendering bugs found during dogfood (`_executor_ran` helper-call miscount + missing pause/resume/abandoned handlers). All P13 issues now resolved or fixed-pending-verify. |
 | 2026-06-23 | Clarified P13-ISS-017 contract: clarity-blocked preloop path must be represented as pause/back-to-host (`needs_input`) rather than synthetic loop failure, so viewer semantics match actual control flow. |

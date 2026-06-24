@@ -207,9 +207,21 @@ Key facts:
 - Error here → `status: error`; `files_changed` still computed from manifest diff.
 - Same-session caching: Aider `Coder` instance is reused across delegates in the same MCP session when workspace/model match → `executor_reused: true` in JSONL (faster; skips Aider init).
 
+**Lifecycle envelope** (Phase 13): the Supervisor wraps each delegation in a canonical trace envelope. You will see these in `traces/<id>.jsonl`:
+
+```
+delegation_lifecycle_start   {delegation_id, resumed, …}
+  phase_start / phase_end    per phase: preloop, loop, postloop
+  supervisor_turn_start/end  per executor turn
+  supervisor_decision        {action: done|rerun_aider|escalate_host, …}
+delegation_lifecycle_end     {outcome, …}
+```
+
+**Pause / resume**: if the Supervisor decides `escalate_host` (e.g. a question it cannot answer autonomously), the response returns `status: needs_input` and a `resume_token`. Pass the `answer` on the next `delegate_to_agent` call (or call `answer_delegation_question`). The delegation resumes at the same turn — completed preloop work and earlier turns are not replayed. See T-08 for a full walkthrough.
+
 ### 9 — `reviewer_pass` (default on)
 
-After the executor finishes each turn, a lightweight reviewer LLM scans `files_changed` against the spec's acceptance criteria. Result is advisory — appended to the spec report, not a blocker. Disable:
+After the executor finishes each turn, a lightweight reviewer LLM scans `files_changed` against the spec's acceptance criteria. Result is advisory — appended to the spec report, not a blocker. Reviewer findings are also written to `project_state.json` for the Supervisor to carry forward. Disable:
 
 ```yaml
 reviewer_pass: false

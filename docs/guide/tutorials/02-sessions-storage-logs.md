@@ -25,6 +25,9 @@ mcp-coder keeps state in two places:
 ~/.mcp-coder/                       ← outside the repo (machine-level)
   projects/<sha256>/                one dir per workspace, keyed by path hash
     project.json                    workspace path + timestamps
+    project_state.json              Supervisor cross-delegation memory (decisions, risks, hot areas)
+    agent_state.json                Supervisor checkpoint — rehydrates across process restarts
+    supervisor_states/              pause/resume payloads (expiring; one file per resume token)
     workspace_history.db            SQLite: file snapshots, diffs, checkpoints
     delegation_rag.db               SQLite FTS5: full-text search over delegations
     workspace_rag.db                SQLite FTS5: per-file summaries
@@ -35,6 +38,16 @@ mcp-coder keeps state in two places:
 ```
 
 The split is intentional: specs and config belong in your repo (versioned, shared). History and logs belong outside (large, machine-specific, no git noise).
+
+**Phase 12/13 additions** — three new files live alongside the DBs in `projects/<sha256>/`:
+
+| File | What it is |
+|------|-----------|
+| `project_state.json` | Supervisor's durable cross-delegation memory: decisions made, risk flags, hot areas, reviewer finding summaries. Written at every `finish()`. |
+| `agent_state.json` | Supervisor checkpoint written at the end of each delegation. If the MCP server restarts, the Supervisor rehydrates from this file — CLI and server resume to an equivalent state. |
+| `supervisor_states/<token>.json` | Expiring pause payload. Written when a delegation is paused (clarity block or `escalate_host`); consumed on resume. Expires after 24 h by default (`MCP_CODER_RESUME_TOKEN_TTL`). |
+
+These are distinct from `workspace_history.db` checkpoints (which are file-content snapshots, not Supervisor control state).
 
 ---
 
