@@ -415,6 +415,8 @@ class AiderEngine(ExecutionEngine):
                             delegation_id=delegation_id,
                             # P12-001: SupervisorAgent owns the supervisor_loop_* envelope.
                             emit_loop_events=False,
+                            target_files_dict=target_files_dict,
+                            project_state_summary=project_state_summary,
                         )
 
                     io, out_buffer = create_delegation_io(io_factory=_io_factory)

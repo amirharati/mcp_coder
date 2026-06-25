@@ -777,6 +777,18 @@ class SupervisorAgent:
             )
             text = tool_result.text
             duration_ms = int((time.perf_counter() - t0) * 1000)
+
+            # P14-002: emit llm_call trace so the ## Reviewer findings block
+            # (in the prompt) is captured in prompt_body.
+            self._emit_llm_call_trace(
+                prompt=prompt,
+                response=text,
+                model=model,
+                tokens=tool_result.tokens,
+                duration_ms=duration_ms,
+                call_index=ctx.turn_index,
+            )
+
             action = _parse_decision_action(text)
             if action is None:
                 fallback = self._policy_decide(ctx)
@@ -794,6 +806,24 @@ class SupervisorAgent:
         except Exception:
             return self._policy_decide(ctx)
 
+    def _render_reviewer_findings(self, checks: dict[str, Any] | None) -> str:
+        """Render a structured ## Reviewer findings block for the decision prompt.
+
+        P14-002: replaces the truncated ## Checks prose with bulleted findings
+        so the supervisor LLM can reason about individual issues.
+        """
+        c = checks or {}
+        outcome = c.get("outcome") or "none"
+        note = str(c.get("note") or "").strip()
+        if not note:
+            return f"## Reviewer findings\n\nOutcome: {outcome}\n\nFindings:\n(none)"
+        bullets = [line.strip() for line in note.splitlines() if line.strip()]
+        bullets = [b if b.startswith("- ") else f"- {b}" for b in bullets][:3]
+        body = "\n".join(bullets)
+        if len(body) > 300:
+            body = body[:297] + "..."
+        return f"## Reviewer findings\n\nOutcome: {outcome}\n\nFindings:\n{body}"
+
     def _build_decision_prompt(self, ctx: SupervisorTurnContext) -> str:
         result = ctx.result
         checks = ctx.checks or {}
@@ -808,7 +838,7 @@ class SupervisorAgent:
             f"## Turn\n{ctx.turn_index} of {ctx.max_turns} (remaining: {ctx.turns_remaining})",
             f"## Worker outcome\n{self._worker_outcome(result)}",
             f"## Files changed\n{files}",
-            f"## Checks\noutcome={checks.get('outcome') or 'none'}; note={str(checks.get('note') or '')[:300]}",
+            self._render_reviewer_findings(checks),
             f"## Prior decisions\n{prior_lines}",
             f"## Planner plan\n{(self._plan or '(none)')[:1200]}",
             f"## Worker output tail\n{tail}",
@@ -1220,6 +1250,58 @@ class SupervisorAgent:
             workspace = workspace_var.get()
             if not delegation_id or not session_dir:
                 return
+            append_trace_record(
+                record,
+                delegation_id=delegation_id,
+                session_dir=session_dir,
+                workspace=workspace or "",
+            )
+        except Exception:
+            pass  # observability must never break delegations
+
+    def _emit_llm_call_trace(
+        self,
+        *,
+        prompt: str,
+        response: str,
+        model: str,
+        tokens: dict[str, Any],
+        duration_ms: int,
+        call_index: int,
+    ) -> None:
+        """Emit llm_call(role=supervisor) trace for the inter-turn decision LLM call.
+
+        P14-002: ensures the ## Reviewer findings block (in the prompt) is
+        captured in prompt_body for dogfood trace analysis.
+        """
+        try:
+            from core.observability.context import (
+                delegation_id_var,
+                session_dir_var,
+                workspace_var,
+            )
+            from core.observability.trace import (
+                build_trace_record,
+                append_trace_record,
+            )
+            from core.config.role_models import ROLE_SUPERVISOR
+
+            delegation_id = self._delegation_id or delegation_id_var.get()
+            session_dir = session_dir_var.get()
+            workspace = workspace_var.get()
+            if not delegation_id or not session_dir:
+                return
+            record = build_trace_record(
+                delegation_id=delegation_id,
+                role=ROLE_SUPERVISOR,
+                model=model,
+                call_index=call_index,
+                duration_ms=duration_ms,
+                tokens=tokens,
+                verbosity="full",
+                prompt_text=prompt,
+                response_text=response,
+            )
             append_trace_record(
                 record,
                 delegation_id=delegation_id,

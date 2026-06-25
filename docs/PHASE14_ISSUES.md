@@ -42,6 +42,7 @@
 
 | Date | Event |
 |------|-------|
+| 2026-06-24 | **P14-002 worker returned** — no new P14-ISS filed. Plan was unambiguous and executed mechanically. Two slices shipped: autonomous `confirm_ask` interception (BL-547 v1) and reviewer findings injection (BL-543 C start). 17 new tests pass. One pre-existing unrelated failure noted by worker. |
 | 2026-06-24 | **P14-001 worker returned** — filed + fixed P14-ISS-008 (`_emit_llm_call_event` imported nonexistent `build_llm_call_record`; supervisor trace events silently never emitted for months; two-line fix, verified). Cross-linked BL-534/536. Notable for P14-004c: this is exactly the "best-effort writes that silently swallow errors" pattern the 4c cleanliness audit targets — the `except Exception: pass` in `_emit_llm_call_event` hid the ImportError. |
 | 2026-06-24 | **P14-003 worker returned** — filed P14-ISS-001..007. ISS-001 (executor trace omits reasoning_tokens, structural, BL-534); ISS-002 (helper silent omission, structural, BL-534); ISS-003 (`AIDER_MODEL` overrides `MCP_CODER_MODEL` footgun, BL-536); ISS-004 (drop_params passthrough — closed, no gap); ISS-005 (executor ignores temperature/top_p/max_tokens, actionable, BL-536); ISS-006 (inconsistent reasoning param shape, doc-only, BL-534); ISS-007 (helper path no timeout/retries, robustness, BL-534). All cross-linked to BL-534/536 at filing time per Q8 protocol. |
 | 2026-06-23 | Phase 14 issues log opened. |

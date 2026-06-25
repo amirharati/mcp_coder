@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import json
 from pathlib import Path
-from typing import Any
+from typing import Any, Literal
 
 from core.config.observability import (
     VERBOSITY_FULL,
@@ -19,6 +19,7 @@ TRACE_TYPE_PROXY_LLM_CALL = "proxy_llm_call"
 TRACE_TYPE_HEADER = "trace_header"
 TRACE_TYPE_TOOL_CALL = "tool_call"
 TRACE_TYPE_ACTION = "action"
+TRACE_TYPE_SUPERVISOR_INTERCEPT = "supervisor_intercept"
 
 # tool enum values (v1)
 TOOL_FILE_WRITE = "file_write"
@@ -567,6 +568,40 @@ def build_action_trace_record(
     }
     if detail is not None:
         record["detail"] = detail
+    return record
+
+
+def build_supervisor_intercept_record(
+    *,
+    delegation_id: str | None,
+    loop_id: str | None,
+    turn_index: int | None,
+    classification: Literal["in_spec_approve", "out_of_scope_deny", "ambiguous_escalate"],
+    decision: str,
+    reasoning: str,
+    question_preview: str,
+    mentioned_paths: list[str],
+    context_ref: dict[str, Any],
+    llm_used: bool,
+    duration_ms: int,
+    timestamp: str | None = None,
+) -> dict[str, Any]:
+    """Build a supervisor_intercept trace record (P14-002, BL-547 v1)."""
+    record: dict[str, Any] = {
+        "type": TRACE_TYPE_SUPERVISOR_INTERCEPT,
+        "delegation_id": delegation_id,
+        "loop_id": loop_id,
+        "turn_index": turn_index,
+        "classification": classification,
+        "decision": decision,
+        "reasoning": reasoning[:200],
+        "question_preview": question_preview[:120],
+        "mentioned_paths": mentioned_paths,
+        "context_ref": context_ref,
+        "llm_used": llm_used,
+        "duration_ms": duration_ms,
+        "timestamp": timestamp or utc_now_iso(),
+    }
     return record
 
 
