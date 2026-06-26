@@ -23,6 +23,17 @@ _gateway_call_active: contextvars.ContextVar[bool] = contextvars.ContextVar(
     "_gateway_call_active", default=False
 )
 
+
+def _resolve_int_env(name: str, *, default: int) -> int:
+    """Best-effort int env read; falls back to default on parse failure."""
+    raw = os.environ.get(name, "").strip()
+    if not raw:
+        return default
+    try:
+        return int(raw)
+    except ValueError:
+        return default
+
 _active_gateway: "LlmGateway | None" = None
 
 
@@ -179,6 +190,15 @@ class LlmGateway:
                         "drop_params": True,
                         "extra_headers": self._build_extra_headers(role=role),
                     }
+                    # P14-ISS-007: helper path had no explicit timeout or num_retries,
+                    # falling back to litellm/provider defaults (typically 10-60s, 0 retries).
+                    # Long reasoning models (GLM 4.6, DeepSeek-R1) can take 80-128s.
+                    helper_timeout = _resolve_int_env("MCP_CODER_HELPER_TIMEOUT", default=300)
+                    if helper_timeout and helper_timeout > 0:
+                        completion_kwargs["timeout"] = helper_timeout
+                    helper_retries = _resolve_int_env("MCP_CODER_HELPER_NUM_RETRIES", default=2)
+                    if helper_retries and helper_retries > 0:
+                        completion_kwargs["num_retries"] = helper_retries
                     if params.reasoning_effort:
                         completion_kwargs["reasoning_effort"] = params.reasoning_effort
                     elif params.thinking_budget:

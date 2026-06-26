@@ -17,7 +17,23 @@ def resolve_model_name() -> str:
     Model id passed to Aider's Model().
 
     Precedence: AIDER_MODEL → MCP_CODER_MODEL → DEFAULT_MODEL.
+
+    P14-ISS-003: warn when both AIDER_MODEL and MCP_CODER_MODEL are set and differ,
+    since AIDER_MODEL silently wins — a footgun for dogfood runs that set only
+    MCP_CODER_MODEL expecting it to apply to the executor.
     """
+    aider = os.environ.get("AIDER_MODEL", "").strip()
+    mcp = os.environ.get("MCP_CODER_MODEL", "").strip()
+    if aider and mcp and aider != mcp:
+        try:
+            from core.logging.server_log import server_log_warn
+
+            server_log_warn(
+                f"AIDER_MODEL={aider!r} overrides MCP_CODER_MODEL={mcp!r} for the executor; "
+                "set only one or make them match to avoid surprises."
+            )
+        except Exception:
+            pass
     for key in ("AIDER_MODEL", "MCP_CODER_MODEL"):
         value = os.environ.get(key, "").strip()
         if value:

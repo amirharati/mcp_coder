@@ -1471,6 +1471,137 @@ def _build_view_events(
                 is_divider=False,
             ))
 
+        elif t == "supervisor_intercept":
+            # P14-004: supervisor_intercept handler (BL-547 v1)
+            turn = line.get("turn_index")
+            n = turn if turn is not None else "?"
+            summary_parts = [p for p in [
+                line.get("classification"),
+                line.get("decision"),
+                f"{line.get('reasoning')[:60]}..." if line.get("reasoning") else None,
+                f"{line.get('duration_ms')}ms" if line.get("duration_ms") else None,
+            ] if p]
+            _emit(_view_event(
+                ev_id=f"supervisor.intercept.{n}",
+                name="supervisor.intercept",
+                direction="←",
+                scope="agent",
+                timestamp=line.get("timestamp"),
+                summary=" · ".join(summary_parts),
+                detail={
+                    "classification": line.get("classification"),
+                    "decision": line.get("decision"),
+                    "reasoning": line.get("reasoning"),
+                    "question_preview": line.get("question_preview"),
+                    "mentioned_paths": line.get("mentioned_paths"),
+                    "context_ref": line.get("context_ref"),
+                    "llm_used": line.get("llm_used"),
+                    "duration_ms": line.get("duration_ms"),
+                    "loop_id": line.get("loop_id"),
+                    "turn_index": line.get("turn_index"),
+                },
+                is_boundary=False,
+            ))
+
+        elif t == "supervisor_session_reset":
+            turn = line.get("turn_index")
+            n = turn if turn is not None else "?"
+            _emit(_view_event(
+                ev_id=f"supervisor.reset.{n}",
+                name="supervisor.session_reset",
+                direction="←",
+                scope="agent",
+                timestamp=line.get("timestamp"),
+                summary=f"reset @ turn {n} ({line.get('reason', '')})",
+                detail={
+                    "turn_index": line.get("turn_index"),
+                    "reason": line.get("reason"),
+                },
+                is_boundary=False,
+            ))
+
+        elif t == "agent_checkpoint_save_failed":
+            _emit(_view_event(
+                ev_id="agent.checkpoint.failed",
+                name="agent.checkpoint_save_failed",
+                direction="·",
+                scope="agent",
+                timestamp=line.get("timestamp"),
+                summary=line.get("error", "checkpoint save failed"),
+                detail={
+                    "error": line.get("error"),
+                },
+                is_boundary=False,
+            ))
+
+        elif t == "human_gate_opened":
+            turn = line.get("turn_index")
+            n = turn if turn is not None else "?"
+            _emit(_view_event(
+                ev_id=f"gate.opened.{n}",
+                name="human_gate_opened",
+                direction="←",
+                scope="host",
+                timestamp=line.get("timestamp"),
+                summary=f"gate opened ({line.get('risk_tier', '?')})",
+                detail={
+                    "risk_tier": line.get("risk_tier"),
+                    "question_preview": line.get("question_preview"),
+                },
+                is_boundary=False,
+            ))
+
+        elif t == "human_gate_answered":
+            turn = line.get("turn_index")
+            n = turn if turn is not None else "?"
+            _emit(_view_event(
+                ev_id=f"gate.answered.{n}",
+                name="human_gate_answered",
+                direction="→",
+                scope="host",
+                timestamp=line.get("timestamp"),
+                summary=f"gate answered ({line.get('answer_preview', 'yes')[:40]})",
+                detail={
+                    "risk_tier": line.get("risk_tier"),
+                    "question_preview": line.get("question_preview"),
+                    "answer_preview": line.get("answer_preview"),
+                },
+                is_boundary=False,
+            ))
+
+        elif t == "human_gate_timeout":
+            turn = line.get("turn_index")
+            n = turn if turn is not None else "?"
+            _emit(_view_event(
+                ev_id=f"gate.timeout.{n}",
+                name="human_gate_timeout",
+                direction="·",
+                scope="host",
+                timestamp=line.get("timestamp"),
+                summary=f"gate timeout ({line.get('timeout_s', '?')}s)",
+                detail={
+                    "risk_tier": line.get("risk_tier"),
+                    "question_preview": line.get("question_preview"),
+                    "timeout_s": line.get("timeout_s"),
+                },
+                is_boundary=False,
+            ))
+
+        elif t == "supervisor_tool_call":
+            _emit(_view_event(
+                ev_id=f"supervisor.tool_call.{line.get('turn_index','?')}",
+                name="supervisor.tool_call",
+                direction="·",
+                scope="agent",
+                timestamp=line.get("timestamp"),
+                summary=line.get("tool", "tool_call") or "tool_call",
+                detail={
+                    "tool": line.get("tool"),
+                    "delegation_id": line.get("delegation_id"),
+                },
+                is_boundary=False,
+            ))
+
         elif t == "tool_call":
             tool = line.get("tool") or ""
             step = line.get("step_index")
