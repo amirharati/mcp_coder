@@ -8,7 +8,7 @@
 
 # Phase 14 issues
 
-**Status:** **Active** — Phase 14 opened 2026-06-23.
+**Status:** **Frozen** — Phase 14 closed 2026-06-25.
 **Open:** none (all 11 closed as of 2026-06-25)
 **Closed:** P14-ISS-001 through P14-ISS-011
 **Related PM board:** [PHASE14_MVP.md](./PHASE14_MVP.md)

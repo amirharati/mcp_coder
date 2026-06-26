@@ -40,6 +40,10 @@ Use this page so **main vision** ([IDEA.md](./IDEA.md)) is not lost when editing
 | **2 — P12 gaps** | [PHASE12_ISSUES.md](./PHASE12_ISSUES.md) | Phase 12 implementation issues | **Frozen** — all closed; partials → backlog |
 | **2 — Phase 13 PM** | [PHASE13_MVP.md](./PHASE13_MVP.md) | Stabilize + dogfood + document + backlog review | **Frozen** — closed 2026-06-23 |
 | **2 — P13 gaps** | [PHASE13_ISSUES.md](./PHASE13_ISSUES.md) | Phase 13 dogfood + cleanup issues | **Frozen** — all resolved; ISS-006/015 watch → BL-554/555 |
+| **2 — Phase 14 PM** | [PHASE14_MVP.md](./PHASE14_MVP.md) | Supervisor intelligence + logging depth | **Frozen** — closed 2026-06-25 |
+| **2 — P14 gaps** | [PHASE14_ISSUES.md](./PHASE14_ISSUES.md) | Phase 14 implementation issues | **Frozen** — all 11 closed; partials → BL-557/558/559 |
+| **2 — Phase 15 PM** | [PHASE15_MVP.md](./PHASE15_MVP.md) | Minimal viable intelligence — supervisor reasoning, planner agentic loop, executor prompt enrichment | **Active** — opened 2026-06-25 |
+| **2 — P15 gaps** | [PHASE15_ISSUES.md](./PHASE15_ISSUES.md) | Phase 15 implementation issues | Active |
 | **2 — Deferred** | [BACKLOG.md](./BACKLOG.md) | BL-* items, priorities, post–P1/P2 focus | Add/defer with user; do not delete rows silently |
 | **2 — P1 gaps** | [PHASE1_ISSUES.md](./PHASE1_ISSUES.md) | Issues from P1 — **frozen / historical at P1-199** | Read-only; new gaps → BACKLOG |
 | **2 — P2 gaps** | [PHASE2_ISSUES.md](./PHASE2_ISSUES.md) | Issues from Phase 2 — **frozen at P2-499** | Read-only; carried → PHASE3_ISSUES |
@@ -61,6 +65,8 @@ Use this page so **main vision** ([IDEA.md](./IDEA.md)) is not lost when editing
 | **3 — Handoff** | [notes/archive/phase9-master-session-bootstrap.md](./notes/archive/phase9-master-session-bootstrap.md) | Phase 9 planning decisions + proxy architecture | Frozen at Phase 9 close 2026-06-17 |
 | **3 — Handoff** | [notes/archive/phase10-master-session-bootstrap.md](./notes/archive/phase10-master-session-bootstrap.md) | Phase 10 planning — trust/visibility/executor capability cluster | **Frozen** — closed 2026-06-18 |
 | **3 — Handoff** | [notes/archive/phase11-master-session-bootstrap.md](./notes/archive/phase11-master-session-bootstrap.md) | Phase 11 planning — supervised execution, multi-LLM pattern, cross-arch decisions (D-ARCH-1..6) | **Frozen** — Phase 11 closed 2026-06-20 |
+| **3 — Handoff** | [notes/archive/phase14-master-session-bootstrap.md](./notes/archive/phase14-master-session-bootstrap.md) | Phase 14 master session prompt + summary — supervisor intelligence + logging depth | **Frozen** — Phase 14 closed 2026-06-25 |
+| **3 — Handoff** | [notes/archive/phase15-master-session-bootstrap.md](./notes/archive/phase15-master-session-bootstrap.md) | Phase 15 master session prompt + summary — minimal viable intelligence (prompt management + supervisor reasoning + planner loop) | **Active** — Phase 15 opened 2026-06-26 |
 | **3 — Design entry** | [notes/system-design-overview.md](./notes/system-design-overview.md) | Refined design map — how notes fit together; vision stays in IDEA | Update when primary note set or system relationships change |
 | **3 — Architecture** | [notes/supervisor-agent-architecture.md](./notes/supervisor-agent-architecture.md) | Supervisor agent architecture — persistent project agent, project memory, pause/resume, subagent/tool context control, shipped vs deferred | **Active** — Phase 12 shipped + Phase 13 dogfood verified 2026-06-23 |
 | **3 — Exit** | [notes/archive/phase2-exit-validation.md](./notes/archive/phase2-exit-validation.md) | P2-499 dogfood sign-off | Frozen at exit |
@@ -108,6 +114,8 @@ Use this page so **main vision** ([IDEA.md](./IDEA.md)) is not lost when editing
 - **Phase 11 (closed 2026-06-20):** Supervised execution — SupervisedIO, clarity pass, reviewer, model policy, planner rename, SupervisorAgent loop. See [PHASE11_MVP.md](./PHASE11_MVP.md) (frozen).
 - **Phase 12 (closed 2026-06-21):** Supervisor orchestration infrastructure — project state, tool runner, pause/resume, reviewer loop, planner pre-injection, executor reset control plane. See [PHASE12_MVP.md](./PHASE12_MVP.md) (frozen).
 - **Phase 13 (closed 2026-06-23):** Stabilize + dogfood + document + backlog review. P13-001..P13-016 + P13-002 + P13-004 shipped; P13-003 → BL-556. See [PHASE13_MVP.md](./PHASE13_MVP.md) (frozen).
+- **Phase 14 (closed 2026-06-25):** Supervisor intelligence + logging depth — context window (P14-001), control loop + autonomous interception (P14-002), helper LLM/config audit (P14-003 3b+3c), logging depth + viewer parity (P14-004); 11 ISS items closed; BL-557 executor reasoning overlay. See [PHASE14_MVP.md](./PHASE14_MVP.md) (frozen).
+- **Phase 15 (active 2026-06-25):** Minimal viable intelligence — supervisor reasoning (make `_llm_decide` default + inject diff), planner agentic loop (reuse `SupervisorToolRunner`), executor prompt enrichment. Infra-first: reuse existing tools, no new ones. See [PHASE15_MVP.md](./PHASE15_MVP.md).
 - **Phase 13+:** Full Planner-as-real-agent (BL-525 complete), interception (BL-547), context lifecycle B/C (BL-543), CTO/Architect (BL-526), executor adaptation (BL-546), full executor-pull sidecar (BL-354 full), AI-suggested params (BL-513), dynamic escalation (BL-514), out-of-process backend proxy, multi-host, ensemble (BL-007).
 - **Executor:** Aider-first; OpenCode/other hosts very low priority.
 
@@ -115,6 +123,8 @@ Use this page so **main vision** ([IDEA.md](./IDEA.md)) is not lost when editing
 
 | Date | Change |
 |------|--------|
+| 2026-06-25 | **Phase 14 closed — frozen.** All 4 milestones done (P14-001, P14-002, P14-003 3b+3c, P14-004); all 11 P14-ISS items closed; all 4 North-star acceptance criteria met. Phase 15 opened: minimal viable intelligence, infra-first (reuse existing `SupervisorToolRunner` tools + `build_delegation_diff`, no new tools). |
+| 2026-06-25 | **Phase 15 opened** — PHASE15_MVP + PHASE15_ISSUES created. Three milestones: P15-000 (executor prompt enrichment), P15-001 (supervisor intelligence v1 — make `_llm_decide` default + inject diff + builder brief), P15-002 (planner agentic loop v1 — reuse `SupervisorToolRunner`). Infra-first principle: existing tools (`read_file`, `get_project_state`, `get_delegation_history`, `get_reviewer_findings`) are already registered; the work is wiring, not building. |
 | 2026-06-23 | **Phase 13 closed** — P13-002 (notes + guide consolidation), P13-004 (backlog review); P13-003 → BL-556; PHASE13_* frozen. |
 | 2026-06-23 | **Notes archive** — `docs/notes/archive/` created; phase3–11 `*-master-session-bootstrap.md` moved; links updated in PHASE*_MVP and doc map. |
 | 2026-06-23 | **Phase 13 code/issue work complete** — P13-001..P13-008 + P13-009..P13-016 shipped; lifecycle envelope unified, pause/resume verified in dogfood (session `28fbe283`), reviewer/classifier tail-hardened, typed-cause surfacing; ISS-001/002/003/005/011/012/014/016/017 marked fixed; ISS-006/015 moved to watch-for-evidence backlog (BL-554/555); docs sync in progress. Remaining P13 milestones: P13-002 (docs), P13-003 (tests), P13-004 (backlog review). |
