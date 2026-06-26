@@ -333,16 +333,11 @@ def policy_applied(cp: CallParams, role: str) -> dict:
     if cp.extra_params:
         out["extra_params"] = cp.extra_params
     if role == ROLE_EXECUTOR:
-        ignored: list[str] = []
-        for name in ("temperature", "top_p", "max_tokens"):
-            if getattr(cp, name) is not None:
-                ignored.append(name)
-        if ignored:
-            out["ignored"] = ignored
-            out["note"] = (
-                "Executor backend ignores these fields; use "
-                "MCP_CODER_EXECUTOR_EXTRA_PARAMS for provider-native knobs."
-            )
+        # P14-ISS-005: temperature/top_p/max_tokens are now routed to the
+        # executor via model.extra_params (see _apply_executor_model_params),
+        # so they are NOT ignored. EXTRA_PARAMS still takes precedence per-key.
+        # Keep this block as a no-op marker of the resolution for trace readers.
+        pass
     if cp.sources:
         out["sources"] = dict(cp.sources)
     return out

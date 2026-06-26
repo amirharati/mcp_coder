@@ -132,15 +132,17 @@ def test_all_roles_resolvable(monkeypatch):
         assert cp.model, f"role {role} resolved empty model"
 
 
-def test_policy_applied_executor_ignored_fields_and_note():
+def test_policy_applied_executor_no_longer_ignores_temp_top_p_max_tokens():
+    # P14-ISS-005: these are now routed via model.extra_params by
+    # _apply_executor_model_params, so policy_applied must NOT mark them ignored.
     cp = CallParams(temperature=0.5, top_p=0.9, max_tokens=1024)
     out = policy_applied(cp, ROLE_EXECUTOR)
-    assert out["ignored"] == ["max_tokens", "temperature", "top_p"] or out["ignored"] == [
-        "temperature",
-        "top_p",
-        "max_tokens",
-    ]
-    assert "MCP_CODER_EXECUTOR_EXTRA_PARAMS" in out["note"]
+    assert "ignored" not in out
+    assert "note" not in out
+    # The values are still surfaced as effective params.
+    assert out.get("temperature") == 0.5
+    assert out.get("top_p") == 0.9
+    assert out.get("max_tokens") == 1024
 
 
 def test_policy_applied_non_executor_no_ignored():

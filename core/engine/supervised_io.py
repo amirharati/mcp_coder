@@ -286,6 +286,16 @@ class SupervisedIO:
         self.supervisor_decisions_count = 0
         self.supervisor_aborts_count = 0
         self.num_error_outputs = 0
+        # P14-ISS-011: per-loop dedupe set for supervisor_turn_decision trace events.
+        # The supervisor_decisions list + count above are the source of truth for
+        # "how many turns happened"; only the trace event stream is deduped.
+        self._emitted_decision_hashes: set[str] = set()
+        self._suppressed_duplicate_decisions: int = 0
+
+    @property
+    def suppressed_duplicate_decisions(self) -> int:
+        """Number of duplicate supervisor_turn_decision trace events suppressed (P14-ISS-011)."""
+        return self._suppressed_duplicate_decisions
 
     def __getattr__(self, name: str) -> Any:
         return getattr(self._inner, name)
@@ -520,7 +530,11 @@ class SupervisedIO:
         if self._on_decision is not None:
             self._on_decision(row)
         # P11-ISS-016: structured turn-level decision event.
+        # P14-ISS-011: dedupe identical trace events within a loop. The
+        # supervisor_decisions list + count above are the source of truth for
+        # "how many turns happened" — only the trace event stream is deduped.
         try:
+            from core.context.summary import sha256_hex
             from core.observability.context import (
                 delegation_id_var,
                 session_dir_var,
@@ -533,25 +547,32 @@ class SupervisedIO:
             session_dir = session_dir_var.get()
             workspace = workspace_var.get()
             if delegation_id and session_dir:
-                turn_rec = {
-                    "type": "supervisor_turn_decision",
-                    "delegation_id": delegation_id,
-                    "loop_id": self._loop_id,
-                    "turn_index": self.supervisor_decisions_count,
-                    "action": decision_name,
-                    "reason": reasoning[:200],
-                    "risk_level": risk_tier,
-                    "question_present": bool(question.strip()),
-                    "llm_used": decision_name not in ("approve",),
-                    "duration_ms": duration_ms,
-                    "timestamp": utc_now_iso(),
-                }
-                append_trace_record(
-                    turn_rec,
-                    delegation_id=delegation_id,
-                    session_dir=session_dir,
-                    workspace=workspace or "",
+                dedupe_key = sha256_hex(
+                    f"{decision_name}|{reasoning[:200]}|{risk_tier}|{bool(question.strip())}"
                 )
+                if dedupe_key in self._emitted_decision_hashes:
+                    self._suppressed_duplicate_decisions += 1
+                else:
+                    self._emitted_decision_hashes.add(dedupe_key)
+                    turn_rec = {
+                        "type": "supervisor_turn_decision",
+                        "delegation_id": delegation_id,
+                        "loop_id": self._loop_id,
+                        "turn_index": self.supervisor_decisions_count,
+                        "action": decision_name,
+                        "reason": reasoning[:200],
+                        "risk_level": risk_tier,
+                        "question_present": bool(question.strip()),
+                        "llm_used": decision_name not in ("approve",),
+                        "duration_ms": duration_ms,
+                        "timestamp": utc_now_iso(),
+                    }
+                    append_trace_record(
+                        turn_rec,
+                        delegation_id=delegation_id,
+                        session_dir=session_dir,
+                        workspace=workspace or "",
+                    )
         except Exception:
             pass
 

@@ -245,10 +245,13 @@ def build_trace_record(
             "output": tokens.get("output"),
             "total": tokens.get("total"),
         }
+        # P14-ISS-002: always emit reasoning_tokens (null when the model returned
+        # none) so consumers can distinguish "field absent = capture broken" from
+        # "field null = model chose not to think". Do not add a reason string in v1.
         reasoning_tokens = tokens.get("reasoning_tokens")
         cached_tokens = tokens.get("cached_tokens")
+        token_payload["reasoning_tokens"] = reasoning_tokens
         if reasoning_tokens is not None:
-            token_payload["reasoning_tokens"] = reasoning_tokens
             # Keep a top-level alias for quick log scans.
             record["thinking_tokens"] = reasoning_tokens
         if cached_tokens is not None:
@@ -487,11 +490,24 @@ def build_executor_llm_trace_record(
         record["duration_ms"] = duration_ms
 
     if tokens:
-        record["tokens"] = {
+        # P14-ISS-001: mirror helper path (build_trace_record) so the executor
+        # summary also carries reasoning/cached token counts and the top-level
+        # thinking_tokens alias. Without this the executor role silently dropped
+        # reasoning_tokens even though backend_llm_call captured them.
+        token_payload = {
             "input": tokens.get("input"),
             "output": tokens.get("output"),
             "total": tokens.get("total"),
         }
+        reasoning_tokens = tokens.get("reasoning_tokens")
+        cached_tokens = tokens.get("cached_tokens")
+        if reasoning_tokens is not None:
+            token_payload["reasoning_tokens"] = reasoning_tokens
+            # Keep a top-level alias for quick log scans (parity with helper path).
+            record["thinking_tokens"] = reasoning_tokens
+        if cached_tokens is not None:
+            token_payload["cached_tokens"] = cached_tokens
+        record["tokens"] = token_payload
 
     if prompt_text:
         record["prompt_hash"] = sha256_hex(prompt_text)

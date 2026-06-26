@@ -515,8 +515,10 @@ def test_trace_non_reasoning_model_omits_reasoning_fields_cleanly(
     assert calls
     call = calls[0]
     tokens = call.get("tokens") or {}
-    # reasoning_tokens should be absent (None is not written by build_trace_record).
-    assert "reasoning_tokens" not in tokens
+    # P14-ISS-002: reasoning_tokens is now always emitted (null when the model
+    # returned none) so consumers can distinguish "field absent = capture broken"
+    # from "field null = model chose not to think".
+    assert tokens.get("reasoning_tokens") is None
     assert "reasoning_body" not in call
     assert "thinking_tokens" not in call
 

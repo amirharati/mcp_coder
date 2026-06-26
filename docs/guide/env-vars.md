@@ -97,6 +97,8 @@ These tune the Aider executor call. Unset = use Aider's own defaults.
 | `MCP_CODER_STALL_AUTO_RETRY` | `0` | `1` = auto-retry once when Aider stalls requesting files (see below) |
 | `MCP_CODER_EXECUTOR_PULL_HINT` | `1` | Inject executor-pull hint into prompt so Aider knows it can fetch context |
 
+> **Executor `temperature`/`top_p`/`max_tokens` (P14-ISS-005, fixed 2026-06-25):** these are now routed to the Aider executor via `model.extra_params` as top-level litellm kwargs (Aider's `Model` has no setters for them, but `extra_params` is merged into the litellm completion call). `MCP_CODER_EXECUTOR_EXTRA_PARAMS` takes precedence per-key (an explicit key in `EXTRA_PARAMS` is not overwritten). Previously these were silently ignored with a trace note — that note has been removed.
+
 ### Stall auto-retry (`MCP_CODER_STALL_AUTO_RETRY`)
 
 **Off (default):** if Aider output matches a file-request stall, `delegate_to_agent` returns `needs_input` with `files_requested[]` so the host can add paths and re-call.

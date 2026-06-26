@@ -139,6 +139,21 @@ def _apply_executor_model_params(model: Any, params: Any) -> None:
         except Exception:
             pass
 
+    # P14-ISS-005: route temperature/top_p/max_tokens into model.extra_params
+    # as top-level litellm kwargs. Aider's Model has no setters for these, but
+    # extra_params is merged into the litellm completion call, so top-level keys
+    # reach the provider. EXTRA_PARAMS (escape hatch) takes precedence: only set
+    # a key when the user has not already supplied it via extra_params.
+    try:
+        if not model.extra_params:
+            model.extra_params = {}
+        for _name in ("temperature", "top_p", "max_tokens"):
+            _value = getattr(params, _name, None)
+            if _value is not None and _name not in model.extra_params:
+                model.extra_params[_name] = _value
+    except Exception:
+        pass
+
     if params.weak_model:
         try:
             model.get_weak_model(params.weak_model)
@@ -588,6 +603,27 @@ class AiderEngine(ExecutionEngine):
                 coder_tokens=_extract_tokens(coder, partial),
                 output=output,
             )
+            # P14-ISS-001 (BL-557): _extract_tokens reads Aider's Coder attrs which
+            # don't surface reasoning_tokens, so the executor llm_call trace record
+            # dropped thinking counts even though backend_llm_call captured them.
+            # Overlay from the litellm callback accumulator, which sees the provider
+            # usage block directly and already holds per-(delegation, executor) totals.
+            if delegation_id:
+                try:
+                    from core.observability.litellm_callback import (
+                        get_accumulated_usage,
+                    )
+
+                    _acc = get_accumulated_usage(delegation_id, ROLE_EXECUTOR)
+                    if _acc:
+                        _rt = _acc.get("reasoning_tokens")
+                        if _rt is not None:
+                            tokens["reasoning_tokens"] = _rt
+                        _ct = _acc.get("cached_tokens")
+                        if _ct is not None:
+                            tokens["cached_tokens"] = _ct
+                except Exception:
+                    pass
             supervisor_meta = _supervisor_metadata_from_io(io)
             if supervisor_meta:
                 tokens.update(supervisor_meta)

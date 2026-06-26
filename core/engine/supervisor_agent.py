@@ -559,7 +559,16 @@ class SupervisorAgent:
                 if self._reviewer_fn is not None:
                     try:
                         checks = self._reviewer_fn(turn_index, result)
-                    except Exception:
+                    except Exception as exc:
+                        # P14-ISS-010: keep the swallow (checks=None stays) but
+                        # make reviewer failures visible — otherwise a broken
+                        # reviewer looks identical to "no findings".
+                        logger.warning(
+                            "reviewer call failed, checks=None: %s", exc, exc_info=True
+                        )
+                        from core.engine._swallow_counts import bump_supervisor_swallow_count
+
+                        bump_supervisor_swallow_count("reviewer_call")
                         checks = None
 
                 self._emit_turn_end(
@@ -803,7 +812,19 @@ class SupervisorAgent:
                 tokens=tool_result.tokens,
                 duration_ms=duration_ms,
             )
-        except Exception:
+        except Exception as exc:
+            # P14-ISS-010: keep the graceful-degradation fallback to _policy_decide
+            # (intentional — observability/LLM must not break the loop) but log a
+            # warning so model/parse errors don't silently masquerade as "the LLM
+            # chose to defer to policy".
+            logger.warning(
+                "supervisor _llm_decide failed, falling back to policy: %s",
+                exc,
+                exc_info=True,
+            )
+            from core.engine._swallow_counts import bump_supervisor_swallow_count
+
+            bump_supervisor_swallow_count("_llm_decide")
             return self._policy_decide(ctx)
 
     def _render_reviewer_findings(self, checks: dict[str, Any] | None) -> str:

@@ -472,6 +472,48 @@ def litellm_success_handler(
         pass
 
 
+def _emit_helper_companion_events(
+    *,
+    delegation_id: str,
+    role: str,
+    call_index: int,
+    model_str: str | None,
+    usage: dict[str, int | None] | None,
+    duration_ms: int,
+    kwargs: dict[str, Any],
+    response_obj: Any,
+) -> None:
+    """P14-ISS-009: emit the missing backend_llm_call for helper roles.
+
+    Helpers already get ``llm_call`` (from ``_append_trace_for_completion``) and
+    ``proxy_llm_call`` with ``attribution_source="headers"`` (from the local
+    proxy HTTP hop that litellm routes through). The missing piece for
+    symmetric capture with the executor was ``backend_llm_call`` — this emits
+    it with ``call_type="owned_helper"`` and ``(role, call_index)`` so the
+    viewer can join on the same key as the executor triple.
+
+    Note: this does NOT emit a ``proxy_llm_call`` — the local proxy already
+    emits one with ``attribution_source="headers"`` for helper calls, and a
+    second one would duplicate. If a helper is ever routed outside the local
+    proxy (e.g. proxy disabled), re-add a gateway-attributed proxy event here.
+    """
+    from core.observability import get_observability
+
+    prompt_text = _extract_prompt_text(kwargs)
+    response_text, _reasoning_text = _extract_response_parts(response_obj)
+
+    get_observability().record_backend_llm_call(
+        call_type="owned_helper",
+        model=model_str,
+        role=role,
+        call_index=call_index,
+        usage=usage,
+        duration_ms=duration_ms,
+        prompt_text=prompt_text,
+        response_text=response_text,
+    )
+
+
 def record_owned_completion(
     *,
     role: str,
@@ -528,6 +570,24 @@ def record_owned_completion(
                 model=model_str,
                 duration_ms=duration_ms,
                 usage=usage,
+                kwargs=kwargs,
+                response_obj=response_obj,
+            )
+        except Exception:
+            pass
+
+        # P14-ISS-009: emit the helper event triple (backend_llm_call +
+        # proxy_llm_call) alongside llm_call so helpers and executor produce
+        # symmetric capture. The call path stays (no local proxy HTTP hop);
+        # these are metadata-only trace events with attribution_source="gateway".
+        try:
+            _emit_helper_companion_events(
+                delegation_id=delegation_id,
+                role=role,
+                call_index=call_index,
+                model_str=model_str,
+                usage=usage,
+                duration_ms=duration_ms,
                 kwargs=kwargs,
                 response_obj=response_obj,
             )

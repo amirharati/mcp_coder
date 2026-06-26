@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import logging
 import re
 import time
 from collections.abc import Callable
@@ -12,6 +13,8 @@ from typing import Any, Literal
 from core.config.providers import apply_provider_env
 from core.config.models import provider_hint_for_model
 from core.config.role_models import ROLE_SUPERVISOR, resolve_role_model_name
+
+logger = logging.getLogger(__name__)
 
 DecisionKind = Literal["approve", "deny", "abort", "escalate"]
 
@@ -327,8 +330,16 @@ class DelegationSupervisor:
                 session_dir=session_dir,
                 workspace=workspace or "",
             )
-        except Exception:
-            pass  # observability must never break completions
+        except Exception as exc:
+            # P14-ISS-010: keep the swallow (observability must never break
+            # completions) but make it visible. This is the P14-ISS-008 site —
+            # a warning here would have surfaced the ImportError immediately.
+            logger.warning(
+                "supervisor _emit_llm_call_event failed: %s", exc, exc_info=True
+            )
+            from core.engine._swallow_counts import bump_supervisor_swallow_count
+
+            bump_supervisor_swallow_count("_emit_llm_call_event")
 
     def _accumulate_tokens(self, tokens: dict[str, Any]) -> None:
         for key in ("input", "output", "total"):

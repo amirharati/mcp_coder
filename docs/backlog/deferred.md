@@ -2191,3 +2191,25 @@ Delegation `58bb9846` failed; host recovered silently with duplicate spec tree.
 
 ---
 
+
+### BL-558: Supervisor swallow-counter health endpoint
+
+**Status:** `deferred` — 2026-06-25. P14-ISS-010 follow-up; v1 left counters exposed but unread.
+
+**Context:** P14-ISS-010 (closed by P14-ISS-FIX worker 2026-06-25) added `core/engine/_swallow_counts.py` with module-level `dict[str, int]` counters + `bump_supervisor_swallow_count(site)` / `get_supervisor_swallow_counts()` / `reset_supervisor_swallow_counts()`. The three supervisor swallow sites (`_emit_llm_call_event`, `_llm_decide`, `reviewer_call`) now log `warning` + increment the counter; observability must never break completions, so the swallow semantics are preserved.
+
+**Gap:** counters are exposed but not surfaced anywhere. A future health check should snapshot + reset on delegation boundaries so a dashboard can show "N swallowed errors in the last delegation". Contextvar-scoped counters (per-delegation) is the v2 if module-level proves too coarse.
+
+**Related:** P14-ISS-010, BL-546.
+
+---
+
+### BL-559: Helper `proxy_llm_call` full bodies
+
+**Status:** `deferred` — 2026-06-25. P14-ISS-009 follow-up; depends on viewer feedback from Phase 14 dogfood.
+
+**Context:** P14-ISS-009 (closed by P14-ISS-FIX worker 2026-06-25) added `backend_llm_call` (`call_type="owned_helper"`) + `proxy_llm_call` (`attribution_source="gateway"`, metadata-only) alongside the existing `llm_call` for helper roles — so helpers and executor now produce symmetric event triples. v1 intentionally omits `raw_request`/`raw_response` bodies to avoid trace bloat (helpers don't go through the local proxy; bodies would come from the owned-completion response object, already in `llm_call.prompt_body`/`response_body`).
+
+**Gap:** if the viewer's helper-triple join needs bodies (e.g. to show the same prompt/response diff view as executor), add them. Decide after the Phase 14 dogfood viewer pass.
+
+**Related:** P14-ISS-009, BL-534.
