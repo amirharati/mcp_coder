@@ -247,6 +247,15 @@ def main() -> None:
         help="maintenance subcommand: stats",
     )
 
+    cost_p = sub.add_parser(
+        "cost",
+        help="Show per-project cost report from delegation logs",
+    )
+    cost_p.add_argument("--workspace", "-w", default=None, help="Repo root (default: cwd)")
+    cost_p.add_argument("--project", "-p", default=None, dest="project_key", help="Filter to project_key")
+    cost_p.add_argument("--limit", "-n", type=int, default=None, help="Max delegations to read")
+    cost_p.add_argument("--json", action="store_true", dest="json_output", help="Raw JSON output")
+
     sub.add_parser(
         "ps",
         help="List running mcp-coder stdio server processes",
@@ -385,6 +394,21 @@ def main() -> None:
         if maintenance_argv and maintenance_argv[0] == "--":
             maintenance_argv = maintenance_argv[1:]
         raise SystemExit(main_maintenance(maintenance_argv))
+
+    if args.command == "cost":
+        _bootstrap_cli_env()
+        from core.cli.cost import main_cost
+
+        cost_argv: list[str] = []
+        if args.workspace:
+            cost_argv.extend(["--workspace", args.workspace])
+        if args.project_key:
+            cost_argv.extend(["--project", args.project_key])
+        if args.limit is not None:
+            cost_argv.extend(["--limit", str(args.limit)])
+        if args.json_output:
+            cost_argv.append("--json")
+        raise SystemExit(main_cost(cost_argv))
 
     if args.command == "ps":
         from core.cli.mcp_process import cmd_ps

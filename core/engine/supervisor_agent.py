@@ -29,6 +29,7 @@ from collections.abc import Callable
 from dataclasses import asdict, dataclass, field
 from typing import Any, Literal, cast
 
+from core.context.role_rules import build_role_rules
 from core.engine.base import ExecutionResult
 from core.state.supervisor_state import SupervisorState
 
@@ -116,19 +117,6 @@ class SupervisorAgentResult:
 DecisionFn = Callable[[SupervisorTurnContext], SupervisorTurnDecision]
 
 
-_DECISION_PREAMBLE = """## Role: delegation supervisor (inter-turn)
-
-A coding worker (Aider) just finished one turn of an MCP delegation. Decide the next step.
-
-Rules:
-- Begin IMMEDIATELY with exactly one line: `## Action: RERUN_AIDER|DONE|ESCALATE_HOST`
-- Then `## Reason` followed by one short sentence (<= 200 chars)
-- DONE: quality is sufficient — stop the loop
-- RERUN_AIDER: a fixable issue was found — re-run the worker with a correction note
-- ESCALATE_HOST: human judgement is required (no policy answer available)
-- No preamble, no code fences, no extra headings"""
-
-
 def resolve_supervisor_max_turns(workspace: str | Any) -> int:
     """Resolve max supervisor turns.
 
@@ -156,6 +144,33 @@ def resolve_supervisor_max_turns(workspace: str | Any) -> int:
     except Exception:
         pass
     return max(1, min(5, resolved))
+
+
+def _supervisor_llm_decide_enabled(workspace: str | Any) -> bool:
+    """Whether the supervisor should use the LLM decision path.
+
+    Default: True (LLM decide is on). Disable with:
+    - Env ``MCP_CODER_SUPERVISOR_LLM_DECIDE=0``
+    - Yaml ``supervisor_llm_decide: false`` (later wins).
+
+    When disabled, ``_decide`` routes to ``_policy_decide`` (today's single-turn
+    behavior). When enabled (default), ``_decide`` routes to ``_llm_decide``,
+    which falls back to ``_policy_decide`` on any failure.
+    """
+    import os
+
+    env_raw = os.environ.get("MCP_CODER_SUPERVISOR_LLM_DECIDE", "").strip()
+    if env_raw == "0":
+        return False
+    try:
+        from core.storage.workspace_config import load_workspace_config
+
+        ws_value = load_workspace_config(workspace).get("supervisor_llm_decide")
+        if ws_value is not None:
+            return bool(ws_value)
+    except Exception:
+        pass
+    return True
 
 
 def _resolve_session_reset_every() -> int:
@@ -233,6 +248,7 @@ class SupervisorAgent:
         self._event_sink = event_sink
         self._supervisor_model = supervisor_model
         self._plan = plan
+        self._builder_brief: str | None = None  # P15-001 Slice C
         self._loop_id = f"{delegation_id}:supervisor:1" if delegation_id else "supervisor:1"
         self._loop_start_emitted = False
         self._loop_end_emitted = False
@@ -273,6 +289,9 @@ class SupervisorAgent:
 
     def set_plan(self, plan: str | None) -> None:
         self._plan = plan
+
+    def set_builder_brief(self, brief: str | None) -> None:
+        self._builder_brief = brief
 
     # P13-006: late-binding setters so the server can create the agent early
     # (before delegation_id / event_sink / spec_path are known) and wire them
@@ -333,6 +352,7 @@ class SupervisorAgent:
         supervisor_model: str | None = None,
         spec_path: str | None = None,
         plan: str | None = None,
+        builder_brief: str | None = None,
     ) -> None:
         """Reset per-delegation state. Call before begin() for each new delegation.
 
@@ -346,6 +366,7 @@ class SupervisorAgent:
         self._event_sink = event_sink
         self._supervisor_model = supervisor_model
         self._plan = plan
+        self._builder_brief = builder_brief
         self._spec_path = spec_path
         self._loop_id = f"{delegation_id}:supervisor:1" if delegation_id else "supervisor:1"
         self._loop_start_emitted = False
@@ -732,7 +753,7 @@ class SupervisorAgent:
     def _decide(self, ctx: SupervisorTurnContext) -> SupervisorTurnDecision:
         if self._decision_fn is not None:
             return self._decision_fn(ctx)
-        if self._max_turns == 1:
+        if not _supervisor_llm_decide_enabled(self._workspace_path):
             return self._policy_decide(ctx)
         return self._llm_decide(ctx)
 
@@ -781,7 +802,7 @@ class SupervisorAgent:
                 model=model,
             )
             tool_result = runner.run_with_metrics(
-                system_prompt=_DECISION_PREAMBLE,
+                system_prompt=build_role_rules("supervisor_decision"),
                 messages=[{"role": "user", "content": prompt}],
             )
             text = tool_result.text
@@ -855,16 +876,53 @@ class SupervisorAgent:
         files = ", ".join((result.files_changed or [])[:20]) or "(none)"
         tail = (result.output or "")[-800:]
         sections = [
-            _DECISION_PREAMBLE,
             f"## Turn\n{ctx.turn_index} of {ctx.max_turns} (remaining: {ctx.turns_remaining})",
             f"## Worker outcome\n{self._worker_outcome(result)}",
             f"## Files changed\n{files}",
+            self._render_diff_section(),
             self._render_reviewer_findings(checks),
             f"## Prior decisions\n{prior_lines}",
             f"## Planner plan\n{(self._plan or '(none)')[:1200]}",
+            self._render_builder_brief_section(),
             f"## Worker output tail\n{tail}",
         ]
         return "\n\n".join(sections)
+
+    def _render_diff_section(self) -> str:
+        """Bounded ## Unified diff section from build_delegation_diff.
+
+        Returns '(no diff available)' when snapshot is missing or diff is empty.
+        Diff is already bounded by apply_diff_truncation (8k/file, 32k total).
+        """
+        delegation_id = getattr(self, "_delegation_id", None)
+        workspace = getattr(self, "_workspace_path", None)
+        if not delegation_id or not workspace:
+            return "## Unified diff\n(no diff available)"
+        try:
+            from core.workspace.history_query import build_delegation_diff
+
+            diff = build_delegation_diff(workspace, delegation_id)
+        except Exception:
+            return "## Unified diff\n(diff read failed)"
+        if diff is None:
+            return "## Unified diff\n(no diff available)"
+        if not diff.diffs:
+            return f"## Unified diff\n(no modified files; created={diff.created or []}, deleted={diff.deleted or []})"
+        parts = []
+        for path in sorted(diff.diffs):
+            parts.append(f"### `{path}`")
+            parts.append(f"```diff\n{diff.diffs[path]}\n```")
+        body = "\n".join(parts)
+        if diff.diff_truncated:
+            body += f"\n\n(diff truncated: {', '.join(diff.diff_truncated_paths)})"
+        return f"## Unified diff\n{body}"
+
+    def _render_builder_brief_section(self) -> str:
+        """Bounded ## Builder brief section (the prompt the executor saw)."""
+        brief = (getattr(self, "_builder_brief", None) or "").strip()
+        if not brief:
+            return "## Builder brief\n(none)"
+        return f"## Builder brief\n{brief[:3000]}"
 
     @staticmethod
     def _correction_note(checks: dict[str, Any] | None, result: ExecutionResult) -> str:

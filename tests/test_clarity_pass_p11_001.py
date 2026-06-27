@@ -7,6 +7,7 @@ from pathlib import Path
 from unittest.mock import patch
 
 from core.config.spec_validation import clarity_pass_enabled
+from core.context.role_rules import build_role_rules
 from core.context.clarity_prompt import CLARITY_ROUND_CAP, build_clarity_check_prompt
 from core.context.helper_llm_pipeline import apply_clarity_check
 from core.engine.base import ExecutionResult
@@ -16,6 +17,7 @@ from core.engine.clarity_llm import (
     parse_clarity_check_output,
     run_clarity_check_llm,
 )
+from core.engine.clarity_resolution import ClarityResolutionResult
 from core.engine.owned_helper_llm import OwnedHelperCompletion
 from core.engine.spec_validation_llm import SpecValidationLlmResult
 from core.host.base import HostSessionHint
@@ -149,6 +151,11 @@ def _delegate(
 ):
     monkeypatch.setenv("MCP_CODER_HOME", str(ws.parent / "home"))
     monkeypatch.chdir(ws)
+    # P15-ISS-008: these tests exercise clarity/planner wiring, not supervisor
+    # decision-making. The default _llm_decide path escalates on the thin mock
+    # engine output ("done"). Route to _policy_decide (deterministic done on
+    # success=True) via the designed opt-out gate.
+    monkeypatch.setenv("MCP_CODER_SUPERVISOR_LLM_DECIDE", "0")
     yaml_bits = ["host_transcript: dump\n"]
     if clarity_env is None:
         monkeypatch.delenv("MCP_CODER_CLARITY_PASS", raising=False)
@@ -187,9 +194,19 @@ def _delegate(
         else patch("core.engine.spec_validation_llm.run_spec_validation_llm")
     )
 
+    # P15-003: patch run_clarity_resolution to default to escalate so existing
+    # tests that assert pause behavior don't try to call the real sub-agent.
+    resolution_patch = patch(
+        "core.engine.clarity_resolution.run_clarity_resolution",
+        return_value=ClarityResolutionResult(
+            resolved=False,
+            escalate_reason="test_default_escalate",
+        ),
+    )
+
     with patch("server.mcp_server.get_host_provider") as host_provider, patch(
         "server.mcp_server.load_cursor_transcript"
-    ) as load_tx, patch("server.mcp_server.get_engine", return_value=engine), clarity_patch, validate_patch:
+    ) as load_tx, patch("server.mcp_server.get_engine", return_value=engine), clarity_patch, validate_patch, resolution_patch:
         host_provider.return_value.resolve_active_session.return_value = hint
         load_tx.return_value = TranscriptLoadResult(
             text=transcript_text,
@@ -245,8 +262,37 @@ def test_build_clarity_prompt_includes_task_and_spec(tmp_path):
     assert "CLI uses core" in prompt
     assert "pkg/cli.py" in prompt
     assert "Prior task about CLI" in prompt
-    assert "## CLEAR" in prompt
-    assert "## UNCLEAR" in prompt
+    assert "## Role: clarity check" not in prompt
+
+
+def test_clarity_prompt_builder_returns_no_preamble(tmp_path):
+    ws = _setup_workspace(tmp_path)
+    spec_read = read_task_spec(ws / ".mcp-coder/specs/tasks/step-b.md", workspace=ws)
+    prompt = build_clarity_check_prompt(
+        task="fix the auth stuff",
+        spec_read=spec_read,
+        recent_delegation_titles=[],
+        prior_blocked_count=0,
+    )
+    assert "## Role: clarity check" not in prompt
+
+
+def test_clarity_llm_passes_system_prompt(tmp_path):
+    completion = OwnedHelperCompletion(
+        text="## CLEAR\nSpecific enough.",
+        model="openrouter/test/flash",
+        tokens={"input": 10, "output": 5, "total": 15, "source": "owned_completion"},
+        duration_ms=42,
+    )
+    with patch("core.engine.clarity_llm.provider_hint_for_model", return_value=None), patch(
+        "core.engine.clarity_llm.run_owned_helper_completion", return_value=completion
+    ) as run_completion:
+        result = run_clarity_check_llm("## Task\nDo it", workspace_path=tmp_path)
+
+    assert result.success is True
+    run_completion.assert_called_once()
+    assert run_completion.call_args.args[0] == [{"role": "user", "content": "## Task\nDo it"}]
+    assert run_completion.call_args.kwargs["system_prompt"] == build_role_rules("clarity")
 
 
 # --- parser ---

@@ -4,11 +4,11 @@ from __future__ import annotations
 
 from core.config.aider_runtime import executor_pull_hint_enabled
 from core.config.model_registry import CallParams
+from core.context.role_rules import SHARED_RULES, build_role_rules
 from core.engine.aider_engine import (
-    EXECUTOR_PULL_HINT_BLOCK,
-    _apply_executor_pull_hint,
+    _apply_executor_system_prefix,
     _apply_executor_model_params,
-    _merge_executor_pull_hint,
+    _merge_executor_system_prefix,
 )
 from core.logging.delegation_log import (
     build_delegation_record,
@@ -81,23 +81,25 @@ def test_executor_pull_hint_env_on(tmp_path, monkeypatch):
 
 
 def test_merge_pull_hint_only_when_no_existing_prefix():
-    assert _merge_executor_pull_hint(None) == EXECUTOR_PULL_HINT_BLOCK
-    assert _merge_executor_pull_hint("") == EXECUTOR_PULL_HINT_BLOCK
+    assert _merge_executor_system_prefix(None) == build_role_rules("executor")
+    assert _merge_executor_system_prefix("") == build_role_rules("executor")
 
 
 def test_merge_pull_hint_after_existing_prefix():
-    merged = _merge_executor_pull_hint("Respect the spec Files contract.")
-    assert merged.startswith("Respect the spec Files contract.")
+    merged = _merge_executor_system_prefix("Custom executor prefix.")
+    assert merged.startswith("Custom executor prefix.")
     assert "\n\n---\n\n" in merged
-    assert merged.endswith(EXECUTOR_PULL_HINT_BLOCK)
+    assert merged.endswith(build_role_rules("executor"))
 
 
 def test_apply_pull_hint_on_sets_prefix(tmp_path, monkeypatch):
     monkeypatch.setenv("MCP_CODER_EXECUTOR_PULL_HINT", "1")
     model = _FakeModel()
-    applied = _apply_executor_pull_hint(model, workspace_path=tmp_path)
+    applied = _apply_executor_system_prefix(model, workspace_path=tmp_path)
     assert applied is True
-    assert model.system_prompt_prefix == EXECUTOR_PULL_HINT_BLOCK
+    assert model.system_prompt_prefix == build_role_rules("executor")
+    for shared in SHARED_RULES:
+        assert shared in model.system_prompt_prefix
 
 
 def test_apply_pull_hint_merges_with_existing_prefix(tmp_path, monkeypatch):
@@ -107,24 +109,24 @@ def test_apply_pull_hint_merges_with_existing_prefix(tmp_path, monkeypatch):
         model,
         CallParams(system_prompt_prefix="Respect the spec Files contract."),
     )
-    applied = _apply_executor_pull_hint(model, workspace_path=tmp_path)
+    applied = _apply_executor_system_prefix(model, workspace_path=tmp_path)
     assert applied is True
     assert model.system_prompt_prefix.startswith("Respect the spec Files contract.")
-    assert EXECUTOR_PULL_HINT_BLOCK in model.system_prompt_prefix
+    assert build_role_rules("executor") in model.system_prompt_prefix
     assert model.system_prompt_prefix.index("Respect") < model.system_prompt_prefix.index("/read")
 
 
-def test_apply_pull_hint_off_leaves_prefix_unchanged(tmp_path, monkeypatch):
+def test_apply_system_prefix_ignores_legacy_pull_hint_toggle(tmp_path, monkeypatch):
     monkeypatch.setenv("MCP_CODER_EXECUTOR_PULL_HINT", "0")
     model = _FakeModel()
     _apply_executor_model_params(
         model,
         CallParams(system_prompt_prefix="Respect the spec Files contract."),
     )
-    before = model.system_prompt_prefix
-    applied = _apply_executor_pull_hint(model, workspace_path=tmp_path)
-    assert applied is False
-    assert model.system_prompt_prefix == before
+    applied = _apply_executor_system_prefix(model, workspace_path=tmp_path)
+    assert applied is True
+    assert model.system_prompt_prefix.startswith("Respect the spec Files contract.")
+    assert build_role_rules("executor") in model.system_prompt_prefix
 
 
 def test_delegation_record_executor_pull_hint_via_contextvar(tmp_path, monkeypatch):

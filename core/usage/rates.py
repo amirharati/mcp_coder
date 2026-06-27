@@ -73,7 +73,18 @@ def estimate_cost_usd(
     """Approximate USD cost from static rates; None when model unknown."""
     rates = lookup_model_rates(model)
     if not rates:
-        return {"source": "unknown_model"}
+        # P15-ISS-007: include zeroed cost fields so cost_est_usd.total is
+        # always present when tokens are reported. Callers (and tests) that
+        # index cost_est_usd["total"] no longer KeyError on unknown models.
+        if input_tokens is None and output_tokens is None:
+            return {"source": "unknown_model"}
+        return {
+            "input": 0.0,
+            "output": 0.0,
+            "total": 0.0,
+            "source": "unknown_model",
+            "note": "rates_missing_for_model",
+        }
 
     input_rate = float(rates.get("input_per_million", 0))
     output_rate = float(rates.get("output_per_million", 0))

@@ -764,6 +764,8 @@ def _apply_architect_pass(
     project_state: Any | None = None,
     spec_files: list[str] | None = None,
     planner_context_sources: list[str] | None = None,
+    spec_path: str | None = None,
+    session_dir: str | None = None,
 ) -> tuple[str | None, str | None, dict[str, Any] | None, dict[str, Any]]:
     return _shared_apply_planner_pass(
         context_package=context_package,
@@ -779,6 +781,8 @@ def _apply_architect_pass(
         project_state=project_state,
         spec_files=spec_files,
         planner_context_sources=planner_context_sources,
+        spec_path=spec_path,
+        session_dir=session_dir,
     )
 
 
@@ -2351,6 +2355,11 @@ def delegate_to_agent(
             validation_status = "passed" if spec_validation_passed else "failed"
         progress.notify(f"[validation] Spec validation {validation_status}.", force=True)
 
+        # P15-003: _proceed_to_executor flag controls whether the delegation
+        # proceeds past the preloop gates. Set True when clarity resolves or
+        # when no gate is blocking.
+        _proceed_to_executor = False
+
         if spec_invalid_reason:
             success = False
             error = spec_invalid_reason
@@ -2376,71 +2385,184 @@ def delegate_to_agent(
                     detail="review_target_files_error",
                 )
         elif clarity_check_blocked:
-            # Hard gate: execution is paused; host must add answers to spec Q&A and re-delegate.
-            success = False
-            error = None
-            supervisor_paused_questions = list(clarity_check_questions or [])
-            _spec_hint = (
-                f" in `{spec_rel_path}`" if spec_rel_path else " in the spec"
-            )
-            output = (
-                "🔍 **Clarity questions** — add answers to the `## Q&A` section"
-                f"{_spec_hint} then re-call `delegate_to_agent`:\n"
-                + "\n".join(f"- {q}" for q in (clarity_check_questions or []))
-            )
-            # Auto-append unanswered questions to the spec so the host can fill them in-place.
-            if spec_rel_path and clarity_check_questions:
+            # P15-003: try supervisor sub-agent resolution before hard pause.
+            clarity_resolution_result = None
+            if clarity_check_questions and spec_rel_path:
+                # Opt-out gate: skip sub-agent when disabled.
                 try:
-                    from core.specs.write import append_clarity_qa
-                    _spec_abs = Path(ws) / spec_rel_path
-                    append_clarity_qa(_spec_abs, clarity_check_questions)
+                    from core.engine.clarity_resolution import _clarity_resolution_enabled
+                    _resolution_on = _clarity_resolution_enabled(ws)
                 except Exception:
-                    pass  # best-effort; never block
-            # P13-006: agent closes preloop + lifecycle on clarity gate
-            if supervisor_agent is not None and delegate_mode == DELEGATE_MODE_IMPLEMENT:
-                supervisor_agent.set_spec_path(spec_rel_path)
-                try:
-                    _pause_lifecycle_context = dict(
-                        getattr(supervisor_agent, "_lifecycle_context", {}) or {}
-                    )
-                    _pause_lifecycle_context.setdefault("project_key", _project_key)
-                    _paused_state = SupervisorState.create(
-                        spec_path=spec_rel_path,
-                        context_ref=delegation_id,
-                        plan=architect_plan,
-                        decision_log=[],
-                        completed_turn_artifacts=[],
-                        turn_index=0,
-                        questions=supervisor_paused_questions,
-                        pause_reason="clarity_check",
-                        lifecycle_context=_pause_lifecycle_context,
-                    )
-                    _paused_state.save()
-                    append_trace_record(
-                        {
-                            "type": "supervisor_paused",
-                            "resume_token": _paused_state.resume_token,
-                            "turn_index": _paused_state.turn_index,
-                            "pause_reason": _paused_state.pause_reason,
-                            "questions": _paused_state.questions,
-                            "expires_at": _paused_state.expires_at,
-                            "timestamp": obs.utc_now_iso(),
-                        },
-                        delegation_id=delegation_id,
-                        session_dir=storage.session_dir,
-                        workspace=ws,
-                    )
-                except Exception:
-                    # Best-effort: clarity gate response should not fail if pause
-                    # persistence cannot be written for any reason.
-                    pass
-                _close_lifecycle_once(
-                    "needs_input",
-                    phase="preloop",
-                    phase_status="blocked",
-                    detail="clarity_check",
+                    _resolution_on = True
+                if _resolution_on:
+                    try:
+                        from core.engine.clarity_resolution import run_clarity_resolution
+
+                        append_trace_record(
+                            {
+                                "type": "clarity_resolution_start",
+                                "delegation_id": delegation_id,
+                                "questions": clarity_check_questions,
+                                "timestamp": obs.utc_now_iso(),
+                            },
+                            delegation_id=delegation_id,
+                            session_dir=storage.session_dir,
+                            workspace=ws,
+                        )
+                        clarity_resolution_result = run_clarity_resolution(
+                            questions=clarity_check_questions,
+                            workspace_path=ws,
+                            spec_path=spec_rel_path,
+                            project_state=(
+                                supervisor_agent._project_state
+                                if supervisor_agent is not None
+                                else None
+                            ),
+                            spec_read=spec_read,
+                            task=task,
+                            context_summary=context_summary,
+                            event_sink=None,
+                        )
+                        append_trace_record(
+                            {
+                                "type": "clarity_resolution_end",
+                                "delegation_id": delegation_id,
+                                "resolved": bool(clarity_resolution_result.resolved),
+                                "answers": clarity_resolution_result.answers,
+                                "escalate_reason": clarity_resolution_result.escalate_reason,
+                                "tool_calls": clarity_resolution_result.tool_calls,
+                                "model": clarity_resolution_result.model,
+                                "duration_ms": clarity_resolution_result.duration_ms,
+                                "error": clarity_resolution_result.error,
+                                "timestamp": obs.utc_now_iso(),
+                            },
+                            delegation_id=delegation_id,
+                            session_dir=storage.session_dir,
+                            workspace=ws,
+                        )
+                        # Add clarity_resolution_ms to the clarity audit dict.
+                        if clarity_check_audit is not None:
+                            try:
+                                clarity_check_audit["clarity_resolution_ms"] = (
+                                    clarity_resolution_result.duration_ms
+                                )
+                            except Exception:
+                                pass
+                    except Exception:
+                        clarity_resolution_result = None
+                        # Best-effort: emit end event marking escalate, never block.
+                        try:
+                            append_trace_record(
+                                {
+                                    "type": "clarity_resolution_end",
+                                    "delegation_id": delegation_id,
+                                    "resolved": False,
+                                    "answers": [],
+                                    "escalate_reason": "sub_agent_exception",
+                                    "tool_calls": 0,
+                                    "model": None,
+                                    "duration_ms": 0,
+                                    "error": "sub_agent_exception",
+                                    "timestamp": obs.utc_now_iso(),
+                                },
+                                delegation_id=delegation_id,
+                                session_dir=storage.session_dir,
+                                workspace=ws,
+                            )
+                        except Exception:
+                            pass
+
+            if clarity_resolution_result is not None and clarity_resolution_result.resolved:
+                # Sub-agent answered -> write answers to Q&A, re-read spec,
+                # clear flags -> proceed to executor.
+                from core.specs.write import append_clarity_qa
+
+                _spec_abs = Path(ws) / spec_rel_path
+                append_clarity_qa(
+                    _spec_abs, clarity_check_questions, clarity_resolution_result.answers
                 )
+                # Re-read the spec so planner/executor see the Q&A answers.
+                spec_read = read_task_spec(_spec_abs, workspace=ws)
+                clarity_check_blocked = False
+                clarity_check_passed = True
+                progress.notify(
+                    "[clarity] Supervisor sub-agent resolved questions — proceeding.",
+                    force=True,
+                )
+                _proceed_to_executor = True
+            else:
+                # Escalate or sub-agent failed -> current hard-pause behavior.
+                success = False
+                error = None
+                supervisor_paused_questions = list(clarity_check_questions or [])
+                _spec_hint = (
+                    f" in `{spec_rel_path}`" if spec_rel_path else " in the spec"
+                )
+                output = (
+                    "🔍 **Clarity questions** — add answers to the `## Q&A` section"
+                    f"{_spec_hint} then re-call `delegate_to_agent`:\n"
+                    + "\n".join(f"- {q}" for q in (clarity_check_questions or []))
+                )
+                # Auto-append unanswered questions to the spec so the host can fill them in-place.
+                if spec_rel_path and clarity_check_questions:
+                    try:
+                        from core.specs.write import append_clarity_qa
+
+                        _spec_abs = Path(ws) / spec_rel_path
+                        append_clarity_qa(_spec_abs, clarity_check_questions)
+                    except Exception:
+                        pass  # best-effort; never block
+                # P13-006: agent closes preloop + lifecycle on clarity gate
+                if (
+                    supervisor_agent is not None
+                    and delegate_mode == DELEGATE_MODE_IMPLEMENT
+                ):
+                    supervisor_agent.set_spec_path(spec_rel_path)
+                    try:
+                        _pause_lifecycle_context = dict(
+                            getattr(supervisor_agent, "_lifecycle_context", {}) or {}
+                        )
+                        _pause_lifecycle_context.setdefault("project_key", _project_key)
+                        _paused_state = SupervisorState.create(
+                            spec_path=spec_rel_path,
+                            context_ref=delegation_id,
+                            plan=architect_plan,
+                            decision_log=[],
+                            completed_turn_artifacts=[],
+                            turn_index=0,
+                            questions=supervisor_paused_questions,
+                            pause_reason="clarity_check",
+                            lifecycle_context=_pause_lifecycle_context,
+                        )
+                        _paused_state.save()
+                        append_trace_record(
+                            {
+                                "type": "supervisor_paused",
+                                "resume_token": _paused_state.resume_token,
+                                "turn_index": _paused_state.turn_index,
+                                "pause_reason": _paused_state.pause_reason,
+                                "questions": _paused_state.questions,
+                                "expires_at": _paused_state.expires_at,
+                                "timestamp": obs.utc_now_iso(),
+                            },
+                            delegation_id=delegation_id,
+                            session_dir=storage.session_dir,
+                            workspace=ws,
+                        )
+                    except Exception:
+                        # Best-effort: clarity gate response should not fail if pause
+                        # persistence cannot be written for any reason.
+                        pass
+                    _close_lifecycle_once(
+                        "needs_input",
+                        phase="preloop",
+                        phase_status="blocked",
+                        detail="clarity_check",
+                    )
         else:
+            _proceed_to_executor = True
+
+        if _proceed_to_executor:
             progress.notify(
                 (
                     "[compile] Context ready — "
@@ -2649,6 +2771,8 @@ def delegate_to_agent(
                             ),
                             spec_files=_spec_files_from_read(spec_read),
                             planner_context_sources=_planner_context_sources,
+                            spec_path=spec_rel_path,
+                            session_dir=storage.session_dir,  # P15-ISS-004
                         )
                         _emit_compile_provenance_pair(
                             delegation_id=delegation_id,
@@ -2786,6 +2910,10 @@ def delegate_to_agent(
                             context_package, workspace=Path(ws), budget_tokens=budget
                         )
                     executor_prompt = context_package.brief
+                    # P15-001 Slice C: wire builder brief into supervisor
+                    # so the decision prompt can check "did executor follow the brief?"
+                    if supervisor_agent is not None:
+                        supervisor_agent.set_builder_brief(context_package.brief)
                     if delegate_mode == DELEGATE_MODE_IMPLEMENT:
                         _emit_compile_event(
                             delegation_id=delegation_id,
@@ -4242,6 +4370,34 @@ def answer_delegation_question(delegation_id: str, answer: str) -> str:
     if found:
         return json.dumps({"status": "ok", "delegation_id": delegation_id, "answer": answer})
     return json.dumps({"status": "not_found", "delegation_id": delegation_id})
+
+
+@mcp.tool(
+    name="get_project_cost",
+    description=(
+        "Return a per-project cost report aggregated from delegation logs. "
+        "Shows total USD spent, breakdown by model, by role (executor, planner_pass, "
+        "supervisor, clarity_check, reviewer_pass, spec_validation), and by task "
+        "(spec_path). Executor tokens are included when captured via litellm callback; "
+        "runs where tokens were unavailable appear in uncaptured_roles with 0 cost. "
+        "HOST COSTS ARE NOT INCLUDED (cursor, IDE, etc.). "
+        "Optional: project_key filters to one epic; limit caps the delegation count. "
+        "Returns JSON string."
+    ),
+)
+def get_project_cost(
+    project_key: str | None = None,
+    limit: int = 50,
+) -> str:
+    """Aggregate cost data from delegation logs and return JSON report."""
+    try:
+        from core.logging.cost_report import build_project_cost_report
+
+        ws = obs.default_workspace_path()
+        report = build_project_cost_report(ws, project_key=project_key, limit=limit)
+        return json.dumps(report, indent=2)
+    except Exception as exc:
+        return json.dumps({"error": str(exc)}, indent=2)
 
 
 def run_stdio() -> None:

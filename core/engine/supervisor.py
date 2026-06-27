@@ -13,6 +13,7 @@ from typing import Any, Literal
 from core.config.providers import apply_provider_env
 from core.config.models import provider_hint_for_model
 from core.config.role_models import ROLE_SUPERVISOR, resolve_role_model_name
+from core.context.role_rules import build_role_rules
 
 logger = logging.getLogger(__name__)
 
@@ -30,20 +31,6 @@ _MAX_PRIOR_DECISIONS = 8
 _MAX_PRIOR_CHARS = 1200
 _MAX_PROJECT_STATE_CHARS = 2000
 _MAX_TARGET_FILES_CHARS = 800
-
-_SUPERVISOR_PREAMBLE = """## Role: delegation supervisor
-
-You review Aider executor confirmation prompts during an MCP delegation.
-Decide whether to approve, deny, abort, or escalate to the human planner.
-
-Rules:
-- Begin IMMEDIATELY with exactly one line: `## Decision: APPROVE|DENY|ABORT|ESCALATE`
-- Then `## Reason` followed by one short sentence (<= 400 chars)
-- APPROVE: safe, in-spec routine action
-- DENY: reject this specific action but executor may try another approach
-- ABORT: stop delegation — out of scope or unsafe
-- ESCALATE: human judgment required before proceeding
-- No preamble, no code fences, no extra headings"""
 
 
 @dataclass
@@ -114,7 +101,7 @@ def build_supervisor_prompt(
     project_state_summary: str | None = None,
     target_files: dict[str, list[str]] | None = None,
 ) -> str:
-    sections = [_SUPERVISOR_PREAMBLE, f"## Risk tier\n{risk_tier}", f"## Question\n{question.strip()}"]
+    sections = [f"## Risk tier\n{risk_tier}", f"## Question\n{question.strip()}"]
     contract = (spec_contract or "").strip()
     if contract:
         sections.append(f"## Spec contract\n{contract[:2000]}")
@@ -236,7 +223,7 @@ class DelegationSupervisor:
                 model=model,
             )
             tool_result = runner.run_with_metrics(
-                system_prompt="",
+                system_prompt=build_role_rules("supervisor_confirm"),
                 messages=[{"role": "user", "content": prompt}],
             )
             text = tool_result.text

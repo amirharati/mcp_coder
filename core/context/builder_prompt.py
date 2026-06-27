@@ -17,23 +17,6 @@ from core.context.summary import estimate_tokens
 if TYPE_CHECKING:
     from core.rag.retrieval import ContextRef
 
-BUILDER_PREAMBLE = """## Role: context builder
-
-You assemble an executor-facing brief for a code delegation. You do NOT edit files.
-
-Rules:
-- Begin your response IMMEDIATELY with the line `## Builder brief` — no preamble, no
-  reasoning narration, no "The user wants..." sentences before it.
-- Output markdown only (no code fences wrapping the whole response).
-- Do NOT paste file contents, code blocks, or ``` fences. Narrative bullets only.
-- Do NOT repeat the ## Builder brief header — the pipeline adds it.
-- Max ~400 words of guidance (executor has full file payloads separately).
-- Preserve spec Goal and Constraints intent; do not contradict files_edit contract.
-- Reference only paths from the candidate file list or spec contract.
-- Summarize prior delegation outcomes when relevant (APIs shipped, failures to avoid).
-- Do not invent file paths or APIs not supported by the inputs.
-- Keep under ~800 words unless history is dense."""
-
 
 def _picker_section(picker_result: CandidateFilesResult | None) -> str:
     if picker_result is None:
@@ -292,7 +275,6 @@ def build_builder_llm_prompt(
     delegation_refs = dedupe_rag_refs_against_history(delegation_refs, history)
     file_refs = dedupe_file_refs_against_picker(file_refs, picker_result)
     fixed_sections = [
-        BUILDER_PREAMBLE,
         "## Mechanical brief\n" + mechanical_brief.strip(),
         _picker_section(picker_result),
         _suggested_edits_section(picker_result),
@@ -341,7 +323,6 @@ def build_builder_llm_prompt(
     rag_text = _combined_rag_sections(effective_delegation_refs, effective_file_refs)
 
     ordered = [
-        BUILDER_PREAMBLE,
         "## Mechanical brief\n" + mechanical_brief.strip(),
         _picker_section(picker_result),
         _suggested_edits_section(picker_result),

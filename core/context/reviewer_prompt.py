@@ -6,18 +6,6 @@ _MAX_ACCEPTANCE_CHARS = 1200
 _MAX_DIFF_CHARS = 7000
 _MAX_PROMPT_CHARS = 10000
 
-REVIEWER_PREAMBLE = """## Role: junior code reviewer
-
-You review a small code change after an executor run.
-Your ONLY job: spot obvious problems in the diff — bugs, import/typing mistakes, naming, missing docstrings or tests.
-You do NOT edit files, re-run the executor, or propose architecture redesign.
-
-Rules:
-- Begin your response IMMEDIATELY with exactly one of:
-  - `## LGTM` followed by one short sentence
-  - `## ISSUES` followed by up to 3 markdown bullets (`- `)
-- No preamble, no reasoning narration, no code blocks."""
-
 
 def _truncate(text: str, max_chars: int) -> str:
     text = (text or "").strip()
@@ -34,7 +22,7 @@ def build_reviewer_prompt(
     unified_diff: str,
 ) -> str:
     """Assemble the tier-1 reviewer LLM prompt."""
-    sections = [REVIEWER_PREAMBLE]
+    sections: list[str] = []
 
     task_text = (task or "").strip()
     if task_text:

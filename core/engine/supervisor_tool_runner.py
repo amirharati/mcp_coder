@@ -14,7 +14,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
-from core.config.role_models import ROLE_SUPERVISOR
+from core.config.role_models import ROLE_PLANNER, ROLE_SUPERVISOR
 from core.observability.gateway import GatewayCompletion, get_llm_gateway
 
 # Per-tool result budget in characters. Module constant for Phase 12 (D-P12-8);
@@ -62,11 +62,13 @@ class SupervisorToolRunner:
         workspace_path: str,
         event_sink: Callable[[dict], None] | None = None,
         max_tool_rounds: int = 3,
+        role: str = ROLE_SUPERVISOR,
     ) -> None:
         self._model = model
         self._workspace_path = workspace_path
         self._event_sink = event_sink
         self._max_tool_rounds = max(1, int(max_tool_rounds))
+        self._role = role  # P15-ISS-005: used in gw.complete() and tool-call events
         self._tools: dict[str, dict[str, Any]] = {}
 
     def register_tool(
@@ -113,7 +115,7 @@ class SupervisorToolRunner:
             completion = gw.complete(
                 model=self._model,
                 messages=all_messages,
-                role=ROLE_SUPERVISOR,
+                role=self._role,
                 tools=tools_spec if tools_spec else None,
             )
             _absorb(completion)
@@ -157,7 +159,7 @@ class SupervisorToolRunner:
         completion = gw.complete(
             model=self._model,
             messages=all_messages,
-            role=ROLE_SUPERVISOR,
+            role=self._role,
             tools=None,
         )
         _absorb(completion)
@@ -208,6 +210,7 @@ class SupervisorToolRunner:
             self._event_sink(
                 {
                     "type": "supervisor_tool_call",
+                    "role": self._role,  # P15-ISS-005: distinguish planner vs supervisor calls
                     "tool": tc.get("name"),
                     "args_summary": str(tc.get("arguments") or "")[:200],
                     "result_chars": len(result),
@@ -378,6 +381,83 @@ def build_phase12_tool_runner(
             "required": [],
         },
         fn=lambda files=None: _get_reviewer_findings_fn(project_state, files),
+    )
+
+    return runner
+
+
+def build_planner_tool_runner(
+    *,
+    workspace_path: str,
+    project_key: str,
+    project_state,
+    event_sink: Callable[[dict], None] | None,
+    model: str,
+) -> SupervisorToolRunner:
+    """Build a SupervisorToolRunner for the planner pass (P15-002).
+
+    Registers the planner-appropriate tool subset: read_file,
+    get_project_state, get_delegation_history. Does NOT register
+    get_reviewer_findings (planner runs before executor; no findings yet).
+    """
+    runner = SupervisorToolRunner(
+        model=model,
+        workspace_path=workspace_path,
+        event_sink=event_sink,
+        role=ROLE_PLANNER,  # P15-ISS-005: tag gateway metrics as planner_pass (not supervisor)
+    )
+
+    runner.register_tool(
+        name="get_project_state",
+        description=(
+            "Get the current project state: decisions, open risks, hot areas, "
+            "last delegation. Use when deciding if this task conflicts with a "
+            "prior decision or touches a risky area."
+        ),
+        schema={"type": "object", "properties": {}},
+        fn=lambda: _get_project_state_fn(project_state),
+    )
+
+    runner.register_tool(
+        name="get_delegation_history",
+        description=(
+            "Get a summary of recent delegations for this project. Use when "
+            "you need to know what was implemented in previous tasks, what "
+            "failed, or what files were changed recently."
+        ),
+        schema={
+            "type": "object",
+            "properties": {
+                "limit": {
+                    "type": "integer",
+                    "description": "Max delegations to return (1-10)",
+                    "default": 5,
+                }
+            },
+        },
+        fn=lambda limit=5: _get_delegation_history_fn(
+            workspace_path, project_key, limit=limit
+        ),
+    )
+
+    runner.register_tool(
+        name="read_file",
+        description=(
+            "Read the contents of a file in the workspace. Use when you need "
+            "to understand what a specific file currently contains before "
+            "deciding the plan's file touch order."
+        ),
+        schema={
+            "type": "object",
+            "properties": {
+                "path": {
+                    "type": "string",
+                    "description": "Relative path within workspace",
+                }
+            },
+            "required": ["path"],
+        },
+        fn=lambda path: _read_file_fn(workspace_path, path),
     )
 
     return runner

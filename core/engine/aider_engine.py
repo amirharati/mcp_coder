@@ -15,7 +15,6 @@ from core.config.aider_runtime import (
     create_delegation_io,
     delegation_coder_kwargs,
     delegation_timeout_seconds,
-    executor_pull_hint_enabled,
     infer_run_success,
     supervised_execution_enabled,
 )
@@ -30,6 +29,7 @@ from core.delegation.errors import (
 )
 from core.config.models import provider_hint_for_model, resolve_model_name
 from core.config.providers import apply_provider_env
+from core.context.role_rules import build_role_rules
 from core.engine.base import BackendRunRequest, ExecutionEngine, ExecutionResult
 from core.engine.capabilities import AIDER_CAPABILITIES, BackendCapabilities
 from core.engine.factory import register_engine
@@ -48,18 +48,25 @@ EXECUTOR_PULL_HINT_BLOCK = (
 
 
 def _merge_executor_pull_hint(existing_prefix: str | None) -> str:
+    return _merge_executor_system_prefix(existing_prefix)
+
+
+def _merge_executor_system_prefix(existing_prefix: str | None) -> str:
     existing = (existing_prefix or "").strip()
+    executor_rules = build_role_rules("executor")
     if not existing:
-        return EXECUTOR_PULL_HINT_BLOCK
-    return f"{existing}\n\n---\n\n{EXECUTOR_PULL_HINT_BLOCK}"
+        return executor_rules
+    return f"{existing}\n\n---\n\n{executor_rules}"
 
 
 def _apply_executor_pull_hint(model: Any, *, workspace_path: str) -> bool:
-    """Append pull-hint block to model.system_prompt_prefix when enabled."""
-    if not executor_pull_hint_enabled(workspace_path):
-        return False
+    return _apply_executor_system_prefix(model, workspace_path=workspace_path)
+
+
+def _apply_executor_system_prefix(model: Any, *, workspace_path: str) -> bool:
+    """Append executor role rules to model.system_prompt_prefix."""
     try:
-        model.system_prompt_prefix = _merge_executor_pull_hint(
+        model.system_prompt_prefix = _merge_executor_system_prefix(
             getattr(model, "system_prompt_prefix", None)
         )
         return True
@@ -91,15 +98,63 @@ def _supervisor_metadata_from_io(io: Any) -> dict[str, Any]:
     return payload
 
 
-def _extract_architect_plan(brief: str | None) -> str | None:
+def _plan_section_range(brief: str | None) -> tuple[int, int, str] | None:
     text = (brief or "").strip()
-    if not text or "## Architect plan" not in text:
+    if not text:
         return None
-    start = text.find("## Architect plan")
+    candidates = [
+        (idx, heading)
+        for heading in ("## Planner plan", "## Architect plan")
+        if (idx := text.find(heading)) != -1
+    ]
+    if not candidates:
+        return None
+    start, heading = min(candidates, key=lambda item: item[0])
     end = text.find("\n---\n", start)
     if end == -1:
-        return text[start:].strip()
-    return text[start:end].strip()
+        end = len(text)
+    return start, end, heading
+
+
+def _extract_plan_section(brief: str | None) -> str | None:
+    found = _plan_section_range(brief)
+    if found is None:
+        return None
+    start, end, heading = found
+    section = (brief or "").strip()[start:end].strip()
+    if heading == "## Architect plan":
+        lines = section.splitlines()
+        lines[0] = "## Planner plan"
+        section = "\n".join(lines)
+    return section
+
+
+def _strip_plan_section(brief: str | None) -> str:
+    text = (brief or "").strip()
+    found = _plan_section_range(text)
+    if found is None:
+        return text
+    start, end, _heading = found
+    stripped = (text[:start].rstrip() + "\n\n" + text[end:].lstrip()).strip()
+    return stripped
+
+
+def _extract_architect_plan(brief: str | None) -> str | None:
+    return _extract_plan_section(brief)
+
+
+def _executor_project_state_summary(spec_path: str | None) -> str | None:
+    try:
+        from core.state.project_key import ProjectKeyResolver
+        from core.state.project_state import ProjectState
+
+        project_key = ProjectKeyResolver.from_spec_path(spec_path)
+        summary = ProjectState.load(project_key).to_summary().strip()
+    except Exception:
+        return None
+    if not summary:
+        return None
+    return summary[:2000]
 
 
 def _build_spec_contract(contract_paths: list[str] | None) -> str | None:
@@ -180,6 +235,7 @@ def translate_context_package(
     package: "ContextPackage",
     *,
     host_transcript: str | None = None,
+    project_state_summary: str | None = None,
 ) -> BackendRunRequest:
     """Translate a ContextPackage into an Aider-specific BackendRunRequest.
 
@@ -218,17 +274,29 @@ def translate_context_package(
             parts.append(f"\n### `{entry.path}` (map-only)\n{entry.payload}\n")
         map_block = "".join(parts)
 
+    plan_section = _extract_plan_section(package.brief)
+    brief_without_plan = _strip_plan_section(package.brief)
+
     if host_transcript and host_transcript.strip():
         base = assemble_prompt(
             "",
             "",
             host_transcript=host_transcript,
-            spec_block=package.brief,
+            spec_block=brief_without_plan,
         )
     else:
-        base = package.brief
+        base = brief_without_plan
 
-    prompt = base + read_block + map_block
+    executor_sections: list[str] = []
+    if plan_section:
+        executor_sections.append(plan_section)
+    project_state_text = (project_state_summary or "").strip()
+    if project_state_text:
+        executor_sections.append(f"## Project state\n{project_state_text[:2000]}")
+
+    prompt_parts = [base.strip(), *executor_sections]
+    prompt = "\n\n---\n\n".join(part for part in prompt_parts if part)
+    prompt = prompt + read_block + map_block
 
     fnames = sorted(e.path for e in package.entries if e.tier == TIER_EDIT_FULL)
 
@@ -350,15 +418,21 @@ class AiderEngine(ExecutionEngine):
             )
             model = ObservableModel(executor_model_name)
             _apply_executor_model_params(model, exec_params)
-            pull_hint_applied = _apply_executor_pull_hint(model, workspace_path=workspace_path)
+            executor_system_prefix_applied = _apply_executor_system_prefix(
+                model,
+                workspace_path=workspace_path,
+            )
             policy_token = model_policy_var.set(policy_applied(exec_params, ROLE_EXECUTOR))
             from core.logging.delegation_log import executor_options_audit_var
 
             executor_options_audit_var.set(
                 {
-                    "system_prefix_applied": bool(exec_params.system_prompt_prefix),
+                    "system_prefix_applied": bool(
+                        exec_params.system_prompt_prefix or executor_system_prefix_applied
+                    ),
                     "edit_format": exec_params.edit_format,
-                    "executor_pull_hint_applied": pull_hint_applied,
+                    "executor_pull_hint_applied": executor_system_prefix_applied,
+                    "executor_system_prefix_applied": executor_system_prefix_applied,
                 }
             )
             before_git = snapshot_git_dirty(workspace_path)
@@ -769,7 +843,12 @@ class AiderEngine(ExecutionEngine):
 
         from core.context.package import TIER_EDIT_FULL, TIER_READ_EXCERPT, TIER_READ_FULL
 
-        req = translate_context_package(package, host_transcript=host_transcript)
+        project_state_summary = _executor_project_state_summary(spec_path)
+        req = translate_context_package(
+            package,
+            host_transcript=host_transcript,
+            project_state_summary=project_state_summary,
+        )
         pkg_key = compute_context_package_cache_key(package)
         if package.policies is not None:
             contract_paths = sorted(
@@ -793,7 +872,7 @@ class AiderEngine(ExecutionEngine):
             contract_paths=contract_paths,
             timestamp_start=timestamp_start,
             timeout_s=timeout_s,
-            architect_plan=_extract_architect_plan(package.brief),
+            architect_plan=_extract_plan_section(package.brief),
         )
         result.prompt_used = req.prompt
         return result

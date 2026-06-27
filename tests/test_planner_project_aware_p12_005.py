@@ -43,7 +43,7 @@ def test_project_state_section_injected_when_non_empty():
     project_state.add_decision("Use auth.py middleware for session checks", "d-0")
     captured: dict[str, str] = {}
 
-    def _run_planner(prompt: str, *, workspace_path: str):
+    def _run_planner(prompt: str, *, workspace_path: str, spec_path=None, event_sink=None):
         captured["prompt"] = prompt
         return _planner_result(success=True, plan="## Planner plan\n- Do work")
 

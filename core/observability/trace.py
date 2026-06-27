@@ -128,6 +128,9 @@ STAGE_PLANNER_OUTPUT = "planner_output"
 # Backward-compat aliases (old traces used architect_* names; keep for reader tools)
 STAGE_ARCHITECT_INPUT = STAGE_PLANNER_INPUT
 STAGE_ARCHITECT_OUTPUT = STAGE_PLANNER_OUTPUT
+# P15-003: clarity-resolution sub-agent lifecycle bracket events.
+STAGE_CLARITY_RESOLUTION_START = "clarity_resolution_start"
+STAGE_CLARITY_RESOLUTION_END = "clarity_resolution_end"
 STAGE_VALIDATION_INPUT = "validation_input"
 STAGE_VALIDATION_OUTPUT = "validation_output"
 STAGE_FINAL_EXECUTOR_PROMPT = "final_executor_prompt"

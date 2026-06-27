@@ -9,6 +9,7 @@ from unittest.mock import patch
 from core.engine.base import ExecutionResult
 from core.engine.capabilities import AIDER_CAPABILITIES
 from core.engine.clarity_llm import ClarityCheckResult
+from core.engine.clarity_resolution import ClarityResolutionResult
 from core.host.base import HostSessionHint
 from core.host.cursor_transcript import TranscriptLoadResult
 from core.specs.outcome import OUTCOME_NEEDS_INPUT
@@ -95,6 +96,12 @@ def _delegate_once(
     ) as load_tx, patch("server.mcp_server.get_engine", return_value=_mock_engine()), patch(
         "core.engine.clarity_llm.run_clarity_check_llm",
         return_value=clarity_result,
+    ), patch(
+        "core.engine.clarity_resolution.run_clarity_resolution",
+        return_value=ClarityResolutionResult(
+            resolved=False,
+            escalate_reason="test_default_escalate",
+        ),
     ):
         host_provider.return_value.resolve_active_session.return_value = hint
         load_tx.return_value = TranscriptLoadResult(
@@ -132,6 +139,11 @@ def test_clarity_followup_resumes_true_paused_lineage(tmp_path, monkeypatch):
     monkeypatch.setenv("MCP_CODER_SPEC_VALIDATION", "0")
     monkeypatch.setenv("MCP_CODER_REVIEWER_PASS", "0")
     monkeypatch.setenv("MCP_CODER_USE_CONTEXT_PACKAGE", "0")
+    # P15-ISS-008: this test exercises clarity pause/resume lineage wiring,
+    # not supervisor decision-making. The default _llm_decide path escalates
+    # on the thin mock engine output ("done"). Route to _policy_decide
+    # (deterministic done on success=True) via the designed opt-out gate.
+    monkeypatch.setenv("MCP_CODER_SUPERVISOR_LLM_DECIDE", "0")
     _SUPERVISOR_REGISTRY.clear()
 
     unclear = ClarityCheckResult(

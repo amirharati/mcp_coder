@@ -31,6 +31,7 @@ def run_owned_helper_completion(
     *,
     model: str,
     max_tokens: int | None = None,
+    system_prompt: str = "",
 ) -> OwnedHelperCompletion:
     """ThreadPoolExecutor + copy_context + gateway.complete().
 
@@ -38,6 +39,8 @@ def run_owned_helper_completion(
     (MCP_CODER_HELPER_MAX_TOKENS, default 8192).
     """
     apply_provider_env()
+    if system_prompt:
+        messages = [{"role": "system", "content": system_prompt}, *messages]
     t0 = time.perf_counter()
 
     def _call() -> OwnedHelperCompletion:

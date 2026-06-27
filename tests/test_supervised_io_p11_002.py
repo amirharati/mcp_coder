@@ -16,6 +16,7 @@ from core.config.aider_runtime import (
     supervised_execution_enabled,
 )
 from core.config.role_models import ROLE_SUPERVISOR, resolve_role_model_name
+from core.context.role_rules import build_role_rules
 from core.engine.base import ExecutionResult
 from core.engine.supervised_io import (
     SupervisorAbort,
@@ -25,6 +26,7 @@ from core.engine.supervised_io import (
 from core.engine.supervisor import (
     DelegationSupervisor,
     SupervisorDecision,
+    build_supervisor_prompt,
     parse_supervisor_output,
 )
 from core.observability.context import delegation_id_var, session_dir_var, workspace_var
@@ -201,11 +203,57 @@ def test_supervisor_parse_and_fallback_abort(tmp_path):
     with patch(
         "core.engine.supervisor_tool_runner.build_phase12_tool_runner"
     ) as build_runner:
-        build_runner.return_value = MagicMock(run=MagicMock(return_value="garbled"))
+        build_runner.return_value = MagicMock(
+            run_with_metrics=MagicMock(return_value=MagicMock(text="garbled", tokens={}))
+        )
         with patch("core.engine.supervisor.provider_hint_for_model", return_value=None):
             result = supervisor.evaluate(question="shell?", risk_tier="high")
     assert result.decision == "abort"
     assert result.reasoning.startswith("supervisor_error:")
+
+
+def test_supervisor_prompt_no_preamble():
+    prompt = build_supervisor_prompt(
+        question="Run command?",
+        risk_tier="high",
+        spec_contract="files: pkg/cli.py",
+        architect_plan=None,
+        prior_decisions=[],
+        output_tail="",
+    )
+    assert "## Role: delegation supervisor" not in prompt
+    assert "## Risk tier" in prompt
+    assert "## Question" in prompt
+
+
+def test_supervisor_evaluate_passes_system_prompt(tmp_path):
+    supervisor = DelegationSupervisor(
+        workspace_path=tmp_path,
+        delegation_id="d-1",
+        spec_contract="files: pkg/cli.py",
+        architect_plan=None,
+        output_tail_provider=lambda: "",
+    )
+    runner = MagicMock(
+        run_with_metrics=MagicMock(
+            return_value=MagicMock(
+                text="## Decision: APPROVE\n## Reason\nLooks safe.",
+                tokens={"input": 1, "output": 1, "total": 2},
+            )
+        )
+    )
+    with patch(
+        "core.engine.supervisor_tool_runner.build_phase12_tool_runner",
+        return_value=runner,
+    ), patch("core.engine.supervisor.provider_hint_for_model", return_value=None):
+        result = supervisor.evaluate(question="shell?", risk_tier="low")
+
+    assert result.decision == "approve"
+    runner.run_with_metrics.assert_called_once()
+    assert (
+        runner.run_with_metrics.call_args.kwargs["system_prompt"]
+        == build_role_rules("supervisor_confirm")
+    )
 
 
 def test_build_needs_input_supervisor_escalation_reason():

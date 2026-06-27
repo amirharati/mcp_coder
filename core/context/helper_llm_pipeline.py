@@ -216,10 +216,29 @@ def apply_planner_pass(
     project_state: Any | None = None,
     spec_files: list[str] | None = None,
     planner_context_sources: list[str] | None = None,
+    spec_path: str | None = None,
+    session_dir: str | None = None,
 ) -> tuple[str | None, str | None, dict[str, Any] | None, dict[str, Any]]:
     """Run planner pass and return (planner_plan, error, model_record, provenance)."""
     from core.context.planner_prompt import build_planner_pass_prompt
     from core.engine.planner_pass_llm import run_planner_pass_llm
+
+    # P15-ISS-004: build event_sink so planner tool calls land in the delegation
+    # trace. Only built when all three context fields are available; gracefully
+    # degrades to None (no-op) when session_dir is absent (tests, inspect-context).
+    _planner_event_sink: Callable[[dict], None] | None = None
+    if delegation_id and session_dir and workspace:
+        def _planner_event_sink(rec: dict) -> None:  # type: ignore[misc]
+            try:
+                from core.observability.trace import append_trace_record
+                append_trace_record(
+                    rec,
+                    delegation_id=delegation_id,
+                    session_dir=session_dir,
+                    workspace=workspace,
+                )
+            except Exception:
+                pass  # observability must never break the planner
 
     t_plan = time.perf_counter()
     project_state_section = ""
@@ -237,7 +256,10 @@ def apply_planner_pass(
         project_state_section=project_state_section or None,
     )
     with role_context("planner_pass"):
-        llm_result = run_planner_pass_llm(prompt, workspace_path=workspace)
+        llm_result = run_planner_pass_llm(
+            prompt, workspace_path=workspace, spec_path=spec_path,
+            event_sink=_planner_event_sink,
+        )
     if timing is not None:
         timing["planner_pass_ms"] = int((time.perf_counter() - t_plan) * 1000)
 
@@ -299,6 +321,7 @@ def apply_architect_pass(
     project_state: Any | None = None,
     spec_files: list[str] | None = None,
     planner_context_sources: list[str] | None = None,
+    spec_path: str | None = None,
 ) -> tuple[str | None, str | None, dict[str, Any] | None, dict[str, Any]]:
     """Backward-compat shim — delegates to apply_planner_pass (P11-008)."""
     return apply_planner_pass(
@@ -315,6 +338,7 @@ def apply_architect_pass(
         project_state=project_state,
         spec_files=spec_files,
         planner_context_sources=planner_context_sources,
+        spec_path=spec_path,
     )
 
 

@@ -14,6 +14,7 @@ from typing import Any, Literal
 from core.config.models import provider_hint_for_model
 from core.config.providers import apply_provider_env
 from core.config.role_models import ROLE_REVIEW, resolve_role_model_name
+from core.context.role_rules import build_role_rules
 from core.engine.owned_helper_llm import run_owned_helper_completion
 
 _ERROR_MARKERS = (
@@ -163,7 +164,11 @@ def run_reviewer_llm(
         )
 
     messages = [{"role": "user", "content": prompt}]
-    completion = run_owned_helper_completion(messages, model=resolved)
+    completion = run_owned_helper_completion(
+        messages,
+        model=resolved,
+        system_prompt=build_role_rules("reviewer"),
+    )
     if completion.error:
         return ReviewerResult(
             success=False,

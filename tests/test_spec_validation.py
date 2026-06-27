@@ -7,6 +7,7 @@ from pathlib import Path
 from unittest.mock import MagicMock, patch
 
 from core.config.spec_validation import spec_validation_enabled
+from core.context.role_rules import build_role_rules
 from core.context.spec_validation_prompt import build_spec_validation_prompt
 from core.engine.base import ExecutionResult
 from core.engine.capabilities import AIDER_CAPABILITIES
@@ -222,7 +223,42 @@ def test_build_spec_validation_prompt_includes_spec_and_transcript(tmp_path):
     assert "CLI uses core" in prompt
     assert "Use SQLite" in prompt
     assert "User agreed on JSON files" in prompt
-    assert "## Validation OK" in prompt or "Validation OK" in prompt
+    assert "## Role: spec advisor" not in prompt
+
+
+def test_spec_validation_prompt_builder_returns_no_preamble(tmp_path):
+    ws = _setup_workspace(tmp_path)
+    spec_read = read_task_spec(ws / ".mcp-coder/specs/tasks/step-b.md", workspace=ws)
+    prompt = build_spec_validation_prompt(
+        spec_read=spec_read,
+        host_transcript="User agreed on JSON files",
+        task="Implement CLI",
+        context_summary="Planner chose JSON",
+    )
+    assert "## Role: spec advisor" not in prompt
+    assert "## Task spec" in prompt
+
+
+def test_spec_validation_llm_passes_system_prompt(tmp_path):
+    completion = OwnedHelperCompletion(
+        text="## Validation OK\nAligned.",
+        model="openrouter/test/validator",
+        tokens={"input": 10, "output": 5, "total": 15, "source": "owned_completion"},
+        duration_ms=42,
+    )
+    with patch("core.engine.spec_validation_llm.provider_hint_for_model", return_value=None), patch(
+        "core.engine.spec_validation_llm.run_owned_helper_completion", return_value=completion
+    ) as run_completion:
+        result = run_spec_validation_llm("## Task spec\nDo it", workspace_path=tmp_path)
+
+    assert result.success is True
+    run_completion.assert_called_once()
+    assert run_completion.call_args.args[0] == [
+        {"role": "user", "content": "## Task spec\nDo it"}
+    ]
+    assert run_completion.call_args.kwargs["system_prompt"] == build_role_rules(
+        "spec_validation"
+    )
 
 
 # --- parser ---

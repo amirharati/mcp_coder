@@ -178,6 +178,36 @@ def test_run_owned_helper_completion_returns_tokens(tmp_path, monkeypatch):
     mock_gw.complete.assert_called_once()
 
 
+def test_run_owned_helper_completion_prepends_system_prompt(tmp_path, monkeypatch):
+    monkeypatch.setenv("OPENROUTER_API_KEY", "sk-test")
+
+    from core.observability.gateway import GatewayCompletion, set_llm_gateway
+    from unittest.mock import MagicMock
+
+    mock_gw = MagicMock()
+    mock_gw.complete.return_value = GatewayCompletion(
+        text="hello",
+        model="openrouter/test/flash",
+        tokens={"input": 50, "output": 10, "total": 60, "source": "owned_completion"},
+        duration_ms=12,
+    )
+    set_llm_gateway(mock_gw)
+
+    with role_context(ROLE_CONTEXT_BUILDER):
+        result = run_owned_helper_completion(
+            [{"role": "user", "content": "ping"}],
+            model="openrouter/test/flash",
+            system_prompt="system rules",
+        )
+
+    assert result.error is None
+    mock_gw.complete.assert_called_once()
+    assert mock_gw.complete.call_args.kwargs["messages"] == [
+        {"role": "system", "content": "system rules"},
+        {"role": "user", "content": "ping"},
+    ]
+
+
 def test_builder_llm_integration_with_owned_completion(tmp_path, monkeypatch):
     monkeypatch.setenv("MCP_CODER_CONTEXT_BUILDER_MODEL", "openrouter/test/flash")
     monkeypatch.setenv("OPENROUTER_API_KEY", "sk-test")

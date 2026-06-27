@@ -52,7 +52,19 @@ def test_estimate_cost_usd_actual_tokens():
 
 
 def test_estimate_cost_usd_unknown_model():
+    # P15-ISS-007: unknown model with tokens returns zeroed cost fields
+    # (total always present) so cost_est_usd["total"] never KeyErrors.
     cost = estimate_cost_usd("unknown/model-xyz", 1000, 500)
+    assert cost["source"] == "unknown_model"
+    assert cost["total"] == 0.0
+    assert cost["input"] == 0.0
+    assert cost["output"] == 0.0
+    assert cost["note"] == "rates_missing_for_model"
+
+
+def test_estimate_cost_usd_unknown_model_no_tokens():
+    # Unknown model with no tokens → minimal marker (no zeroed fields).
+    cost = estimate_cost_usd("unknown/model-xyz", None, None)
     assert cost == {"source": "unknown_model"}
 
 

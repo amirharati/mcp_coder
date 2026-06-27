@@ -9,6 +9,7 @@ from types import SimpleNamespace
 from unittest.mock import patch
 
 from core.config.planner_pass import planner_pass_enabled
+from core.context.role_rules import build_role_rules
 from core.context.planner_prompt import build_planner_pass_prompt
 from core.context.file_picker import CandidateFilesResult
 from core.engine.planner_pass_llm import PlannerPassLlmResult, run_planner_pass_llm
@@ -311,8 +312,46 @@ def test_planner_pass_prompt_heading(tmp_path):
         task="Implement CLI",
         context_summary="",
     )
-    assert "## Planner plan" in prompt
+    assert "## Role: task planner" not in prompt
+    assert "## Planner plan" in build_role_rules("planner")
     assert "## Task spec summary" in prompt
+
+
+def test_planner_prompt_builder_returns_no_preamble(tmp_path):
+    from core.specs.read import read_task_spec as _rts
+
+    ws = _setup_workspace(tmp_path, spec_text=STEP_SPEC_PLANNER_ON)
+    spec_read = _rts(ws / ".mcp-coder/specs/tasks/step.md", workspace=ws)
+    prompt = build_planner_pass_prompt(
+        spec_read=spec_read,
+        mechanical_brief="## Paths\n- EDIT pkg/cli.py",
+        picker_result=None,
+        host_transcript=None,
+        task="Implement CLI",
+        context_summary="",
+    )
+    assert "## Role: task planner" not in prompt
+    assert "## Task spec summary" in prompt
+
+
+def test_planner_llm_passes_system_prompt(tmp_path):
+    completion = OwnedHelperCompletion(
+        text="## Planner plan\n- Do the work.",
+        model="openrouter/test/planner",
+        tokens={"input": 10, "output": 5, "total": 15, "source": "owned_completion"},
+        duration_ms=42,
+    )
+    with patch("core.engine.planner_pass_llm.provider_hint_for_model", return_value=None), patch(
+        "core.engine.planner_pass_llm.run_owned_helper_completion", return_value=completion
+    ) as run_completion:
+        result = run_planner_pass_llm("## Task spec summary\nDo it", workspace_path=tmp_path)
+
+    assert result.success is True
+    run_completion.assert_called_once()
+    assert run_completion.call_args.args[0] == [
+        {"role": "user", "content": "## Task spec summary\nDo it"}
+    ]
+    assert run_completion.call_args.kwargs["system_prompt"] == build_role_rules("planner")
 
 
 # ── 10. planner_pass key in architect_trigger takes precedence ────────────────

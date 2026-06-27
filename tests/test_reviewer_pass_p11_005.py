@@ -9,12 +9,15 @@ from unittest.mock import patch
 
 from core.config.spec_validation import reviewer_pass_enabled
 from core.context.helper_llm_pipeline import apply_reviewer_pass
+from core.context.role_rules import build_role_rules
 from core.context.reviewer_prompt import build_reviewer_prompt
 from core.engine.base import ExecutionResult
 from core.engine.capabilities import AIDER_CAPABILITIES
+from core.engine.owned_helper_llm import OwnedHelperCompletion
 from core.engine.reviewer_llm import (
     ReviewerResult,
     parse_reviewer_output,
+    run_reviewer_llm,
 )
 from core.host.base import HostSessionHint
 from core.host.cursor_transcript import TranscriptLoadResult
@@ -239,6 +242,36 @@ def test_reviewer_pass_flag_default_on(tmp_path, monkeypatch):
 def test_reviewer_pass_env_on(tmp_path, monkeypatch):
     monkeypatch.setenv("MCP_CODER_REVIEWER_PASS", "1")
     assert reviewer_pass_enabled(tmp_path) is True
+
+
+def test_reviewer_prompt_builder_returns_no_preamble():
+    prompt = build_reviewer_prompt(
+        task="Wire CLI",
+        acceptance="CLI calls core.api().",
+        files_changed=["pkg/cli.py"],
+        unified_diff="diff --git a/pkg/cli.py b/pkg/cli.py",
+    )
+    assert "## Role: junior code reviewer" not in prompt
+    assert "## Task\nWire CLI" in prompt
+    assert "## Unified diff" in prompt
+
+
+def test_reviewer_llm_passes_system_prompt(tmp_path):
+    completion = OwnedHelperCompletion(
+        text="## LGTM\nLooks consistent.",
+        model="openrouter/test/reviewer",
+        tokens={"input": 10, "output": 5, "total": 15, "source": "owned_completion"},
+        duration_ms=42,
+    )
+    with patch("core.engine.reviewer_llm.provider_hint_for_model", return_value=None), patch(
+        "core.engine.reviewer_llm.run_owned_helper_completion", return_value=completion
+    ) as run_completion:
+        result = run_reviewer_llm("## Task\nReview it", workspace_path=tmp_path)
+
+    assert result.success is True
+    run_completion.assert_called_once()
+    assert run_completion.call_args.args[0] == [{"role": "user", "content": "## Task\nReview it"}]
+    assert run_completion.call_args.kwargs["system_prompt"] == build_role_rules("reviewer")
 
 
 def test_parse_reviewer_output_lgtm():

@@ -33,6 +33,10 @@ models:
     input_per_million: 0.25
     output_per_million: 0.40
     context_budget_tokens: 64000
+  openrouter/deepseek/deepseek-v4-pro:
+    input_per_million: 0.435
+    output_per_million: 0.87
+    context_budget_tokens: 1000000
   openrouter/google/gemini-2.5-flash:
     input_per_million: 0.15
     output_per_million: 0.60

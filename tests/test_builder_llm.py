@@ -11,6 +11,7 @@ from core.config.context_builder import context_builder_llm_enabled
 from core.context.builder_history import BuilderHistoryContext
 from core.context.builder_prompt import build_builder_llm_prompt
 from core.context.file_picker import CandidateFilesResult
+from core.context.role_rules import build_role_rules
 from core.engine.base import ExecutionResult
 from core.engine.capabilities import AIDER_CAPABILITIES, BackendCapabilities
 from core.engine.context_builder_llm import (
@@ -36,6 +37,40 @@ def _run_builder_llm(tmp_path, response: str) -> BuilderLlmResult:
     with patch("core.engine.context_builder_llm.provider_hint_for_model", return_value=None):
         with patch("core.engine.context_builder_llm.run_owned_helper_completion", return_value=completion):
             return run_context_builder_llm("prompt", workspace_path=tmp_path)
+
+
+def test_builder_prompt_builder_returns_no_preamble():
+    prompt = build_builder_llm_prompt(
+        mechanical_brief="## Task\nBuild CLI",
+        picker_result=None,
+        package_metadata={},
+        history=BuilderHistoryContext(),
+        host_transcript=None,
+        context_summary="",
+        task="Build CLI",
+    )
+    assert "## Role: context builder" not in prompt
+    assert "## Mechanical brief" in prompt
+
+
+def test_builder_llm_passes_system_prompt(tmp_path):
+    completion = OwnedHelperCompletion(
+        text="## Builder brief\nDo the work.",
+        model="openrouter/test/builder",
+        tokens={"input": 10, "output": 5, "total": 15, "source": "owned_completion"},
+        duration_ms=42,
+    )
+    with patch("core.engine.context_builder_llm.provider_hint_for_model", return_value=None), patch(
+        "core.engine.context_builder_llm.run_owned_helper_completion", return_value=completion
+    ) as run_completion:
+        result = run_context_builder_llm("## Mechanical brief\nDo it", workspace_path=tmp_path)
+
+    assert result.success is True
+    run_completion.assert_called_once()
+    assert run_completion.call_args.args[0] == [
+        {"role": "user", "content": "## Mechanical brief\nDo it"}
+    ]
+    assert run_completion.call_args.kwargs["system_prompt"] == build_role_rules("builder")
 
 
 STEP_SPEC = """\

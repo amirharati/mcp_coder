@@ -9,7 +9,7 @@ from core.context.package import (
     ContextPackage,
     PathEntry,
 )
-from core.engine.aider_engine import translate_context_package
+from core.engine.aider_engine import _extract_plan_section, translate_context_package
 from core.engine.base import BackendRunRequest
 
 
@@ -170,3 +170,33 @@ def test_translate_full_package():
     assert "class Expense: pass" in req.prompt
     # read context comes after brief
     assert req.prompt.index(brief) < req.prompt.index("## Read context")
+
+
+def test_executor_prompt_has_planner_plan_section():
+    brief = "## Task\nImplement CLI\n\n---\n\n## Planner plan\n- Touch pkg/cli.py first"
+    pkg = _make_package([], brief=brief)
+    req = translate_context_package(pkg)
+    assert "## Planner plan\n- Touch pkg/cli.py first" in req.prompt
+    assert req.prompt.count("## Planner plan") == 1
+
+
+def test_executor_prompt_has_project_state_section():
+    pkg = _make_package([], brief="## Task\nImplement CLI")
+    req = translate_context_package(pkg, project_state_summary="Recent work: CLI exported.")
+    assert "## Project state\nRecent work: CLI exported." in req.prompt
+
+
+def test_executor_prompt_section_ordering():
+    brief = "## Task\nImplement CLI\n\n---\n\n## Planner plan\n- Touch pkg/cli.py first"
+    pkg = _make_package(
+        [PathEntry(path="pkg/core.py", tier=TIER_READ_FULL, bytes=19, payload="def api(): return 1")],
+        brief=brief,
+    )
+    req = translate_context_package(pkg, project_state_summary="Recent work: CLI exported.")
+    assert req.prompt.index("## Planner plan") < req.prompt.index("## Project state")
+    assert req.prompt.index("## Project state") < req.prompt.index("## Read context")
+
+
+def test_extract_plan_section_legacy_architect():
+    brief = "## Task\nImplement CLI\n\n---\n\n## Architect plan\n- Legacy step"
+    assert _extract_plan_section(brief) == "## Planner plan\n- Legacy step"

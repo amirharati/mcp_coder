@@ -12,17 +12,6 @@ _MAX_PATHS_CHARS = 4000
 
 _PATHS_HEADING_RE = re.compile(r"^##\s+Paths\b", re.IGNORECASE | re.MULTILINE)
 
-PLANNER_PREAMBLE = """## Role: task planner
-
-You produce a concise implementation plan for the executor brief.
-
-Rules:
-- Begin your response IMMEDIATELY with `## Planner plan` (no preamble).
-- Include bullets covering: approach, risks, file touch order, and what not to change.
-- Max ~250 words.
-- No code fences, no file contents, no code blocks.
-- Use only files/constraints present in the provided inputs."""
-
 
 def _spec_summary(spec_read: SpecReadResult) -> str:
     parts = ["## Task spec summary"]
@@ -90,7 +79,6 @@ def build_planner_pass_prompt(
 ) -> str:
     """Assemble planner pass prompt from spec + planner + picker context."""
     parts = [
-        PLANNER_PREAMBLE,
         _spec_summary(spec_read),
         "## Mechanical brief paths\n" + _paths_from_brief(mechanical_brief),
         _picker_section(picker_result),
