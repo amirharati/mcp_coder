@@ -182,9 +182,13 @@ def _delegate(
 
     monkeypatch.setenv("MCP_CODER_HOME", str(ws.parent / "home"))
     monkeypatch.chdir(ws)
-    # This test module targets reviewer behavior; disable clarity gate to avoid
-    # unrelated needs_input blocks from pre-delegate questions.
+    # This test module targets reviewer behavior; disable clarity gate and
+    # supervisor LLM decide to avoid unrelated needs_input blocks. Force
+    # max_turns=1 so policy_decide accepts advisory reviewer issues (otherwise
+    # turns_remaining>0 triggers rerun_aider on "issues").
     monkeypatch.setenv("MCP_CODER_CLARITY_PASS", "0")
+    monkeypatch.setenv("MCP_CODER_SUPERVISOR_LLM_DECIDE", "0")
+    monkeypatch.setenv("MCP_CODER_SUPERVISOR_MAX_TURNS", "1")
     monkeypatch.delenv("MCP_CODER_SPEC_VALIDATION", raising=False)
     if reviewer_env is None:
         monkeypatch.delenv("MCP_CODER_REVIEWER_PASS", raising=False)

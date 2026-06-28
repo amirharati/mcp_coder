@@ -29,7 +29,7 @@ def test_build_role_rules_returns_shared_rules():
 def test_build_role_rules_returns_role_specific_rules():
     samples = {
         "planner": "file touch order",
-        "reviewer": "obvious problems in the diff",
+        "reviewer": "WEAK post-execution reviewer",
         "clarity": "genuinely catastrophic",
         "spec_validation": "advisory feedback",
         "builder": "executor-facing brief",
@@ -72,7 +72,5 @@ def test_build_role_rules_planner_includes_feasibility_rule():
 
 def test_build_role_rules_reviewer_includes_spec_compliance_rule():
     rules = build_role_rules("reviewer")
-    assert (
-        "Check whether the diff addresses the spec Goal and respects the Files contract (no out-of-scope edits). Frame findings as spec-compliance issues, not just style."
-        in rules
-    )
+    assert "verify the diff meets the spec Goal and Acceptance criteria" in rules
+    assert "When in doubt: return `## LGTM`" in rules

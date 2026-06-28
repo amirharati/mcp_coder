@@ -120,21 +120,23 @@ DecisionFn = Callable[[SupervisorTurnContext], SupervisorTurnDecision]
 def resolve_supervisor_max_turns(workspace: str | Any) -> int:
     """Resolve max supervisor turns.
 
-    Precedence: default(1) → env ``MCP_CODER_SUPERVISOR_MAX_TURNS`` → yaml
+    Precedence: default(3) → env ``MCP_CODER_SUPERVISOR_MAX_TURNS`` → yaml
     ``supervisor_max_turns`` (later wins). Clamped to ``[1, 5]``.
 
-    Default ``1`` keeps behaviour functionally identical to the pre-P12 pipeline
-    (single worker run, no autonomous rerun).
+    Default ``3`` gives the intelligent supervisor (P15-001) room to rerun the
+    executor on reviewer findings before escalating to the host. The old default
+    of 1 caused every ``rerun_aider`` decision to immediately become a host
+    escalation (no second turn available).
     """
     import os
 
-    resolved = 1
+    resolved = 3
     env_raw = os.environ.get("MCP_CODER_SUPERVISOR_MAX_TURNS", "").strip()
     if env_raw:
         try:
             resolved = int(env_raw)
         except ValueError:
-            resolved = 1
+            resolved = 3
     try:
         from core.storage.workspace_config import load_workspace_config
 

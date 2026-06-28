@@ -269,7 +269,7 @@ def test_context_block_shape():
 
 def test_resolve_max_turns_default(tmp_path, monkeypatch):
     monkeypatch.delenv("MCP_CODER_SUPERVISOR_MAX_TURNS", raising=False)
-    assert resolve_supervisor_max_turns(tmp_path) == 1
+    assert resolve_supervisor_max_turns(tmp_path) == 3
 
 
 def test_resolve_max_turns_env(tmp_path, monkeypatch):
