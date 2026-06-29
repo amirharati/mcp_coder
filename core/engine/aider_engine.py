@@ -98,6 +98,74 @@ def _supervisor_metadata_from_io(io: Any) -> dict[str, Any]:
     return payload
 
 
+def _executor_flush_grace_seconds() -> float:
+    """P15-019: grace period before killing the executor on timeout.
+
+    Lets the executor thread flush buffered writes so the after-walk sees real
+    source files (not just Aider cache files). Default 5.0s; tunable via
+    MCP_CODER_EXECUTOR_FLUSH_GRACE_S.
+    """
+    raw = os.environ.get("MCP_CODER_EXECUTOR_FLUSH_GRACE_S", "5.0").strip()
+    try:
+        return max(0.0, float(raw))
+    except ValueError:
+        return 5.0
+
+
+def _mark_delegation_outcome(
+    delegation_id: str | None,
+    snapshot_session: Any,
+    *,
+    outcome: str,
+) -> None:
+    """P15-019: immediately mark the snapshot row outcome so it's never in limbo.
+
+    Called from the timeout/abort/exception paths BEFORE doing anything else.
+    Failure-tolerant: swallows errors so the outcome-mark never masks the
+    original failure.
+    """
+    if not delegation_id or snapshot_session is None:
+        return
+    history_db = getattr(snapshot_session, "history_db", None)
+    if history_db is None:
+        return
+    try:
+        from core.workspace.snapshot import utc_now_iso
+
+        history_db.mark_outcome(
+            delegation_id,
+            outcome=outcome,
+            timestamp_end=utc_now_iso(),
+        )
+    except Exception:
+        pass
+
+
+def _shutdown_pool_with_grace(
+    pool: concurrent.futures.ThreadPoolExecutor,
+    future: concurrent.futures.Future,
+) -> None:
+    """P15-019: give the executor a grace period to flush before killing it.
+
+    First waits (cancel_futures=False) for MCP_CODER_EXECUTOR_FLUSH_GRACE_S so
+    buffered writes can land on disk; if the thread still isn't done, forces a
+    cancel+shutdown. This fixes B014 where the after-walk saw only cache files.
+    """
+    grace_s = _executor_flush_grace_seconds()
+    if grace_s > 0:
+        try:
+            future.result(timeout=grace_s)
+            # Thread completed during grace window — clean shutdown.
+            pool.shutdown(wait=False, cancel_futures=False)
+            return
+        except concurrent.futures.TimeoutError:
+            pass  # grace window elapsed; fall through to hard cancel
+        except Exception:
+            pass  # thread raised during grace; fall through to hard cancel
+    future.cancel()
+    pool.shutdown(wait=False, cancel_futures=True)
+
+
 def _plan_section_range(brief: str | None) -> tuple[int, int, str] | None:
     text = (brief or "").strip()
     if not text:
@@ -560,8 +628,17 @@ class AiderEngine(ExecutionEngine):
                     future.result(timeout=timeout_s)
                 )
             except concurrent.futures.TimeoutError:
-                future.cancel()
-                pool.shutdown(wait=False, cancel_futures=True)
+                # P15-019: mark the snapshot outcome IMMEDIATELY so the row is
+                # never left in limbo (timestamp_end=NULL), even if everything
+                # below fails. Fixes the "permanent limbo" failure mode.
+                _mark_delegation_outcome(
+                    delegation_id, snapshot_session, outcome="timeout"
+                )
+                # P15-019: give the executor a grace period to flush buffered
+                # writes before killing it. Fixes B014 where the after-walk
+                # saw only Aider cache files because the thread was killed
+                # mid-flush.
+                _shutdown_pool_with_grace(pool, future)
                 pool_shutdown = True
                 from core.logging.server_log import server_log_emit
 
@@ -602,6 +679,12 @@ class AiderEngine(ExecutionEngine):
                 from core.engine.supervised_io import SupervisorAbort
 
                 if isinstance(exc, SupervisorAbort):
+                    # P15-019: mark outcome immediately so the row is not in limbo.
+                    _mark_delegation_outcome(
+                        delegation_id,
+                        snapshot_session,
+                        outcome=OUTCOME_NEEDS_INPUT_CLARIFICATION,
+                    )
                     if not pool_shutdown:
                         pool.shutdown(wait=False, cancel_futures=True)
                         pool_shutdown = True
@@ -739,6 +822,18 @@ class AiderEngine(ExecutionEngine):
                 workspace_snapshot_ms=snapshot_ms or None,
             )
         except Exception as exc:
+            # P15-019: mark the snapshot outcome immediately so the row is not
+            # left with timestamp_end=NULL. The outcome is best-effort derived
+            # from the error class; this mark runs before anything else so it
+            # survives even if attribution below fails.
+            _error_class_for_mark, _ = classify_delegation_error(
+                f"{type(exc).__name__}: {exc}", exc=exc
+            )
+            _mark_delegation_outcome(
+                delegation_id,
+                snapshot_session,
+                outcome=_error_class_for_mark or "error",
+            )
             (
                 files_changed,
                 files_unexpected,

@@ -64,6 +64,10 @@ def mock_aider_slow_coder(monkeypatch):
 
 
 def test_timeout_returns_without_waiting_for_worker(tmp_path, mock_aider_slow_coder, monkeypatch):
+    # P15-019: the default grace period (5s) would make this test wait for the
+    # 5s-sleeping mock coder. This test verifies the legacy instant-kill path,
+    # so disable the grace window.
+    monkeypatch.setenv("MCP_CODER_EXECUTOR_FLUSH_GRACE_S", "0")
     monkeypatch.setenv("MCP_CODER_DELEGATION_TIMEOUT_S", "0.1")
     ws = tmp_path / "ws"
     ws.mkdir()

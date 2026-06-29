@@ -11,7 +11,7 @@ from core.engine.git_diff import (
     snapshot_git_dirty,
 )
 from core.workspace.history_db import WorkspaceHistoryDB
-from core.workspace.manifest import Manifest, diff_manifests
+from core.workspace.manifest import DelegationDelta, Manifest, diff_manifests
 from core.workspace.walk import walk_workspace
 
 
@@ -22,6 +22,12 @@ def is_snapshot_enabled() -> bool:
         "true",
         "yes",
     )
+
+
+def is_reconcile_on_startup_enabled() -> bool:
+    """P15-019: reconciliation runs on server startup unless explicitly disabled."""
+    raw = os.environ.get("MCP_CODER_RECONCILE_ON_STARTUP", "1").strip().lower()
+    return raw not in ("0", "false", "no", "off")
 
 
 def read_snapshot_retention(workspace_path: str) -> str:
@@ -175,3 +181,118 @@ def resolve_delegation_attribution(
         attribution_source="legacy",
     )
     return files_changed, files_unexpected, None, used_git, 0
+
+
+def reconcile_interrupted_delegations(
+    workspace_path: str,
+) -> list[dict[str, Any]]:
+    """P15-019: backfill file_deltas + timestamp_end + outcome for orphaned delegations.
+
+    On server startup (or on-demand), find every snapshots row with
+    timestamp_end IS NULL, diff the current workspace against the persisted
+    before-manifest, and write the result as if commit_snapshot had run.
+
+    Guarantees:
+    - **Idempotent:** safe to call multiple times. Reconciling twice produces
+      no duplicate file_deltas rows (PK = delegation_id, path). Reconciliation
+      only runs for rows still missing timestamp_end; once a row is finalized
+      it's skipped.
+    - **Failure-tolerant:** a failure reconciling one delegation is logged and
+      skipped; it never blocks the others or crashes the caller.
+    - **Legacy-compat:** a snapshots row with no manifest_files entries
+      (pre-P15-019) is skipped with a warning, not an error.
+
+    Returns a list of summary dicts (delegation_id, delta counts, outcome).
+    """
+    from core.logging.server_log import server_log_emit
+
+    summaries: list[dict[str, Any]] = []
+    db = WorkspaceHistoryDB(workspace_path)
+    if not db.db_path.is_file():
+        return summaries
+
+    orphaned = db.list_interrupted_snapshots()
+    if not orphaned:
+        return summaries
+
+    # P15-019: walk the workspace once and diff against each orphan's
+    # before-manifest (walk is shared, diff is per-delegation).
+    try:
+        current_manifest = walk_workspace(workspace_path)
+    except Exception as exc:
+        server_log_emit(
+            "delegation_reconcile_walk_failed",
+            level="error",
+            workspace_path=workspace_path,
+            error=f"{type(exc).__name__}: {exc}",
+            orphaned_count=len(orphaned),
+        )
+        return summaries
+
+    for row in orphaned:
+        delegation_id = str(row["delegation_id"])
+        try:
+            before_manifest = db.get_manifest(delegation_id, role="before")
+            if not before_manifest:
+                # Legacy row (pre-P15-019) or begin_snapshot itself failed
+                # before the manifest_files table existed. Skip gracefully.
+                server_log_emit(
+                    "delegation_reconcile_skipped_legacy",
+                    level="warn",
+                    workspace_path=workspace_path,
+                    delegation_id=delegation_id,
+                    reason="no before-manifest rows",
+                )
+                continue
+
+            delta = diff_manifests(before_manifest, current_manifest)
+            timestamp_end = utc_now_iso()
+            # commit_snapshot is idempotent w.r.t. file_deltas (PK on
+            # delegation_id, path) because it uses INSERT. To make a second
+            # reconciliation pass safe, we DELETE existing file_deltas for
+            # this delegation first, then re-insert.
+            db._reconcile_commit_snapshot(
+                delegation_id=delegation_id,
+                timestamp_end=timestamp_end,
+                delta=delta,
+                after_manifest=current_manifest,
+                before_manifest=before_manifest,
+            )
+
+            summary: dict[str, Any] = {
+                "delegation_id": delegation_id,
+                "outcome": "interrupted",
+                "timestamp_end": timestamp_end,
+                "created": list(delta.created),
+                "modified": list(delta.modified),
+                "deleted": list(delta.deleted),
+                "created_count": len(delta.created),
+                "modified_count": len(delta.modified),
+                "deleted_count": len(delta.deleted),
+            }
+            summaries.append(summary)
+
+            server_log_emit(
+                "delegation_reconciled",
+                level="info",
+                workspace_path=workspace_path,
+                delegation_id=delegation_id,
+                outcome="interrupted",
+                timestamp_end=timestamp_end,
+                delta_created=len(delta.created),
+                delta_modified=len(delta.modified),
+                delta_deleted=len(delta.deleted),
+            )
+        except Exception as exc:
+            # Failure reconciling one delegation must not block the others or
+            # crash server startup.
+            server_log_emit(
+                "delegation_reconcile_failed",
+                level="warn",
+                workspace_path=workspace_path,
+                delegation_id=delegation_id,
+                error=f"{type(exc).__name__}: {exc}",
+            )
+            continue
+
+    return summaries

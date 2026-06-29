@@ -205,6 +205,24 @@ Phase 9+ uses write-always semantics: trace and delegation artifacts are always 
 
 ---
 
+## Crash-safe delegation trail (P15-019)
+
+These knobs control the durability and recovery of delegation records after an
+abnormal termination (server crash, OOM kill, SIGKILL, executor timeout).
+
+| Variable | Default | Effect |
+|---|---|---|
+| `MCP_CODER_RECONCILE_ON_STARTUP` | `1` | `1` = run the reconciliation pass on server startup: backfill `file_deltas` + `timestamp_end` + `outcome` for any delegation left with `timestamp_end IS NULL` by a previous crash. `0` = skip (orphans stay in limbo until the next enabled startup). |
+| `MCP_CODER_EXECUTOR_FLUSH_GRACE_S` | `5.0` | Grace period (seconds) the executor thread gets to flush buffered writes before being killed on timeout. Before P15-019 the timeout path killed the thread instantly (`cancel_futures=True`), so the after-walk saw only Aider cache files (B014). A short grace window lets real source writes land on disk. `0` = kill instantly (legacy behavior). |
+
+### How the crash-safe trail works
+
+1. **Before-manifest persisted (P15-019 pillar 1):** `begin_snapshot()` now writes the before-manifest path→hash map to a `manifest_files` table in the same transaction as the `snapshots` INSERT. A crash mid-`begin_snapshot` leaves either both or neither — never a snapshot row without its manifest.
+2. **Startup reconciliation (P15-019 pillar 2):** on server start, any `snapshots` row with `timestamp_end IS NULL` is diffed against the current workspace and backfilled with `file_deltas`, `timestamp_end=now`, `outcome='interrupted'`, and after-manifest rows. Legacy rows (pre-P15-019, no `manifest_files` entries) are skipped with a warning.
+3. **Timeout grace + immediate outcome (P15-019 pillar 3):** the timeout, supervisor-abort, and exception paths in `aider_engine.py` mark the snapshot `outcome` immediately (so the row is never in limbo) and give the executor `MCP_CODER_EXECUTOR_FLUSH_GRACE_S` seconds to flush before being killed.
+
+---
+
 ## Environment file loading
 
 | Variable | Default | Effect |

@@ -310,6 +310,35 @@ def list_delegations(
     return out
 
 
+def list_interrupted_delegations(
+    workspace: str | Path,
+) -> list[dict[str, Any]]:
+    """P15-019: surface delegations left with timestamp_end IS NULL.
+
+    These are crash-orphaned delegations that the startup reconciliation pass
+    will backfill. Each item carries the snapshot row fields plus whether a
+    persisted before-manifest exists (so callers can tell legacy rows apart).
+    """
+    db = WorkspaceHistoryDB(workspace)
+    rows = db.list_interrupted_snapshots()
+    out: list[dict[str, Any]] = []
+    for row in rows:
+        delegation_id = str(row["delegation_id"])
+        before_manifest = db.get_manifest(delegation_id, role="before")
+        out.append(
+            {
+                "delegation_id": delegation_id,
+                "timestamp_start": row.get("timestamp_start"),
+                "spec_path": row.get("spec_path"),
+                "mcp_session_id": row.get("mcp_session_id"),
+                "workspace_path": row.get("workspace_path"),
+                "before_manifest_entries": len(before_manifest),
+                "has_before_manifest": bool(before_manifest),
+            }
+        )
+    return out
+
+
 def build_file_history(
     workspace: str | Path,
     file_path: str,

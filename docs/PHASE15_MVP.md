@@ -81,6 +81,7 @@ If a worker needs a capability not in this table, file a P15-ISS-* rather than b
 | 3 | P15-002 | [P15-002.md](../tasks/P15-002.md) | **done** | Planner agentic loop v1 — reuse `SupervisorToolRunner` |
 | 4 | P15-003 | [P15-003.md](../tasks/P15-003.md) | **done** | Supervisor clarity-resolution sub-agent — bounded tool-calling sub-loop answers clarity questions before pausing for human |
 | 5 | P15-004 | [P15-004.md](../tasks/P15-004.md) | **done** | Minimal per-project cost tracker — aggregate `model_roles_payload` from delegation logs; MCP tool + CLI; extension of existing logging infra |
+| 6 | P15-019 | [P15-019-durable-delegation-trail.md](../tasks/P15-019-durable-delegation-trail.md) | **done** | Durable delegation trail (crash-safe snapshots) — persist before-manifest to `manifest_files` table; startup reconciliation pass for orphaned delegations; timeout grace period + immediate outcome mark. Fixes P15-ISS-019 (critical) + P15-ISS-013 (B014). Filed from `idealabs_web` Epic 2 dogfood. |
 
 **Order rationale:** P15-000 first because it's the smallest and immediately improves every delegation's executor quality. P15-001 second because it's lower-risk (the LLM path already exists, we just make it default + enrich the prompt). P15-002 last because it's the biggest structural change (planner goes from one-shot to loop).
 
@@ -277,6 +278,32 @@ workspace
 
 ---
 
+### P15-019 — Durable delegation trail (crash-safe snapshots)
+
+**Status:** `done` (2026-06-29)
+**Goal:** Make the delegation trail crash-safe. Regardless of how a delegation ends (clean success, timeout, supervisor abort, exception, or hard process kill), the workspace history DB always ends up with a complete, queryable record containing `timestamp_end`, `outcome`, and accurate `file_deltas` that can be diffed, reverted, or resumed from.
+
+**Why Phase 15 (not Phase 16):** This is a reliability fix for existing Phase 12/13 infrastructure (`WorkspaceHistoryDB`, `SnapshotSession`, `resolve_delegation_attribution`). The workspace history system shipped in earlier phases but was never hardened against abnormal termination. `idealabs_web` Epic 2 dogfood proved this breaks the judgment loop, revert workflow, and resume-from-checkpoint. It blocks trustworthy dogfooding and must ship before Phase 16 work.
+
+**Filed from:** P15-ISS-019 (critical, reliability) — supersedes P15-ISS-013 (B014). Root cause analysis performed 2026-06-29 master session.
+
+**Three pillars:**
+
+| Pillar | What | Where |
+|--------|------|-------|
+| **1. Persist before-manifest** | New `manifest_files` table in `workspace_history.db` stores the path→hash map durably during `begin_snapshot()`. Today it lives only in `WorkspaceHistoryDB._before_manifest` (memory) and `SnapshotSession.before_manifest` (memory) — lost on crash. | `core/workspace/history_db.py`, `core/workspace/snapshot.py` |
+| **2. Startup reconciliation** | `reconcile_interrupted_delegations(ws)` scans for `snapshots` rows with `timestamp_end IS NULL`, re-walks the workspace, computes `current - before`, backfills `file_deltas` + `timestamp_end` + `outcome='interrupted'`. Idempotent, failure-tolerant, gated by `MCP_CODER_RECONCILE_ON_STARTUP=1`. | `core/workspace/snapshot.py`, called from `main.py` |
+| **3. Timeout grace + immediate outcome** | On timeout, mark `outcome='timeout'` immediately (before anything else), then give the executor thread `MCP_CODER_EXECUTOR_FLUSH_GRACE_S` (default 5s) to flush buffered writes before killing it. Same immediate-outcome-mark for `SupervisorAbort` and `except Exception` paths. | `core/engine/aider_engine.py` |
+
+**Full spec:** [docs/tasks/P15-019-durable-delegation-trail.md](../tasks/P15-019-durable-delegation-trail.md)
+
+**Not solved (out of scope):**
+- Auto-chunking large delegations (P15-ISS-014 / B013)
+- Executor spec delivery (P15-ISS-015 / B010)
+- Auto-revert policy on interrupted delegations (the trail will support manual revert via existing tools)
+
+---
+
 | BL | Status | Phase 15 slice |
 |----|--------|----------------|
 | BL-525 (Planner as agent) | partial → Phase 15 P15-002 advances | tool-calling loop v1; RAG-aware + full mutable plan deferred |
@@ -322,6 +349,8 @@ workspace
 
 | Date | Event |
 |------|-------|
+| 2026-06-29 | **P15-019 done — P15-ISS-019 (critical) + P15-ISS-013 (B014) closed.** Reviewed worker § Results. All three pillars verified against the 8 acceptance criteria (D1-D8). (1) Durable manifest: new `manifest_files` table; `begin_snapshot()` writes before-manifest in the same transaction as the `snapshots` INSERT. (2) Startup reconciliation: `reconcile_interrupted_delegations(ws)` backfills orphaned delegations (`timestamp_end IS NULL`) with correct `file_deltas` + `outcome='interrupted'`; idempotent, failure-tolerant, legacy-compat. (3) Timeout grace: `_shutdown_pool_with_grace()` gives the executor 5s (configurable) to flush before `cancel_futures=True`; `_mark_delegation_outcome()` marks the row immediately on all abnormal exit paths. 21 new tests pass; 46/47 existing tests pass (1 pre-existing B009 failure, verified on clean HEAD). No linter errors. |
+| 2026-06-29 | **P15-019 spec written + P15-ISS-019 filed (critical, reliability).** Master root-cause analysis of B014 (P15-ISS-013) revealed the delegation trail is not crash-safe. Three concrete failures: (1) before-manifest path→hash map lives only in process memory — not persisted as a queryable structure, so after a hard crash the before-state cannot be reconstructed from disk even though before-content blobs ARE durable; (2) `commit_snapshot()` never runs on hard crash, leaving `snapshots` rows with `timestamp_end=NULL`, no `file_deltas`, no `outcome` — permanent limbo; (3) timeout path's `pool.shutdown(wait=False, cancel_futures=True)` kills the Aider thread before it flushes buffered writes, so the after-walk sees only cache files (B014). Filed P15-ISS-019 as the comprehensive fix superseding P15-ISS-013. Created worker spec [docs/tasks/P15-019-durable-delegation-trail.md](../tasks/P15-019-durable-delegation-trail.md) with three pillars: durable manifest table (`manifest_files`), startup reconciliation pass (`reconcile_interrupted_delegations`), timeout grace-period flush. P15-019 added to milestone table as item 6 (pending). |
 | 2026-06-27 | **P15-004 done** — reviewed worker § Results. All four slices verified and accepted with one inline fix. Slice A (`core/logging/cost_report.py`) — clean aggregation: loads via `load_delegations_for_workspace`, filters by `project_key`, applies `limit` on last-N, folds `model_roles` values per delegation, groups by model/role/spec_path; `source=unavailable` → 0 cost + role in `uncaptured_roles`; `FileNotFoundError` or empty filtered list → zeroed report (never raises). Slice B (`server/mcp_server.py`) — `@mcp.tool(name="get_project_cost")` appended before `run_stdio()`; uses `obs.default_workspace_path()`; wrapped in `try/except` returning JSON error on failure. Slice C (`core/cli/cost.py` + `main.py`) — `mcp-coder cost [--workspace] [--project] [--limit] [--json]` wired via `main_cost()`; human-readable default output. Slice D (`tests/test_cost_report_p15_004.py`) — 12 tests submitted. **Inline fix (master):** worker's `by_task["runs"]` was incremented per role entry (inside the role loop) instead of per delegation — a delegation with 6 roles would report `runs=6` instead of `runs=1`. Fixed by moving `task_stats["runs"] += 1` to the outer delegation loop; cost accumulation (`cost_usd`) left inside the role loop (correct). Added `test_by_task_runs_counts_delegations_not_roles` to cover the regression. Final: **13 passed, 0 failed**. No regressions in full suite. All Phase 15 milestones P15-000 → P15-001 → P15-002 → P15-003 → P15-004 done. Phase 15 complete. |
 | 2026-06-27 | **P15-004 spec written** — `docs/tasks/P15-004.md` created. Minimal per-project cost tracker as logging extension: Slice A (`core/logging/cost_report.py`, new — `build_project_cost_report` reads delegation JSONL via `load_delegations_for_workspace`, folds `model_roles_payload` rows, groups by model/role/spec_path, treats `source=unavailable` or `cost_est_usd=None` as 0 with `uncaptured_roles` list); Slice B (MCP tool `get_project_cost` — pure read, no LLM, returns JSON report); Slice C (CLI `mcp-coder cost`); Slice D (tests). PM board updated with P15-004 milestone (pending). |
 | 2026-06-27 | **P15-ISS-001, P15-ISS-004, P15-ISS-005 fixed inline (observability + test hygiene pass).** All Phase 15 open functional issues now closed. (1) P15-ISS-005: added `role: str = ROLE_SUPERVISOR` param to `SupervisorToolRunner.__init__`; `run_with_metrics` uses `self._role` in both `gw.complete()` calls; `build_planner_tool_runner` passes `role=ROLE_PLANNER`; tool-call events carry `"role"` field so trace consumers distinguish planner vs supervisor calls. (2) P15-ISS-004: wired `session_dir` from mcp_server call site → `_apply_architect_pass` → `apply_planner_pass` → `run_planner_pass_llm` → `_run_planner_via_tool_runner` → `build_planner_tool_runner`; `apply_planner_pass` builds `_planner_event_sink` closure that calls `append_trace_record` per tool call; degrades to `None` when `session_dir` absent (tests, inspect-context path). (3) P15-ISS-001: added `pytest.skip` guard on empty FTS hits in `test_fts_query.py` (FAIL→SKIP for empty workspace); fixed stale clarity sample phrase in `test_role_rules_p15_000.py` (stale wording from pre-P15-ISS-006 rules; updated to `"genuinely catastrophic"`). Also fixed mock compat in `test_planner_project_aware_p12_005.py` (mock `_run_planner` needed `event_sink=None` kwarg). Full suite: **1503 passed, 3 skipped, 0 failed**. |

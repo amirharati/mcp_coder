@@ -17,6 +17,108 @@ def _bootstrap_cli_env() -> None:
     apply_provider_env()
 
 
+def _is_client_disconnect(exc: Exception) -> bool:
+    """Detect benign MCP client disconnects (Cursor closed the stdio pipe).
+
+    B012/B011: when a long delegation times out on the client side, Cursor
+    closes the connection. The MCP SDK raises BrokenResourceError wrapped in
+    an ExceptionGroup. This is NOT a server bug — exit gracefully.
+    """
+    # Direct BrokenResourceError.
+    try:
+        import anyio  # type: ignore
+
+        if isinstance(exc, anyio.BrokenResourceError):
+            return True
+    except Exception:
+        pass
+    # ExceptionGroup wrapping BrokenResourceError (the common case).
+    if hasattr(exc, "exceptions"):
+        for sub in exc.exceptions:  # type: ignore[attr-defined]
+            if _is_client_disconnect(sub):
+                return True
+    # String fallback: match by class name in case anyio import is unavailable.
+    exc_name = type(exc).__name__
+    if exc_name == "BrokenResourceError":
+        return True
+    exc_str = str(exc)
+    if "BrokenResourceError" in exc_str or "broken pipe" in exc_str.lower():
+        return True
+    return False
+
+
+def _flush_inflight_delegation_state(workspace: str) -> None:
+    """P15-ISS-012: write a crash marker so the next session can detect orphaned writes.
+
+    When the server dies mid-delegation, the executor may have written partial
+    files to disk with no completed delegation record. This writes a marker file
+    that the next session can check to surface orphaned state.
+
+    Failure-tolerant: never raises — if any step fails, we silently skip the
+    marker so the exit handler itself cannot crash.
+    """
+    import json
+    import time
+
+    try:
+        from core.storage.paths import mcp_coder_home, project_key
+
+        pk = project_key(workspace)
+        marker_dir = Path(mcp_coder_home()) / "projects" / pk
+        marker_dir.mkdir(parents=True, exist_ok=True)
+        marker_path = marker_dir / "last_crash.json"
+
+        marker = {
+            "timestamp": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
+            "pid": os.getpid(),
+            "workspace": workspace,
+            "reason": "client_disconnect",
+        }
+        marker_path.write_text(json.dumps(marker, indent=2), encoding="utf-8")
+    except Exception:
+        pass
+
+
+def _reconcile_on_startup(workspace: str) -> None:
+    """P15-019: backfill orphaned delegations (timestamp_end IS NULL) on startup.
+
+    Gated by MCP_CODER_RECONCILE_ON_STARTUP (default on). Failure-tolerant: a
+    crash here must never block server startup, so all errors are swallowed
+    and logged via server_log_emit.
+    """
+    try:
+        from core.workspace.snapshot import (
+            is_reconcile_on_startup_enabled,
+            reconcile_interrupted_delegations,
+        )
+
+        if not is_reconcile_on_startup_enabled():
+            return
+        summaries = reconcile_interrupted_delegations(workspace)
+        if summaries:
+            from core.logging.server_log import server_log_emit
+
+            server_log_emit(
+                "delegation_reconcile_pass",
+                level="info",
+                workspace_path=workspace,
+                reconciled_count=len(summaries),
+                delegations=[s["delegation_id"] for s in summaries],
+            )
+    except Exception as exc:
+        try:
+            from core.logging.server_log import server_log_emit
+
+            server_log_emit(
+                "delegation_reconcile_startup_failed",
+                level="warn",
+                workspace_path=workspace,
+                error=f"{type(exc).__name__}: {exc}",
+            )
+        except Exception:
+            pass
+
+
 def main() -> None:
     if len(sys.argv) > 1 and sys.argv[1] == "inspect-context":
         from core.cli.inspect_context import main_inspect_context
@@ -495,6 +597,9 @@ def main() -> None:
         spec_layout = ensure_workspace_spec_layout(ws)
         rule_sync = sync_workspace_cursor_rules(ws)
         register_stdio_server(ws)
+        # P15-019: reconcile orphaned delegations (timestamp_end IS NULL) left
+        # behind by a previous crash. Gated by MCP_CODER_RECONCILE_ON_STARTUP.
+        _reconcile_on_startup(ws)
         log_cfg = resolve_config(ws)
         host_raw = os.environ.get("MCP_CODER_HOST", "auto").strip() or "auto"
         from core.session.policy import resolve_session_policy
@@ -531,18 +636,36 @@ def main() -> None:
         run_stdio()
     except Exception as exc:
         tb = traceback.format_exc(limit=8)
+
+        # B012/B011 fix: BrokenResourceError means the MCP client (Cursor)
+        # closed the stdio pipe — usually because a long delegation timed out
+        # on the client side. This is a benign disconnect, NOT a server bug.
+        # Exit gracefully instead of crashing and leaving orphaned state.
+        _is_disconnect = _is_client_disconnect(exc)
         try:
             server_log_emit(
                 "stdio_server_start_failed",
-                level="error",
+                level="warn" if _is_disconnect else "error",
                 workspace_path=ws,
                 error=str(exc),
                 traceback=tb,
+                client_disconnect=_is_disconnect,
             )
+            # P15-ISS-012: capture in-flight delegation state before exit so the
+            # next session can detect orphaned partial writes.
+            if _is_disconnect:
+                _flush_inflight_delegation_state(ws)
         except Exception:
             pass
         if log_brief():
-            log_stderr(f"[mcp-coder] stdio startup failed: {exc}\n{tb}")
+            if _is_disconnect:
+                log_stderr(f"[mcp-coder] stdio client disconnected (benign): {exc}")
+            else:
+                log_stderr(f"[mcp-coder] stdio startup failed: {exc}\n{tb}")
+        # Benign disconnect: exit 0 so the host restarts cleanly.
+        # Real errors: re-raise so the exit code reflects failure.
+        if _is_disconnect:
+            raise SystemExit(0)
         raise
 
 
