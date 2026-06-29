@@ -383,6 +383,77 @@ def test_clarity_resolution_escalates_on_parse_failure():
     assert result.escalate_reason == "parse_failure_no_recognized_heading"
 
 
+def test_clarity_resolution_strips_leaked_tool_call_text_then_parses_answers():
+    """P15-ISS-011: GLM-5.2 sometimes emits <tool_call>...</tool_call> text
+    instead of using native function-calling. The parser must strip these
+    blocks before looking for ## Answers / ## Escalate headings."""
+    raw_with_tool_calls = (
+        "<tool_call>read_file(path=\"content/products/claude-downloader.md\")</tool_call>\n"
+        "## Answers\n"
+        "1. Use YAML frontmatter for products.\n"
+        "2. Place files under content/ root.\n"
+    )
+    fake_runner = _make_fake_runner(
+        run_with_metrics_result=_fake_runner_result(raw_with_tool_calls)
+    )
+    with patch(
+        "core.engine.clarity_resolution.build_phase12_tool_runner",
+        return_value=fake_runner,
+    ), patch(
+        "core.engine.clarity_resolution.provider_hint_for_model", return_value=None
+    ), patch(
+        "core.engine.clarity_resolution.resolve_role_model_name",
+        return_value="test/supervisor",
+    ):
+        result = run_clarity_resolution(
+            questions=["What format?", "Where?"],
+            workspace_path="/tmp/ws",
+            spec_path="tasks/foo.md",
+            project_state=SimpleNamespace(),
+            spec_read=None,
+            task="Test task",
+            context_summary="test",
+        )
+    assert result.resolved is True
+    assert result.answers == [
+        "Use YAML frontmatter for products.",
+        "Place files under content/ root.",
+    ]
+
+
+def test_clarity_resolution_strips_leaked_tool_call_text_then_parses_escalate():
+    """P15-ISS-011: leaked <tool_call> text must not mask an ## Escalate heading."""
+    raw_with_tool_calls = (
+        "<tool_call>get_project_state()</tool_call>\n"
+        "<tool_call>get_delegation_history()</tool_call>\n"
+        "## Escalate\n"
+        "Spec doesn't define the content directory structure.\n"
+    )
+    fake_runner = _make_fake_runner(
+        run_with_metrics_result=_fake_runner_result(raw_with_tool_calls)
+    )
+    with patch(
+        "core.engine.clarity_resolution.build_phase12_tool_runner",
+        return_value=fake_runner,
+    ), patch(
+        "core.engine.clarity_resolution.provider_hint_for_model", return_value=None
+    ), patch(
+        "core.engine.clarity_resolution.resolve_role_model_name",
+        return_value="test/supervisor",
+    ):
+        result = run_clarity_resolution(
+            questions=["Where?"],
+            workspace_path="/tmp/ws",
+            spec_path="tasks/foo.md",
+            project_state=SimpleNamespace(),
+            spec_read=None,
+            task="Test task",
+            context_summary="test",
+        )
+    assert result.resolved is False
+    assert "Spec doesn't define" in (result.escalate_reason or "")
+
+
 def test_clarity_resolution_escalates_when_no_questions():
     with patch(
         "core.engine.clarity_resolution.build_phase12_tool_runner",

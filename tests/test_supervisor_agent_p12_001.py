@@ -138,6 +138,83 @@ def test_escalate_host_first_turn():
     assert res.end_reason == "escalated"
 
 
+# ── 4b. host-driven retry loop contract (P15-ISS-010) ───────────────────────
+# Simulates the mcp_server.py host-driven loop: begin_turn → complete_turn →
+# if rerun_aider and can_rerun(): correction_note + begin_turn → ... → finish().
+# This is the exact contract the mcp_server.py retry loop relies on.
+
+
+def test_host_driven_retry_loop_reruns_on_rerun_aider():
+    """P15-ISS-010: host-driven loop must retry when rerun_aider is decided
+    and turns remain, instead of immediately calling finish() (which would
+    escalate with max_turns_reached)."""
+    calls: list[tuple[int, str | None]] = []
+
+    def decider(ctx: SupervisorTurnContext) -> SupervisorTurnDecision:
+        # Turn 1: reviewer found issues → rerun. Turn 2: lgtm → done.
+        if (ctx.checks or {}).get("outcome") == "issues" and ctx.turns_remaining > 0:
+            return SupervisorTurnDecision(action="rerun_aider", reason="reviewer issues")
+        return SupervisorTurnDecision(action="done", reason="clean")
+
+    agent, events = _agent(lambda t, c: _result(success=True), decision_fn=decider, max_turns=3)
+    agent.begin_delegation(
+        delegation_id="d-host",
+        executor_fn=lambda t, c: _result(success=True),
+        decision_fn=decider,
+        max_turns=3,
+    )
+    agent.begin()
+
+    # Turn 1: reviewer found issues.
+    agent.begin_turn()
+    dec1 = agent.complete_turn(_result(success=True), {"outcome": "issues", "note": "fix bug"})
+    assert dec1.action == "rerun_aider"
+    assert agent.can_rerun() is True  # turns remain → must retry, not finish
+
+    # Host-driven retry: get correction note, begin new turn, re-run executor.
+    correction = agent.correction_note({"outcome": "issues", "note": "fix bug"})
+    assert "fix bug" in correction
+    agent.begin_turn()
+    calls.append((2, correction))
+
+    # Turn 2: reviewer says lgtm → done.
+    dec2 = agent.complete_turn(_result(success=True), {"outcome": "lgtm", "note": ""})
+    assert dec2.action == "done"
+
+    # Now finish() should report success, NOT max_turns_reached.
+    res = agent.finish()
+    assert res.outcome == "success"
+    assert res.final_action == "done"
+    assert res.end_reason == "completed"
+    assert res.turns_completed == 2
+    assert [d.action for d in res.decisions] == ["rerun_aider", "done"]
+
+
+def test_host_driven_loop_finish_escalates_when_rerun_but_no_turns_left():
+    """P15-ISS-010: when rerun_aider is decided but can_rerun() is False
+    (turns exhausted), finish() must escalate with max_turns_reached."""
+    def always_rerun(ctx):
+        return SupervisorTurnDecision(action="rerun_aider", reason="never satisfied")
+
+    agent, events = _agent(lambda t, c: _result(success=True), decision_fn=always_rerun, max_turns=1)
+    agent.begin_delegation(
+        delegation_id="d-host",
+        executor_fn=lambda t, c: _result(success=True),
+        decision_fn=always_rerun,
+        max_turns=1,
+    )
+    agent.begin()
+    agent.begin_turn()
+    dec = agent.complete_turn(_result(success=True), {"outcome": "issues", "note": "still bad"})
+    assert dec.action == "rerun_aider"
+    assert agent.can_rerun() is False  # no turns left → finish, don't retry
+
+    res = agent.finish()
+    assert res.outcome == "escalated"
+    assert res.final_action == "escalate_host"
+    assert res.end_reason == "max_turns_reached"
+
+
 # ── 5. decision log count matches turns ──────────────────────────────────────
 
 

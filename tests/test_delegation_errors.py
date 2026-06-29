@@ -255,9 +255,9 @@ class TestDelegationCoderKwargsDetectUrls:
 
 
 class TestDelegationTimeoutSeconds:
-    def test_default_is_120(self, monkeypatch):
+    def test_default_is_600(self, monkeypatch):
         monkeypatch.delenv("MCP_CODER_DELEGATION_TIMEOUT_S", raising=False)
-        assert delegation_timeout_seconds() == 120.0
+        assert delegation_timeout_seconds() == 600.0
 
     def test_env_override(self, monkeypatch):
         monkeypatch.setenv("MCP_CODER_DELEGATION_TIMEOUT_S", "60")
@@ -265,11 +265,11 @@ class TestDelegationTimeoutSeconds:
 
     def test_invalid_env_falls_back_to_default(self, monkeypatch):
         monkeypatch.setenv("MCP_CODER_DELEGATION_TIMEOUT_S", "notanumber")
-        assert delegation_timeout_seconds() == 120.0
+        assert delegation_timeout_seconds() == 600.0
 
     def test_zero_env_falls_back_to_default(self, monkeypatch):
         monkeypatch.setenv("MCP_CODER_DELEGATION_TIMEOUT_S", "0")
-        assert delegation_timeout_seconds() == 120.0
+        assert delegation_timeout_seconds() == 600.0
 
 
 class TestTimeoutReturnPath:

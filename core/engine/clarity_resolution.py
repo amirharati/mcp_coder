@@ -226,6 +226,16 @@ def run_clarity_resolution(
             raw_output=raw,
         )
 
+    # P15-ISS-011: strip leaked tool-call text blocks that some models (GLM-5.2)
+    # emit as plain text instead of using the native function-calling protocol.
+    # These look like <tool_call>...</tool_call> or bare <tool_call>... fragments
+    # and obscure the real ## Answers / ## Escalate headings.
+    cleaned = re.sub(
+        r"<tool_call>.*?(?:</tool_call>|$)", "", raw, flags=re.IGNORECASE | re.DOTALL
+    ).strip()
+    if cleaned and cleaned != raw.strip():
+        raw = cleaned
+
     # Parse output.
     answers_match = _ANSWERS_HEADING_RE.search(raw)
     escalate_match = _ESCALATE_HEADING_RE.search(raw)

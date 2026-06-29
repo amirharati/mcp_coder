@@ -3418,36 +3418,218 @@ def delegate_to_agent(
         if supervisor_agent is not None and not _lifecycle_closed:
             # Translate the reviewer signal into the agent's per-turn check summary, then
             # let the agent emit supervisor_turn_end + supervisor_decision and close the
-            # loop. With max_turns=1 (default) this is a single turn ending in `done`.
+            # loop. P15-ISS-010 fix: when the supervisor decides `rerun_aider` and turns
+            # remain, re-invoke the executor + reviewer with a correction note instead of
+            # immediately escalating to the host.
             if architect_plan:
                 supervisor_agent.set_plan(architect_plan)
-            _reviewer_checks = {
-                "outcome": (
-                    "issues"
-                    if reviewer_pass_outcome == "issues"
-                    else ("lgtm" if reviewer_pass_outcome == "lgtm" else None)
-                ),
-                "note": str(
-                    reviewer_pass_note or reviewer_pass_error or ""
-                )[:300],
-            }
-            _agent_turn_result = (
-                result
-                if result is not None
-                else ExecutionResult(
-                    success=success,
-                    output=output or "",
-                    files_changed=files_changed,
-                    model=model,
-                    error=error,
-                    error_class=error_class,
+
+            # Save the base executor prompt so retries can append a correction note.
+            _retry_base_prompt = executor_prompt if context_package is not None else prompt
+            _retry_context_package = context_package
+            _retry_use_pkg = _use_pkg
+            _retry_engine = engine if _use_pkg else None
+
+            # ── supervisor retry loop (P15-ISS-010) ──────────────────────────
+            # Each iteration: build reviewer checks from the latest reviewer pass,
+            # feed result + checks to complete_turn, then inspect the decision.
+            # `rerun_aider` + turns remaining → re-run executor + reviewer.
+            # `done` / `escalate_host` / no turns → finish().
+            _supervisor_retrying = True
+            while _supervisor_retrying:
+                _reviewer_checks = {
+                    "outcome": (
+                        "issues"
+                        if reviewer_pass_outcome == "issues"
+                        else ("lgtm" if reviewer_pass_outcome == "lgtm" else None)
+                    ),
+                    "note": str(
+                        reviewer_pass_note or reviewer_pass_error or ""
+                    )[:300],
+                }
+                _agent_turn_result = (
+                    result
+                    if result is not None
+                    else ExecutionResult(
+                        success=success,
+                        output=output or "",
+                        files_changed=files_changed,
+                        model=model,
+                        error=error,
+                        error_class=error_class,
+                    )
                 )
-            )
-            # P13-005: persist reviewer pass result into lifecycle context before finish()
-            # so escalation SupervisorState captures it; non-fatal for delegation success.
-            if delegate_mode == DELEGATE_MODE_IMPLEMENT:
-                supervisor_agent.update_reviewer_pass_result(reviewer_pass_result)
-            supervisor_agent.complete_turn(_agent_turn_result, _reviewer_checks)
+                # P13-005: persist reviewer pass result into lifecycle context before finish()
+                # so escalation SupervisorState captures it; non-fatal for delegation success.
+                if delegate_mode == DELEGATE_MODE_IMPLEMENT:
+                    supervisor_agent.update_reviewer_pass_result(reviewer_pass_result)
+                _turn_decision = supervisor_agent.complete_turn(
+                    _agent_turn_result, _reviewer_checks
+                )
+
+                # Decide whether to retry or finish.
+                _should_rerun = (
+                    _turn_decision.action == "rerun_aider"
+                    and delegate_mode == DELEGATE_MODE_IMPLEMENT
+                    and supervisor_agent.can_rerun()
+                )
+                if not _should_rerun:
+                    _supervisor_retrying = False
+                    break
+
+                # ── rerun path: re-invoke executor with correction note ───────
+                try:
+                    _correction = supervisor_agent.correction_note(_reviewer_checks)
+                except Exception:
+                    _correction = ""
+                _retry_prompt = (
+                    f"{_retry_base_prompt}\n\n{_correction}" if _correction else _retry_base_prompt
+                )
+                supervisor_agent.begin_turn()
+                _executor_turns = 0
+                executor_phase_started = False
+                try:
+                    t_engine = time.perf_counter()
+                    if _retry_use_pkg and _retry_engine is not None:
+                        # Re-run via legacy engine.run with augmented prompt.
+                        # We intentionally don't use run_context on retry: the
+                        # context package is already applied; the correction note
+                        # just needs to reach the executor as a prompt suffix.
+                        if pipeline_recorder is not None:
+                            pipeline_recorder.start("executor")
+                            executor_phase_started = True
+
+                        def _retry_legacy_step_fn(timeout_s):
+                            with role_context(ROLE_EXECUTOR):
+                                return _retry_engine.run(
+                                    _retry_prompt,
+                                    effective_target_files,
+                                    workspace_path=ws,
+                                    mcp_session_id=storage.mcp_session_id,
+                                    delegation_id=delegation_id,
+                                    spec_path=spec_rel_path,
+                                    contract_paths=legacy_contract,
+                                    timestamp_start=timestamp_start,
+                                    timeout_s=timeout_s,
+                                )
+
+                        result, _executor_turns, effective_target_files, auto_merged_read_paths, _legacy_pkg, stall_auto_retried = (
+                            _run_executor_with_optional_stall_retry(
+                                step_fn=_retry_legacy_step_fn,
+                                delegation_id=delegation_id,
+                                session_dir=storage.session_dir,
+                                workspace=ws,
+                                obs_verbosity=_loop_obs_verbosity,
+                                progress_notify=progress.notify,
+                                context_package=None,
+                                effective_target_files=effective_target_files,
+                                auto_merged_read_paths=auto_merged_read_paths,
+                                already_retried=stall_auto_retried,
+                            )
+                        )
+                        executor_prompt = _retry_prompt
+                    else:
+                        # No engine available (review mode or other) — can't retry.
+                        _supervisor_retrying = False
+                        break
+
+                    timing["engine_run_ms"] = int((time.perf_counter() - t_engine) * 1000)
+                    success = result.success
+                    output = result.output or ""
+                    files_changed = result.files_changed
+                    files_unexpected = result.files_unexpected
+                    tokens = result.tokens or tokens
+                    model = result.model or model
+                    error = result.error
+                    error_class = result.error_class
+                    if not success and error and not output:
+                        output = error
+                    if pipeline_recorder is not None and executor_phase_started:
+                        pipeline_recorder.end(
+                            "executor",
+                            status="ok" if success else "error",
+                            detail=error[:200] if (error and not success) else None,
+                        )
+                except Exception as exc:
+                    success = False
+                    error = f"{type(exc).__name__}: {exc}"
+                    error_class, error_message = classify_delegation_error(error, exc=exc)
+                    output = error
+                    if pipeline_recorder is not None and executor_phase_started:
+                        pipeline_recorder.end("executor", status="error", detail=error[:200])
+                    # On executor exception during retry, fall through to finish().
+                    _supervisor_retrying = False
+                    break
+
+                # ── re-run reviewer pass on the new result ────────────────────
+                reviewer_pass_ran = False
+                reviewer_pass_outcome = None
+                reviewer_pass_note = None
+                reviewer_pass_error = None
+                reviewer_pass_audit = None
+                reviewer_pass_record = None
+                reviewer_applicable = (
+                    reviewer_pass_on
+                    and delegate_mode == DELEGATE_MODE_IMPLEMENT
+                    and success
+                    and bool(files_changed)
+                    and not spec_invalid_reason
+                )
+                if reviewer_applicable:
+                    if pipeline_recorder is not None:
+                        pipeline_recorder.start("reviewer_pass")
+                    try:
+                        unified_diff = _collect_reviewer_unified_diff(ws, files_changed)
+                    except Exception as diff_exc:
+                        reviewer_pass_error = str(diff_exc)
+                        if pipeline_recorder is not None:
+                            pipeline_recorder.end(
+                                "reviewer_pass", status="error", detail=reviewer_pass_error[:200]
+                            )
+                    else:
+                        (
+                            reviewer_pass_ran,
+                            reviewer_pass_outcome,
+                            reviewer_pass_note,
+                            reviewer_pass_audit,
+                            reviewer_pass_record,
+                            _reviewer_prov,
+                        ) = _apply_reviewer_pass(
+                            spec_read=spec_read,
+                            workspace=ws,
+                            task=task,
+                            files_changed=files_changed,
+                            unified_diff=unified_diff,
+                            timing=timing,
+                            delegation_id=delegation_id,
+                        )
+                        if reviewer_pass_ran and reviewer_pass_outcome in ("lgtm", "issues"):
+                            if pipeline_recorder is not None:
+                                pipeline_recorder.end("reviewer_pass", status="ok")
+                        else:
+                            reviewer_pass_error = reviewer_pass_error or (
+                                (reviewer_pass_audit or {}).get("error") or "reviewer_pass_failed"
+                            )
+                            if pipeline_recorder is not None:
+                                pipeline_recorder.end(
+                                    "reviewer_pass",
+                                    status="error",
+                                    detail=str(reviewer_pass_error)[:200],
+                                )
+                else:
+                    if pipeline_recorder is not None:
+                        pipeline_recorder.mark(
+                            "reviewer_pass", status="skipped", detail="disabled_or_not_applicable"
+                        )
+                reviewer_pass_result = resolve_reviewer_pass_result(
+                    enabled=reviewer_pass_on,
+                    ran=reviewer_pass_ran,
+                    outcome=reviewer_pass_outcome,
+                    error=reviewer_pass_error,
+                )
+                # Loop continues: complete_turn will be called again at top of while.
+            # ── end supervisor retry loop ──────────────────────────────────────
+
             supervisor_agent_result = supervisor_agent.finish()
             supervisor_paused_questions = list(supervisor_agent_result.paused_questions or [])
             context_block["supervisor_agent_loop"] = supervisor_agent.context_block(

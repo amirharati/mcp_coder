@@ -125,9 +125,14 @@ def delegation_detect_urls() -> bool:
 
 
 def delegation_timeout_seconds() -> float:
-    """Max seconds for a single delegate_to_agent engine run (default 120).
+    """Max seconds for a single delegate_to_agent engine run (default 600).
 
     Override via MCP_CODER_DELEGATION_TIMEOUT_S.
+
+    Raised from 120 → 600 (P15-ISS-010 dogfood): large multi-file creation
+    specs (12+ files) can take 5+ minutes. 600s gives enough headroom while
+    still being a reasonable cap. The previous 120s default was too tight and
+    caused frequent timeouts on real-world specs.
     """
     raw = os.environ.get("MCP_CODER_DELEGATION_TIMEOUT_S", "").strip()
     if raw:
@@ -137,7 +142,7 @@ def delegation_timeout_seconds() -> float:
                 return v
         except ValueError:
             pass
-    return 120.0
+    return 600.0
 
 
 # ── Bounded executor outer-loop limits (P7-002, D-P7-2/Q6) ──────────────────

@@ -9,6 +9,7 @@ imports Aider APIs.
 
 from __future__ import annotations
 
+import re
 from collections.abc import Callable
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -20,6 +21,13 @@ from core.observability.gateway import GatewayCompletion, get_llm_gateway
 # Per-tool result budget in characters. Module constant for Phase 12 (D-P12-8);
 # Phase 13 may make it configurable via env.
 _TOOL_RESULT_BUDGET = 2000
+
+# P15-ISS-011: some models (notably GLM-5.2) occasionally emit tool calls as
+# plain text (e.g. ``<tool_call>read_file(...)</tool_call>``) instead of using
+# the native function-calling protocol. When the runner sees a "final answer"
+# that looks like leaked tool-call text, it does one recovery call without
+# tools to force a clean response.
+_TOOL_CALL_TEXT_RE = re.compile(r"<tool_call>", re.IGNORECASE)
 
 
 @dataclass
@@ -129,8 +137,33 @@ class SupervisorToolRunner:
 
             if not completion.tool_calls:
                 # Final answer — no tool calls requested.
+                final_text = completion.text or ""
+                # P15-ISS-011: some models emit tool calls as plain text instead
+                # of using the native function-calling protocol. When we detect
+                # leaked ``<tool_call>`` text in the "final answer", do one
+                # recovery call without tools to force a clean response.
+                if final_text.strip() and _TOOL_CALL_TEXT_RE.search(final_text):
+                    recovery_completion = gw.complete(
+                        model=self._model,
+                        messages=all_messages
+                        + [
+                            {
+                                "role": "user",
+                                "content": (
+                                    "Your previous response contained raw tool-call "
+                                    "syntax instead of a final answer. Ignore any "
+                                    "tool-call text and respond with your final answer "
+                                    "now, using the required heading format."
+                                ),
+                            }
+                        ],
+                        role=self._role,
+                        tools=None,
+                    )
+                    _absorb(recovery_completion)
+                    final_text = recovery_completion.text or final_text
                 return SupervisorToolRunnerResult(
-                    text=completion.text,
+                    text=final_text,
                     tokens=agg_tokens,
                     llm_duration_ms=agg_duration_ms,
                     llm_calls=agg_calls,
