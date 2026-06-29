@@ -671,3 +671,57 @@ def test_reconcile_on_startup_enabled_explicit(monkeypatch):
     """MCP_CODER_RECONCILE_ON_STARTUP=1 enables the pass."""
     monkeypatch.setenv("MCP_CODER_RECONCILE_ON_STARTUP", "1")
     assert is_reconcile_on_startup_enabled() is True
+
+
+# ---------------------------------------------------------------------------
+# Regression: P15-019-R1 — begin_snapshot called twice on same delegation_id
+# ---------------------------------------------------------------------------
+
+
+def test_begin_snapshot_idempotent_on_retry(tmp_path, monkeypatch):
+    """Regression P15-019-R1: begin_snapshot must not raise UNIQUE constraint
+    error when called twice with the same delegation_id.
+
+    Root cause: the P15-ISS-010 retry loop calls engine.run() multiple times
+    with the same delegation_id. Each call to engine.run() calls
+    begin_delegation_snapshot() → begin_snapshot() → INSERT INTO snapshots.
+    The second call crashed with IntegrityError: UNIQUE constraint failed:
+    snapshots.delegation_id.
+
+    Fix: INSERT OR IGNORE in begin_snapshot() so retries are safe.
+    """
+    monkeypatch.setenv("MCP_CODER_HOME", str(tmp_path / "home"))
+    monkeypatch.delenv("MCP_CODER_DISABLE_WORKSPACE_SNAPSHOT", raising=False)
+
+    ws = tmp_path / "ws"
+    ws.mkdir()
+    (ws / "a.py").write_text("v1\n", encoding="utf-8")
+
+    delegation_id = str(uuid.uuid4())
+    db = WorkspaceHistoryDB(ws)
+
+    # First call — simulates turn 1 of the retry loop.
+    before = walk_workspace(str(ws))
+    db.begin_snapshot(
+        delegation_id=delegation_id,
+        mcp_session_id="sess-retry",
+        timestamp_start="2026-06-29T10:00:00Z",
+        spec_path="tasks/retry.md",
+        before_manifest=before,
+    )
+
+    # Second call with the same delegation_id — simulates turn 2 of the retry
+    # loop. Must NOT raise IntegrityError.
+    (ws / "a.py").write_text("v2\n", encoding="utf-8")
+    before2 = walk_workspace(str(ws))
+    db.begin_snapshot(
+        delegation_id=delegation_id,
+        mcp_session_id="sess-retry",
+        timestamp_start="2026-06-29T10:01:00Z",
+        spec_path="tasks/retry.md",
+        before_manifest=before2,
+    )
+
+    # The snapshot row exists exactly once.
+    rows = db.list_snapshots(limit=10)
+    assert sum(1 for r in rows if r["delegation_id"] == delegation_id) == 1

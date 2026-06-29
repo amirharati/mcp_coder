@@ -228,7 +228,7 @@ class WorkspaceHistoryDB:
             )
             conn.execute(
                 """
-                INSERT INTO snapshots (
+                INSERT OR IGNORE INTO snapshots (
                     delegation_id, mcp_session_id, timestamp_start,
                     spec_path, workspace_path
                 ) VALUES (?, ?, ?, ?, ?)
