@@ -40,6 +40,12 @@ def _patch_setup_basics(monkeypatch, *, env_file: Path | None = None):
     monkeypatch.delenv("MCP_CODER_REVIEW_MODEL", raising=False)
 
 
+def _expected_mcp_server_command() -> str:
+    from core.version import repo_root
+
+    return str(repo_root() / "bin" / "mcp-coder-server")
+
+
 # ---------------------------------------------------------------------------
 # setup — env found
 # ---------------------------------------------------------------------------
@@ -154,7 +160,7 @@ def test_setup_init_config_errors_if_exists(monkeypatch, capsys, tmp_path):
 
 
 def test_setup_mcp_json_contains_binary_path(monkeypatch, capsys):
-    """mcp.json block embeds the resolved binary path."""
+    """mcp.json block embeds the auto-restart server wrapper path."""
     monkeypatch.setattr("core.cli.setup.load_env_files", lambda: [])
     monkeypatch.setattr("core.cli.setup.apply_provider_env", lambda: None)
     monkeypatch.delenv("AIDER_MODEL", raising=False)
@@ -162,8 +168,8 @@ def test_setup_mcp_json_contains_binary_path(monkeypatch, capsys):
     monkeypatch.delenv("MCP_CODER_CONTEXT_BUILDER_MODEL", raising=False)
     monkeypatch.delenv("MCP_CODER_REVIEW_MODEL", raising=False)
 
-    fake_binary = "/usr/local/bin/mcp-coder"
-    monkeypatch.setattr("core.cli.setup._binary_path", lambda: fake_binary)
+    monkeypatch.setattr("core.cli.setup._binary_path", lambda: "/usr/local/bin/mcp-coder")
+    expected_command = _expected_mcp_server_command()
 
     from core.cli.setup import run_setup
 
@@ -171,7 +177,7 @@ def test_setup_mcp_json_contains_binary_path(monkeypatch, capsys):
     out = capsys.readouterr().out
 
     assert rc == 0
-    assert fake_binary in out
+    assert expected_command in out
     assert '"command"' in out
     assert "mcpServers" in out
 
@@ -331,7 +337,7 @@ def test_setup_local_creates_mcp_json(monkeypatch, capsys, tmp_path):
     assert mcp_path.is_file()
     assert "Created .cursor/mcp.json" in out
     data = json.loads(mcp_path.read_text(encoding="utf-8"))
-    assert data["mcpServers"]["mcp-coder"]["command"] == "/usr/local/bin/mcp-coder"
+    assert data["mcpServers"]["mcp-coder"]["command"] == _expected_mcp_server_command()
     assert data["mcpServers"]["mcp-coder"]["env"]["MCP_CODER_ENV_FILE"] == str(env_file)
 
 
@@ -403,7 +409,7 @@ def test_setup_local_updates_existing_mcp_coder_entry(monkeypatch, capsys, tmp_p
 
     assert rc == 0
     assert "mcp-coder entry updated" in out
-    assert data["mcpServers"]["mcp-coder"]["command"] == "/usr/local/bin/mcp-coder"
+    assert data["mcpServers"]["mcp-coder"]["command"] == _expected_mcp_server_command()
     assert data["mcpServers"]["mcp-coder"]["env"]["MCP_CODER_ENV_FILE"] == str(env_file)
 
 
@@ -424,7 +430,7 @@ def test_setup_global_writes_to_mocked_path(monkeypatch, capsys, tmp_path):
     assert global_path.is_file()
     assert "Created" in out
     data = json.loads(global_path.read_text(encoding="utf-8"))
-    assert data["mcpServers"]["mcp-coder"]["command"] == "/usr/local/bin/mcp-coder"
+    assert data["mcpServers"]["mcp-coder"]["command"] == _expected_mcp_server_command()
 
 
 def test_setup_global_and_local_mutually_exclusive():

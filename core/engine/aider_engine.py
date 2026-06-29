@@ -9,6 +9,7 @@ from typing import Any
 from core.config.aider_runtime import (
     OUTCOME_NEEDS_INPUT_CLARIFICATION,
     OUTCOME_NEEDS_INPUT_FILES,
+    OUTCOME_SUCCESS,
     STALL_OUTPUT_TAIL_CHARS,
     _executor_output_tail,
     classify_executor_outcome,
@@ -466,6 +467,19 @@ class AiderEngine(ExecutionEngine):
                 str(Path(workspace_path) / f) if not Path(f).is_absolute() else f
                 for f in fnames_rel
             ]
+            # P15-ISS-020: add the spec file as read-only context so Aider can open it
+            # without needing to ask. Uses Aider's read_only_fnames, not the edit list.
+            _read_only_spec: list[str] = []
+            if spec_path:
+                _abs_spec = (
+                    str(Path(spec_path))
+                    if Path(spec_path).is_absolute()
+                    else str(Path(workspace_path) / spec_path)
+                )
+                if Path(_abs_spec).exists():
+                    _read_only_spec = [
+                        p for p in [_abs_spec] if p not in resolved_files
+                    ]
             from core.config.host_model_policy import pick_host_override
             from core.config.model_registry import ROLE_EXECUTOR, policy_applied, resolve
             from core.observability.context import host_model_policy_var, model_policy_var
@@ -585,6 +599,7 @@ class AiderEngine(ExecutionEngine):
                     main_model=model,
                     io=io,
                     fnames=resolved_files,
+                    read_only_fnames=_read_only_spec,  # P15-ISS-020
                     **delegation_coder_kwargs(exec_params.edit_format),
                 )
                 return coder, io, out_buffer
@@ -794,6 +809,19 @@ class AiderEngine(ExecutionEngine):
                 output=output,
                 partial_response=partial_str,
             )
+            # P15-ISS-021: if the executor actually changed files, a trailing question in
+            # the output is cosmetic. Downgrade clarification stall to a soft success.
+            if (
+                classification["outcome"] == OUTCOME_NEEDS_INPUT_CLARIFICATION
+                and files_changed
+            ):
+                classification = {
+                    **classification,
+                    "outcome": OUTCOME_SUCCESS,
+                    "message": None,
+                }
+                success = True
+                error = None
             error_class: str | None = None
             if classification["outcome"] in (
                 OUTCOME_NEEDS_INPUT_FILES,

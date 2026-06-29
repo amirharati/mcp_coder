@@ -173,12 +173,29 @@ def _sanitize_notification_text(text: str, *, max_chars: int = 180) -> str:
     return compact[: max_chars - 1] + "…"
 
 
+def _progress_heartbeat_seconds() -> float:
+    """Seconds between keepalive progress notifications. 0 = disabled."""
+    raw = os.environ.get("MCP_CODER_PROGRESS_HEARTBEAT_S", "30").strip()
+    try:
+        v = float(raw)
+        return max(0.0, v)
+    except ValueError:
+        return 30.0
+
+
 class _DelegationProgressBridge:
     """Thread-safe bridge from sync delegate flow to async ctx.info()."""
 
-    def __init__(self, ctx: Context | None, *, throttle_seconds: float = 2.0) -> None:
+    def __init__(
+        self,
+        ctx: Context | None,
+        *,
+        throttle_seconds: float = 2.0,
+        heartbeat_seconds: float = 30.0,
+    ) -> None:
         self._ctx = ctx
         self._throttle_seconds = throttle_seconds
+        self._heartbeat_seconds = heartbeat_seconds
         self._last_emit = 0.0
         self._loop: asyncio.AbstractEventLoop | None = None
         self._queue: queue.Queue[str | None] = queue.Queue()
@@ -206,15 +223,29 @@ class _DelegationProgressBridge:
         self._queue.put(_sanitize_notification_text(message))
 
     def _drain_worker(self) -> None:
+        last_sent = time.monotonic()
         while True:
             try:
                 msg = self._queue.get(timeout=0.2)
             except queue.Empty:
                 if self._stopped:
                     return
-                continue
-            if msg is None:
-                return
+                # Periodic heartbeat: emit a brief notification so Cursor's
+                # idle-connection timer doesn't expire during long delegations.
+                if self._heartbeat_seconds > 0:
+                    now = time.monotonic()
+                    if (now - last_sent) >= self._heartbeat_seconds:
+                        msg = "⏳ delegation in progress…"
+                        last_sent = now
+                        # Fall through to send below.
+                    else:
+                        continue
+                else:
+                    continue
+            else:
+                if msg is None:
+                    return
+                last_sent = time.monotonic()
             if self._ctx is None:
                 continue
             try:
@@ -1524,7 +1555,10 @@ def _handle_resume(
 ) -> str:
     from core.engine.supervisor_agent import SupervisorAgent
 
-    progress = _DelegationProgressBridge(ctx)
+    progress = _DelegationProgressBridge(
+        ctx,
+        heartbeat_seconds=_progress_heartbeat_seconds(),
+    )
     try:
         ws = obs.default_workspace_path()
         record = _find_delegation_record_for_resume(ws, state.context_ref)
@@ -1707,7 +1741,10 @@ def delegate_to_agent(
     ctx: Context | None = None,
 ) -> str:
     """Run one delegated implementation via the selected backend; append JSONL log."""
-    progress = _DelegationProgressBridge(ctx)
+    progress = _DelegationProgressBridge(
+        ctx,
+        heartbeat_seconds=_progress_heartbeat_seconds(),
+    )
     delegation_id = obs.new_delegation_id()
     _delegation_scope = delegation_context(delegation_id)
     _delegation_scope.__enter__()

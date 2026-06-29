@@ -20,6 +20,7 @@ from core.config.role_models import (
 )
 from core.storage.paths import mcp_coder_home, workspace_config_path
 from core.storage.workspace_config import load_workspace_config
+from core.version import repo_root
 
 WriteTarget = Literal["global", "local"]
 
@@ -101,13 +102,26 @@ def _display_path(path: Path) -> str:
         return str(path)
 
 
-def _build_mcp_coder_entry(*, binary: str, env_file: str) -> dict[str, object]:
+def _server_wrapper_path() -> Path:
+    """Absolute path to the auto-restart stdio MCP server wrapper script."""
+    return repo_root() / "bin" / "mcp-coder-server"
+
+
+def mcp_json_config(*, env_file: str | None = None) -> dict[str, object]:
+    """Return the mcp-coder MCP server entry for Cursor mcp.json."""
+    env_for_block = env_file if env_file else "/path/to/.env"
     return {
-        "command": binary,
+        "command": str(_server_wrapper_path()),
+        "args": [],
         "env": {
-            "MCP_CODER_ENV_FILE": env_file,
+            "MCP_CODER_ENV_FILE": env_for_block,
         },
     }
+
+
+def _build_mcp_coder_entry(*, binary: str, env_file: str) -> dict[str, object]:
+    del binary  # wrapper script replaces direct binary invocation for MCP stdio
+    return mcp_json_config(env_file=env_file)
 
 
 def _merge_and_write_mcp_json(path: Path, entry: dict[str, object]) -> tuple[str, bool]:
@@ -210,7 +224,7 @@ def run_setup(
     binary = _binary_path()
     primary_env_file = loaded_env_files[0] if loaded_env_files else None
     env_for_block = str(primary_env_file) if primary_env_file else "/path/to/.env"
-    mcp_entry = _build_mcp_coder_entry(binary=binary, env_file=env_for_block)
+    mcp_entry = mcp_json_config(env_file=env_for_block)
 
     if write_target is not None:
         rc = _write_mcp_json_target(write_target, mcp_entry)

@@ -1,9 +1,11 @@
 {
   "mcpServers": {
     "mcp-coder": {
-      "command": "${workspaceFolder}/.venv/bin/python",
-      "args": ["${workspaceFolder}/main.py", "--mcp"],
-      "cwd": "${workspaceFolder}"
+      "command": "/Users/amir/Dropbox/CodingProjects/personal_tools/mcp_coder/bin/mcp-coder-server",
+      "args": [],
+      "env": {
+        "MCP_CODER_ENV_FILE": "/Users/amir/Dropbox/CodingProjects/personal_tools/mcp_coder/.env"
+      }
     }
   }
 }
