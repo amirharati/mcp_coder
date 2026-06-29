@@ -21,6 +21,9 @@ SKIP_DIRS = frozenset(
         ".mypy_cache",
         ".pytest_cache",
         ".mcp-coder",
+        # B002 fix: Aider's internal tag cache — tooling noise, not source files.
+        ".aider.tags.cache.v4",
+        ".aider.cache.v3",
     }
 )
 

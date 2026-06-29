@@ -3,6 +3,30 @@ from __future__ import annotations
 import subprocess
 from pathlib import Path
 
+# B002 fix: Aider writes these cache/side-effect files on every edit. They are
+# tooling noise, not real scope violations, so they are filtered out of
+# files_unexpected and files_changed attribution.
+_TOOLING_NOISE_PREFIXES = (
+    ".aider.tags.cache.v4/",
+    ".aider.cache.v3/",
+    ".aider/",
+)
+
+_TOOLING_NOISE_EXACT = frozenset(
+    {
+        ".aider.conf.yml",
+        ".aider.model.settings.yml",
+        ".aider.models.json",
+    }
+)
+
+
+def _is_tooling_noise(path: str) -> bool:
+    """True for Aider-internal cache/config files that should not count as scope violations."""
+    if path in _TOOLING_NOISE_EXACT:
+        return True
+    return any(path.startswith(prefix) for prefix in _TOOLING_NOISE_PREFIXES)
+
 
 def normalize_repo_path(path: str) -> str:
     """Normalize repo-relative path for set comparison."""
@@ -148,17 +172,32 @@ def compute_files_unexpected(
     used_git: bool = False,
     attribution_source: str = "legacy",
 ) -> list[str]:
-    """Paths touched outside normalized contract paths."""
+    """Paths touched outside normalized contract paths.
+
+    B002 fix: Aider-internal cache files (.aider.tags.cache.v4/*, etc.) are
+    filtered out — they are tooling noise written as a side effect of any edit,
+    not real scope violations.
+    """
     if attribution_source == "manifest":
         norm_contract = {normalize_repo_path(f) for f in contract_paths}
         return sorted(
-            {normalize_repo_path(f) for f in files_changed} - norm_contract
+            {
+                normalize_repo_path(f)
+                for f in files_changed
+                if not _is_tooling_noise(normalize_repo_path(f))
+            }
+            - norm_contract
         )
     if not used_git:
         return []
     norm_targets = {normalize_repo_path(f) for f in contract_paths}
     return sorted(
-        {normalize_repo_path(f) for f in files_changed} - norm_targets
+        {
+            normalize_repo_path(f)
+            for f in files_changed
+            if not _is_tooling_noise(normalize_repo_path(f))
+        }
+        - norm_targets
     )
 
 

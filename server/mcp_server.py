@@ -2604,6 +2604,17 @@ def delegate_to_agent(
                     with role_context(ROLE_REVIEW):
                         result = run_spec_review(prompt, workspace_path=ws)
                 elif _use_pkg:
+                    # B009 fix: compute legacy_contract once at the top of the _use_pkg
+                    # block so it's always bound for the retry closure (P15-ISS-010).
+                    # Previously this was only defined inside the `else:` (legacy) sub-
+                    # branch, causing a NameError when the context-package path ran and
+                    # a retry was attempted.
+                    legacy_contract: list[str] | None = None
+                    if delegation_policies is not None:
+                        legacy_contract = sorted(
+                            set(delegation_policies.files_edit)
+                            | set(delegation_policies.files_read)
+                        )
                     builder_on = context_builder_enabled(ws)
                     workspace_rag_paths_for_picker: list[str] = []
                     if builder_on and delegation_policies is not None:
@@ -3013,12 +3024,6 @@ def delegate_to_agent(
                         caps = engine.capabilities()
                     except (NotImplementedError, AttributeError):
                         caps = None
-                    legacy_contract: list[str] | None = None
-                    if delegation_policies is not None:
-                        legacy_contract = sorted(
-                            set(delegation_policies.files_edit)
-                            | set(delegation_policies.files_read)
-                        )
                     if pipeline_recorder is not None:
                         pipeline_recorder.start("executor")
                         executor_phase_started = True

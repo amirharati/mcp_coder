@@ -130,7 +130,13 @@ def resolve_delegation_attribution(
             diffs_stored = commit_stats.get("diffs_stored", 0)
 
         paths = contract_paths if contract_paths else edit_paths_rel
-        files_changed = delta.all_changed
+        # B002 fix: filter Aider-internal cache files from files_changed so the
+        # delegation log and diff don't show tooling noise.
+        from core.engine.git_diff import _is_tooling_noise
+
+        files_changed = [
+            f for f in delta.all_changed if not _is_tooling_noise(f)
+        ]
         files_unexpected = compute_files_unexpected(
             files_changed,
             paths,
