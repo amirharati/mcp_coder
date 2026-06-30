@@ -132,6 +132,7 @@ This applies only to the `needs_input_files` stall pattern — not timeouts, tes
 | `MCP_CODER_DIFF_MAX_TOTAL_CHARS` | *(unset)* | — | Max total diff chars per delegation |
 | `MCP_CODER_AUTO_MERGE_SPEC_READ` | *(unset)* | — | `1` = merge spec read deps into context automatically |
 | `MCP_CODER_WORKSPACE_FILE_HINTS` | *(unset)* | — | Extra file hints for context assembly |
+| `MCP_CODER_CONTEXT_EXCLUDE_DIRS` | _(empty)_ | — | Colon-separated extra workspace directory names to exclude from context assembly, file picker, and workspace walk (in addition to the built-in skip list). Matched by basename, case-sensitive. |
 | `MCP_CODER_INSPECT_RUN_BUILDER_LLM` | `0` | — | `1` = run builder LLM in `inspect-context` CLI dry run |
 
 ---

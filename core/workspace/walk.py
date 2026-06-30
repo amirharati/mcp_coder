@@ -9,21 +9,34 @@ from core.workspace.manifest import FileEntry, Manifest
 
 SKIP_DIRS = frozenset(
     {
+        # languages / venvs
         "node_modules",
         ".venv",
         "venv",
         "env",
         "__pycache__",
+        # vcs
         ".git",
+        # generic build output
         "dist",
         "build",
         ".tox",
         ".mypy_cache",
         ".pytest_cache",
+        # mcp-coder + aider internals
         ".mcp-coder",
         # B002 fix: Aider's internal tag cache — tooling noise, not source files.
         ".aider.tags.cache.v4",
         ".aider.cache.v3",
+        # P15-024 (B021): framework build output / deploy artifacts
+        ".next",  # Next.js
+        "out",  # Next.js static export / tsc out
+        "out_deploy",  # custom deploy export (idealabs_web)
+        ".svelte-kit",  # SvelteKit
+        ".nuxt",  # Nuxt
+        ".turbo",  # Turborepo cache
+        "coverage",  # test coverage reports
+        ".specstory",  # editor history (SpecStory)
     }
 )
 
@@ -67,8 +80,20 @@ def is_binary_content(data: bytes) -> bool:
         return True
 
 
+def _extra_exclude_dirs() -> frozenset[str]:
+    """User-configured extra dir names to exclude from context/walk.
+
+    ``MCP_CODER_CONTEXT_EXCLUDE_DIRS`` is a colon-separated list (PATH-style).
+    Names are matched exactly like ``SKIP_DIRS`` (basename, case-sensitive).
+    """
+    raw = os.environ.get("MCP_CODER_CONTEXT_EXCLUDE_DIRS", "").strip()
+    if not raw:
+        return frozenset()
+    return frozenset(d.strip() for d in raw.split(":") if d.strip())
+
+
 def should_skip_dir(name: str) -> bool:
-    return name in SKIP_DIRS
+    return name in SKIP_DIRS or name in _extra_exclude_dirs()
 
 
 def should_skip_file(name: str) -> bool:
