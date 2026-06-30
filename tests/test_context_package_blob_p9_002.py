@@ -51,6 +51,7 @@ def _policies() -> DelegationPolicies:
     return DelegationPolicies(
         files_edit=["pkg/cli.py"],
         files_read=["pkg/core.py"],
+        files_delete=[],
         edit_scope=EDIT_SCOPE_DISCOVER,
         allow_create=False,
         untracked_policy=UNTRACKED_POLICY_MATERIALIZE,

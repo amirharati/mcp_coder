@@ -128,6 +128,7 @@ def test_no_spec_with_explicit_policies(tmp_path):
     policies = DelegationPolicies(
         files_edit=["a.py"],
         files_read=["b.py"],
+        files_delete=[],
         edit_scope="discover",
         allow_create=True,
         untracked_policy="materialize",

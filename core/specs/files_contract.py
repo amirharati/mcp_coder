@@ -11,6 +11,7 @@ BULLET_RE = re.compile(r"^\s*-\s+(.+?)\s*$", re.MULTILINE)
 PATH_IN_BACKTICKS_RE = re.compile(r"`([^`]+)`")
 EDIT_SUBSECTION_RE = re.compile(r"^###\s+Edit\b", re.MULTILINE)
 READ_SUBSECTION_RE = re.compile(r"^###\s+Read\b", re.MULTILINE)
+DELETE_SUBSECTION_RE = re.compile(r"^###\s+Delete\b", re.MULTILINE)
 SUBSECTION_SPLIT_RE = re.compile(r"^###\s+(.+)$", re.MULTILINE)
 
 _PLACEHOLDER_PATHS = frozenset({"(none)", "none", "n/a", "na", "-"})
@@ -20,6 +21,7 @@ _PLACEHOLDER_PATHS = frozenset({"(none)", "none", "n/a", "na", "-"})
 class FilesContract:
     edit: list[str]
     read: list[str]
+    delete: list[str]
     all_paths: list[str]
 
 
@@ -75,17 +77,19 @@ def parse_files_contract(files_section: str) -> FilesContract:
     """Parse ## Files section text into edit/read contract paths."""
     text = (files_section or "").strip()
     if not text:
-        return FilesContract(edit=[], read=[], all_paths=[])
+        return FilesContract(edit=[], read=[], delete=[], all_paths=[])
 
     has_edit = bool(EDIT_SUBSECTION_RE.search(text))
     has_read = bool(READ_SUBSECTION_RE.search(text))
+    has_delete = bool(DELETE_SUBSECTION_RE.search(text))
 
-    if not has_edit and not has_read:
+    if not has_edit and not has_read and not has_delete:
         paths = sorted(set(_parse_bullet_paths(text)))
-        return FilesContract(edit=paths, read=[], all_paths=paths)
+        return FilesContract(edit=paths, read=[], delete=[], all_paths=paths)
 
     edit: list[str] = []
     read: list[str] = []
+    delete: list[str] = []
     parts = SUBSECTION_SPLIT_RE.split(text)
     idx = 1
     while idx < len(parts):
@@ -95,12 +99,20 @@ def parse_files_contract(files_section: str) -> FilesContract:
             edit.extend(_parse_bullet_paths(body))
         elif title.startswith("Read"):
             read.extend(_parse_bullet_paths(body))
+        elif title.startswith("Delete"):
+            delete.extend(_parse_bullet_paths(body))
         idx += 2
 
     edit_unique = sorted(set(edit))
     read_unique = sorted(set(read))
-    all_paths = sorted(set(edit_unique + read_unique))
-    return FilesContract(edit=edit_unique, read=read_unique, all_paths=all_paths)
+    delete_unique = sorted(set(delete))
+    all_paths = sorted(set(edit_unique + read_unique + delete_unique))
+    return FilesContract(
+        edit=edit_unique,
+        read=read_unique,
+        delete=delete_unique,
+        all_paths=all_paths,
+    )
 
 
 def paths_missing_from_target(

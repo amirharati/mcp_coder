@@ -23,6 +23,7 @@ def apply_post_delegation_gateway(
     edit_scope: str | None,
     files_changed: list[str],
     files_edit: list[str],
+    files_delete: list[str] | None = None,
 ) -> PostGatewayResult:
     """
     Post-delegation strict gateway: compute scope violations and auto-revert when snapshot on.
@@ -40,7 +41,9 @@ def apply_post_delegation_gateway(
             gateway_applied=False,
         )
 
-    violations = compute_scope_violations(files_changed, files_edit)
+    violations = compute_scope_violations(
+        files_changed, files_edit, files_delete=files_delete
+    )
     if not violations:
         return PostGatewayResult(
             scope_violations=[],

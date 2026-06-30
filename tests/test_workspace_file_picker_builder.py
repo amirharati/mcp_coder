@@ -71,6 +71,7 @@ def _discover_policies(*, files_edit: list[str], files_read: list[str] | None = 
     return DelegationPolicies(
         files_edit=files_edit,
         files_read=read,
+        files_delete=[],
         all_paths=sorted(set(files_edit) | set(read)),
         edit_scope="discover",
         allow_create=True,

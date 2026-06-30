@@ -131,6 +131,7 @@ from core.engine.spec_review import run_spec_review
 from core.specs.delegation_policies import (
     DelegationPolicies,
     PolicyValidationError,
+    append_executor_contract_prompt_blocks,
     load_delegation_policies,
 )
 from core.workspace.gateway import apply_post_delegation_gateway
@@ -1254,6 +1255,7 @@ def _response_payload(
     output: str,
     files_changed: list[str],
     files_unexpected: list[str] | None = None,
+    files_deleted: list[str] | None = None,
     session_reused: bool,
     session_reason: str,
     session_policy: str,
@@ -1331,6 +1333,7 @@ def _response_payload(
         "output": _truncate_output(output),
         "files_changed": files_changed,
         "files_unexpected": files_unexpected if files_unexpected is not None else [],
+        "files_deleted": files_deleted if files_deleted is not None else [],
         "session_reused": session_reused,
         "session_reason": session_reason,
         "session_policy": session_policy,
@@ -2192,6 +2195,7 @@ def delegate_to_agent(
         error_message: str | None = None
         files_changed: list[str] = []
         files_unexpected: list[str] = []
+        files_deleted: list[str] = []
         output = ""
         tokens: dict[str, Any] = {"source": "unavailable"}
         executor_reused = False
@@ -2740,13 +2744,14 @@ def delegate_to_agent(
                 # reference this variable; binding it only inside `elif _use_pkg:`
                 # (the earlier 6dd0423 fix) left the no-spec path's closure unbound
                 # → NameError on no-spec delegations (Epic 5: 9e6b67f2, ca1c548f).
-                # `allowed_paths` is the spec's file contract (files_edit ∪ files_read),
+                # `allowed_paths` is the spec's file contract (files_edit ∪ files_read ∪ files_delete),
                 # fed to the executor as the `### Allowed paths` scope-enforcement block.
                 allowed_paths: list[str] | None = None
                 if delegation_policies is not None:
                     allowed_paths = sorted(
                         set(delegation_policies.files_edit)
                         | set(delegation_policies.files_read)
+                        | set(delegation_policies.files_delete)
                     )
                 if delegate_mode == DELEGATE_MODE_REVIEW:
                     with role_context(ROLE_REVIEW):
@@ -3175,10 +3180,18 @@ def delegate_to_agent(
                             obs_verbosity=_compile_verbosity,
                         )
 
+                    legacy_executor_prompt = prompt
+                    if delegation_policies is not None:
+                        legacy_executor_prompt = append_executor_contract_prompt_blocks(
+                            prompt,
+                            contract_paths=allowed_paths,
+                            files_delete=delegation_policies.files_delete,
+                        )
+
                     def _legacy_step_fn(timeout_s: float | None) -> ExecutionResult:
                         with role_context(ROLE_EXECUTOR):
                             return engine.run(
-                                prompt,
+                                legacy_executor_prompt,
                                 effective_target_files,
                                 workspace_path=ws,
                                 mcp_session_id=storage.mcp_session_id,
@@ -3209,6 +3222,7 @@ def delegate_to_agent(
                 output = result.output or ""
                 files_changed = result.files_changed
                 files_unexpected = result.files_unexpected
+                files_deleted = list(result.files_deleted or [])
                 tokens = result.tokens or tokens
                 model = result.model or model
                 error = result.error
@@ -3680,6 +3694,7 @@ def delegate_to_agent(
                     output = result.output or ""
                     files_changed = result.files_changed
                     files_unexpected = result.files_unexpected
+                    files_deleted = list(result.files_deleted or [])
                     tokens = result.tokens or tokens
                     model = result.model or model
                     error = result.error
@@ -3845,6 +3860,7 @@ def delegate_to_agent(
                 edit_scope=delegation_policies.edit_scope,
                 files_changed=files_changed,
                 files_edit=delegation_policies.files_edit,
+                files_delete=delegation_policies.files_delete,
             )
             scope_violations = gateway_result.scope_violations
             reverted_paths = gateway_result.reverted_paths
@@ -4155,6 +4171,7 @@ def delegate_to_agent(
             output=output,
             files_changed=files_changed,
             files_unexpected=files_unexpected,
+            files_deleted=files_deleted,
             session_reused=storage.session_action == "reuse",
             session_reason=(
                 "resumed" if _resumed_from_pause_token is not None

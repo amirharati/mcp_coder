@@ -2,7 +2,9 @@ from __future__ import annotations
 
 import concurrent.futures
 import contextvars
+import logging
 import os
+import subprocess
 from pathlib import Path
 from typing import Any
 
@@ -40,6 +42,8 @@ from core.workspace.snapshot import begin_delegation_snapshot, resolve_delegatio
 from core.engine.stdio_isolation import isolated_stdio, merged_capture
 
 BACKEND_ID = "aider"
+
+_logger = logging.getLogger(__name__)
 
 EXECUTOR_PULL_HINT_BLOCK = (
     "If you need additional context, use /read <path> to add files as read-only.\n"
@@ -227,10 +231,118 @@ def _executor_project_state_summary(spec_path: str | None) -> str | None:
 
 
 def _build_spec_contract(contract_paths: list[str] | None) -> str | None:
-    paths = sorted({p.replace("\\", "/").lstrip("./") for p in (contract_paths or []) if p})
-    if not paths:
-        return None
-    return "### Allowed paths\n" + "\n".join(f"- `{p}`" for p in paths)
+    from core.specs.delegation_policies import build_allowed_paths_prompt_block
+
+    return build_allowed_paths_prompt_block(contract_paths)
+
+
+def _append_executor_contract_blocks(
+    prompt: str,
+    *,
+    contract_paths: list[str] | None,
+    delete_paths: list[str] | None,
+) -> str:
+    from core.specs.delegation_policies import append_executor_contract_prompt_blocks
+
+    return append_executor_contract_prompt_blocks(
+        prompt,
+        contract_paths=contract_paths,
+        files_delete=delete_paths,
+    )
+
+
+def _git_path_is_tracked(workspace_path: str, rel_path: str) -> bool:
+    try:
+        proc = subprocess.run(
+            ["git", "ls-files", "--error-unmatch", "--", rel_path],
+            cwd=workspace_path,
+            capture_output=True,
+            text=True,
+            timeout=10,
+            check=False,
+        )
+        return proc.returncode == 0
+    except (OSError, subprocess.TimeoutExpired):
+        return False
+
+
+def _prune_empty_parents(abs_path: Path, workspace_root: Path) -> None:
+    parent = abs_path.parent
+    while parent != workspace_root and parent.is_relative_to(workspace_root):
+        try:
+            parent.rmdir()
+            parent = parent.parent
+        except OSError:
+            break
+
+
+def _apply_deterministic_deletions(
+    workspace_path: str,
+    delete_paths_rel: list[str] | None,
+) -> tuple[list[str], list[str], list[str], list[str]]:
+    """Remove contract delete targets after executor returns.
+
+    Returns (removed, already_gone, skipped, failed).
+    """
+    if not delete_paths_rel:
+        return [], [], [], []
+
+    workspace_root = Path(workspace_path).resolve()
+    removed: list[str] = []
+    already_gone: list[str] = []
+    skipped: list[str] = []
+    failed: list[str] = []
+
+    from core.engine.git_diff import _is_git_repo, normalize_repo_path
+
+    in_git = _is_git_repo(workspace_path)
+
+    for raw in delete_paths_rel:
+        rel = normalize_repo_path(raw)
+        if not rel:
+            continue
+        try:
+            abs_path = (workspace_root / rel).resolve()
+            if not abs_path.is_relative_to(workspace_root):
+                _logger.warning(
+                    "Skipping files_delete path outside workspace: %s", raw
+                )
+                skipped.append(rel)
+                continue
+        except (OSError, ValueError):
+            _logger.warning("Skipping invalid files_delete path: %s", raw)
+            skipped.append(rel)
+            continue
+
+        if not abs_path.exists():
+            already_gone.append(rel)
+            continue
+        if abs_path.is_dir():
+            _logger.warning("Skipping directory in files_delete (not removed): %s", rel)
+            skipped.append(rel)
+            continue
+
+        try:
+            if in_git and _git_path_is_tracked(workspace_path, rel):
+                proc = subprocess.run(
+                    ["git", "rm", "--quiet", "--force", "--", rel],
+                    cwd=workspace_path,
+                    capture_output=True,
+                    text=True,
+                    timeout=30,
+                    check=False,
+                )
+                if proc.returncode != 0:
+                    abs_path.unlink()
+            else:
+                abs_path.unlink()
+            removed.append(rel)
+            _prune_empty_parents(abs_path, workspace_root)
+        except OSError as exc:
+            _logger.warning("Failed to remove files_delete path %s: %s", rel, exc)
+            failed.append(rel)
+
+    return removed, already_gone, skipped, failed
 
 
 def _apply_executor_model_params(model: Any, params: Any) -> None:
@@ -437,6 +549,7 @@ class AiderEngine(ExecutionEngine):
         delegation_id: str | None = None,
         spec_path: str | None = None,
         contract_paths: list[str] | None = None,
+        delete_paths_rel: list[str] | None = None,
         timestamp_start: str | None = None,
         timeout_s: float | None = None,
         spec_contract: str | None = None,
@@ -457,7 +570,10 @@ class AiderEngine(ExecutionEngine):
         before_git: set[str] | None = None
         before_mtimes: dict[str, float | None] | None = None
         snapshot_session = None
-        contract = contract_paths or edit_paths_rel
+        delete_paths = list(delete_paths_rel or [])
+        contract = sorted(
+            set(contract_paths or edit_paths_rel) | set(delete_paths)
+        )
         policy_token = None
         supervised_on = supervised_execution_enabled(workspace_path)
         effective_spec_contract = spec_contract or _build_spec_contract(contract)
@@ -518,7 +634,8 @@ class AiderEngine(ExecutionEngine):
                 }
             )
             before_git = snapshot_git_dirty(workspace_path)
-            before_mtimes = snapshot_mtimes(workspace_path, edit_paths_rel)
+            mtime_paths = list(dict.fromkeys([*edit_paths_rel, *delete_paths]))
+            before_mtimes = snapshot_mtimes(workspace_path, mtime_paths)
             snapshot_session = begin_delegation_snapshot(
                 workspace_path=workspace_path,
                 delegation_id=delegation_id,
@@ -751,6 +868,21 @@ class AiderEngine(ExecutionEngine):
                 pool.shutdown(wait=True)
                 pool_shutdown = True
 
+            files_deleted: list[str] = []
+            delete_failed_paths: list[str] = []
+            delete_error: str | None = None
+            if delete_paths:
+                try:
+                    removed, _already_gone, _skipped, delete_failed_paths = (
+                        _apply_deterministic_deletions(workspace_path, delete_paths)
+                    )
+                    files_deleted = removed
+                except Exception as exc:
+                    delete_error = f"{type(exc).__name__}: {exc}"
+                    _logger.warning(
+                        "Deterministic deletion failed unexpectedly: %s", delete_error
+                    )
+
             partial_str = str(partial) if partial is not None else ""
             output = "\n".join(s for s in (captured.strip(), partial_str.strip()) if s)
 
@@ -835,11 +967,19 @@ class AiderEngine(ExecutionEngine):
             elif not success and error:
                 error_class, _short = classify_delegation_error(error)
                 output = sanitize_delegation_output(output, error_class=error_class)
+            executor_edits = [
+                p for p in files_changed if p not in set(files_deleted)
+            ]
+            if (delete_failed_paths or delete_error) and not executor_edits:
+                error_class = "delete_failed"
+                if delete_error and not error:
+                    error = delete_error
             return ExecutionResult(
                 success=success,
                 output=output,
                 files_changed=files_changed,
                 files_unexpected=files_unexpected,
+                files_deleted=files_deleted,
                 model=self._model_name,
                 error=error,
                 error_class=error_class,
@@ -912,6 +1052,7 @@ class AiderEngine(ExecutionEngine):
         delegation_id: str | None = None,
         spec_path: str | None = None,
         contract_paths: list[str] | None = None,
+        delete_paths_rel: list[str] | None = None,
         timestamp_start: str | None = None,
         timeout_s: float | None = None,
     ) -> ExecutionResult:
@@ -926,6 +1067,12 @@ class AiderEngine(ExecutionEngine):
                 error=config_error,
                 tokens={"source": "unavailable"},
             )
+        if delete_paths_rel:
+            _logger.warning(
+                "files_delete ignored on no-spec run() path (%d path(s))",
+                len(delete_paths_rel),
+            )
+            delete_paths_rel = None
         return self._execute_delegation(
             prompt=prompt,
             fnames_rel=target_files,
@@ -935,6 +1082,7 @@ class AiderEngine(ExecutionEngine):
             delegation_id=delegation_id,
             spec_path=spec_path,
             contract_paths=contract_paths or target_files,
+            delete_paths_rel=delete_paths_rel,
             timestamp_start=timestamp_start,
             timeout_s=timeout_s,
         )
@@ -973,9 +1121,13 @@ class AiderEngine(ExecutionEngine):
             project_state_summary=project_state_summary,
         )
         pkg_key = compute_context_package_cache_key(package)
+        delete_paths_rel: list[str] = []
         if package.policies is not None:
+            delete_paths_rel = list(package.policies.files_delete)
             contract_paths = sorted(
-                set(package.policies.files_edit) | set(package.policies.files_read)
+                set(package.policies.files_edit)
+                | set(package.policies.files_read)
+                | set(package.policies.files_delete)
             )
         else:
             contract_paths = sorted(
@@ -983,8 +1135,18 @@ class AiderEngine(ExecutionEngine):
                 for e in package.entries
                 if e.tier in (TIER_EDIT_FULL, TIER_READ_FULL, TIER_READ_EXCERPT)
             )
+        req = translate_context_package(
+            package,
+            host_transcript=host_transcript,
+            project_state_summary=project_state_summary,
+        )
+        executor_prompt = _append_executor_contract_blocks(
+            req.prompt,
+            contract_paths=contract_paths,
+            delete_paths=delete_paths_rel,
+        )
         result = self._execute_delegation(
-            prompt=req.prompt,
+            prompt=executor_prompt,
             fnames_rel=req.fnames,
             edit_paths_rel=req.edit_paths,
             workspace_path=workspace_path,
@@ -993,9 +1155,10 @@ class AiderEngine(ExecutionEngine):
             delegation_id=delegation_id,
             spec_path=spec_path,
             contract_paths=contract_paths,
+            delete_paths_rel=delete_paths_rel or None,
             timestamp_start=timestamp_start,
             timeout_s=timeout_s,
             architect_plan=_extract_plan_section(package.brief),
         )
-        result.prompt_used = req.prompt
+        result.prompt_used = executor_prompt
         return result

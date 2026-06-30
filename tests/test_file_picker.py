@@ -28,6 +28,7 @@ def _policies(
     return DelegationPolicies(
         files_edit=edit,
         files_read=read,
+        files_delete=[],
         edit_scope=edit_scope,
         allow_create=True,
         untracked_policy="materialize",

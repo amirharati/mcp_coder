@@ -28,6 +28,7 @@ class PolicyValidationError(ValueError):
 class DelegationPolicies:
     files_edit: list[str]
     files_read: list[str]
+    files_delete: list[str]
     edit_scope: str
     allow_create: bool
     untracked_policy: str
@@ -37,6 +38,7 @@ class DelegationPolicies:
         return {
             "files_edit": self.files_edit,
             "files_read": self.files_read,
+            "files_delete": self.files_delete,
             "edit_scope": self.edit_scope,
             "allow_create": self.allow_create,
             "untracked_policy": self.untracked_policy,
@@ -124,14 +126,17 @@ def load_delegation_policies(
 
     yaml_edit = _yaml_path_list(front_matter, "files_edit")
     yaml_read = _yaml_path_list(front_matter, "files_read")
+    yaml_delete = _yaml_path_list(front_matter, "files_delete")
 
     files_edit = yaml_edit if yaml_edit is not None else md_contract.edit
     files_read = yaml_read if yaml_read is not None else md_contract.read
-    all_paths = sorted(set(files_edit + files_read))
+    files_delete = yaml_delete if yaml_delete is not None else md_contract.delete
+    all_paths = sorted(set(files_edit + files_read + files_delete))
 
     return DelegationPolicies(
         files_edit=files_edit,
         files_read=files_read,
+        files_delete=files_delete,
         edit_scope=_parse_edit_scope(front_matter.get("edit_scope")),
         allow_create=_parse_bool(
             front_matter.get("allow_create"), default=True, field="allow_create"
@@ -144,12 +149,64 @@ def load_delegation_policies(
 def compute_scope_violations(
     files_changed: list[str],
     files_edit: list[str],
+    files_delete: list[str] | None = None,
 ) -> list[str]:
-    """Sorted normalized paths in files_changed not in files_edit."""
-    edit_set = {normalize_repo_path(p) for p in files_edit}
+    """Sorted normalized paths in files_changed not in files_edit ∪ files_delete."""
+    allowed = {normalize_repo_path(p) for p in files_edit}
+    allowed.update(normalize_repo_path(p) for p in (files_delete or []))
     violations: list[str] = []
     for path in files_changed:
         norm = normalize_repo_path(path)
-        if norm and norm not in edit_set:
+        if norm and norm not in allowed:
             violations.append(norm)
     return sorted(set(violations))
+
+
+def build_files_delete_prompt_block(files_delete: list[str]) -> str | None:
+    """Executor prompt block listing engine-managed delete targets."""
+    paths = sorted(
+        {normalize_repo_path(p) for p in files_delete if normalize_repo_path(p)}
+    )
+    if not paths:
+        return None
+    lines = [
+        "### Files to be deleted (engine-managed)",
+        "The following files WILL be removed by the engine after you finish. Do NOT",
+        "edit, empty, or rewrite them — that wastes turns. Only update references to",
+        "them in your edit files (e.g. remove re-exports, imports, registrations).",
+    ]
+    lines.extend(f"- `{p}`" for p in paths)
+    return "\n".join(lines)
+
+
+def build_allowed_paths_prompt_block(contract_paths: list[str] | None) -> str | None:
+    paths = sorted(
+        {
+            normalize_repo_path(p.replace("\\", "/").lstrip("./"))
+            for p in (contract_paths or [])
+            if normalize_repo_path(p.replace("\\", "/").lstrip("./"))
+        }
+    )
+    if not paths:
+        return None
+    return "### Allowed paths\n" + "\n".join(f"- `{p}`" for p in paths)
+
+
+def append_executor_contract_prompt_blocks(
+    prompt: str,
+    *,
+    contract_paths: list[str] | None,
+    files_delete: list[str] | None = None,
+) -> str:
+    """Append allowed-path and engine-managed delete blocks to the executor prompt."""
+    blocks: list[str] = []
+    allowed = build_allowed_paths_prompt_block(contract_paths)
+    if allowed:
+        blocks.append(allowed)
+    delete_block = build_files_delete_prompt_block(files_delete or [])
+    if delete_block:
+        blocks.append(delete_block)
+    if not blocks:
+        return prompt
+    suffix = "\n\n---\n\n" + "\n\n".join(blocks)
+    return prompt + suffix if prompt.strip() else suffix.lstrip()

@@ -57,7 +57,7 @@ def test_parse_edit_only():
 
 def test_parse_empty_section():
     contract = parse_files_contract("")
-    assert contract == FilesContract(edit=[], read=[], all_paths=[])
+    assert contract == FilesContract(edit=[], read=[], delete=[], all_paths=[])
 
 
 def test_contract_paths_missing_from_target():
