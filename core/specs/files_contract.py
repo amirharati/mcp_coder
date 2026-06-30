@@ -10,6 +10,7 @@ from core.engine.git_diff import normalize_repo_path
 BULLET_RE = re.compile(r"^\s*-\s+(.+?)\s*$", re.MULTILINE)
 PATH_IN_BACKTICKS_RE = re.compile(r"`([^`]+)`")
 EDIT_SUBSECTION_RE = re.compile(r"^###\s+Edit\b", re.MULTILINE)
+CREATE_SUBSECTION_RE = re.compile(r"^###\s+Create\b", re.MULTILINE)
 READ_SUBSECTION_RE = re.compile(r"^###\s+Read\b", re.MULTILINE)
 DELETE_SUBSECTION_RE = re.compile(r"^###\s+Delete\b", re.MULTILINE)
 SUBSECTION_SPLIT_RE = re.compile(r"^###\s+(.+)$", re.MULTILINE)
@@ -79,7 +80,9 @@ def parse_files_contract(files_section: str) -> FilesContract:
     if not text:
         return FilesContract(edit=[], read=[], delete=[], all_paths=[])
 
-    has_edit = bool(EDIT_SUBSECTION_RE.search(text))
+    has_edit = bool(EDIT_SUBSECTION_RE.search(text)) or bool(
+        CREATE_SUBSECTION_RE.search(text)
+    )
     has_read = bool(READ_SUBSECTION_RE.search(text))
     has_delete = bool(DELETE_SUBSECTION_RE.search(text))
 
@@ -95,7 +98,7 @@ def parse_files_contract(files_section: str) -> FilesContract:
     while idx < len(parts):
         title = parts[idx].strip()
         body = parts[idx + 1] if idx + 1 < len(parts) else ""
-        if title.startswith("Edit"):
+        if title.startswith("Edit") or title.startswith("Create"):
             edit.extend(_parse_bullet_paths(body))
         elif title.startswith("Read"):
             read.extend(_parse_bullet_paths(body))

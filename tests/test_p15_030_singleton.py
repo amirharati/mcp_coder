@@ -104,6 +104,46 @@ def test_t4_stdio_health_multiple_when_cross_workspace_servers(monkeypatch):
     assert data["stdio_health"] == "MULTIPLE"
 
 
+def test_c5_recommended_action_kill_all_when_stale_same_workspace():
+    """C5: same-workspace stale PIDs → recommended_action mentions kill --all."""
+    my_pid = os.getpid()
+    with (
+        patch("server.mcp_server.stale_mcp_pids", return_value=[1234]),
+        patch("core.server.singleton._pgrep_mcp_pids", return_value=[my_pid, 1234]),
+    ):
+        data = _build_server_status("/tmp/ws")
+
+    assert data["stdio_health"] == "MULTIPLE"
+    assert "kill --all" in data["recommended_action"]
+
+
+def test_c6_recommended_action_toggle_when_cross_workspace_only():
+    """C6: cross-workspace only → Toggle MCP hint, no kill --all."""
+    my_pid = os.getpid()
+    with (
+        patch("server.mcp_server.stale_mcp_pids", return_value=[]),
+        patch("core.server.singleton._pgrep_mcp_pids", return_value=[my_pid, 9999]),
+    ):
+        data = _build_server_status("/tmp/ws")
+
+    assert data["stdio_health"] == "MULTIPLE"
+    assert "Toggle MCP" in data["recommended_action"]
+    assert "kill --all" not in data["recommended_action"]
+
+
+def test_c7_recommended_action_none_when_stdio_health_one():
+    """C7: stdio_health ONE → recommended_action is None."""
+    my_pid = os.getpid()
+    with (
+        patch("server.mcp_server.stale_mcp_pids", return_value=[]),
+        patch("core.server.singleton._pgrep_mcp_pids", return_value=[my_pid]),
+    ):
+        data = _build_server_status("/tmp/ws")
+
+    assert data["stdio_health"] == "ONE"
+    assert data["recommended_action"] is None
+
+
 def test_t5_get_server_status_includes_stdio_health():
     """T5: live get_server_status response includes stdio_health."""
     raw = get_server_status()

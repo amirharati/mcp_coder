@@ -1533,7 +1533,15 @@ def _build_server_status(workspace: str | Path) -> dict[str, Any]:
 
     if stale_pids or global_server_count > 0:
         stdio_health = "MULTIPLE"
-        recommended_action = "Run: mcp-coder kill --all, then refresh MCP in Cursor"
+        if stale_pids:
+            recommended_action = (
+                "Run: mcp-coder kill --all, then refresh MCP in Cursor"
+            )
+        else:
+            recommended_action = (
+                "Toggle MCP off/on in Cursor settings to refresh; "
+                "run mcp-coder kill only if -32602 errors occur"
+            )
     else:
         stdio_health = "ONE"
         recommended_action = None

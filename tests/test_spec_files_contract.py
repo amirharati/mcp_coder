@@ -162,6 +162,65 @@ def test_placeholder_read_not_in_missing_from_target():
     assert missing == []
 
 
+CREATE_ONLY_SECTION = """\
+### Create
+
+- `pkg/new_module.py`
+"""
+
+CREATE_SECTION = """\
+### Create
+
+- `pkg/new_file.py`
+"""
+
+MIXED_EDIT_CREATE_SECTION = """\
+### Edit
+
+- `pkg/existing.py`
+
+### Create
+
+- `pkg/new_file.py`
+- `pkg/existing.py`
+"""
+
+
+def test_c1_create_section_paths_in_edit():
+    """C1: ### Create paths land in FilesContract.edit."""
+    contract = parse_files_contract(CREATE_SECTION)
+    assert contract.edit == ["pkg/new_file.py"]
+    assert contract.read == []
+    assert contract.all_paths == ["pkg/new_file.py"]
+
+
+def test_c2_create_only_not_flat_list_fallback():
+    """C2: spec with only ### Create uses subsection parsing, not flat fallback."""
+    contract = parse_files_contract(CREATE_ONLY_SECTION)
+    assert contract.edit == ["pkg/new_module.py"]
+    assert contract.read == []
+    assert contract.all_paths == ["pkg/new_module.py"]
+
+
+def test_c3_mixed_edit_create_merged_and_deduped():
+    """C3: ### Edit + ### Create merge into edit with duplicates removed."""
+    contract = parse_files_contract(MIXED_EDIT_CREATE_SECTION)
+    assert contract.edit == ["pkg/existing.py", "pkg/new_file.py"]
+    assert contract.read == []
+    assert contract.all_paths == ["pkg/existing.py", "pkg/new_file.py"]
+
+
+def test_c4_edit_read_delete_regression_unchanged():
+    """C4: existing Edit/Read/Delete behaviour unchanged."""
+    contract = parse_files_contract(EDIT_READ_SECTION)
+    assert contract.edit == ["expense_splitter/cli.py"]
+    assert contract.read == ["expense_splitter/splitter.py"]
+    assert contract.all_paths == [
+        "expense_splitter/cli.py",
+        "expense_splitter/splitter.py",
+    ]
+
+
 def test_build_contract_warnings():
     warnings = build_contract_warnings(["a.py", "b.py"])
     assert warnings == [
