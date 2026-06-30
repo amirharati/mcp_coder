@@ -1523,6 +1523,21 @@ def _build_server_status(workspace: str | Path) -> dict[str, Any]:
     except Exception:
         stale_pids = []
 
+    try:
+        from core.server.singleton import _pgrep_mcp_pids
+
+        all_pids = _pgrep_mcp_pids(str(root / "main.py"))
+        global_server_count = len([p for p in all_pids if p != pid])
+    except Exception:
+        global_server_count = 0
+
+    if stale_pids or global_server_count > 0:
+        stdio_health = "MULTIPLE"
+        recommended_action = "Run: mcp-coder kill --all, then refresh MCP in Cursor"
+    else:
+        stdio_health = "ONE"
+        recommended_action = None
+
     return {
         "pid": pid,
         "workspace_path": ws,
@@ -1533,6 +1548,8 @@ def _build_server_status(workspace: str | Path) -> dict[str, Any]:
         "latest_dirty_change_at": latest_dirty_change_at,
         "stale_vs_local_changes": stale_vs_local_changes,
         "stale_sibling_pids": stale_pids,
+        "stdio_health": stdio_health,
+        "recommended_action": recommended_action,
     }
 
 

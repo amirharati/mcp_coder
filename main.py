@@ -580,7 +580,7 @@ def main() -> None:
         raise SystemExit(2)
 
     from core.config import apply_provider_env, load_env_files
-    from core.server.singleton import register_stdio_server
+    from core.server.singleton import enforce_single_stdio_server
     from server.mcp_server import run_stdio
 
     from core.logging.delegation_log import log_brief, log_stderr, workspace_path
@@ -588,6 +588,7 @@ def main() -> None:
     from core.host.cursor_rules import sync_workspace_cursor_rules
     from core.specs.bootstrap import ensure_workspace_spec_layout
     from core.storage.paths import ensure_mcp_coder_home, mcp_coder_home, project_key
+    from core.version import repo_root, source_revision
 
     ws: str | None = None
     try:
@@ -596,15 +597,44 @@ def main() -> None:
         ws = workspace_path()
         spec_layout = ensure_workspace_spec_layout(ws)
         rule_sync = sync_workspace_cursor_rules(ws)
-        register_stdio_server(ws)
+        # P15-ISS-030: kill stale same-workspace stdio servers before registering
+        # this PID (register_stdio_server alone left orphan pids → MULTIPLE_STDIO /
+        # Cursor -32602 after restart-loop pipe closes).
+        enforce_single_stdio_server(ws, main_script=str(repo_root() / "main.py"))
+        try:
+            from core.server.singleton import _pgrep_mcp_pids, _singleton_enabled
+
+            if _singleton_enabled():
+                _all = _pgrep_mcp_pids(str(repo_root() / "main.py"))
+                _others = [p for p in _all if p != os.getpid()]
+                if _others:
+                    server_log_emit(
+                        "singleton_cross_workspace_warning",
+                        level="warn",
+                        other_pids=_others,
+                        workspace_path=ws,
+                    )
+                    if log_brief():
+                        log_stderr(
+                            f"[mcp-coder] WARNING: {len(_others)} other MCP server(s) alive "
+                            f"(pids={_others}); if -32602 errors occur, run: mcp-coder kill --all"
+                        )
+                    _kill_all = os.environ.get(
+                        "MCP_CODER_SINGLETON_KILL_ALL", "0"
+                    ).strip() not in ("0", "false", "no", "off")
+                    if _kill_all:
+                        from core.server.singleton import _terminate_pid
+
+                        for _p in _others:
+                            _terminate_pid(_p)
+        except Exception:
+            pass  # never crash startup due to cross-workspace detection
         # P15-019: reconcile orphaned delegations (timestamp_end IS NULL) left
         # behind by a previous crash. Gated by MCP_CODER_RECONCILE_ON_STARTUP.
         _reconcile_on_startup(ws)
         log_cfg = resolve_config(ws)
         host_raw = os.environ.get("MCP_CODER_HOST", "auto").strip() or "auto"
         from core.session.policy import resolve_session_policy
-
-        from core.version import repo_root, source_revision
 
         server_log_emit(
             "stdio_server_ready",

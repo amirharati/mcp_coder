@@ -39,6 +39,7 @@ On/off switches for each pipeline stage. Default `1` (enabled) unless noted.
 | `MCP_CODER_RESUME_TOKEN_TTL` | `86400` (24 h) | — | Pause/resume token lifetime in seconds; expired tokens raise `ResumeTokenExpired` |
 | `MCP_CODER_HOT_AREAS_MAX` | `50` | — | Max hot-area entries kept in `project_state.json` |
 | `MCP_CODER_SINGLETON` | `1` | — | `1` = only one `SupervisorAgent` instance per server process; `0` = allow concurrent (not recommended) |
+| `MCP_CODER_SINGLETON_KILL_ALL` | `0` | — | When set to `1`, the MCP server kills ALL other mcp-coder stdio servers on startup (not just same-workspace stales). Use if you regularly switch Cursor projects and want automatic cleanup without running `mcp-coder kill --all` manually. No-op when `MCP_CODER_SINGLETON=0`. |
 
 ---
 

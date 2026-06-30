@@ -12,3 +12,4 @@ def test_get_server_status_returns_freshness_fields() -> None:
     assert isinstance(data.get("source_revision"), str)
     assert "stale_vs_local_changes" in data
     assert isinstance(data.get("stale_sibling_pids"), list)
+    assert "stdio_health" in data
