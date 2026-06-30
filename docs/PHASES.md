@@ -58,6 +58,8 @@ This document is the **delivery plan**: what to build, in what order, and how we
 | **12** *(complete)* | **Supervisor orchestration infrastructure** — project state, tool runner, pause/resume, reviewer loop, planner pre-injection, executor reset control plane | [PHASE12_MVP.md](./PHASE12_MVP.md) **complete** 2026-06-21 |
 | **13** *(complete)* | **Stabilize + dogfood + document + backlog review** — lifecycle envelope, agent checkpoint, dogfood-verified pause/resume, reviewer/classifier hardening, docs consolidation | [PHASE13_MVP.md](./PHASE13_MVP.md) **complete** 2026-06-23 |
 | **13+** | Multi-step plan object + async resume token; full executor-pull sidecar; tier-2 epic-boundary review; BL-513 AI-suggested params; BL-514 dynamic escalation; cross-session reasoning (BL-333); out-of-process proxy extension; dogfood integration tests (BL-556) | BL-350, BL-513–515, BL-321, BL-160, BL-007, BL-333, BL-556 |
+| **15** *(active, extended)* | **Minimal viable intelligence + dogfooding reliability** — supervisor reasoning, planner agentic loop, executor prompt enrichment (P15-000..038 done); **+ architecture refactor track (daemon + thin CLI/MCP clients, BL-560..BL-566)** added to finish dogfooding after Epic 7 proved stdio-as-center is the reliability root cause (0/6 complete MCP delegations). | BL-525/529/543/547; BL-560..BL-566 |
+| **16** *(planned)* | **Full product rename** — package, CLI, docs, env prefix (`MCP_CODER_*`), on-disk paths (`~/.mcp-coder/`), `mcp.json` key; deprecation/compat shim for old env vars + paths so existing dogfood workspaces keep working. Mostly mechanical str-replace + small compat shim. Run after the Phase 15 architecture refactor settles the new shape. | BL-567 |
 
 **Principle (Phase 3+ attribution):** MCP reports `files_changed` from **delegation-scoped workspace manifest delta** — git-agnostic, backend-agnostic. User git is complementary; optional `git_tracked` metadata later (trivial).
 
@@ -979,6 +981,107 @@ See full table in [PHASE11_MVP.md](./PHASE11_MVP.md) § Cross-phase architectura
 3. Executor-pull hint: `needs_input` stall frequency measurably lower in dogfood.
 4. Tier-1 reviewer note appears in spec report; non-fatal on reviewer error.
 5. `model_policy` overrides executor thinking budget from Cursor for one delegation.
+
+---
+
+## Phase 15 architecture refactor track — daemon + thin clients *(active, added 2026-06-30)*
+
+**Status:** Active — added to Phase 15 as the dogfooding-finishing track after Epic 7 dogfood (`idealabs_web`, mcp-coder rev `2fb976e`) proved the stdio-as-center model is the reliability root cause, not a set of patchable bugs. Tracked on [PHASE15_MVP.md](./PHASE15_MVP.md) as milestone P15-040 (pending — open design questions below).
+**Backlog inputs:** BL-560 (daemon + API), BL-561 (async delegation jobs), BL-562 (thin MCP adapter), BL-563 (CLI as API client), BL-564 (single daemon multi-workspace + lifecycle), BL-565 (localhost security), BL-566 (migration/forward-compat).
+
+### One-line goal
+
+Stop running the delegation engine inside a disposable stdio process that the host (Cursor) controls and kills. Run it in one long-lived, host-independent **server (daemon)** that owns all business logic and state, and demote **CLI** and **MCP** to thin clients over a localhost API.
+
+### Why this track now (the dogfood evidence)
+
+Every Epic 2–7 dogfood hit the same family of failures, and the P15 patches (singleton enforcement, idle keepalive, restart loop, heartbeat, crash-safe snapshots, reconciliation) were necessary band-aids but provably insufficient — Epic 7 delivered **0/6 complete MCP delegations**; all product work landed via host fallback. The server log from Epic 7 shows the mechanism directly:
+
+- **Client owns process lifecycle.** Cursor's MCP V2 client closes the stdio pipe ~1s after a delegation completes (FSM `conn=degraded → closed`). `main.py` catches the `BrokenResourceError` and exits 0. The process is gone; Cursor may or may not respawn it lazily → `Not connected`.
+- **Singleton enforcement kills in-flight work.** On reconnect, the new server startup runs `singleton_stale_terminated` on the previous pid — while a delegation may still be running on it. Direct path: `Connection closed` → retry → orphaned/killed delegation.
+- **One server per project = permanent MULTIPLE.** Two Cursor projects (`idealabs_web` + `mcp_coder_phase13_e2e`) = two stdio servers forever; `stdio_health: MULTIPLE` the entire session; cross-workspace fights no patch can resolve.
+- **Long work on a request/response transport.** 5–10 min delegations over a pipe designed for short tool calls; the 7a timeout at ~340s is the **per-step** `MCP_CODER_EXECUTOR_STEP_TIMEOUT_S` (300s default), not the 600s delegation timeout — different timeouts winning is a symptom of execution living where it shouldn't.
+
+The durable history layer (`workspace_history.db`, crash-safe snapshots, startup reconciliation) shipped earlier in Phase 15 was step one of durability. A persistent daemon that owns execution is step two. Continuing to patch stdio is diminishing returns.
+
+### Three things (the architecture)
+
+```
+1. SERVER (daemon)            — long-lived, host-independent, owns ALL business logic + state
+                                (delegation engine, context builder, supervisor, scope gate,
+                                 workspace history, job queue); exposes a localhost API;
+                                single instance serves all workspaces.
+2. CLI                        — thin client over the same API + local-only ops
+                                (setup, viewer, install rules, serve, kill).
+3. MCP                        — thin client over the same API + local-only ops
+                                (setup, viewer, install rules).
+```
+
+**Core rule: business logic lives in exactly one place — the server.** CLI and MCP are peers. This kills the "CLI works but MCP times out" class of bug (today they are divergent code routes) and makes "is the fix loaded?" a single-server question (one `source_revision`), not a two-stale-servers question.
+
+### What changes vs what stays
+
+**Stays (most of the product):** spec contract, context builder, executor (Aider), supervisor loop, scope gate, workspace history, `workspace_history.db` (already the durable truth layer), judgment-loop semantics (diff → pytest → retry).
+
+**Changes (the shell around it):**
+- `main.py --mcp` stops being "the server" — becomes a thin MCP→API adapter (stdio proxy to localhost). Zero business logic in the MCP layer (today `server/mcp_server.py` is 4000+ lines doing everything — that coupling is the problem).
+- New: daemon process (`mcp-coder serve`) with lifecycle management.
+- Delegations become **async jobs** with IDs, status polling, progress streaming — not one blocking 340s tool call.
+
+### Design decisions (locked 2026-06-30)
+
+1. **One daemon for all workspaces** — **YES.** A single daemon serves all `project_key`s; every API call carries a workspace param. Superagent sessions are fully separated by `project_key`. **Crash recovery is stateful, not mid-turn resumption:** if the daemon crashes, on restart it reconciles from `workspace_history.db` — the audit trail + partial work on disk survive, and the host continues via a fix-up spec. We start from the last good state; we do **not** resume a mid-flight Aider turn. This is the honest "recover from almost where we left" guarantee: durable audit + partial work + fix-up continuation.
+2. **Daemon lifecycle — CLI owns it; MCP is a pure client; opt-in autostart fallback.**
+   - **Layer 1 (always):** `mcp-coder start` = background daemon **+ supervisor that auto-restarts on crash** (the existing restart-loop pattern moved onto the daemon; survives logout via `setsid`/`nohup`). `mcp-coder serve` = foreground, dev/debug, no supervisor. `mcp-coder stop` / `status` = control. **One server per machine** via lock + health; `start`/`serve` when already running → "already running (pid N)", no second spawn (idempotent, safe to re-run). The supervisor handles the "server can die" case **without MCP involvement**.
+   - **Layer 2 (cold-start fallback, opt-in):** `MCP_CODER_DAEMON_AUTOSTART=1` — if the MCP shim gets connection-refused, it spawns-and-detaches the daemon (lock-respecting), waits for `/health`, then retries. **Default OFF** for the first slice (so we test the "stop and ask" path first — the safety-critical one); **default decided later** after dogfood. When OFF and the daemon is down, the MCP shim does **one** short retry (~200–500ms, covers the supervisor-restart gap) then returns a **single, clear, actionable error** per call (*"daemon not running — run `mcp-coder start`"*) — it does **not** spin in a hot loop, does **not** block, and works the instant the daemon is up (no Cursor restart). MCP never silently swallows.
+3. **First-slice scope — full thing, step by step.** We implement the complete daemon + thin-client architecture before returning to real dogfooding, but build it incrementally (sub-milestones P15-040a..e) with **minimal internal dogfooding** between slices. No half-measures that we'd have to live with.
+4. **MCP tool shape — blocking wrapper, async underneath.** `delegate_to_agent` stays a host-compatible blocking tool that internally submits an async job to the daemon and polls for completion, streaming progress. The daemon's HTTP API is the canonical interface, so **host↔server communication can take many forms** — stdio-MCP adapter (now), HTTP-MCP, or the host polling the API directly / watching a file or process. Future experimentation (async-with-host, CLI-vs-MCP) is enabled by this architecture and captured as a later-track option, not built in 040.
+
+### What this track does NOT own
+
+| Item | Why deferred / separate |
+|------|--------------|
+| Preflight/context bloat (B021) | Gateway/context logic, not transport — separate work (P15-ISS-026/028 lineage) |
+| False scope violations (B030) | Gateway attribution logic, not transport (P15-ISS-041) |
+| Cursor auto-review blocks (B028) | Host-side, pre-transport — documentation only (P15-ISS-039) |
+| Full product rename | Phase 16 — run after this refactor settles so we name the right thing (BL-567) |
+
+### Acceptance (dogfood)
+
+1. A delegation survives the host closing the MCP pipe mid-run — host reconnects and asks "status of delegation X"; the daemon answers with the running/completed job.
+2. One daemon serves multiple Cursor projects; `stdio_health: MULTIPLE` and manual `kill --all` before every session are gone.
+3. CLI and MCP produce identical results for the same operation (same API, one `source_revision`).
+4. `delegate_to_agent` no longer blocks a stdio pipe for 5+ minutes; long jobs run on the daemon.
+
+---
+
+## Phase 16: Full product rename *(planned)*
+
+**Status:** Planned — run after the Phase 15 architecture refactor. Roadmap entry added 2026-06-30.
+**PM doc:** to be created when the phase opens.
+**Backlog input:** BL-567.
+
+### One-line goal
+
+Rename the product across code, docs, env prefix, and on-disk paths, with a deprecation/compat shim so existing dogfood workspaces keep working without manual migration.
+
+### Why a separate phase (and why after the Phase 15 refactor)
+
+- The current name actively misdescribes the product after the refactor: "mcp-coder" implies "an MCP server that codes," but post-refactor it is a coding-delegation **daemon** with MCP and CLI clients. Renaming is *motivated* by the architecture change — but doing it as a follow-up lets the new shape settle first, so we name the right thing rather than renaming twice.
+- The rename is mechanically tedious but low-risk; mixing it into the refactor would make one big scary change instead of two reviewable ones.
+
+### Scope
+
+**Pure str-replace (the ~90%):** package/module name, CLI command string, doc prose, rule file references, `scripts/mcp-coder` shim filename.
+
+**Needs a compat shim, not just replace (the ~10%):**
+- **Env var prefix** `MCP_CODER_*` — every existing `.env` (`idealabs_web`, `mcp_coder_phase13_e2e`, etc.) would break; read old+new during transition with a one-time rename warning.
+- **On-disk paths** `~/.mcp-coder/`, per-project `.mcp-coder/` — existing `workspace_history.db` files live there; migrate/symlink so prior delegation history is not orphaned.
+- **`~/.cursor/mcp.json` server key** `mcp-coder` — existing Cursor configs reference it.
+
+### Open question (for this phase, not now)
+
+Does the rename touch the env var prefix and on-disk paths, or just the package/CLI name? Renaming `MCP_CODER_*` → `NEW_*` and `~/.mcp-coder/` → `~/.new/` is the painful part (breaks every existing `.env` and every existing history DB). Decide appetite when the phase opens.
 
 ---
 

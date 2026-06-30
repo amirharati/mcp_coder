@@ -188,6 +188,19 @@ When running log analysis or dogfood, check these conditions and close the sourc
 | BL-558 | Supervisor swallow-counter health endpoint — surface `get_supervisor_swallow_counts()` snapshot + reset on delegation boundaries so a dashboard can show "N swallowed errors in the last delegation" (P14-ISS-010 follow-up) | deferred |
 | BL-559 | Helper `proxy_llm_call` full bodies — v1 emits metadata-only (`attribution_source="gateway"`); add `raw_request`/`raw_response` if the viewer's helper-triple join needs them (P14-ISS-009 follow-up; depends on viewer feedback from Phase 14 dogfood) | deferred |
 
+### Architecture & transport (Phase 15 refactor / Phase 16 rename)
+
+| BL-ID | What | Status |
+|-------|------|--------|
+| BL-560 | Long-lived daemon (server) with localhost API owning all business logic + state | deferred |
+| BL-561 | Async delegation jobs — submit/poll/status on the daemon so jobs survive client disconnect; blocking compat wrapper for hosts | deferred |
+| BL-562 | Thin MCP adapter — stdio shim proxying to the daemon API; no business logic in MCP layer | deferred |
+| BL-563 | CLI as daemon API client — CLI/MCP become peers over the same API | deferred |
+| BL-564 | Single daemon multi-workspace + lifecycle — auto-start, `mcp-coder serve`, PID/lock, health endpoint; replaces per-project stdio singleton (B026) | deferred |
+| BL-565 | Localhost security — bind 127.0.0.1, optional token, no network exposure by default | deferred |
+| BL-566 | Migration / forward-compat — keep stdio-as-server working during transition; existing `.cursor/mcp.json` forward-compat | deferred |
+| BL-567 | Full product rename — package, CLI, docs, env prefix, on-disk paths + deprecation/compat shim (Phase 16) | deferred |
+
 ### Ideas / unscoped
 
 | BL-ID | What | Status |
@@ -274,6 +287,7 @@ When running log analysis or dogfood, check these conditions and close the sourc
 
 | Date | Change |
 |------|--------|
+| 2026-06-30 | **BL-560..BL-567 added (Phase 15 refactor track / Phase 16 rename).** Epic 7 dogfood (`idealabs_web`, rev `2fb976e`) proved the stdio-as-center model is the reliability root cause — 0/6 complete MCP delegations; product work landed via host fallback. Added a new "Architecture & transport" cluster: BL-560 (long-lived daemon + localhost API owning all business logic/state), BL-561 (async delegation jobs surviving client disconnect + blocking compat wrapper), BL-562 (thin MCP adapter, no business logic in MCP layer), BL-563 (CLI as daemon API client — CLI/MCP peers), BL-564 (single daemon multi-workspace + lifecycle — replaces per-project stdio singleton / B026), BL-565 (localhost security), BL-566 (migration/forward-compat), BL-567 (full product rename + env/path compat shim — Phase 16). The refactor (BL-560..BL-566) is a **Phase 15 track** (milestone P15-040) to finish dogfooding; the rename (BL-567) is **Phase 16**, run after the refactor settles. Core rule: business logic lives only in the server; CLI and MCP are thin clients. PHASES.md updated with the Phase 15 refactor-track section + Phase 16 rename section. |
 | 2026-06-25 | **BL-558 + BL-559 added** — follow-ups from P14-ISS-FIX closure batch. BL-558: wire `get_supervisor_swallow_counts()` to a health endpoint (snapshot + reset on delegation boundaries; P14-ISS-010 v1 left the counters exposed but unread). BL-559: add `raw_request`/`raw_response` bodies to helper `proxy_llm_call` if the viewer's helper-triple join needs them (P14-ISS-009 v1 emitted metadata-only to avoid trace bloat; depends on viewer feedback from Phase 14 dogfood). |
 | 2026-06-24 | **BL-525 reframed** — Planner as agent: tool-calling loop + mutable plan + RAG-aware. Updated to reflect the real gap surfaced in Phase 14 — the Supervisor already has a bounded tool-calling agent loop (`SupervisorToolRunner`, BL-530) but the Planner is still one-shot `run_owned_helper_completion()`. Planner should mirror the Supervisor's loop pattern with its own tool set (`read_file`, `get_project_state`, `get_delegation_history`, `rag_search`). Cross-linked BL-557 (sharing layer — a tool-calling Planner can pull prior reasoning via RAG, the high-value path for the intelligence cascade). Post-Phase-14. |
 | 2026-06-24 | **BL-557 added (reframed)** — cross-model reasoning sharing layer: peer-to-peer normalized reasoning summaries + curated shared store, with implicit (supervisor-mediated) + explicit (RAG) retrieval seams. Extends BL-333 beyond executor-only; depends on Phase 14 (P14-003c/P14-004) to verify reasoning-capture substrate first. Forcing-prompt convention for non-reasoning models included as deliverable (a). Reframed from "cascade downhill" to "peer-to-peer sharing among role-specific models" after user clarification. |

@@ -1309,10 +1309,123 @@ The MCP-facilitated path is the architectural win: the junior PM host calls `mcp
 
 ---
 
+---
+
+## Architecture & transport (Phase 15 refactor / Phase 16 rename)
+
+Added 2026-06-30 after Epic 7 dogfood (`idealabs_web`, mcp-coder rev `2fb976e`) proved the stdio-as-center model is the reliability root cause. 0/6 complete MCP delegations; product work landed via host fallback. The P15 patches (singleton enforcement, idle keepalive, restart loop, heartbeat, crash-safe snapshots, reconciliation) were necessary band-aids but insufficient. The refactor (BL-560..BL-566) is a **Phase 15 track** (milestone P15-040) to finish dogfooding; the rename (BL-567) is **Phase 16**, run after the refactor settles. See [PHASES.md](../PHASES.md) § "Phase 15 architecture refactor track" / § Phase 16 for the full rationale and the three-thing architecture (server / CLI / MCP).
+
+**Core rule:** business logic lives in exactly one place — the server (daemon). CLI and MCP are thin clients (peers) over a localhost API.
+
+### BL-560: Long-lived daemon (server) with localhost API
+
+**Status:** `deferred` — 2026-06-30. Phase 15 (refactor track) cornerstone.
+
+**Context:** Today `main.py --mcp` is "the server" and `server/mcp_server.py` is 4000+ lines doing everything (delegation engine wiring, context builder, supervisor loop, scope gate, status tools). The host (Cursor) spawns this process over stdio, owns its lifecycle, closes the pipe ~1s after a delegation completes, and may or may not respawn it. Execution of 5–10 min delegations lives inside a disposable request/response transport.
+
+**Goal:** Extract a long-lived, host-independent daemon that owns ALL business logic + state (delegation engine, context builder, supervisor, scope gate, workspace history, job queue) and exposes a localhost API. The daemon stays up across host reconnects; one instance serves all workspaces (workspace param on every call).
+
+**Stays:** spec contract, context builder, executor (Aider), supervisor loop, scope gate, `workspace_history.db` (already the durable truth layer), judgment-loop semantics.
+
+**Related:** BL-561, BL-562, BL-563, BL-564, BL-565, BL-566; supersedes the patch lineage P15-ISS-016/023/027/030 (connection stability / singleton).
+
+---
+
+### BL-561: Async delegation jobs (survive client disconnect)
+
+**Status:** `deferred` — 2026-06-30. Phase 15 (refactor track).
+
+**Context:** Today `delegate_to_agent` is one blocking tool call that holds the stdio pipe for the whole run (up to 600s). When Cursor closes the pipe mid-run, the delegation is orphaned/killed (P15-ISS-012/027). The 7a timeout at ~340s was the per-step `MCP_CODER_EXECUTOR_STEP_TIMEOUT_S` (300s) — a symptom of long work living on a short transport.
+
+**Goal:** A delegation becomes a **job** on the daemon: `submit` returns a job/delegation ID immediately; `get_status` / `get_result` poll; progress streams. The job keeps running when the client disconnects; the host reconnects and asks "status of delegation X."
+
+**Compat:** keep a blocking `delegate_to_agent` MCP tool that internally polls the daemon, so existing hosts/routing keep working during transition. Fully async (`submit` + `poll`) is the end state.
+
+**Related:** BL-560; fixes B012/B013 disconnect-mid-delegation family.
+
+---
+
+### BL-562: Thin MCP adapter (no business logic in MCP layer)
+
+**Status:** `deferred` — 2026-06-30. Phase 15 (refactor track).
+
+**Context:** `server/mcp_server.py` is 4000+ lines mixing MCP transport with all business logic. This coupling is why transport problems manifest as product bugs and why "CLI works but MCP times out" happens (divergent code routes).
+
+**Goal:** MCP becomes a thin stdio adapter that proxies to the daemon API. Zero business logic in the MCP layer. Tools: `delegate_to_agent`, `get_server_status`, `list_delegations`, `get_delegation_diff`, `revert_delegation`, `inspect_context`, etc. — all proxy to the daemon. Local-only ops (setup, viewer, install rules) stay in the client.
+
+**Related:** BL-560, BL-563.
+
+---
+
+### BL-563: CLI as daemon API client
+
+**Status:** `deferred` — 2026-06-30. Phase 15 (refactor track).
+
+**Context:** Today the CLI and MCP are different code routes (`scripts/mcp-coder` CLI vs `main.py --mcp`), producing real divergence ("CLI works but MCP times out"). One `source_revision` vs two stale servers confusion (Epic 7 "is the fix loaded?") comes from this.
+
+**Goal:** CLI commands become thin clients over the same daemon API as MCP. CLI and MCP are peers — identical results for the same operation, one `source_revision`. CLI also keeps local-only ops (`setup`, `serve`, `kill`, viewer launch).
+
+**Related:** BL-560, BL-562.
+
+---
+
+### BL-564: Single daemon, multi-workspace + lifecycle
+
+**Status:** `deferred` — 2026-06-30. Phase 15 (refactor track).
+
+**Context:** One Cursor project = one stdio server. Two projects (`idealabs_web` + `mcp_coder_phase13_e2e`) = two servers forever → permanent `stdio_health: MULTIPLE` (B026/P15-ISS-030). Singleton enforcement kills "stale" siblings, sometimes while they are still executing a delegation. No patch resolves this on the stdio model.
+
+**Goal:** One daemon serves all workspaces (workspace param on every API call) — the singleton problem disappears structurally. Lifecycle: auto-started by CLI/MCP shim on first contact if down + explicit `mcp-coder serve` for manual control; PID/lock file; health endpoint. Replaces per-project stdio singleton enforcement entirely.
+
+**Related:** BL-560; structurally fixes B026 / P15-ISS-030 (no manual `kill --all` before sessions).
+
+---
+
+### BL-565: Localhost security
+
+**Status:** `deferred` — 2026-06-30. Phase 15 (refactor track).
+
+**Context:** A long-lived daemon listening on a port introduces a local attack surface that stdio-as-server did not have.
+
+**Goal:** Bind `127.0.0.1` only (no network exposure by default); optional token auth; document the threat model. Remote daemon (Render/cloud) is explicitly out of scope for now — localhost-only simplifies security.
+
+**Related:** BL-560, BL-564.
+
+---
+
+### BL-566: Migration / forward-compat
+
+**Status:** `deferred` — 2026-06-30. Phase 15 (refactor track).
+
+**Context:** Existing dogfood setups (`idealabs_web`, `mcp_coder_phase13_e2e`) have `.cursor/mcp.json` pointing at `scripts/mcp-coder` (stdio). A cutover must not brick in-flight work or require everyone to re-run setup simultaneously.
+
+**Goal:** Keep stdio-as-server working during the transition (the stdio path becomes the thin MCP adapter that auto-starts/connects to the daemon). Existing `.cursor/mcp.json` configs forward-compat (the shim detects/launches the daemon). Provide a clean migration path + docs.
+
+**Related:** BL-560, BL-562, BL-564.
+
+---
+
+### BL-567: Full product rename + compat shim (Phase 16)
+
+**Status:** `deferred` — 2026-06-30. Phase 16 (run after the Phase 15 architecture refactor settles the new shape).
+
+**Context:** The name "mcp-coder" actively misdescribes the product after the Phase 15 refactor — it implies "an MCP server that codes," but post-refactor it is a coding-delegation **daemon** with MCP and CLI clients. Rename is motivated by the architecture change but kept separate so we name the right thing, not rename twice.
+
+**Goal:** Rename across package/module, CLI command, doc prose, rule files, `scripts/mcp-coder` shim. Plus a **deprecation/compat shim** for the painful parts: env var prefix `MCP_CODER_*` (read old+new with one-time rename warning — every existing `.env` would break otherwise), on-disk paths `~/.mcp-coder/` + per-project `.mcp-coder/` (migrate/symlink so existing `workspace_history.db` files are not orphaned), and `~/.cursor/mcp.json` server key.
+
+**Scope split:** ~90% pure str-replace (code/docs name); ~10% compat shim (env prefix + on-disk paths + mcp.json key).
+
+**Open question (for Phase 16, not now):** does the rename touch the env var prefix and on-disk paths, or just the package/CLI name? The env/path rename is the painful part (breaks every existing `.env` and every existing history DB).
+
+**Related:** Phase 15 architecture refactor (BL-560..BL-566) must land first.
+
+---
+
 ## Changelog
 
 | Date | Change |
 |------|--------|
+| 2026-06-30 | **BL-560..BL-567 added (Phase 15 refactor track / Phase 16 rename).** New "Architecture & transport" cluster. Epic 7 dogfood proved stdio-as-center is the reliability root cause (0/6 complete MCP delegations). BL-560 (long-lived daemon + localhost API owning all business logic/state), BL-561 (async delegation jobs surviving client disconnect + blocking compat wrapper), BL-562 (thin MCP adapter, no business logic in MCP layer), BL-563 (CLI as daemon API client — CLI/MCP peers), BL-564 (single daemon multi-workspace + lifecycle — replaces per-project stdio singleton / B026), BL-565 (localhost security), BL-566 (migration/forward-compat), BL-567 (full product rename + env/path compat shim — Phase 16). The refactor (BL-560..BL-566) is a **Phase 15 track** (milestone P15-040) to finish dogfooding; the rename (BL-567) is **Phase 16**. Core rule: business logic lives only in the server; CLI and MCP are thin clients. PHASES.md updated with the Phase 15 refactor-track section + Phase 16 rename section. |
 | 2026-06-21 | **BL-548 added** — mid-loop crash recovery (per-turn agent checkpoint). Deferred from P13-007, which shipped steady-state checkpoint at delegation boundaries only. Long-tail 20% after P13-007's high-value 80%. |
 | 2026-06-21 | **Phase 12 closed** — P12-001..P12-005 + issues + BL-545 v1 shipped; partial items (BL-543, BL-529, BL-525) and D-ARCH-8 → **BL-547** deferred; Phase 13 opened (stabilize + dogfood). |
 | 2026-06-21 | **BL-547 added** — D-ARCH-8 supervisor autonomous interception (`supervisor_intercept`); deferred post–Phase 12 infra. |
