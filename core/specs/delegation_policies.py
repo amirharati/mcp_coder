@@ -87,7 +87,7 @@ def _parse_bool(value: Any, *, default: bool, field: str) -> bool:
 
 def _parse_edit_scope(value: Any) -> str:
     if value is None:
-        return EDIT_SCOPE_DISCOVER
+        return EDIT_SCOPE_STRICT
     if not isinstance(value, str):
         raise PolicyValidationError(
             f"edit_scope must be {EDIT_SCOPE_DISCOVER!r} or {EDIT_SCOPE_STRICT!r}"
@@ -150,10 +150,12 @@ def compute_scope_violations(
     files_changed: list[str],
     files_edit: list[str],
     files_delete: list[str] | None = None,
+    files_read: list[str] | None = None,
 ) -> list[str]:
-    """Sorted normalized paths in files_changed not in files_edit ∪ files_delete."""
+    """Sorted normalized paths in files_changed not in files_edit ∪ files_delete ∪ files_read."""
     allowed = {normalize_repo_path(p) for p in files_edit}
     allowed.update(normalize_repo_path(p) for p in (files_delete or []))
+    allowed.update(normalize_repo_path(p) for p in (files_read or []))
     violations: list[str] = []
     for path in files_changed:
         norm = normalize_repo_path(path)

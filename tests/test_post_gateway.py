@@ -305,3 +305,77 @@ def test_p2_iss_002_strict_auto_revert(tmp_path, monkeypatch):
         scope_violations=result.scope_violations,
     )
     assert outcome == OUTCOME_SCOPE_VIOLATION
+
+
+# P15-032 acceptance: T5–T6
+
+
+def test_p15_032_t5_gateway_skips_revert_for_files_read(tmp_path, monkeypatch):
+    """files_read-listed path changed but not reverted under strict."""
+    home = tmp_path / "home"
+    ws = tmp_path / "ws"
+    ws.mkdir()
+    delegation_id = str(uuid.uuid4())
+
+    _commit_delegation(
+        ws,
+        home,
+        monkeypatch,
+        delegation_id=delegation_id,
+        contract_paths=["a.ts", "b.ts"],
+        mutate=lambda w: (
+            (w / "a.ts").write_text("edit-a\n", encoding="utf-8"),
+            (w / "b.ts").write_text("edit-b\n", encoding="utf-8"),
+        ),
+    )
+
+    result = apply_post_delegation_gateway(
+        workspace=ws,
+        delegation_id=delegation_id,
+        delegate_mode=DELEGATE_MODE_IMPLEMENT,
+        edit_scope=EDIT_SCOPE_STRICT,
+        files_changed=["a.ts", "b.ts"],
+        files_edit=["a.ts"],
+        files_read=["b.ts"],
+    )
+
+    assert "b.ts" not in result.reverted_paths
+    assert result.scope_violations == []
+    assert (ws / "b.ts").read_text(encoding="utf-8") == "edit-b\n"
+
+
+def test_p15_032_t6_gateway_reverts_out_of_contract_path(tmp_path, monkeypatch):
+    """Path not in files_edit or files_read is reverted under strict."""
+    home = tmp_path / "home"
+    ws = tmp_path / "ws"
+    ws.mkdir()
+    delegation_id = str(uuid.uuid4())
+
+    _commit_delegation(
+        ws,
+        home,
+        monkeypatch,
+        delegation_id=delegation_id,
+        contract_paths=["a.ts", "b.ts"],
+        mutate=lambda w: (
+            (w / "a.ts").write_text("edit-a\n", encoding="utf-8"),
+            (w / "b.ts").write_text("edit-b\n", encoding="utf-8"),
+            (w / "c.ts").write_text("bad\n", encoding="utf-8"),
+        ),
+    )
+
+    result = apply_post_delegation_gateway(
+        workspace=ws,
+        delegation_id=delegation_id,
+        delegate_mode=DELEGATE_MODE_IMPLEMENT,
+        edit_scope=EDIT_SCOPE_STRICT,
+        files_changed=["a.ts", "b.ts", "c.ts"],
+        files_edit=["a.ts"],
+        files_read=["b.ts"],
+    )
+
+    assert "c.ts" in result.scope_violations
+    assert "c.ts" in result.reverted_paths
+    assert "b.ts" not in result.reverted_paths
+    assert not (ws / "c.ts").exists()
+    assert (ws / "b.ts").read_text(encoding="utf-8") == "edit-b\n"

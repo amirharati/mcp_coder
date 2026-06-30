@@ -363,7 +363,11 @@ def test_delegate_strict_scope_violation(tmp_path, monkeypatch):
     fake = ExecutionResult(
         success=True,
         output="done",
-        files_changed=["expense_splitter/cli.py", "expense_splitter/splitter.py"],
+        files_changed=[
+            "expense_splitter/cli.py",
+            "expense_splitter/splitter.py",
+            "expense_splitter/models.py",  # out-of-contract: not in files_edit or files_read
+        ],
         model="m",
     )
     mock_engine = type("E", (), {"model_name": "m", "run": lambda *a, **k: fake})()
@@ -382,13 +386,13 @@ def test_delegate_strict_scope_violation(tmp_path, monkeypatch):
     payload = json.loads(raw)
     assert payload["success"] is True
     assert payload["outcome"] == OUTCOME_SCOPE_VIOLATION
-    assert payload["scope_violations"] == ["expense_splitter/splitter.py"]
+    assert payload["scope_violations"] == ["expense_splitter/models.py"]
     assert payload["delegation_policies"]["edit_scope"] == "strict"
     assert payload["delegation_policies"]["files_edit"] == ["expense_splitter/cli.py"]
 
     record = json.loads(Path(payload["log_path"]).read_text(encoding="utf-8").strip())
     assert record["outcome"] == OUTCOME_SCOPE_VIOLATION
-    assert record["scope_violations"] == ["expense_splitter/splitter.py"]
+    assert record["scope_violations"] == ["expense_splitter/models.py"]
     assert record["delegation_policies"]["edit_scope"] == "strict"
 
 
@@ -408,7 +412,11 @@ def test_delegate_strict_scope_violation_report_content(tmp_path, monkeypatch):
     fake = ExecutionResult(
         success=True,
         output="done",
-        files_changed=["expense_splitter/cli.py", "expense_splitter/splitter.py"],
+        files_changed=[
+            "expense_splitter/cli.py",
+            "expense_splitter/splitter.py",
+            "expense_splitter/models.py",  # out-of-contract: not in files_edit or files_read
+        ],
         model="m",
     )
     mock_engine = type("E", (), {"model_name": "m", "run": lambda *a, **k: fake})()
@@ -430,7 +438,7 @@ def test_delegate_strict_scope_violation_report_content(tmp_path, monkeypatch):
 
     assert "## Scope expansion" in report_text
     assert "scope_violation" in report_text
-    assert "expense_splitter/splitter.py" in report_text
+    assert "expense_splitter/models.py" in report_text
 
     from core.specs.sections import split_front_matter
 

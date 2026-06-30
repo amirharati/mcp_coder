@@ -146,10 +146,10 @@ def test_strict_mode_no_discovery(tmp_path, monkeypatch):
         policies=policies,
         target_files=[],
     )
-    assert result.discovered_read == []
+    # Strict mode: symbol scan still runs (provides read context) but no edit suggestions.
+    assert "lib/helpers.py" in result.discovered_read
     assert result.suggested_edit_paths == []
-    assert result.symbol_queries == []
-    assert result.ranked_paths == ["src/app.py"]
+    assert "src/app.py" in result.ranked_paths
 
 
 def test_suggested_edit_paths_under_edit_dir(tmp_path, monkeypatch):
@@ -209,6 +209,7 @@ spec_id: widget-step
 epic: widget
 revision: 1
 status: draft
+edit_scope: discover
 ---
 
 ## Goal

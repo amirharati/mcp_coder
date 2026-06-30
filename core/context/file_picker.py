@@ -261,25 +261,28 @@ def pick_candidate_files(
     discovered_read: list[str] = []
     suggested_edit_paths: list[str] = []
 
-    if discover:
-        discovered_set: set[str] = set(workspace_rag_filtered)
-        symbol_queries = extract_symbol_queries(task, spec_text)
-        known = contract | set(hint_paths) | set(workspace_rag_filtered)
-        hits_by_symbol = scan_symbols(workspace, symbol_queries)
-        cap = max_discovered_paths()
-        for symbol in symbol_queries:
-            for hit in hits_by_symbol.get(symbol, []):
-                if hit in known or hit in discovered_set:
-                    continue
-                if len(discovered_set) >= cap:
-                    break
-                discovered_set.add(hit)
-                path_sources.setdefault(hit, SOURCE_SYMBOL_SCAN)
-        # Workspace RAG paths first, then symbol discoveries (stable order).
-        discovered_read = workspace_rag_filtered + sorted(
-            discovered_set - set(workspace_rag_filtered)
-        )
+    # Symbol scan always runs — provides read context regardless of scope mode.
+    # Only suggested_edit_paths (new edit-target proposals) is gated on discover mode.
+    discovered_set: set[str] = set(workspace_rag_filtered)
+    symbol_queries = extract_symbol_queries(task, spec_text)
+    known = contract | set(hint_paths) | set(workspace_rag_filtered)
+    hits_by_symbol = scan_symbols(workspace, symbol_queries)
+    cap = max_discovered_paths()
+    for symbol in symbol_queries:
+        for hit in hits_by_symbol.get(symbol, []):
+            if hit in known or hit in discovered_set:
+                continue
+            if len(discovered_set) >= cap:
+                break
+            discovered_set.add(hit)
+            path_sources.setdefault(hit, SOURCE_SYMBOL_SCAN)
+    # Workspace RAG paths first, then symbol discoveries (stable order).
+    discovered_read = workspace_rag_filtered + sorted(
+        discovered_set - set(workspace_rag_filtered)
+    )
 
+    if discover:
+        # Discover mode: propose additional edit targets found near existing edit dirs.
         edit_dirs = _edit_dirs(edit_paths)
         suggested_edit_paths = sorted(
             p
@@ -288,6 +291,7 @@ def pick_candidate_files(
             and str(Path(p).parent.as_posix()) in edit_dirs
         )
     else:
+        # Strict mode: workspace RAG goes to read context; no new edit suggestions.
         for p in workspace_rag_filtered:
             if p not in read_paths_spec and p not in hint_paths:
                 read_paths_spec.append(p)

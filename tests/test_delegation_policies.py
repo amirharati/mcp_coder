@@ -4,6 +4,7 @@ import pytest
 
 from core.specs.delegation_policies import (
     PolicyValidationError,
+    _parse_edit_scope,
     compute_scope_violations,
     load_delegation_policies,
 )
@@ -54,7 +55,7 @@ def test_load_from_markdown_only():
     policies = load_delegation_policies({}, MARKDOWN_FILES)
     assert policies.files_edit == ["pkg/a.py"]
     assert policies.files_read == ["pkg/b.py"]
-    assert policies.edit_scope == "discover"
+    assert policies.edit_scope == "strict"
     assert policies.allow_create is True
     assert policies.untracked_policy == "materialize"
 
@@ -79,7 +80,7 @@ def test_yaml_inline_flow_style():
 
 def test_defaults_when_omitted():
     policies = load_delegation_policies({}, "")
-    assert policies.edit_scope == "discover"
+    assert policies.edit_scope == "strict"
     assert policies.allow_create is True
     assert policies.untracked_policy == "materialize"
     assert policies.all_paths == []
@@ -123,3 +124,26 @@ def test_apply_scope_outcome_discover_passthrough():
         scope_violations=["other.py"],
     )
     assert result == OUTCOME_SUCCESS
+
+
+# P15-032 acceptance: T1–T4
+
+
+def test_p15_032_t1_default_edit_scope_strict():
+    assert _parse_edit_scope(None) == "strict"
+
+
+def test_p15_032_t2_explicit_discover_preserved():
+    assert _parse_edit_scope("discover") == "discover"
+
+
+def test_p15_032_t3_files_read_excluded_from_violations():
+    assert compute_scope_violations(
+        ["a.ts", "b.ts"],
+        ["a.ts"],
+        files_read=["b.ts"],
+    ) == []
+
+
+def test_p15_032_t4_files_read_none_backward_compat():
+    assert compute_scope_violations(["a.ts", "b.ts"], ["a.ts"]) == ["b.ts"]

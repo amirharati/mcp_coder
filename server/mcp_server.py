@@ -3878,6 +3878,7 @@ def delegate_to_agent(
                 files_changed=files_changed,
                 files_edit=delegation_policies.files_edit,
                 files_delete=delegation_policies.files_delete,
+                files_read=delegation_policies.files_read,
             )
             scope_violations = gateway_result.scope_violations
             reverted_paths = gateway_result.reverted_paths
