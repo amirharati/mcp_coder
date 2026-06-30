@@ -1,6 +1,6 @@
 # P15-023 — Server-level idle keepalive
 
-**Phase:** 15 · **Status:** pending  
+**Phase:** 15 · **Status:** done  
 **Issue:** [P15-ISS-023](../PHASE15_ISSUES.md)  
 **Severity:** high (reliability)
 
@@ -231,12 +231,12 @@ In `docs/guide/env-vars.md` (same section):
 
 ## What to verify before marking done
 
-- [ ] **D1** — keepalive fires: mock session; advance time past `interval`; assert `send_log_message` called with `level="info"` and data containing `"keepalive"`.
-- [ ] **D2** — keepalive silent when active: mock session; call tracking hook (simulating tool call activity) every 20s with `interval=25`; assert `send_log_message` NOT called.
-- [ ] **D3** — keepalive disabled: `MCP_CODER_IDLE_KEEPALIVE_S=0`; assert task exits immediately (or never sends).
-- [ ] **D4** — session capture: call `_tracking_handle_message` with a mock session; assert `_idle_session` is set and `_idle_last_activity` is updated.
-- [ ] **D5** — `_idle_keepalive_seconds()` env reading: valid float, invalid string → 25.0, zero → 0.0.
-- [ ] **D6** — no regression: existing `_progress_heartbeat_seconds()` and `_DelegationProgressBridge` unchanged; the two keepalives are orthogonal (idle keepalive = between calls; delegation heartbeat = during `delegate_to_agent`).
+- [x] **D1** — keepalive fires: mock session; advance time past `interval`; assert `send_log_message` called with `level="info"` and data containing `"keepalive"`.
+- [x] **D2** — keepalive silent when active: mock session; call tracking hook (simulating tool call activity) every 20s with `interval=25`; assert `send_log_message` NOT called.
+- [x] **D3** — keepalive disabled: `MCP_CODER_IDLE_KEEPALIVE_S=0`; assert task exits immediately (or never sends).
+- [x] **D4** — session capture: call `_tracking_handle_message` with a mock session; assert `_idle_session` is set and `_idle_last_activity` is updated.
+- [x] **D5** — `_idle_keepalive_seconds()` env reading: valid float, invalid string → 25.0, zero → 0.0.
+- [x] **D6** — no regression: existing `_progress_heartbeat_seconds()` and `_DelegationProgressBridge` unchanged; the two keepalives are orthogonal (idle keepalive = between calls; delegation heartbeat = during `delegate_to_agent`).
 
 Run targeted tests:
 ```bash
@@ -288,10 +288,28 @@ ruff check server/mcp_server.py
 
 ## § Results
 
-*(Fill in when done)*
+- [x] D1–D6 checkboxes above ticked
+- [x] Full suite: `1535 passed, 34 pre-existing failures, 0 new failures` (pre-existing `legacy_contract` / wave1 failures unchanged)
+- [x] Linter: IDE linter clean on `server/mcp_server.py`; `ruff` not installed in env (same as prior workers)
+- [x] Summary of changes made (any deviations from spec + why)
+- [x] Suggested for master session: (bullets only — do not edit other docs)
 
-- [ ] D1–D6 checkboxes above ticked
-- [ ] Full suite: `N passed, M pre-existing failures, 0 new failures`
-- [ ] Linter: clean on `server/mcp_server.py`
-- [ ] Summary of changes made (any deviations from spec + why)
-- [ ] Suggested for master session: (bullets only — do not edit other docs)
+### Summary
+
+Implemented server-level idle keepalive per spec Steps 1–6:
+
+1. **`_idle_keepalive_seconds()`** — reads `MCP_CODER_IDLE_KEEPALIVE_S` (default 25, 0=disabled).
+2. **Module-level `_idle_session` / `_idle_last_activity`** — hold per-connection session ref and last activity timestamp.
+3. **`_idle_keepalive_lifespan`** — FastMCP lifespan with background anyio task; sends `notifications/message` via `session.send_log_message()` when idle ≥ interval; swallows exceptions; cancels task group on exit.
+4. **`_install_session_tracker()`** — monkey-patches `mcp._mcp_server._handle_message` to capture session + update activity on every inbound message; calls original bound method unchanged.
+5. **`FastMCP(..., lifespan=_idle_keepalive_lifespan)`** — wired at instantiation.
+6. **Docs** — `MCP_CODER_IDLE_KEEPALIVE_S` added to `.env.example` and `docs/guide/env-vars.md`.
+
+**Tests:** `tests/test_p15_023_idle_keepalive.py` — 6 tests covering D1–D6 (async tests use `asyncio.run()` since project has no pytest-asyncio config).
+
+**No deviations** from spec. `_DelegationProgressBridge` and `_progress_heartbeat_seconds` untouched.
+
+### Suggested for master session
+
+- Close **P15-ISS-023** when dogfood confirms idle pipe stays alive between delegations.
+- Update **PHASE15_MVP** / **PHASE15_ISSUES** status row for P15-023 → done.

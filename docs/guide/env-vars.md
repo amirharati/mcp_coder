@@ -95,6 +95,7 @@ These tune the Aider executor call. Unset = use Aider's own defaults.
 | `MCP_CODER_EXECUTOR_TOTAL_TIMEOUT_S` | *(unset)* | Total executor run timeout (seconds) |
 | `MCP_CODER_DELEGATION_TIMEOUT_S` | *(unset)* | Full delegation wall-clock timeout (seconds; wraps the whole pipeline) |
 | `MCP_CODER_PROGRESS_HEARTBEAT_S` | `30` | Seconds between keepalive `ctx.info()` progress notifications during delegations; `0` = disabled |
+| `MCP_CODER_IDLE_KEEPALIVE_S` | `25` | Seconds between idle keepalive notifications sent when the server is idle between tool calls. Prevents B011-class disconnects during session idle time. Set to `0` to disable. |
 | `MCP_CODER_STALL_AUTO_RETRY` | `0` | `1` = auto-retry once when Aider stalls requesting files (see below) |
 | `MCP_CODER_EXECUTOR_PULL_HINT` | `1` | Inject executor-pull hint into prompt so Aider knows it can fetch context |
 

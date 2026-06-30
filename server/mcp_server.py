@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+from contextlib import asynccontextmanager
 from datetime import datetime
 import json
 import os
@@ -10,7 +11,7 @@ import subprocess
 import threading
 import time
 from pathlib import Path
-from typing import Any
+from typing import Any, AsyncGenerator
 
 from mcp.server.fastmcp import Context, FastMCP
 
@@ -181,6 +182,20 @@ def _progress_heartbeat_seconds() -> float:
         return max(0.0, v)
     except ValueError:
         return 30.0
+
+
+def _idle_keepalive_seconds() -> float:
+    """Seconds between idle keepalive notifications when server is between tool calls.
+
+    Default 25s (just under a typical 30s idle timeout).
+    Set to 0 to disable.
+    """
+    raw = os.environ.get("MCP_CODER_IDLE_KEEPALIVE_S", "25").strip()
+    try:
+        v = float(raw)
+        return max(0.0, v)
+    except ValueError:
+        return 25.0
 
 
 class _DelegationProgressBridge:
@@ -724,6 +739,52 @@ def use_context_package() -> bool:
     return raw not in ("0", "false", "no")
 
 
+# P15-023: session reference captured by _install_session_tracker().
+# Per-connection, valid for entire connection lifetime.
+_idle_session: Any | None = None
+_idle_last_activity: float = 0.0
+
+
+@asynccontextmanager
+async def _idle_keepalive_lifespan(server: Any) -> AsyncGenerator[None, None]:
+    """FastMCP lifespan: background keepalive task for the idle MCP pipe.
+
+    Sends a periodic ``notifications/message`` so Cursor never considers
+    the stdio connection idle and closes it. Fires only when the server
+    has been silent for ``_idle_keepalive_seconds()`` seconds.
+    """
+    import anyio
+
+    interval = _idle_keepalive_seconds()
+
+    async def _keepalive() -> None:
+        global _idle_last_activity
+        if interval <= 0:
+            return
+        check_every = min(interval / 2, 5.0)
+        while True:
+            await anyio.sleep(check_every)
+            session = _idle_session
+            if session is None:
+                continue
+            since = time.monotonic() - _idle_last_activity
+            if since < interval:
+                continue
+            try:
+                await session.send_log_message(
+                    level="info",
+                    data="⏳ mcp-coder idle keepalive",
+                )
+                _idle_last_activity = time.monotonic()
+            except Exception:
+                pass
+
+    async with anyio.create_task_group() as tg:
+        tg.start_soon(_keepalive)
+        yield
+        tg.cancel_scope.cancel()
+
+
 mcp = FastMCP(
     "mcp-coder",
     instructions=(
@@ -731,7 +792,43 @@ mcp = FastMCP(
         "wants code written or changed on disk—especially HTML/CSS/JS, multi-file "
         "work, or refactors. Do not use for chat-only answers. Requires context_summary."
     ),
+    lifespan=_idle_keepalive_lifespan,
 )
+
+
+def _install_session_tracker() -> None:
+    """P15-023: monkey-patch _handle_message to capture the session reference.
+
+    FastMCP's lifespan starts *before* the ServerSession is created, so we
+    cannot access the session during lifespan startup. Instead we wrap
+    _handle_message (called on every inbound message with the session object)
+    to stash a reference in the module-level ``_idle_session`` variable.
+
+    The session is per-connection (not per-request), so storing it once on
+    the first message is sufficient for the connection lifetime.
+
+    The existing bound method is preserved and called normally — this wrapper
+    only adds the session capture and activity timestamp update.
+    """
+    global _idle_session, _idle_last_activity
+
+    _orig = mcp._mcp_server._handle_message
+
+    async def _tracking_handle_message(
+        message: Any,
+        session: Any,
+        lifespan_context: Any,
+        raise_exceptions: bool = False,
+    ) -> None:
+        global _idle_session, _idle_last_activity
+        _idle_session = session
+        _idle_last_activity = time.monotonic()
+        await _orig(message, session, lifespan_context, raise_exceptions)
+
+    mcp._mcp_server._handle_message = _tracking_handle_message
+
+
+_install_session_tracker()
 
 
 def _truncate_output(text: str, max_chars: int = OUTPUT_MAX_CHARS) -> str:
