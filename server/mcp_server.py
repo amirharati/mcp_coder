@@ -2734,21 +2734,24 @@ def delegate_to_agent(
             _executor_turns = 0
             try:
                 t_engine = time.perf_counter()
+                # P15-ISS-017 (B009) fix: bind the allowed-paths contract BEFORE the
+                # REVIEW / _use_pkg / no-spec branch split. Both the context-package
+                # path and the no-spec `else:` path build executor closures that
+                # reference this variable; binding it only inside `elif _use_pkg:`
+                # (the earlier 6dd0423 fix) left the no-spec path's closure unbound
+                # → NameError on no-spec delegations (Epic 5: 9e6b67f2, ca1c548f).
+                # `allowed_paths` is the spec's file contract (files_edit ∪ files_read),
+                # fed to the executor as the `### Allowed paths` scope-enforcement block.
+                allowed_paths: list[str] | None = None
+                if delegation_policies is not None:
+                    allowed_paths = sorted(
+                        set(delegation_policies.files_edit)
+                        | set(delegation_policies.files_read)
+                    )
                 if delegate_mode == DELEGATE_MODE_REVIEW:
                     with role_context(ROLE_REVIEW):
                         result = run_spec_review(prompt, workspace_path=ws)
                 elif _use_pkg:
-                    # B009 fix: compute legacy_contract once at the top of the _use_pkg
-                    # block so it's always bound for the retry closure (P15-ISS-010).
-                    # Previously this was only defined inside the `else:` (legacy) sub-
-                    # branch, causing a NameError when the context-package path ran and
-                    # a retry was attempted.
-                    legacy_contract: list[str] | None = None
-                    if delegation_policies is not None:
-                        legacy_contract = sorted(
-                            set(delegation_policies.files_edit)
-                            | set(delegation_policies.files_read)
-                        )
                     builder_on = context_builder_enabled(ws)
                     workspace_rag_paths_for_picker: list[str] = []
                     if builder_on and delegation_policies is not None:
@@ -3181,7 +3184,7 @@ def delegate_to_agent(
                                 mcp_session_id=storage.mcp_session_id,
                                 delegation_id=delegation_id,
                                 spec_path=spec_rel_path,
-                                contract_paths=legacy_contract,
+                                contract_paths=allowed_paths,
                                 timestamp_start=timestamp_start,
                                 timeout_s=timeout_s,
                             )
@@ -3647,7 +3650,7 @@ def delegate_to_agent(
                                     mcp_session_id=storage.mcp_session_id,
                                     delegation_id=delegation_id,
                                     spec_path=spec_rel_path,
-                                    contract_paths=legacy_contract,
+                                    contract_paths=allowed_paths,
                                     timestamp_start=timestamp_start,
                                     timeout_s=timeout_s,
                                 )

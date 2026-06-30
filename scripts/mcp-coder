@@ -32,8 +32,24 @@ elif [[ -f "$REPO_ROOT/.env" ]]; then
   set +a
 fi
 
-# MCP stdio server (no args): pass --mcp so singleton can find/kill stale processes.
+# MCP stdio server (no args): auto-restart loop (P15-ISS-027).
+# Cursor's MCP V2 client closes the stdio pipe ~1s after each delegation
+# completes (FSM conn=degraded -> closed); main.py catches the resulting
+# BrokenResourceError (P15-012) and exits 0. Without a loop the process is
+# gone and Cursor must respawn it lazily — sometimes it doesn't, leaving the
+# host on "Not connected" until a manual refresh. The loop brings the server
+# back in ~0.5s so the next tool call lands on a ready process.
 if [[ $# -eq 0 ]]; then
-  exec "$PYTHON" "$REPO_ROOT/main.py" --mcp
+  set +e
+  while true; do
+    "$PYTHON" "$REPO_ROOT/main.py" --mcp
+    _exit=$?
+    # Clean SIGINT (130) / SIGTERM (143) from the user — stop the loop.
+    if [[ "$_exit" -eq 130 || "$_exit" -eq 143 ]]; then
+      exit "$_exit"
+    fi
+    echo "[mcp-coder] server exited (code=$_exit); restarting…" >&2
+    sleep 0.5
+  done
 fi
 exec "$PYTHON" "$REPO_ROOT/main.py" "$@"
